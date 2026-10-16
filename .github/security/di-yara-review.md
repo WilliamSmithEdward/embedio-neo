@@ -288,3 +288,36 @@ empty, and this YARA workflow creates no matching alert to dismiss. No dismissal
 is claimed. Other findings, stale acceptances, missing scans and scanner errors
 remain fatal; replacement exact-head scans must pass. Evidence is retained under
 ignored `TestResults/release-2.1.0`, including both printed-match logs.
+
+## 2.2.0 release revalidation
+
+Independent release scan [38940153246](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38940153246)
+built all six packages from release branch commit `b80c867f`. Its policy report
+rejected the two stale 2.1.0 paths while reporting the same two DI debug-symbol
+matches at their new 2.2.0 paths. The scanner and full-rule archives were checked
+against the unchanged `yara.json` SHA-256 pins, and the complete God Mode rule
+was reread. The full pinned YARA-X 1.21.0 / YARA Forge 20261011 rules were rerun
+with printed strings in a network-disabled container and read-only mounts
+against both exact CI assemblies. The only match in each is `Injection.pdb`,
+at `0x6c84` (net10.0) and `0x7573` (netstandard2.0), within the compiler-generated
+CodeView paths already listed above. No other rule or string matched.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.2.0.nupkg` | `ddb7c30960488307acc4f9845e217a215cf2d041aa2c1538831421359939b2f7` |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `d0baec4b5f6eb0c9bac61ff5bda4d447bc26edf5a872b8d62a3f60902e99f951` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `c8d4247631226dbfa14b8202d8b067f7d664c2be419d39224d732f31bda05777` |
+| `yara-x.json` | `675da5319e3b5fc625745d87e7437156877e71e49781e940e1ef6cb2629f2c06` |
+| `clamav.json` | `69a1665b7ccf8edcebfecb06407e43dde7e2eff6dc04408561bb617f65f69717` |
+
+The full CI report contains eleven expected findings and no scanner errors.
+ClamAV 1.5.4/database 28155 scanned 1,573 files with no findings or errors.
+The DI source, targets, build behavior, scanner pins and matched filename
+metadata are unchanged; only the two accepted package-version paths move to
+2.2.0. GitHub's open code-scanning alert list is empty and the YARA workflow
+creates no matching alert. The existing owner-approved unavailable-alert
+exception for this reviewed debug-symbol finding is carried forward; no alert
+dismissal is claimed. Other findings, missing scans, scanner errors and stale
+acceptances remain fatal. Final exact-head scans must pass before merge or
+publication. Evidence is retained under ignored `TestResults/release-2.2.0`,
+including archive verification and both full-rule printed-match logs.

@@ -1,6 +1,6 @@
 # Bearer authentication and controller authorization
 
-These opt-in APIs are under development after EmbedIO-Neo 2.1.0. Existing Basic
+These opt-in APIs were added in EmbedIO-Neo 2.2.0. Existing Basic
 authentication and application authorization hooks retain their behavior.
 
 `BearerAuthenticationModule` processes one `Authorization: Bearer ...` header and
@@ -23,7 +23,7 @@ The syntax and challenge behavior follow [RFC 6750](https://www.rfc-editor.org/r
 
 ## A complete controller example
 
-Build this program against the source containing the feature. It uses public,
+Build this program against EmbedIO-Neo 2.2.0 or later. It uses public,
 synthetic loopback credentials to demonstrate configuration; replace the validator
 with trusted application validation and configure HTTPS for deployment.
 
