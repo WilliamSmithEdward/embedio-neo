@@ -87,46 +87,46 @@ jobs:
         with:
           global-json-file: global.json
       - name: Build the locked state-machine harness
-        shell: pwsh
+        shell: bash
         run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force TestResults/fuzz | Out-Null
-          $env:GITHUB_SHA | Set-Content TestResults/fuzz/source.txt
-          dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode 2>&1 | Tee-Object TestResults/fuzz/restore.log
-          if ($LASTEXITCODE) { throw 'Locked restore failed.' }
-          dotnet build test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj -c Release --no-restore 2>&1 | Tee-Object TestResults/fuzz/build.log
-          if ($LASTEXITCODE) { throw 'Harness build failed.' }
+          set -euo pipefail
+          mkdir -p TestResults/fuzz
+          printf '%s\n' "$GITHUB_SHA" > TestResults/fuzz/source.txt
+          dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode 2>&1 | tee TestResults/fuzz/restore.log
+          dotnet build test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj -c Release --no-restore 2>&1 | tee TestResults/fuzz/build.log
       - name: Verify replay, shrinking and cleanup
-        shell: pwsh
+        shell: bash
         run: |
-          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machine-selftest 2>&1 | Tee-Object TestResults/fuzz/selftest.log
-          if ($LASTEXITCODE) { throw 'State-machine runner self-test failed.' }
+          set -euo pipefail
+          dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machine-selftest 2>&1 | tee TestResults/fuzz/selftest.log
       - name: Replay every checked-in state trace
-        shell: pwsh
+        shell: bash
         run: |
-          $ErrorActionPreference = 'Stop'
-          $corpus = @(Get-ChildItem test/EmbedIO.Fuzz/state-corpus -Filter '*.json' -File | Sort-Object Name)
-          if ($corpus.Count -eq 0) { throw 'State-machine corpus is empty.' }
-          foreach ($trace in $corpus) {
-            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines-replay $trace.FullName 2>&1 | Tee-Object (Join-Path TestResults/fuzz ($trace.BaseName + '.log'))
-            if ($LASTEXITCODE) { throw "Corpus replay failed: $($trace.Name)" }
-          }
+          set -euo pipefail
+          traces=(test/EmbedIO.Fuzz/state-corpus/*.json)
+          test -f "${traces[0]}"
+          for trace in "${traces[@]}"; do
+            name="$(basename "$trace" .json)"
+            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines-replay "$trace" 2>&1 | tee "TestResults/fuzz/$name.log"
+          done
       - name: Exercise shared resource models
-        shell: pwsh
+        shell: bash
         run: |
-          $seed = [Math]::Max(1, [long]$env:GITHUB_RUN_ID % 2147483647)
-          foreach ($scenario in @('websocket-budget', 'rate-limits', 'routes', 'tunnels', 'sessions')) {
-            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines $seed $env:MODEL_CASES $scenario 2>&1 | Tee-Object (Join-Path TestResults/fuzz ($scenario + '.log'))
-            if ($LASTEXITCODE) { throw "Shared-state campaign failed: $scenario" }
-          }
+          set -euo pipefail
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          if (( seed == 0 )); then seed=1; fi
+          for scenario in websocket-budget rate-limits routes tunnels sessions; do
+            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$MODEL_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
+          done
       - name: Exercise real HTTP/1 and HTTP/2 connections
-        shell: pwsh
+        shell: bash
         run: |
-          $seed = [Math]::Max(1, [long]$env:GITHUB_RUN_ID % 2147483647)
-          foreach ($scenario in @('http1-connections', 'http2-connections')) {
-            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines $seed $env:CONNECTION_CASES $scenario 2>&1 | Tee-Object (Join-Path TestResults/fuzz ($scenario + '.log'))
-            if ($LASTEXITCODE) { throw "Connection campaign failed: $scenario" }
-          }
+          set -euo pipefail
+          seed=$((GITHUB_RUN_ID % 2147483647))
+          if (( seed == 0 )); then seed=1; fi
+          for scenario in http1-connections http2-connections; do
+            dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$CONNECTION_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
+          done
       - name: Retain traces, provenance and transition counts
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
