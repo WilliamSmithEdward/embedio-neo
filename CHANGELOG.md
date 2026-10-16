@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-15
+
+### Added
+
+- Opt-in streaming multipart uploads with `MultipartReader`, `MultipartSection`,
+  `MultipartOptions`, `OpenMultipartReader` and `[MultipartForm]` controller binding.
+  File contents can be copied directly to storage without buffering whole files.
+  Total, file, field, part-count and header limits bound processing; malformed
+  requests return 400, exceeded limits return 413 and unsupported media types return
+  415. Generated and reflection-based controllers, OpenAPI metadata, cancellation,
+  repeated fields and UTF-8 filenames are supported. See the
+  [streaming multipart guide](docs/guides/streaming-multipart.md) for staged-file
+  cleanup and complete-request validation (#461).
+
+### Changed
+
+- Extend FsCheck, AFL++ and libFuzzer coverage to multipart parsing, and add
+  replayable multi-connection state-machine campaigns for WebSocket budgets,
+  rate limits, routing, sessions, tunnels and real HTTP/1, HTTP/2 and HTTP/3
+  connections. Failures retain traces and binary provenance; matching invariant
+  failures are shrunk. Windows and Linux CI exercise shared-state and network
+  campaigns (#461, #462).
+- Preserve existing APIs, request-handling defaults, target frameworks and runtime
+  dependency groups. The new upload API is opt-in; fuzzing remains test-only.
+
 ## [2.0.1] - 2026-10-15
 
 ### Added
