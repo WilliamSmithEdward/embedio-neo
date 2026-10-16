@@ -31,3 +31,15 @@ C#/Actions/Semgrep SARIF; that is not a fresh scan or a green hosted check.
 - `src/EmbedIO/Files/FileSystemProvider.cs`: `61908147aad87afba81335e09d53227daa561bf1408ad6758521085541be1cbc`
 - `src/EmbedIO.Cli/CliFileProvider.cs`: `37994932ecbd412f4c8bcdd546bdfac2d07ec38e3eb9eae70353aa18fe9b43ac`
 - Downloaded C# SARIF: `d3b21e6a0717213d6cb47180df44f13c82c87985e770dddd074256496c876ca6`
+
+## PR #470 recheck (2026-10-16)
+
+Security run 38963988604 reported zero C# findings on both attempts for
+head 53b59be94447791d0f8e0f0c3f9f86bee723ea3c. The downloaded second
+attempt SARIF identifies CodeQL 2.27.2 and successful execution, with no
+results. The stale-entry gate correctly rejected the unmatched acceptance.
+The obsolete entry is removed from accepted.toml; scanner rules and report
+policy remain unchanged. This records absence in these scans, not a production
+ZIP repair. A returned finding requires review against its actual flow.
+GitHub alert #9 was rechecked and remains dismissed as false positive, with
+the original 2026-10-08 dismissal. Both failed report attempts remain retained.

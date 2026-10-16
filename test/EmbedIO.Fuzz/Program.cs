@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using EmbedIO.Utilities;
 
 if (FsCheckProperties.Run(args)) return;
+if (await HeaderPolicyFuzz.SelfTestAsync(args)) return;
+if (await ExtendedFuzzSelfTest.RunAsync(args)) return;
 if (await StateMachineSelfTest.RunAsync(args)) return;
 if (await ResponsePipelineFuzz.SelfTestAsync(args)) return;
 
@@ -21,6 +23,15 @@ if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateM
     ["auth-jwt"] = JwtAuthFuzz.RunAsync,
     ["auth-http1"] = AuthStateFuzz.Http1Async,
     ["auth-http2"] = AuthStateFuzz.Http2Async,
+    ["forwarded-policy"] = HeaderPolicyFuzz.ForwardedAsync,
+    ["cors-policy"] = HeaderPolicyFuzz.CorsAsync,
+    ["conditional-ranges"] = HeaderPolicyFuzz.ConditionalAsync,
+    ["request-codings"] = RequestCodingFuzz.RunAsync,
+    ["multipart-lifetime"] = MultipartLifetimeFuzz.RunAsync,
+    ["server-lifecycle"] = LifecycleFuzz.RunAsync,
+    ["file-mutation"] = FileMutationFuzz.RunAsync,
+    ["controller-parity"] = ControllerParityFuzz.RunAsync,
+    ["permanent-bans"] = PermanentBanFuzz.RunAsync,
     ["response-http1"] = ResponsePipelineFuzz.Http1Async,
     ["response-http2"] = ResponsePipelineFuzz.Http2Async,
     ["response-http3"] = ResponsePipelineFuzz.Http3Async,

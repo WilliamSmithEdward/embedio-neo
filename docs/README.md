@@ -15,6 +15,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Usage guides
 
+- [Stateful application-surface fuzzing](guides/stateful-surface-fuzzing.md): controller parity, persistence rollback, lifecycle races, file mutation, request codings, multipart ownership and forwarding/CORS/conditional policies.
+
 - [Response-pipeline fuzzing](guides/response-pipeline-fuzzing.md): real HTTP/1-3 ranges, validators, compression, HEAD, cookies/trailers and cancellation with independent oracles.
 - [Route hooks and enum statuses](guides/route-hooks.md): unreleased controller/action preprocessing choices, async ordering, cache policy and compatible status overloads.
 

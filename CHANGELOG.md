@@ -4,6 +4,16 @@
 
 ### Added
 
+- Test-only trusted-proxy, CORS and conditional/range policy fuzzing with
+  independent expectations, numeric extremes, three negative oracle checks and
+  six replay traces. Existing production behavior and public APIs are unchanged.
+
+- Additional test-only state-machine campaigns for generated/reflection controller
+  parity, permanent-ban persistence/rollback, server cancellation/disposal, mutable
+  file-cache generations, request coding chains/limits and multipart lifetime.
+  Adds independent ledgers, six negative oracle checks and seven replay traces;
+  production behavior, APIs, defaults and dependencies remain unchanged.
+
 - Test-only response-pipeline state-machine campaigns for HTTP/1, HTTP/2 and
   HTTP/3: ranges/validators, compression, HEAD, cookies/trailers, overlapping
   clients, cancellation and connection reuse. Adds independent body/framing

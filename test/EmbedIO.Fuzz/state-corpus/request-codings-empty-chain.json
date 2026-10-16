@@ -1,0 +1,11 @@
+{
+  "Scenario": "request-codings",
+  "Seed": 10246244,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 5,
+      "Value": 0
+    }
+  ]
+}

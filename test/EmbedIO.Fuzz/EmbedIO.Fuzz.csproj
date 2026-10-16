@@ -5,6 +5,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/EmbedIO.Generators/EmbedIO.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <PackageReference Include="FsCheck" PrivateAssets="all" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
     <ProjectReference Include="../../src/EmbedIO.Testing/EmbedIO.Testing.csproj" />

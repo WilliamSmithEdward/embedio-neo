@@ -42,6 +42,8 @@
   items:
     - name: Bearer authentication and authorization
       href: guides/bearer-authentication.md
+    - name: Stateful application-surface fuzzing
+      href: guides/stateful-surface-fuzzing.md
     - name: Response-pipeline fuzzing
       href: guides/response-pipeline-fuzzing.md
     - name: Multi-connection state-machine fuzzing
