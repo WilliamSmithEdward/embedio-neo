@@ -41,6 +41,16 @@ internal static class AuthorizationChecks
         using (var anonymous = await client.GetAsync(url + "auth/public"))
             Require(anonymous.StatusCode == HttpStatusCode.OK, "AOT inherited AllowAnonymous was lost.");
 
+        using (var hooked = await client.GetAsync(url + "auth/hooked"))
+        {
+            Require(hooked.StatusCode == HttpStatusCode.Accepted && hooked.Headers.GetValues("X-Hook").Single() == "async",
+                "AOT direct asynchronous hook or enum status was lost.");
+            Require(hooked.Headers.CacheControl?.NoStore != true, "Replace unexpectedly ran the controller hook.");
+        }
+        using (var skipped = await client.GetAsync(url + "auth/skipped"))
+            Require(skipped.StatusCode == HttpStatusCode.NoContent && !skipped.Headers.Contains("X-Hook"), "AOT Skip ran the class hook.");
+        checks["before_handler_generated"] = "async class Replace, action Skip, enum statuses, authorization before hooks";
+
         var document = new OpenApiDocumentBuilder("AOT authorization", "1")
             .AddController("/auth", AuthorizationControllers.AuthorizedSmokeController)
             .AddBearerAuthentication("bearer", CreateBearer())
@@ -51,6 +61,8 @@ internal static class AuthorizationChecks
             "AOT OpenAPI lost authorization metadata.");
         Require(document.Root["paths"]?["/auth/public"]?["get"]?["x-embedio-authorization"]?["allowAnonymous"]?.GetValue<bool>() == true,
             "AOT OpenAPI lost inherited anonymous metadata.");
+        Require(document.Root["paths"]?["/auth/hooked"]?["get"]?["responses"]?["202"] != null,
+            "AOT OpenAPI lost enum response metadata.");
         checks["authorization_inherited_generated"] = "401, authenticated 200, anonymous override 200, OpenAPI";
     }
 
@@ -95,8 +107,23 @@ internal abstract class AuthorizedSmokeBase : WebApiController
 }
 
 [Authorize]
+[BeforeHandler(nameof(Prepare), Behavior = BeforeHandlerBehavior.Replace)]
 internal sealed class AuthorizedSmokeController : AuthorizedSmokeBase
 {
+    public async Task Prepare(CancellationToken token)
+    {
+        await Task.Yield();
+        token.ThrowIfCancellationRequested();
+        Response.Headers["X-Hook"] = "async";
+    }
+
+    [AllowAnonymous, Route(HttpVerbs.Get, "/hooked"), OpenApiResponse(HttpStatusCode.Accepted)]
+    public void Hooked() => Response.SetEmptyResponse(HttpStatusCode.Accepted);
+
+    [AllowAnonymous, Route(HttpVerbs.Get, "/skipped")]
+    [BeforeHandler(Behavior = BeforeHandlerBehavior.Skip)]
+    public void Skipped() => Response.SetEmptyResponse(HttpStatusCode.NoContent);
+
     public override string Secure() => "secure";
     [Authorize("smoke")]
     public override string Public() => "public";

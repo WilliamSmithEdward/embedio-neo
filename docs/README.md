@@ -18,6 +18,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Stateful application-surface fuzzing](guides/stateful-surface-fuzzing.md): controller parity, persistence rollback, lifecycle races, file mutation, request codings, multipart ownership and forwarding/CORS/conditional policies.
 
 - [Response-pipeline fuzzing](guides/response-pipeline-fuzzing.md): real HTTP/1-3 ranges, validators, compression, HEAD, cookies/trailers and cancellation with independent oracles.
+- [Route hooks and enum statuses](guides/route-hooks.md): unreleased controller/action preprocessing choices, async ordering, cache policy and compatible status overloads.
+
 - [Bearer authentication and authorization](guides/bearer-authentication.md): asynchronous validation, controller roles and policies, optional JWT validation and identity-isolation campaigns.
 - [Multi-connection state-machine fuzzing](guides/multi-connection-fuzzing.md): deterministic actor traces, replay, invariant-preserving shrinking and bounded cleanup.
 - [Streaming multipart uploads](guides/streaming-multipart.md): bounded streaming, controller binding, complete-request validation and staged file cleanup.

@@ -65,7 +65,7 @@ namespace EmbedIO.Tests
                 context.Response.ContentLength64 = 3;
                 context.Response.Headers["X-Final"] = "retained";
                 await Send(context.Response, 103, new WebHeaderCollection { ["Link"] = "</one>; rel=preload" }, stop.Token);
-                await Send(context.Response, 103, new WebHeaderCollection { ["Link"] = "</two>; rel=preload" }, stop.Token);
+                await (context.Response as IHttpResponseSections ?? throw new AssertionException("Missing response capability.")).SendInformationalAsync(HttpStatusCode.EarlyHints, new WebHeaderCollection { ["Link"] = "</two>; rel=preload" }, stop.Token);
                 Assert.That(context.Response.StatusCode, Is.EqualTo(201));
                 Assert.That(context.Response.ContentLength64, Is.EqualTo(3));
                 Assert.That(context.Response.Headers["Link"], Is.Null);

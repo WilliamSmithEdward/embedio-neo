@@ -18,3 +18,4 @@ EMBEDIO010 | EmbedIO.WebApi | Warning | DiagnosticDescriptors
 EMBEDIO011 | EmbedIO.WebApi | Error | DiagnosticDescriptors
 EMBEDIO012 | EmbedIO.WebApi | Warning | DiagnosticDescriptors
 EMBEDIO013 | EmbedIO.WebApi | Error | DiagnosticDescriptors
+EMBEDIO014 | EmbedIO.WebApi | Error | Invalid before-handler hook

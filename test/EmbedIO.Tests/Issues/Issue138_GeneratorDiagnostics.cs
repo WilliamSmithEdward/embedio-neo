@@ -355,6 +355,34 @@ internal static class Use { internal static object[] All() { return new object[]
             Assert.That(first.Generated, Is.EqualTo(second.Generated));
             Assert.That(Regex.Matches(first.Generated, "ControllerBinding<global::C> C").Count, Is.EqualTo(3));
         }
+        [TestCase("", "Missing")]
+        [TestCase("public int Prepare() => 1;", "Prepare")]
+        [TestCase("private Task value = Task.CompletedTask; public ref Task Prepare() => ref value;", "Prepare")]
+        [TestCase("public void Prepare<T>() { }", "Prepare")]
+        [TestCase("private void Prepare() { }", "Prepare")]
+        [TestCase("public static void Prepare() { }", "Prepare")]
+        [TestCase("public async void Prepare() { await Task.Yield(); }", "Prepare")]
+        [TestCase("public Task<int> Prepare() => Task.FromResult(1);", "Prepare")]
+        [TestCase("public void Prepare(int value) { }", "Prepare")]
+        [TestCase("public void Prepare() { } public void Prepare(System.Threading.CancellationToken token) { }", "Prepare")]
+        public void InvalidBeforeHooksHaveAnActionableDiagnostic(string declaration, string name)
+        {
+            var result = Run(Usings + "[GeneratedControllerBinding(typeof(C))] internal static partial class B {} public sealed class C : WebApiController { "
+                + declaration + " [Route(HttpVerbs.Get, \"/\"), BeforeHandler(\"" + name + "\")] public void Get() {} }");
+            Assert.That(result.GeneratorDiagnostics.Select(d => d.Id), Does.Contain("EMBEDIO014"));
+            Assert.That(result.Generated, Does.Not.Contain("WebApiRouteBinding<"));
+        }
+
+        [TestCase("[BeforeHandler]")]
+        [TestCase("[BeforeHandler(Behavior = (BeforeHandlerBehavior)99)]")]
+        [TestCase("[BeforeHandler(\"Prepare\", Behavior = BeforeHandlerBehavior.Skip)]")]
+        public void InvalidBeforeHookModesHaveAnActionableDiagnostic(string attribute)
+        {
+            var result = Run(Usings + "[GeneratedControllerBinding(typeof(C))] internal static partial class B {} public sealed class C : WebApiController { public void Prepare() {} "
+                + attribute + " [Route(HttpVerbs.Get, \"/\")] public void Get() {} }");
+            Assert.That(result.GeneratorDiagnostics.Select(d => d.Id), Does.Contain("EMBEDIO014"));
+        }
+
         private static GeneratorResult Run(string source, LanguageVersion language = LanguageVersion.Latest, bool trimAnalyzed = false)
         {
             var parse = new CSharpParseOptions(language);
