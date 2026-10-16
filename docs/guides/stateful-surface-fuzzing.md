@@ -102,6 +102,6 @@ Native AOT or native `System.Net.HttpListener` parity, browser policy enforcemen
 arbitrary proxy grammars or live proxy transport, TLS trust/rotation correctness,
 process-crash durability, cross-process writer races, arbitrary writes during
 an active file read, ZIP mutation, all controller/custom-binding types or all
-operating-system schedules. Per-route hook attributes from the separate pending
-feature PR are not required by this branch. Existing focused regression/platform
+operating-system schedules. Attribute-specific per-route hook matrices remain in the dedicated regression/AOT
+fixtures; this campaign checks the existing controller override and registration paths. Existing focused regression/platform
 tests remain necessary for those surfaces.
