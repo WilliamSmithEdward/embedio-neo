@@ -4,6 +4,11 @@
 
 ### Added
 
+- Test-only response-pipeline state-machine campaigns for HTTP/1, HTTP/2 and
+  HTTP/3: ranges/validators, compression, HEAD, cookies/trailers, overlapping
+  clients, cancellation and connection reuse. Adds independent body/framing
+  oracles, bounded reads, negative self-tests and cached/streamed replay corpus.
+  Production APIs, defaults and dependencies are unchanged.
 - Controller/action `[BeforeHandler]` attributes with explicit Append, Replace
   and Skip behavior, asynchronous hooks and cancellation, matching generated/AOT
   and reflection bindings. Authorization remains before activation and hooks;

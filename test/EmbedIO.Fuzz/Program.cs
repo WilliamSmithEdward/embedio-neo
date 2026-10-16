@@ -8,6 +8,7 @@ using EmbedIO.Utilities;
 
 if (FsCheckProperties.Run(args)) return;
 if (await StateMachineSelfTest.RunAsync(args)) return;
+if (await ResponsePipelineFuzz.SelfTestAsync(args)) return;
 
 if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateMachineTrace, CancellationToken, Task>>
 {
@@ -20,6 +21,9 @@ if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateM
     ["auth-jwt"] = JwtAuthFuzz.RunAsync,
     ["auth-http1"] = AuthStateFuzz.Http1Async,
     ["auth-http2"] = AuthStateFuzz.Http2Async,
+    ["response-http1"] = ResponsePipelineFuzz.Http1Async,
+    ["response-http2"] = ResponsePipelineFuzz.Http2Async,
+    ["response-http3"] = ResponsePipelineFuzz.Http3Async,
     ["http1-connections"] = ConnectionIsolationFuzz.Http1Async,
     ["http2-connections"] = ConnectionIsolationFuzz.Http2Async,
     ["http3-connections"] = ConnectionIsolationFuzz.Http3Async,

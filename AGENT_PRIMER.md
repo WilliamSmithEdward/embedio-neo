@@ -523,6 +523,18 @@ describe experimental binaries, not current production behavior. The requested
 listener display name is `EmbedIO-Neo HTTP Listener`. The measurement runner,
 wire regressions and evidence remain available for future investigations.
 
+### Response-pipeline validation (unreleased after 2.2.0)
+
+The test-only response state machines combine file ranges, conditional requests,
+gzip/deflate, HEAD metadata, cookies, trailers and cancellation over real HTTP/1,
+HTTP/2 and HTTP/3. They cover cached/streamed and empty/large representations,
+actual multi-client overlap and a flushed-prefix cancellation boundary.
+Expected bodies/ranges are independent of production helpers; negative oracle
+self-tests must reject deliberately corrupted responses. See
+[response-pipeline fuzzing](docs/guides/response-pipeline-fuzzing.md) for commands,
+corpus and limits. These checks validate correctness and cleanup; they do not
+establish latency or exhaustive coverage, and configured CI is not a passing run.
+
 ## 17. Pitfalls checklist
 
 - Registering a static folder at `/` before the API: the API never runs.
