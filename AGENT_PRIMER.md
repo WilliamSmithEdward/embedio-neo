@@ -12,10 +12,10 @@ disagree, the guide and the source win.
 
 | Item | Value |
 | --- | --- |
-| NuGet package | `EmbedIO-Neo` (DI integration: `EmbedIO-Neo.DependencyInjection`) |
+| NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.0.1, the v2 engine. 1.0.x is the previous major version. |
+| Current version | 2.2.0, the v2 engine. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -173,8 +173,8 @@ bugs.
 - Final handlers end dispatch: `WithWebApi`, `WithStaticFolder` (and the other
   file modules) and WebSocket modules.
 - Middleware does not end dispatch unless it rejects the request:
-  `WithCors`, `WithBasicAuthentication`, `WithIPBanning`, forwarded headers and
-  rate limiting.
+  `WithCors`, `WithBasicAuthentication`, `WithIPBanning`, bearer authentication,
+  forwarded headers and rate limiting.
 - Register middleware first, then APIs and WebSockets, then specific file
   mounts, then any catch-all static folder at `/` last.
 - `OnGet("/x", handler)` and the other `On*` shortcuts match a base path,
@@ -183,8 +183,8 @@ bugs.
   `WithStaticFolder(baseRoute, path, isImmutable)`, `WithEmbeddedResources`,
   `WithZipFile`, `WithCors`, `WithBasicAuthentication`, `WithIPBanning`,
   `WithLocalSessionManager`.
-- Modules with no `With*` helper (rate limiting, forwarded headers, client
-  banning) are added with `WithModule(new ...Module(...))`.
+- Modules with no `With*` helper (bearer authentication, rate limiting, forwarded
+  headers, client banning) are added with `WithModule(new ...Module(...))`.
 
 ## 7. Routing and Web API controllers
 
@@ -201,13 +201,17 @@ bugs.
   - `[FormField]`, `[FormData]`, `[QueryData]`
   - `[JsonData]` deserializes the body; invalid JSON is a 400
   - `[FromServices]` (DI package)
+  - `[MultipartForm] MultipartReader` (2.1.0+, streaming; see below)
 - Return an object to send JSON with status 200. Return `Task<T>` for async work.
   Return `void` or `Task` for no body. `ValueTask` is not awaited; do not use it.
 - Set `HttpContext.Response.StatusCode` before returning to change the status.
 - Throw `HttpException.BadRequest(message)`, `NotFound()`, `Unauthorized()`,
   `Forbidden()` or `MethodNotAllowed()` for HTTP errors.
-- Override `OnBeforeHandler()` for per-controller checks before binding, such as
-  authorization. It runs before the body is read.
+- In 2.2.0+, use `[Authorize]`, `[Authorize("policy", Roles = "editor,admin")]`
+  and `[AllowAnonymous]` from `EmbedIO.Authorization`. Configure named policies
+  before controller registration and register authentication before the API.
+  Authorization runs before controller activation, preprocessing and body binding.
+  `OnBeforeHandler()` remains available for application-specific checks.
 - Controllers need a public parameterless constructor for
   `WithController<T>()`, or use `WithController<T>(() => new T(...))`.
 - `CaseInsensitiveRoutes` on the Web API module enables case-insensitive literal
@@ -216,6 +220,13 @@ bugs.
 Guides: [controllers](docs/guides/getting-started/controllers.md),
 [routes and parameters](docs/guides/getting-started/requests.md),
 [base routes](docs/guides/controller-base-routes.md).
+
+Generated bindings carry multipart and authorization metadata as well as routes.
+The OpenAPI builder describes `multipart/form-data` request bodies and can derive
+bearer requirements with `AddBearerAuthentication(schemeName, module)`. Register
+the real module before protected endpoints; an OpenAPI security declaration alone
+does not enforce access. Streaming multipart metadata cannot infer part names or
+file types. Guide: [OpenAPI documents](docs/guides/openapi.md).
 
 ## 8. Reading requests
 
@@ -231,6 +242,26 @@ Guides: [controllers](docs/guides/getting-started/controllers.md),
   is set. If you enable it, also set a finite decompressed-size limit.
 - Read the body before the response completes, and never read the same request
   stream from two tasks at once.
+
+### Streaming multipart uploads (2.1.0+)
+
+- Use `using var reader = context.OpenMultipartReader(options)` or bind a
+  controller parameter with `[MultipartForm] MultipartReader reader`.
+- Await `ReadNextSectionAsync()` and read each section's `Body` sequentially.
+  The reader streams bytes; your code owns destination streams and staging files.
+- Set `MultipartOptions` or attribute limits for total/file/field bytes, parts,
+  files, fields and section headers. Combine them with transport limits and
+  admission control; per-request limits do not bound aggregate disk usage.
+  Defaults include 128 MiB total, 64 MiB per file, 64 KiB per field, 128 parts,
+  32 files, 128 fields and 16 KiB / 32 headers per part. Exceeded limits return
+  413, malformed multipart returns 400 and other outer content types return 415.
+- Only a null result from `ReadNextSectionAsync()` confirms complete validation.
+  Stage uploads privately and publish them after that result; delete staged data
+  on failure or cancellation. Do not use a supplied filename as a storage path.
+- Disposing a section body or returning after the first file does not validate
+  the remaining input. Do not mix multipart parsing with another body reader.
+
+Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
 
 ## 9. Writing responses
 
@@ -337,11 +368,39 @@ For any server reachable from an untrusted network:
 | Compressed uploads | Only enable `WithSupportCompressedRequests(true)` with a finite decompressed limit. |
 | Request rate | `RateLimitingModule` with a `PartitionedRateLimiter<IHttpContext>`. See [rate limiting](docs/guides/rate-limiting.md). |
 | Behind a proxy | `ForwardedHeadersModule` trusts nothing until you call `WithTrustedProxies(...)`. Read results with `context.GetForwardedRequest()`; the request itself is not rewritten. See [forwarded headers](docs/guides/forwarded-headers.md). |
-| Authentication | `WithBasicAuthentication(baseRoute, m => m.WithAccount(user, password))` over HTTPS only. For tokens, check in `OnBeforeHandler` or an earlier module. |
+| Authentication | Basic authentication over HTTPS, or `BearerAuthenticationModule` before protected endpoints (2.2.0+). Use controller roles/policies for authorization; see below. |
 | Banning abusers | `IPBanningModule` (instance APIs are scoped to that module) or `ClientBanningModule` (custom keys, CIDR allow/deny, optional persistent store). |
 | Browser access | `WithCors(origins, headers, methods)` with explicit origins, not `*`, when credentials are involved. |
 | Sessions | `WithLocalSessionManager(m => { m.CookieSecure = true; m.CookieSameSite = CookieSameSiteMode.Lax; })` on HTTPS. |
 | Error detail | Keep the default empty 500 or problem details. Do not enable `ExceptionHandler.HtmlResponse` or `EmptyResponseWithHeaders` in production. |
+
+### Bearer authentication and authorization (2.2.0+)
+
+- Add `new BearerAuthenticationModule(baseRoute, validator)` before endpoints.
+  The asynchronous validator accepts a token/cancellation token and returns an
+  authenticated `ClaimsPrincipal`, or null for invalid credentials. Use HTTPS.
+- Missing credentials are permitted by default so public and protected actions
+  can coexist. Invalid supplied bearer credentials still fail. Set
+  `RequireAuthentication = true` to require credentials for the whole module path.
+- Configure `AuthorizationOptions.AddPolicy(...)` through
+  `api.ConfigureAuthorization(...)` before registering controllers. Controller
+  and method requirements combine with AND; roles within one attribute use OR.
+  `[AllowAnonymous]` overrides action/controller attributes, not an earlier module.
+  Applicable inherited attributes participate too. Unknown policy names fail
+  controller registration; policy configuration is copied at registration.
+- Missing/invalid credentials on a protected action produce 401; an authenticated
+  principal that fails a role or policy gets 403. Malformed, duplicate or oversized
+  bearer credentials produce 400. `MaximumTokenLength` defaults to 16,384 ASCII
+  characters. Validators and policies must honor cancellation and support overlap.
+- The optional `EmbedIO-Neo.Jwt` package provides `JwtBearerTokenValidator` and
+  `JwtBearerOptions`. Supply issuer, audience, trusted verification keys and an
+  algorithm allowlist. It validates signed tokens and lifetime; it does not issue
+  tokens or discover keys remotely. Core authentication has no JWT dependency.
+- Authentication is per request. Issued JWT claims and configured verification
+  keys do not track permission changes or key rotation automatically; applications
+  own token lifetime, revocation checks and trusted configuration replacement.
+
+Guide: [bearer authentication and authorization](docs/guides/bearer-authentication.md).
 
 ## 14. Diagnostics and telemetry
 
@@ -380,9 +439,42 @@ api.WithController(ApiControllers.ItemsController)
 
 - Use `SendDataWithMetadataAsync`, `GetRequestDataWithMetadataAsync` and
   `Json.SerializeWithMetadata` with source-generated `JsonTypeInfo`.
-- Generator diagnostics EMBEDIO001-012 explain unsupported controllers.
+- Generator diagnostics EMBEDIO001-013 explain unsupported controllers and invalid
+  authorization attributes. `[MultipartForm]` and authorization attributes work
+  with generated bindings as well as reflection registration.
 
 Guide: [trimming and Native AOT](docs/guides/trimming-and-native-aot.md).
+
+### Startup and first-endpoint latency
+
+Windows desktop / embedded hosting is the current primary performance target.
+Measure your deployed application: listener readiness, first complete response,
+first use of each endpoint and warm request latency are different costs.
+
+- For a cold measurement, launch a fresh server process and report readiness
+  through a non-HTTP signal. An HTTP health/readiness probe warms the request
+  pipeline. Hitting another endpoint can also initialize shared controller,
+  serializer, JIT and transport code. Keep that phase separate.
+- Retain process launch to first complete response as well as endpoint latency.
+  Moving initialization into startup can improve the latter while leaving the
+  user's total wait unchanged. Fresh processes do not imply cold OS/file caches.
+- Compare Release builds with the same runner, runtime, deployment settings and
+  response validation, alternating baseline/candidate order. Separate TCP/TLS
+  setup from requests on established connections. Record failures and sample
+  spread; do not discard slow samples or treat short warm windows as p99 evidence.
+- Generated controllers and JSON metadata are supported alternatives to reflection
+  and are required for Native AOT. Measure them with your application and compare
+  deployment modes; their availability alone is not a latency guarantee.
+- Preserve request limits, authentication and data freshness while optimizing.
+  Do not run mutating handlers as an implicit warmup or cache user responses to
+  obtain a lower first-hit number. Keep application warmup explicit and safe.
+
+The repository's fresh-process runner is documented in
+[performance checks](test/EmbedIO.Performance/README.md#first-endpoint-latency).
+The [first-endpoint report](docs/project/first-endpoint-latency.md) describes an
+unreleased literal-route optimization and its measured limits. Do not assume it
+is in the published 2.2.0 packages. Preserve existing public APIs and behavior
+when changing the library; follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 17. Pitfalls checklist
 
@@ -403,15 +495,32 @@ Guide: [trimming and Native AOT](docs/guides/trimming-and-native-aot.md).
 - Upgrading from v1 without reading the
   [v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md).
 
+### Validation when changing the library
+
+Follow [CONTRIBUTING.md](CONTRIBUTING.md) for the pinned SDK, locked restore,
+warning-free builds, regression suites and required platform gates. Parser checks
+combine FsCheck with instrumented AFL++/libFuzzer campaigns; multipart joins the
+URL/query surface. Multi-connection state-machine campaigns cover shared routing,
+sessions, rate limits, WebSocket budgets, tunnels, authentication/JWT and real
+HTTP/1, HTTP/2 and HTTP/3 connections. They retain replayable traces, binary
+provenance and bounded cleanup, and shrink matching invariant failures. These
+trace campaigns are not coverage-guided fuzzers; QUIC needs a prepared host.
+Fuzzing dependencies remain test-only. A configured workflow is not proof of a
+passing run. See [property testing](docs/guides/property-testing.md) and
+[multi-connection fuzzing](docs/guides/multi-connection-fuzzing.md).
+
 ## 18. Where to read more
 
 | Topic | Guide |
 | --- | --- |
 | First app | [Getting started](docs/guides/getting-started/README.md) |
-| Files | [Static files](docs/guides/getting-started/files.md) |
+| Files | [Static files](docs/guides/getting-started/files.md), [streaming uploads](docs/guides/streaming-multipart.md) |
+| Authentication | [Bearer authentication, policies and optional JWT](docs/guides/bearer-authentication.md) |
+| Startup and latency | [First-endpoint measurements](docs/project/first-endpoint-latency.md), [Native AOT](docs/guides/trimming-and-native-aot.md) |
 | Limits and deadlines | [Request limits](docs/guides/request-limits.md), [body limits](docs/guides/request-body-limits.md) |
 | HTTP/3 | [HTTP/3 listener](docs/guides/http3.md) |
 | OpenAPI | [OpenAPI documents](docs/guides/openapi.md) |
+| Regression and fuzzing | [Property testing](docs/guides/property-testing.md), [multi-connection state machines](docs/guides/multi-connection-fuzzing.md) |
 | Graceful shutdown | [Draining with WebSockets](docs/guides/graceful-drain-websockets.md) |
 | Trailers and 1xx | [Response field sections](docs/guides/response-field-sections.md) |
 | Everything else | [Documentation index](docs/README.md) |
