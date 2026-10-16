@@ -15,6 +15,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Usage guides
 
+- [Bearer authentication and authorization](guides/bearer-authentication.md): asynchronous validation, controller roles and policies, optional JWT validation and identity-isolation campaigns.
 - [Multi-connection state-machine fuzzing](guides/multi-connection-fuzzing.md): deterministic actor traces, replay, invariant-preserving shrinking and bounded cleanup.
 - [Streaming multipart uploads](guides/streaming-multipart.md): bounded streaming, controller binding, complete-request validation and staged file cleanup.
 - [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in asynchronous bearer authentication and controller authorization attributes,
+  roles and named policies. Generated and reflection-based controllers enforce
+  requirements before activation and body binding, with OpenAPI security metadata.
+  The optional `EmbedIO-Neo.Jwt` package validates signed JWTs using explicit
+  issuer, audience, trusted keys, lifetime and signing-algorithm settings.
+- Authentication state-machine campaigns exercise identity isolation, cancellation,
+  role/policy decisions and JWT validation across overlapping requests and reused
+  HTTP/1 and HTTP/2 connections.
+
 ## [2.1.0] - 2026-10-15
 
 ### Added

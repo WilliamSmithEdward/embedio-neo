@@ -31,6 +31,7 @@ modular request pipeline.
 - JSON callbacks and attribute-based Web API controllers.
 - Static, embedded and ZIP-backed files, including conditional requests and ranges.
 - Managed WebSockets, sessions, CORS and server-sent events.
+- Opt-in bearer authentication, controller roles and policies, with a separate JWT adapter.
 - HTTPS with an application-supplied certificate.
 - Informational responses, trailers and optional capsule/tunnel APIs.
 - Async I/O and graceful drain, with documented protocol and platform limits.
@@ -108,6 +109,7 @@ which module handles a request.
 | Read request bodies and define routes | [Requests and controllers](docs/guides/getting-started/requests.md) |
 | Serve HTML and files | [Static files](docs/guides/getting-started/files.md) |
 | Configure HTTPS | [Certificates and client trust](docs/guides/https.md) |
+| Protect APIs and uploads | [Bearer authentication, policies and optional JWT](docs/guides/bearer-authentication.md) |
 | Use WebSockets | [Startup and readiness](docs/user-reports/websocket-startup-messages.md) |
 | Stream progress to a browser | [Server-sent events](docs/user-reports/progress-events.md) |
 | Send interim responses or trailers | [Response field sections](docs/guides/response-field-sections.md) |

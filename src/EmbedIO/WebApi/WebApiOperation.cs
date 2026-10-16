@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using EmbedIO.OpenApi;
+using EmbedIO.Authorization;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.WebApi
@@ -34,6 +35,22 @@ namespace EmbedIO.WebApi
             OpenApiOperationAttribute? operation,
             OpenApiResponseAttribute[] responses,
             bool ignored)
+            : this(controllerName, methodName, resultType, parameters, operation, responses, ignored, null)
+        {
+        }
+
+        /// <summary>Creates generated operation metadata including authorization requirements.</summary>
+        /// <param name="controllerName">The controller name.</param>
+        /// <param name="methodName">The method name.</param>
+        /// <param name="resultType">The serialized result type.</param>
+        /// <param name="parameters">Parameter metadata.</param>
+        /// <param name="operation">Optional operation attribute.</param>
+        /// <param name="responses">Response attributes.</param>
+        /// <param name="ignored">Whether OpenAPI ignores the operation.</param>
+        /// <param name="authorization">Optional authorization metadata.</param>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public WebApiOperation(string controllerName, string methodName, Type? resultType, WebApiOperationParameter[] parameters,
+            OpenApiOperationAttribute? operation, OpenApiResponseAttribute[] responses, bool ignored, AuthorizationMetadata? authorization)
         {
             ControllerName = Validate.NotNull(nameof(controllerName), controllerName);
             MethodName = Validate.NotNull(nameof(methodName), methodName);
@@ -42,7 +59,11 @@ namespace EmbedIO.WebApi
             Operation = operation;
             Responses = Validate.NotNull(nameof(responses), responses);
             Ignored = ignored;
+            Authorization = authorization;
         }
+
+        /// <summary>Gets effective controller and method authorization metadata.</summary>
+        public AuthorizationMetadata? Authorization { get; }
 
         /// <summary>Gets the controller type's name.</summary>
         public string ControllerName { get; }

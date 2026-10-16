@@ -435,11 +435,12 @@ namespace EmbedIO.Tests.Issues
         private sealed class RawSocket : IDisposable
         {
             private readonly TcpClient _client;
-            public RawSocket(TcpClient client) { _client = client; }
+            private readonly NetworkStream _stream;
+            public RawSocket(TcpClient client) { _client = client; _stream = client.GetStream(); }
             public Task SendAsync(string text)
             {
                 var bytes = Encoding.ASCII.GetBytes(text);
-                return _client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+                return _stream.WriteAsync(bytes, 0, bytes.Length);
             }
             // Reads until the server closes; a reset after the response counts as the end.
             public async Task<string> ReadToEndAsync()
@@ -450,13 +451,13 @@ namespace EmbedIO.Tests.Issues
                 try
                 {
                     int read;
-                    while ((read = await _client.GetStream().ReadAsync(buffer, 0, buffer.Length, timeout.Token)) > 0)
+                    while ((read = await _stream.ReadAsync(buffer, 0, buffer.Length, timeout.Token)) > 0)
                         received.Write(buffer, 0, read);
                 }
                 catch (IOException) { }
                 return Encoding.Latin1.GetString(received.ToArray());
             }
-            public Task SendBytesAsync(byte[] bytes) => _client.GetStream().WriteAsync(bytes, 0, bytes.Length);
+            public Task SendBytesAsync(byte[] bytes) => _stream.WriteAsync(bytes, 0, bytes.Length);
 
             // Reads until the end of a response head, leaving the connection open.
             public async Task<string> ReadHeadAsync()
@@ -465,7 +466,7 @@ namespace EmbedIO.Tests.Issues
                 var buffer = new byte[1];
                 using var timeout = new CancellationTokenSource(Deadline);
                 while (!received.ToString().Contains("\r\n\r\n", StringComparison.Ordinal)
-                    && await _client.GetStream().ReadAsync(buffer, 0, 1, timeout.Token) == 1)
+                    && await _stream.ReadAsync(buffer, 0, 1, timeout.Token) == 1)
                     received.Append((char)buffer[0]);
                 return received.ToString();
             }
@@ -480,7 +481,11 @@ namespace EmbedIO.Tests.Issues
                 return types.ToArray();
             }
 
-            public void Dispose() => _client.Dispose();
+            public void Dispose()
+            {
+                try { _stream.Dispose(); }
+                finally { _client.Dispose(); }
+            }
         }
 
         private sealed class Host : IAsyncDisposable

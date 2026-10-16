@@ -94,6 +94,14 @@ namespace EmbedIO.Generators
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        internal static readonly DiagnosticDescriptor InvalidAuthorization = new(
+            "EMBEDIO013",
+            "Invalid authorization attribute",
+            "Authorization on '{0}' is invalid: {1}",
+            Category,
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         internal static readonly DiagnosticDescriptor SerializedAwaitable = new(
             "EMBEDIO012",
             "Awaitable result is serialized as an object",

@@ -1,6 +1,8 @@
 <Project>
 
   <ItemGroup>
+    <!-- Optional JWT adapter only; core authentication has no IdentityModel dependency. -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <PackageVersion Include="SharpFuzz" Version="2.3.0" />
     <!-- Property generation and shrinking in the nonpackable fuzz harness only. -->
     <PackageVersion Include="FsCheck" Version="3.4.0" />

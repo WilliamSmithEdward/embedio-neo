@@ -157,6 +157,11 @@ namespace EmbedIO.Generators
             foreach (var (method, routeAttributes) in RoutedMethods(controller, location, ref failed))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (!ValidateAuthorization(controller, method))
+                {
+                    failed = true;
+                    continue;
+                }
                 var operationName = "__EmbedIO_" + propertyName + "_Operation" + Literals.Int(invokerCount);
                 var invokerName = "__EmbedIO_" + propertyName + "_Invoker" + Literals.Int(invokerCount++);
                 var invoker = GenerateInvoker(controller, method, routeAttributes, jsonContext, invokerName, operationName, location);
@@ -1012,7 +1017,55 @@ namespace EmbedIO.Generators
                 + ResultTypeOf(method) + ", new global::EmbedIO.WebApi.WebApiOperationParameter[] { " + string.Join(", ", parameters) + " }, "
                 + (operation is null ? "null" : AttributeExpression(operation) ?? "null")
                 + ", new global::EmbedIO.OpenApi.OpenApiResponseAttribute[] { " + string.Join(", ", responses) + " }, "
-                + (ignored ? "true" : "false") + ")";
+                + (ignored ? "true" : "false")
+                + (_types.AuthorizationMetadata is null ? string.Empty : ", " + AuthorizationExpression(controller, method)) + ")";
+        }
+
+        private List<AttributeData> AuthorizationAttributes(INamedTypeSymbol controller, IMethodSymbol method)
+        {
+            var attributes = new List<AttributeData>();
+            for (var type = controller; type is not null; type = type.BaseType)
+                attributes.AddRange(type.GetAttributes());
+            attributes.AddRange(InheritedAttributes(method));
+            return attributes;
+        }
+
+        private bool ValidateAuthorization(INamedTypeSymbol controller, IMethodSymbol method)
+        {
+            var valid = true;
+            foreach (var attribute in AuthorizationAttributes(controller, method))
+            {
+                if (SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, _types.Authorize)
+                    && attribute.ConstructorArguments.Length == 1 && attribute.ConstructorArguments[0].IsNull)
+                {
+                    Report(DiagnosticDescriptors.InvalidAuthorization, Location(attribute), method.ToDisplayString(), "the policy constructor argument cannot be null");
+                    valid = false;
+                }
+            }
+            return valid;
+        }
+
+        private string AuthorizationExpression(INamedTypeSymbol controller, IMethodSymbol method)
+        {
+            var attributes = AuthorizationAttributes(controller, method);
+            var anonymous = attributes.Any(attribute => SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, _types.AllowAnonymous));
+            var requirements = new List<string>();
+            foreach (var attribute in attributes.Where(attribute => SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, _types.Authorize)))
+            {
+                var policy = attribute.ConstructorArguments.Length == 1 ? attribute.ConstructorArguments[0].Value as string : null;
+                string? roles = null;
+                foreach (var named in attribute.NamedArguments)
+                {
+                    if (named.Key == "Policy") policy = named.Value.Value as string;
+                    if (named.Key == "Roles") roles = named.Value.Value as string;
+                }
+                var roleValues = roles is null ? Array.Empty<string>() : roles.Split(',').Select(role => role.Trim()).ToArray();
+                requirements.Add("new global::EmbedIO.Authorization.AuthorizationRequirement(" + (policy is null ? "null" : Literals.String(policy))
+                    + ", new string[] { " + string.Join(", ", roleValues.Select(Literals.String)) + " })");
+            }
+            if (!anonymous && requirements.Count == 0) return "null";
+            return "new global::EmbedIO.Authorization.AuthorizationMetadata(" + (anonymous ? "true" : "false")
+                + ", new global::EmbedIO.Authorization.AuthorizationRequirement[] { " + string.Join(", ", requirements) + " })";
         }
 
         // The type the module's serializer receives, or null when the method returns no value.

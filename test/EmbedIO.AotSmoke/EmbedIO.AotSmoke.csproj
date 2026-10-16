@@ -15,6 +15,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
+    <ProjectReference Include="../../src/EmbedIO.Jwt/EmbedIO.Jwt.csproj" />
     <ProjectReference Include="../../src/EmbedIO.DependencyInjection/EmbedIO.DependencyInjection.csproj" />
     <Compile Include="../Shared/HttpsSmoke.cs" Link="Shared/HttpsSmoke.cs" />
     <Compile Include="../Shared/LoopbackPorts.cs" Link="Shared/LoopbackPorts.cs" />

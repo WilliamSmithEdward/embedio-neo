@@ -1,0 +1,14 @@
+{
+  "Scenario": "auth-state",
+  "Seed": 1729,
+  "Steps": [
+    { "Actor": 0, "Command": 0, "Value": 0 },
+    { "Actor": 0, "Command": 2, "Value": 0 },
+    { "Actor": 1, "Command": 8, "Value": 0 },
+    { "Actor": 2, "Command": 8, "Value": 0 },
+    { "Actor": 1, "Command": 1, "Value": 0 },
+    { "Actor": 0, "Command": 6, "Value": 0 },
+    { "Actor": 0, "Command": 5, "Value": 0 },
+    { "Actor": 2, "Command": 11, "Value": 0 }
+  ]
+}

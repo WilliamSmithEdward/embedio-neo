@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Bearer authentication and authorization
+      href: guides/bearer-authentication.md
     - name: Multi-connection state-machine fuzzing
       href: guides/multi-connection-fuzzing.md
     - name: Streaming multipart uploads

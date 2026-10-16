@@ -9,6 +9,9 @@ namespaces or assemblies: existing `EmbedIO`, `EmbedIO.Internal` and
 | `src/EmbedIO/Hosting` | Server lifecycle, listeners, options and server extension methods. |
 | `src/EmbedIO/Http` | Public request/response contracts, helpers, headers, MIME types and HTTP policies. |
 | `src/EmbedIO/Modules` | Module contracts, composition and registration extension methods. |
+| `src/EmbedIO/Authentication` | Credential validation modules and bearer callbacks. |
+| `src/EmbedIO/Authorization` | Controller access requirements and named policy evaluation. |
+| `src/EmbedIO.Jwt` | Optional explicit-key JWT validation; IdentityModel dependencies stay in this package. |
 | `src/EmbedIO/Tunnels` | Public tunnel, capsule and datagram contracts. |
 | `src/EmbedIO/Internal/RequestBodies` | Request stream wrappers, decoding, accounting and policy enforcement. |
 | `src/EmbedIO/Internal/Responses` | Response streams, write ownership, commitment and cookie metadata. |
