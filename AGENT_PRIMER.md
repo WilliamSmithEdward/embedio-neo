@@ -515,6 +515,13 @@ Their independent ledgers, six negative oracle checks and replay traces suppleme
 existing parser/transport fuzzing; they do not establish exhaustive coverage or
 performance. Production APIs/defaults/dependencies are unchanged.
 
+Three additional in-process policy campaigns exercise trusted-proxy forwarding,
+CORS preflights and conditional/range precedence with three overlapping actors,
+independent expectations, numeric extremes and three negative oracle checks.
+They preserve existing trust, wildcard and method behavior. See the same
+[stateful application guide](docs/guides/stateful-surface-fuzzing.md) for replay
+commands and the difference between helper-output checks and wire validation.
+
 ## 17. Pitfalls checklist
 
 - Registering a static folder at `/` before the API: the API never runs.
