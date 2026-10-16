@@ -108,7 +108,25 @@ namespace EmbedIO.WebApi
         /// <param name="authorization">Optional authorization metadata.</param>
         public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
             Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization)
+            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, true)
         {
+        }
+
+        /// <summary>Creates a route binding with explicit controller preprocessing ownership.</summary>
+        /// <param name="verb">The HTTP verb.</param>
+        /// <param name="route">The route template.</param>
+        /// <param name="isBaseRoute">Whether this is a base route.</param>
+        /// <param name="handlerId">The method identity.</param>
+        /// <param name="createInvoker">The invoker factory.</param>
+        /// <param name="operation">Optional OpenAPI metadata.</param>
+        /// <param name="authorization">Optional authorization metadata.</param>
+        /// <param name="useControllerPreprocessing">Whether the runtime calls the legacy controller hook.
+        /// False means the generated invoker owns all preprocessing.</param>
+        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing)
+        {
+            UseControllerPreprocessing = useControllerPreprocessing;
             if (operation != null && !ReferenceEquals(operation.Authorization, authorization))
                 throw new ArgumentException("Route and operation must share the same authorization metadata.", nameof(authorization));
             Verb = verb;
@@ -119,6 +137,9 @@ namespace EmbedIO.WebApi
             Operation = operation;
             Authorization = authorization;
         }
+
+        /// <summary>Gets whether the runtime calls the legacy controller hook before the invoker.</summary>
+        public bool UseControllerPreprocessing { get; }
 
         /// <summary>Gets authorization enforced before controller activation.</summary>
         public AuthorizationMetadata? Authorization { get; }

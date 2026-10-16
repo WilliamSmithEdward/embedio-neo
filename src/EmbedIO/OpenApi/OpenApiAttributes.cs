@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 
 namespace EmbedIO.OpenApi
 {
@@ -43,6 +44,10 @@ namespace EmbedIO.OpenApi
         {
             StatusCode = statusCode;
         }
+
+        /// <summary>Declares a response using the standard status enumeration.</summary>
+        /// <param name="statusCode">The status code.</param>
+        public OpenApiResponseAttribute(HttpStatusCode statusCode) : this((int)statusCode) { }
 
         /// <summary>Gets the HTTP status code.</summary>
         public int StatusCode { get; }

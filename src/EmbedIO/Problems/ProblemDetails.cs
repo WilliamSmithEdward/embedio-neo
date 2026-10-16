@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -33,6 +34,10 @@ namespace EmbedIO.Problems
 
             Status = status;
         }
+
+        /// <summary>Creates a problem using the standard status enumeration.</summary>
+        /// <param name="status">An error status, 400 to 599.</param>
+        public ProblemDetails(HttpStatusCode status) : this((int)status) { }
 
         /// <summary>Gets the HTTP status code.</summary>
         public int Status { get; }
