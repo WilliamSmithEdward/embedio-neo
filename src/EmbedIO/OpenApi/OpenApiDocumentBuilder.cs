@@ -8,6 +8,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
 using System.Text.Json.Serialization.Metadata;
 using EmbedIO.Authentication;
+using EmbedIO.Authorization;
 using EmbedIO.Routing;
 using EmbedIO.Utilities;
 using EmbedIO.WebApi;
@@ -183,6 +184,20 @@ namespace EmbedIO.OpenApi
             return this;
         }
 
+        /// <summary>Describes bearer authentication and the controller actions that require authorization.</summary>
+        /// <param name="schemeName">The security scheme name.</param>
+        /// <param name="module">The bearer module, registered before the protected handlers.</param>
+        /// <returns>This builder.</returns>
+        /// <remarks>Optional authentication requires credentials only on authorized actions. A module requiring
+        /// authentication protects every matched action, including actions allowing anonymous authorization.</remarks>
+        public OpenApiDocumentBuilder AddBearerAuthentication(string schemeName, BearerAuthenticationModule module)
+        {
+            module = Validate.NotNull(nameof(module), module);
+            AddSecurityScheme(schemeName, OpenApiSecurityScheme.Bearer(description: "HTTP bearer authentication."));
+            _requirements.Add(new SecurityRequirement(path => module.MatchUrlPath(path) != null, schemeName, true, !module.RequireAuthentication));
+            return this;
+        }
+
         private string KnownScheme(string schemeName)
         {
             schemeName = Validate.NotNull(nameof(schemeName), schemeName);
@@ -260,12 +275,15 @@ namespace EmbedIO.OpenApi
         // Operations whose sample path Covers returns true for require Scheme.
         private sealed class SecurityRequirement
         {
-            internal SecurityRequirement(Func<string, bool> covers, string scheme, bool unauthorizedResponse)
+            internal SecurityRequirement(Func<string, bool> covers, string scheme, bool unauthorizedResponse, bool onlyAuthorizedOperations = false)
             {
                 Covers = covers;
                 Scheme = scheme;
                 UnauthorizedResponse = unauthorizedResponse;
+                OnlyAuthorizedOperations = onlyAuthorizedOperations;
             }
+
+            internal bool OnlyAuthorizedOperations { get; }
 
             internal Func<string, bool> Covers { get; }
 
@@ -319,6 +337,7 @@ namespace EmbedIO.OpenApi
             internal List<string> Tags { get; } = new();
 
             internal List<string> Problems { get; } = new();
+            private readonly Dictionary<JsonObject, AuthorizationMetadata> _authorization = new();
 
             internal void AddRoute(string basePath, RouteDescription route)
             {
@@ -402,14 +421,9 @@ namespace EmbedIO.OpenApi
 
                     foreach (var operation in ((JsonObject?)pathItem.Value ?? new JsonObject()).Select(o => o.Value).OfType<JsonObject>())
                     {
-                        var schemes = new JsonObject();
-                        foreach (var requirement in applying)
-                        {
-                            if (!schemes.ContainsKey(requirement.Scheme))
-                                schemes[requirement.Scheme] = new JsonArray();
-                        }
-
-                        operation["security"] = new JsonArray((JsonNode)schemes);
+                        var authorized = _authorization.TryGetValue(operation, out var authorization)
+                            && !authorization.AllowAnonymous && authorization.Requirements.Count != 0;
+                        var matching = applying.Where(requirement => !requirement.OnlyAuthorizedOperations || authorized).ToArray();
                         if (applying.Any(r => r.UnauthorizedResponse) && operation["responses"] is JsonObject responses && !responses.ContainsKey("401"))
                         {
                             responses["401"] = new JsonObject
@@ -418,6 +432,15 @@ namespace EmbedIO.OpenApi
                                 ["headers"] = new JsonObject { [HttpHeaderNames.WWWAuthenticate] = new JsonObject { ["schema"] = StringSchema() } },
                             };
                         }
+                        if (matching.Length == 0) continue;
+                        var schemes = new JsonObject();
+                        foreach (var requirement in matching)
+                        {
+                            if (!schemes.ContainsKey(requirement.Scheme))
+                                schemes[requirement.Scheme] = new JsonArray();
+                        }
+
+                        operation["security"] = new JsonArray((JsonNode)schemes);
                     }
                 }
             }
@@ -686,6 +709,19 @@ namespace EmbedIO.OpenApi
                 var controller = TrimSuffix(operation.ControllerName, "Controller");
                 var metadata = operation.Operation;
                 var result = new JsonObject();
+                if (operation.Authorization is { } authorization)
+                {
+                    _authorization[result] = authorization;
+                    result["x-embedio-authorization"] = new JsonObject
+                    {
+                        ["allowAnonymous"] = authorization.AllowAnonymous,
+                        ["requirements"] = new JsonArray(authorization.Requirements.Select(requirement => (JsonNode)new JsonObject
+                        {
+                            ["policy"] = requirement.Policy,
+                            ["roles"] = new JsonArray(requirement.Roles.Select(role => (JsonNode)JsonValue.Create(role)).ToArray()),
+                        }).ToArray()),
+                    };
+                }
                 var tags = metadata?.Tags is { Length: > 0 } explicitTags ? explicitTags : new[] { controller };
                 result["tags"] = new JsonArray(tags.Select(t => (JsonNode)JsonValue.Create(t)).ToArray());
 
@@ -849,6 +885,15 @@ namespace EmbedIO.OpenApi
                 }
 
                 var responses = Responses(operation, canFailBinding, where);
+                if (operation.Authorization is { AllowAnonymous: false } protectedAction && protectedAction.Requirements.Count > 0)
+                {
+                    if (!responses.ContainsKey("401")) responses["401"] = new JsonObject
+                    {
+                        ["description"] = "Authentication is required.",
+                        ["headers"] = new JsonObject { [HttpHeaderNames.WWWAuthenticate] = new JsonObject { ["schema"] = StringSchema() } },
+                    };
+                    if (!responses.ContainsKey("403")) responses["403"] = new JsonObject { ["description"] = "The authenticated user does not satisfy the authorization requirements." };
+                }
                 if (multipart)
                 {
                     if (!responses.ContainsKey("413"))

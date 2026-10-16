@@ -122,6 +122,29 @@ internal sealed class Hidden : WebApiController { [Route(HttpVerbs.Get, ""/"")] 
             Assert.That(result.Generated, Is.Empty);
         }
 
+        [TestCase(true)]
+        [TestCase(false)]
+        public void NullAuthorizationConstructorPolicyReportsError(bool controllerAttribute)
+        {
+            // A named property cannot repair the constructor exception that reflection registration observes.
+            const string Attribute = "[EmbedIO.Authorization.Authorize(null, Policy = \"valid\")] ";
+            var source = Usings + (controllerAttribute ? Attribute : string.Empty)
+                + "public sealed class C : WebApiController { "
+                + (controllerAttribute ? string.Empty : Attribute)
+                + "[Route(HttpVerbs.Get, \"/\")] public string Get() { return \"ok\"; } }\n"
+                + "[GeneratedControllerBinding(typeof(C))] internal static partial class B { }";
+            var result = Run(source);
+            var errors = result.GeneratorDiagnostics.Where(d => d.Id == "EMBEDIO013").ToArray();
+            Assert.That(errors, Has.Length.EqualTo(1));
+            Assert.That(errors[0].Severity, Is.EqualTo(DiagnosticSeverity.Error));
+            // Incremental diagnostics retain file/span data rather than a SyntaxTree.
+            Assert.That(errors[0].Location.Kind, Is.EqualTo(LocationKind.ExternalFile));
+            var span = errors[0].Location.SourceSpan;
+            Assert.That(source.Substring(span.Start, span.Length), Does.Contain("Authorize(null"));
+            Assert.That(errors[0].GetMessage(), Does.Contain("policy constructor argument cannot be null"));
+            Assert.That(result.Generated, Is.Empty, "Invalid authorization must not produce a usable binding.");
+        }
+
         [Test]
         public void IgnoredMethodsAndAwaitablesWarnButStillGenerate()
         {

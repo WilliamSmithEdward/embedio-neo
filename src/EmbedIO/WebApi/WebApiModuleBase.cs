@@ -15,7 +15,7 @@ namespace EmbedIO.WebApi
     /// <para>A module using objects derived from <see cref="WebApiController"/>
     /// as collections of handler methods.</para>
     /// </summary>
-    public abstract class WebApiModuleBase : RoutingModuleBase
+    public abstract partial class WebApiModuleBase : RoutingModuleBase
     {
         internal const string ReflectionMessage = "Controllers are discovered, bound and invoked through reflection and runtime code generation, "
             + "which trimming and Native AOT do not support. Register routes with RoutingModule or ActionModule delegates instead.";
@@ -706,7 +706,11 @@ namespace EmbedIO.WebApi
             var caseInsensitive = _caseInsensitiveRoutes;
             var pending = caseInsensitive ? new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>() : null;
             var methods = controllerType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
-                .Where(m => !m.ContainsGenericParameters);
+                .Where(m => !m.ContainsGenericParameters).ToArray();
+            var authorization = methods.Where(method => method.GetCustomAttributes().OfType<RouteAttribute>().Any())
+                .ToDictionary(method => method, method => ReadAuthorization(controllerType, method));
+            foreach (var metadata in authorization.Values)
+                if (metadata != null) _authorization.Validate(metadata);
 
             foreach (var method in methods)
             {
@@ -724,11 +728,11 @@ namespace EmbedIO.WebApi
                         var staged = pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.");
                         if (!AcceptCaseInsensitiveDeclaration(attribute.Verb, matcher, method, controllerType, staged.Select(p => (p.Verb, p.Matcher, p.Method))))
                             continue;
-                        staged.Add((attribute.Verb, matcher, method, CompileHandler(factoryExpression, method, matcher, contextFactory, release)));
+                        staged.Add((attribute.Verb, matcher, method, WrapAuthorization(CompileHandler(factoryExpression, method, matcher, contextFactory, release), authorization[method])));
                     }
                     else
                     {
-                        AddHandler(attribute.Verb, attribute.Matcher, CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release));
+                        AddHandler(attribute.Verb, attribute.Matcher, WrapAuthorization(CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release), authorization[method]));
                     }
                     handlerCount++;
                 }
@@ -841,12 +845,15 @@ namespace EmbedIO.WebApi
 
             var matchers = new RouteMatcher[routes.Count];
             for (var i = 0; i < routes.Count; i++)
+            {
                 matchers[i] = RouteMatcher.Parse(routes[i].Route, routes[i].IsBaseRoute);
+                if (routes[i].Authorization is { } metadata) _authorization.Validate(metadata);
+            }
 
             if (!_caseInsensitiveRoutes)
             {
                 for (var i = 0; i < routes.Count; i++)
-                    AddHandler(routes[i].Verb, matchers[i], createHandler(routes[i].CreateInvoker()));
+                    AddHandler(routes[i].Verb, matchers[i], WrapAuthorization(createHandler(routes[i].CreateInvoker()), routes[i].Authorization));
             }
             else
             {
@@ -858,7 +865,7 @@ namespace EmbedIO.WebApi
                     if (!AcceptCaseInsensitiveDeclaration(route.Verb, matcher, route.HandlerId, controllerType, pending.Select(p => (p.Verb, p.Matcher, p.Method))))
                         continue;
 
-                    pending.Add((route.Verb, matcher, route.HandlerId, createHandler(route.CreateInvoker())));
+                    pending.Add((route.Verb, matcher, route.HandlerId, WrapAuthorization(createHandler(route.CreateInvoker()), route.Authorization)));
                 }
 
                 foreach (var entry in pending)

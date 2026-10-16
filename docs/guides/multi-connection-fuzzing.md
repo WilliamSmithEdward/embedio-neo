@@ -25,6 +25,10 @@ values 0–63; their interpretation belongs to the scenario.
 | `routes` | Shared route registration and retained snapshots |
 | `tunnels` | Shared tunnel lifetime and ownership |
 | `sessions` | Shared session identities and mutations |
+| `auth-state` | Bearer identities, roles/policies, cancellation and application body-binding isolation |
+| `auth-jwt` | Explicit-key JWT trust, lifetime, cancellation and concurrent principal isolation |
+| `auth-http1` | Real HTTP/1 authentication across overlapping and reused connections |
+| `auth-http2` | Real HTTP/2 authentication across overlapping and reused connections |
 | `http1-connections` | Real HTTP/1 connection isolation |
 | `http2-connections` | Real HTTP/2 connection isolation |
 | `http3-connections` | Real HTTP/3 connection isolation; requires working native QUIC support |

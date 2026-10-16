@@ -7,6 +7,8 @@
   <ItemGroup>
     <PackageReference Include="FsCheck" PrivateAssets="all" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
+    <ProjectReference Include="../../src/EmbedIO.Testing/EmbedIO.Testing.csproj" />
+    <ProjectReference Include="../../src/EmbedIO.Jwt/EmbedIO.Jwt.csproj" />
     <None Update="corpus.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

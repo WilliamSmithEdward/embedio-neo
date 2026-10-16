@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading.Tasks;
 using EmbedIO.Routing;
+using EmbedIO.Authorization;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.WebApi
@@ -93,14 +94,34 @@ namespace EmbedIO.WebApi
             string handlerId,
             Func<WebApiRouteInvoker<TController>> createInvoker,
             WebApiOperation? operation)
+            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, operation?.Authorization)
         {
+        }
+
+        /// <summary>Creates a generated route binding with immutable authorization metadata.</summary>
+        /// <param name="verb">The HTTP verb.</param>
+        /// <param name="route">The route template.</param>
+        /// <param name="isBaseRoute">Whether this is a base route.</param>
+        /// <param name="handlerId">The method identity.</param>
+        /// <param name="createInvoker">The invoker factory.</param>
+        /// <param name="operation">Optional OpenAPI metadata.</param>
+        /// <param name="authorization">Optional authorization metadata.</param>
+        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization)
+        {
+            if (operation != null && !ReferenceEquals(operation.Authorization, authorization))
+                throw new ArgumentException("Route and operation must share the same authorization metadata.", nameof(authorization));
             Verb = verb;
             Route = Validate.NotNull(nameof(route), route);
             IsBaseRoute = isBaseRoute;
             HandlerId = Validate.NotNull(nameof(handlerId), handlerId);
             CreateInvoker = Validate.NotNull(nameof(createInvoker), createInvoker);
             Operation = operation;
+            Authorization = authorization;
         }
+
+        /// <summary>Gets authorization enforced before controller activation.</summary>
+        public AuthorizationMetadata? Authorization { get; }
 
         /// <summary>Gets the controller method's description for OpenAPI documents, if the generator provided one.</summary>
         public WebApiOperation? Operation { get; }

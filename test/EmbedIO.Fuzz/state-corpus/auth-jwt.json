@@ -1,0 +1,21 @@
+{
+  "Scenario": "auth-jwt",
+  "Seed": 1729,
+  "Steps": [
+    { "Actor": 0, "Command": 0, "Value": 1 },
+    { "Actor": 1, "Command": 1, "Value": 2 },
+    { "Actor": 2, "Command": 2, "Value": 3 },
+    { "Actor": 0, "Command": 3, "Value": 4 },
+    { "Actor": 1, "Command": 4, "Value": 5 },
+    { "Actor": 2, "Command": 5, "Value": 6 },
+    { "Actor": 0, "Command": 6, "Value": 7 },
+    { "Actor": 1, "Command": 7, "Value": 8 },
+    { "Actor": 2, "Command": 8, "Value": 9 },
+    { "Actor": 0, "Command": 9, "Value": 10 },
+    { "Actor": 1, "Command": 9, "Value": 11 },
+    { "Actor": 2, "Command": 9, "Value": 12 },
+    { "Actor": 0, "Command": 10, "Value": 13 },
+    { "Actor": 1, "Command": 11, "Value": 14 },
+    { "Actor": 2, "Command": 0, "Value": 15 }
+  ]
+}
