@@ -25,6 +25,7 @@ namespace EmbedIO.Tests
             var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => failed.RunAsync());
             Assert.That(actual, Is.SameAs(expected));
             Assert.That(failed.Listener.IsListening, Is.False);
+            Assert.That(failed.Listener.Name, Is.EqualTo("EmbedIO-Neo HTTP Listener"));
 
             // Keep the failed server alive; cleanup must not depend on consumer Dispose/GC.
             using var replacement = new WebServer(mode, url);

@@ -28,6 +28,10 @@
   extensions. Existing integer APIs, properties and validation remain available.
   See [route hooks and enum statuses](docs/guides/route-hooks.md).
 
+### Changed
+
+- The managed listener display name and startup log use `EmbedIO-Neo HTTP Listener`.
+  Original license and copyright attribution are preserved.
 ### Fixed
 
 - Permanent client-ban storage retries the Windows replacement error that leaves

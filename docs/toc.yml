@@ -303,6 +303,8 @@
       href: project/http3-native-provider-audit.md
     - name: Native QUIC lifetime campaigns
       href: project/http3-native-lifetime-campaigns.md
+    - name: Cold-path JIT latency
+      href: project/cold-path-jit-latency.md
     - name: First-endpoint latency
       href: project/first-endpoint-latency.md
     - name: Managed engine load comparison

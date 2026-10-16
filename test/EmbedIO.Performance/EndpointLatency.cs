@@ -33,6 +33,10 @@ internal static class EndpointLatency
         using var handler = new SocketsHttpHandler { UseProxy = false, AutomaticDecompression = DecompressionMethods.None };
         using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10), DefaultRequestVersion = HttpVersion.Version11, DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact };
         var assembly = typeof(WebServer).Assembly;
+        var available = new[] { "literal", "literal-100", "parameter", "controller", "json", "cookies", "large-header" };
+        var selected = Environment.GetEnvironmentVariable("EMBEDIO_LATENCY_SCENARIOS")?.Split(',') ?? available;
+        if (selected.Length == 0 || selected.Any(scenario => !available.Contains(scenario)) || selected.Distinct().Count() != selected.Length)
+            throw new ArgumentException("EMBEDIO_LATENCY_SCENARIOS must contain distinct supported scenario names.");
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             environment = new
@@ -44,6 +48,8 @@ internal static class EndpointLatency
                 runnerSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(EndpointLatency).Assembly.Location))),
                 tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
                 rounds,
+                scenarios = selected,
+                traceLevel = Environment.GetEnvironmentVariable("EMBEDIO_LATENCY_TRACE_LEVEL") ?? "Off",
                 method = "Fresh server per sample; no HTTP readiness probe; HTTP/1.1 loopback; complete bodies validated; first error aborts without retry. Cold means fresh process, not cold filesystem/OS caches. Ready notification includes runtime launch and console reporting. Request timings include the separate client HTTP stack. No latency pass/fail thresholds."
             }
         }));
@@ -51,7 +57,7 @@ internal static class EndpointLatency
         await SampleAsync(client, "literal", true, -1, token).ConfigureAwait(false);
         for (var round = 0; round < rounds; round++)
         {
-            var scenarios = new[] { "literal", "literal-100", "parameter", "controller", "json" };
+            var scenarios = (string[])selected.Clone();
             if (round % 2 != 0) Array.Reverse(scenarios);
             foreach (var scenario in scenarios)
                 foreach (var endpointOnly in round % 2 == 0 ? new[] { false, true } : new[] { true, false })
@@ -90,10 +96,10 @@ internal static class EndpointLatency
                 for (var i = 0; i < 20; i++) await RequestAsync(client, url + "__control", "ok", token).ConfigureAwait(false);
             var target = url + (scenario == "parameter" ? "target/42" : "target");
             var expected = scenario == "json" ? "{\"message\":\"ok\"}" : "ok";
-            var first = await RequestAsync(client, target, expected, token).ConfigureAwait(false);
+            var first = await RequestAsync(client, target, expected, token, scenario).ConfigureAwait(false);
             var firstCompleteFromLaunch = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
             var warm = new List<double>();
-            for (var i = 0; i < 100; i++) warm.Add((await RequestAsync(client, target, expected, token).ConfigureAwait(false)).CompleteMilliseconds);
+            for (var i = 0; i < 100; i++) warm.Add((await RequestAsync(client, target, expected, token, scenario).ConfigureAwait(false)).CompleteMilliseconds);
             warm.Sort();
             await child.StandardInput.WriteLineAsync("stop").ConfigureAwait(false);
             await child.WaitForExitAsync(token).WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
@@ -122,7 +128,7 @@ internal static class EndpointLatency
         }
     }
 
-    private static async Task<(double HeadersMilliseconds, double CompleteMilliseconds)> RequestAsync(HttpClient client, string url, string expected, CancellationToken token)
+    private static async Task<(double HeadersMilliseconds, double CompleteMilliseconds)> RequestAsync(HttpClient client, string url, string expected, CancellationToken token, string? scenario = null)
     {
         var start = Stopwatch.GetTimestamp();
         using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
@@ -131,12 +137,20 @@ internal static class EndpointLatency
         var complete = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
         if (response.StatusCode != HttpStatusCode.OK || response.Version != HttpVersion.Version11 || body != expected)
             throw new InvalidDataException("Unexpected latency response: " + response.StatusCode + " " + body);
+        if (scenario == "cookies")
+        {
+            var cookies = response.Headers.GetValues("Set-Cookie").ToArray();
+            if (cookies.Length != 2 || !cookies.Contains("raw=one; Path=/") || !cookies.Contains("structured=two; Path=/"))
+                throw new InvalidDataException("Unexpected latency cookies.");
+        }
+        if (scenario == "large-header" && response.Headers.GetValues("X-Large").Single() != new string('x', 17000))
+            throw new InvalidDataException("Unexpected latency large header.");
         return (headers, complete);
     }
 
     private static async Task HostAsync(string scenario, string url)
     {
-        EmbedIO.Diagnostics.Log.Source.Switch.Level = SourceLevels.Off;
+        EmbedIO.Diagnostics.Log.Source.Switch.Level = Enum.Parse<SourceLevels>(Environment.GetEnvironmentVariable("EMBEDIO_LATENCY_TRACE_LEVEL") ?? "Off");
         var start = Stopwatch.GetTimestamp();
         using var server = new WebServer(url).PreferNoCompressionFor("text/*").PreferNoCompressionFor("application/json");
         if (scenario == "controller")
@@ -153,6 +167,12 @@ internal static class EndpointLatency
                 (context, route) =>
                 {
                     if (scenario == "parameter" && route["id"] != "42") throw new InvalidDataException("Unexpected route parameter.");
+                    if (scenario == "cookies")
+                    {
+                        context.Response.Headers.Add("Set-Cookie", "raw=one; Path=/");
+                        context.Response.SetCookie(new Cookie("structured", "two", "/"));
+                    }
+                    if (scenario == "large-header") context.Response.Headers["X-Large"] = new string('x', 17000);
                     return scenario == "json" ? context.SendDataAsync(new Payload { Message = "ok" }) : ReplyAsync(context, "ok");
                 });
             server.WithModule(routes);
