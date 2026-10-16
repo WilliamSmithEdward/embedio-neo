@@ -27,6 +27,7 @@ namespace EmbedIO.Generators
             TypeConverterAttribute = compilation.GetTypeByMetadataName("System.ComponentModel.TypeConverterAttribute");
             QueryData = compilation.GetTypeByMetadataName("EmbedIO.WebApi.QueryDataAttribute");
             FormData = compilation.GetTypeByMetadataName("EmbedIO.WebApi.FormDataAttribute");
+            MultipartForm = compilation.GetTypeByMetadataName("EmbedIO.WebApi.MultipartFormAttribute");
             WebApiOperation = compilation.GetTypeByMetadataName("EmbedIO.WebApi.WebApiOperation");
             OpenApiOperation = compilation.GetTypeByMetadataName("EmbedIO.OpenApi.OpenApiOperationAttribute");
             OpenApiResponse = compilation.GetTypeByMetadataName("EmbedIO.OpenApi.OpenApiResponseAttribute");
@@ -36,6 +37,8 @@ namespace EmbedIO.Generators
         internal INamedTypeSymbol? QueryData { get; }
 
         internal INamedTypeSymbol? FormData { get; }
+
+        internal INamedTypeSymbol? MultipartForm { get; }
 
         // Null when the referenced EmbedIO predates operation metadata; bindings are then generated without it.
         internal INamedTypeSymbol? WebApiOperation { get; }

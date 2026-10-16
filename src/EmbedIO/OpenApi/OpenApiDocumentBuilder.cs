@@ -722,6 +722,7 @@ namespace EmbedIO.OpenApi
                 List<string>? formRequired = null;
                 var formIsOpen = false;
                 WebApiOperationParameter? jsonBody = null;
+                var multipart = false;
                 foreach (var parameter in operation.Parameters)
                 {
                     switch (parameter.Source)
@@ -777,6 +778,13 @@ namespace EmbedIO.OpenApi
                             canFailBinding = true;
                             break;
 
+                        case WebApiParameterSource.Multipart:
+                            if (multipart)
+                                Problems.Add(where + ": more than one parameter reads the multipart request body.");
+                            multipart = true;
+                            canFailBinding = true;
+                            break;
+
                         // A service the dependency injection package supplies reads nothing from the request.
                         case WebApiParameterSource.Custom when parameter.CustomAttribute == FromServicesAttributeName:
                             break;
@@ -790,7 +798,26 @@ namespace EmbedIO.OpenApi
                 if (parameters.Count > 0)
                     result["parameters"] = parameters;
 
-                if (jsonBody != null && formProperties != null)
+                if (multipart && (jsonBody != null || formProperties != null))
+                {
+                    Problems.Add(where + ": a streaming multipart reader cannot share the request body with another body binding.");
+                }
+                else if (multipart)
+                {
+                    result["requestBody"] = new JsonObject
+                    {
+                        ["required"] = true,
+                        ["description"] = "Streaming multipart form with application-defined field names, repeated fields and binary file parts. Upload limits are enforced while reading.",
+                        ["content"] = new JsonObject
+                        {
+                            ["multipart/form-data"] = new JsonObject
+                            {
+                                ["schema"] = new JsonObject { ["type"] = "object", ["additionalProperties"] = true },
+                            },
+                        },
+                    };
+                }
+                else if (jsonBody != null && formProperties != null)
                 {
                     Problems.Add(where + ": the method reads the request body both as JSON and as a form.");
                 }
@@ -821,7 +848,15 @@ namespace EmbedIO.OpenApi
                     };
                 }
 
-                result["responses"] = Responses(operation, canFailBinding, where);
+                var responses = Responses(operation, canFailBinding, where);
+                if (multipart)
+                {
+                    if (!responses.ContainsKey("413"))
+                        responses["413"] = new JsonObject { ["description"] = "A configured multipart upload limit was exceeded." };
+                    if (!responses.ContainsKey("415"))
+                        responses["415"] = new JsonObject { ["description"] = "The request content type is not multipart/form-data." };
+                }
+                result["responses"] = responses;
                 return result;
             }
 

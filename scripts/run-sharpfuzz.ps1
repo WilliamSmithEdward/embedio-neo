@@ -32,7 +32,7 @@ if ($IsLinux) {
     if ($LASTEXITCODE) { throw 'Could not make driver executable.' }
 }
 
-@{ seed = $Seed; seconds = $Seconds; maxLength = 4096; sharpFuzz = '2.3.0'; driver = $release; driverSha256 = $hash; source = (git -C $repo rev-parse HEAD) } |
+@{ seed = $Seed; seconds = $Seconds; maxLength = 4096; sharpFuzz = '2.3.0'; driver = $release; driverSha256 = $hash; source = (git -C $repo rev-parse HEAD); workingTreeChanges = @(git -C $repo status --porcelain) } |
     ConvertTo-Json | Set-Content (Join-Path $output 'campaign.json')
 dotnet restore $project --locked-mode 2>&1 | Tee-Object (Join-Path $output 'restore.log')
 if ($LASTEXITCODE) { throw 'Locked restore failed.' }
@@ -46,13 +46,22 @@ $ordinaryAssembly = Join-Path $repo 'src/EmbedIO/bin/Release/net10.0/EmbedIO.dll
 $ordinaryHash = (Get-FileHash $ordinaryAssembly).Hash
 $originalHash = (Get-FileHash $assembly).Hash
 $priorRollForward = $env:DOTNET_ROLL_FORWARD
+$priorPrintTypes = $env:SHARPFUZZ_PRINT_INSTRUMENTED_TYPES
 try {
     # The instrumenter targets net8; the repository pins and installs net10.
     $env:DOTNET_ROLL_FORWARD = 'Major'
-    & (Join-Path $tools 'sharpfuzz') $assembly EmbedIO.Utilities.UrlPath EmbedIO.Utilities.UrlEncodedDataParser
+    $env:SHARPFUZZ_PRINT_INSTRUMENTED_TYPES = '1'
+    & (Join-Path $tools 'sharpfuzz') $assembly EmbedIO.Utilities.UrlPath EmbedIO.Utilities.UrlEncodedDataParser EmbedIO.MultipartReader |
+        Tee-Object (Join-Path $output 'instrumentation.log')
     if ($LASTEXITCODE) { throw 'Instrumentation failed.' }
 } finally {
     $env:DOTNET_ROLL_FORWARD = $priorRollForward
+    $env:SHARPFUZZ_PRINT_INSTRUMENTED_TYPES = $priorPrintTypes
+}
+$instrumentation = Get-Content (Join-Path $output 'instrumentation.log') -Raw
+if ($instrumentation -notmatch 'EmbedIO\.MultipartReader/<ReadBodyCoreAsync>' -or
+    $instrumentation -notmatch 'EmbedIO\.MultipartReader/<ReadHeadersAsync>') {
+    throw 'Multipart async parser state machines were not instrumented.'
 }
 if ((Get-FileHash $assembly).Hash -eq $originalHash) { throw 'Instrumentation did not change the copied assembly.' }
 if ((Get-FileHash $ordinaryAssembly).Hash -ne $ordinaryHash) { throw 'Instrumentation modified the ordinary build output.' }

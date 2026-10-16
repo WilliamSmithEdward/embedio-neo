@@ -2,9 +2,9 @@ name: Fuzz
 on:
   push:
     branches: [main]
-    paths: [src/EmbedIO/Tunnels/HttpCapsule*.cs, src/EmbedIO/Tunnels/HttpTunnel.cs, src/EmbedIO/Tunnels/IHttpTunnelContext.cs, src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/EmbedIO/Http/Multipart/**, src/EmbedIO/Http/HttpContextExtensions.Multipart.cs, src/EmbedIO/Tunnels/HttpCapsule*.cs, src/EmbedIO/Tunnels/HttpTunnel.cs, src/EmbedIO/Tunnels/IHttpTunnelContext.cs, src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
   pull_request:
-    paths: [src/EmbedIO/Tunnels/HttpCapsule*.cs, src/EmbedIO/Tunnels/HttpTunnel.cs, src/EmbedIO/Tunnels/IHttpTunnelContext.cs, src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
+    paths: [src/EmbedIO/Http/Multipart/**, src/EmbedIO/Http/HttpContextExtensions.Multipart.cs, src/EmbedIO/Tunnels/HttpCapsule*.cs, src/EmbedIO/Tunnels/HttpTunnel.cs, src/EmbedIO/Tunnels/IHttpTunnelContext.cs, src/EmbedIO/Utilities/**, src/EmbedIO/Net/**, src/EmbedIO/WebSockets/**, test/EmbedIO.Fuzz/**, .github/workflows/fuzz.yml]
   schedule:
     - cron: '23 4 * * *'
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   fuzz:
-    name: Fuzz URL data and HTTP transport framing
+    name: Fuzz URL data, multipart and HTTP transport framing
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

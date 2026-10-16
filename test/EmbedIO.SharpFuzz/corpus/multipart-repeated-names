@@ -1,0 +1,9 @@
+--fuzz-boundary
+Content-Disposition: form-data; name="text"
+
+one
+--fuzz-boundary
+Content-Disposition: form-data; name="text"
+
+two
+--fuzz-boundary--

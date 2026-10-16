@@ -7,7 +7,16 @@ using SharpFuzz;
 
 // The driver supplies arbitrary bytes. UTF-8 replacement decoding is intentional:
 // these public APIs accept strings, including malformed URL escapes.
-if (args.Length == 1 && args[0] == "--afl")
+if (args.Length == 2 && args[0] == "--multipart-corpus")
+{
+    var paths = Directory.GetFiles(args[1]).OrderBy(path => path, StringComparer.Ordinal);
+    foreach (var path in paths)
+    {
+        MultipartFuzzChecks.Check(File.ReadAllBytes(path));
+        Console.WriteLine("Passed multipart seed: " + Path.GetFileName(path));
+    }
+}
+else if (args.Length == 1 && args[0] == "--afl")
 {
     Fuzzer.OutOfProcess.Run((Stream stream) =>
     {
@@ -23,6 +32,7 @@ else
 
 static void CheckInput(ReadOnlySpan<byte> data)
 {
+    MultipartFuzzChecks.Check(data);
     var input = Encoding.UTF8.GetString(data);
     foreach (var groupFlags in new[] { false, true })
     {
