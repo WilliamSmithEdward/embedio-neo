@@ -8,7 +8,7 @@ mkdir -p /work /results/maps
 # AFL creates private files as container root; preserve readable evidence for
 # the host runner on successful and failed campaigns alike.
 trap 'result=$?; chmod -R a+rX /results; exit "$result"' EXIT
-tar -C /input --exclude=bin --exclude=obj -cf - src test/EmbedIO.SharpFuzz .editorconfig Directory.Build.props Directory.Packages.props global.json README.md LICENSE images | tar -xf - -C /work
+tar -C /input --exclude=bin --exclude=obj -cf - src test/EmbedIO.SharpFuzz test/EmbedIO.Fuzz/MultipartFuzzChecks.cs .editorconfig Directory.Build.props Directory.Packages.props global.json README.md LICENSE images | tar -xf - -C /work
 cd /work
 # Match a Linux Git checkout when the read-only source comes from Windows.
 find src test -name '*.cs' -type f -exec sed -i 's/\r$//' {} +
@@ -16,7 +16,9 @@ dotnet restore test/EmbedIO.SharpFuzz --locked-mode > /results/restore.log 2>&1
 dotnet publish test/EmbedIO.SharpFuzz -c Release --no-restore -o /work/publish -m:1 > /results/build.log 2>&1
 sha256sum src/EmbedIO/bin/Release/net10.0/EmbedIO.dll > /results/ordinary-before.sha256
 before=$(sha256sum /work/publish/EmbedIO.dll)
-DOTNET_ROLL_FORWARD=Major /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.dll EmbedIO.Utilities.UrlPath EmbedIO.Utilities.UrlEncodedDataParser > /results/instrumentation.log 2>&1
+DOTNET_ROLL_FORWARD=Major SHARPFUZZ_PRINT_INSTRUMENTED_TYPES=1 /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.dll EmbedIO.Utilities.UrlPath EmbedIO.Utilities.UrlEncodedDataParser EmbedIO.MultipartReader > /results/instrumentation.log 2>&1
+grep -F 'EmbedIO.MultipartReader/<ReadBodyCoreAsync>' /results/instrumentation.log
+grep -F 'EmbedIO.MultipartReader/<ReadHeadersAsync>' /results/instrumentation.log
 test "$before" != "$(sha256sum /work/publish/EmbedIO.dll)"
 sha256sum --check /results/ordinary-before.sha256
 mkdir /work/corpus
@@ -31,6 +33,11 @@ afl-showmap -t 10000 -m none -i /work/corpus -o /results/maps -- dotnet /work/pu
 test -s /results/maps/root && test -s /results/maps/query
 if cmp -s /results/maps/root /results/maps/query; then
     echo 'Distinct parser inputs produced identical coverage maps.' >&2
+    exit 1
+fi
+test -s /results/maps/multipart-file && test -s /results/maps/multipart-empty-file
+if cmp -s /results/maps/multipart-file /results/maps/multipart-empty-file; then
+    echo 'Distinct multipart inputs produced identical coverage maps.' >&2
     exit 1
 fi
 printf 'seconds=%s\nseed=%s\nafl_commit=dbaf11913c1b2702dee5b4d3dcfffd52f1defe50\n' "$seconds" "$seed" > /results/campaign.txt

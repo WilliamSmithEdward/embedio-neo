@@ -1,6 +1,6 @@
 - name: Documentation
   href: README.md
-- name: Generated URL and query properties
+- name: Generated URL, query and multipart properties
   href: guides/property-testing.md
 - name: Parity audit
   items:
@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Streaming multipart uploads
+      href: guides/streaming-multipart.md
     - name: WebSocket handshake status
       href: guides/websocket-handshake-status.md
     - name: Outstanding WebSocket deliveries (Neo v2)

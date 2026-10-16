@@ -15,6 +15,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Usage guides
 
+- [Streaming multipart uploads](guides/streaming-multipart.md): bounded streaming, controller binding, complete-request validation and staged file cleanup.
 - [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.
 - [Outstanding WebSocket deliveries](guides/websocket-receive-limits.md): opt-in connection and module limits covering assembly, queues and unfinished callbacks.
 - [WebSockets during a graceful drain](guides/graceful-drain-websockets.md): new in Neo v2, an opt-in 1001 close on drain and the `DrainStarted` signal, over HTTP/1.1, HTTP/2 and HTTP/3.
@@ -210,7 +211,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
-- [Generated URL and query properties](guides/property-testing.md): bounded FsCheck generation, shrinking and reproducible campaigns.
+- [Generated URL, query and multipart properties](guides/property-testing.md): bounded FsCheck generation, shrinking and reproducible campaigns.
 - [Source layout](project/source-layout.md): responsibilities, partial-file naming and shared-source links.
 
 - [Performance and cleanup audit](project/performance-cleanup-audit.md): allocation measurements, compatibility-preserving simplifications and TLS callback regression coverage.

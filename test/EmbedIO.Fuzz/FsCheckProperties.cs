@@ -52,6 +52,9 @@ internal static class FsCheckProperties
                 }));
         }
 
+        Check.One(config.WithName("Multipart binary round trip and fragmentation"),
+            Prop.ForAll(inputs, input => MultipartFuzzChecks.CheckText(input)));
+
         return true;
     }
 
