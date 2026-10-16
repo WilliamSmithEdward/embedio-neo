@@ -6,6 +6,13 @@ namespace EmbedIO
 {
     partial class HttpContextExtensions
     {
+        /// <summary>Redirects using the existing integer validation and response behavior.</summary>
+        /// <param name="this">The context.</param>
+        /// <param name="location">The target URL.</param>
+        /// <param name="statusCode">The redirection status code.</param>
+        public static void Redirect(this IHttpContext @this, string location, HttpStatusCode statusCode)
+            => Redirect(@this, location, (int)statusCode);
+
         /// <summary>
         /// Sets a redirection status code and adds a <c>Location</c> header to the response.
         /// </summary>

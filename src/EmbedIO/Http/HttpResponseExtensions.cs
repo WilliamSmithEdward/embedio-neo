@@ -10,6 +10,27 @@ namespace EmbedIO
     /// </summary>
     public static class HttpResponseExtensions
     {
+        /// <summary>Sets the response status through the response's existing integer setter.</summary>
+        /// <param name="this">The response.</param>
+        /// <param name="statusCode">The final status code.</param>
+        public static void SetStatusCode(this IHttpResponse @this, int statusCode)
+        {
+            if (@this is null) throw new NullReferenceException();
+            @this.StatusCode = statusCode;
+        }
+
+        /// <summary>Sets the response status from the standard HTTP status enumeration.</summary>
+        /// <param name="this">The response.</param>
+        /// <param name="statusCode">The final status code.</param>
+        public static void SetStatusCode(this IHttpResponse @this, HttpStatusCode statusCode)
+            => SetStatusCode(@this, (int)statusCode);
+
+        /// <summary>Prepares an empty response using the existing integer validation.</summary>
+        /// <param name="this">The response.</param>
+        /// <param name="statusCode">The status code.</param>
+        public static void SetEmptyResponse(this IHttpResponse @this, HttpStatusCode statusCode)
+            => SetEmptyResponse(@this, (int)statusCode);
+
         /// <summary>Sets a cookie with an explicit SameSite policy on a built-in listener response.</summary>
         /// <param name="this">The response.</param>
         /// <param name="cookie">The cookie to set.</param>

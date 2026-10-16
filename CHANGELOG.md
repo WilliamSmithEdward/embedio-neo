@@ -6,6 +6,16 @@
 
 - The managed listener display name and startup log use `EmbedIO-Neo HTTP Listener`.
   Original license and copyright attribution are preserved.
+### Added
+
+- Controller/action `[BeforeHandler]` attributes with explicit Append, Replace
+  and Skip behavior, asynchronous hooks and cancellation, matching generated/AOT
+  and reflection bindings. Authorization remains before activation and hooks;
+  existing unannotated preprocessing and controller lifetimes are preserved.
+- `HttpStatusCode` overloads for empty/HTML/redirect/informational responses,
+  problem details and OpenAPI response declarations, plus `SetStatusCode` response
+  extensions. Existing integer APIs, properties and validation remain available.
+  See [route hooks and enum statuses](docs/guides/route-hooks.md).
 
 ### Fixed
 
@@ -15,10 +25,6 @@
   still propagate without a delete-first fallback.
 
 ### Performance
-
-- Separate uncommon HTTP/1 header encoding and optional log formatting from common
-  first-response compilation. See the [cold-path measurements](docs/project/cold-path-jit-latency.md)
-  for Windows results, logging configurations, specialized endpoints and limits.
 
 - Case-sensitive literal endpoint routes avoid regex construction and first-match
   compilation while preserving matching semantics. A fresh-process HTTP latency

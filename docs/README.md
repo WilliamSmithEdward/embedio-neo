@@ -15,6 +15,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Usage guides
 
+- [Route hooks and enum statuses](guides/route-hooks.md): unreleased controller/action preprocessing choices, async ordering, cache policy and compatible status overloads.
+
 - [Bearer authentication and authorization](guides/bearer-authentication.md): asynchronous validation, controller roles and policies, optional JWT validation and identity-isolation campaigns.
 - [Multi-connection state-machine fuzzing](guides/multi-connection-fuzzing.md): deterministic actor traces, replay, invariant-preserving shrinking and bounded cleanup.
 - [Streaming multipart uploads](guides/streaming-multipart.md): bounded streaming, controller binding, complete-request validation and staged file cleanup.
