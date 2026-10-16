@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Permanent client-ban storage retries the Windows replacement error that leaves
+  both filenames intact, preserving metadata/ACL handling and confirmation only
+  after a successful save. Retries are bounded; other and persistent I/O failures
+  still propagate without a delete-first fallback.
+
 ### Performance
 
 - Case-sensitive literal endpoint routes avoid regex construction and first-match

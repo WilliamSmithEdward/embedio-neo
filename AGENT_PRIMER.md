@@ -374,6 +374,20 @@ For any server reachable from an untrusted network:
 | Sessions | `WithLocalSessionManager(m => { m.CookieSecure = true; m.CookieSameSite = CookieSameSiteMode.Lax; })` on HTTPS. |
 | Error detail | Keep the default empty 500 or problem details. Do not enable `ExceptionHandler.HtmlResponse` or `EmptyResponseWithHeaders` in production. |
 
+### Persistent client bans
+
+Configure `ClientBanningModule.WithPermanentBanStore(path)` before startup, using
+an application-selected path outside static mounts. A module holds a cooperating
+writer lease; dispose it before reopening the store. Changes save before the
+in-memory ban/unban is confirmed, and persistence errors propagate. Do not edit
+the active file externally or treat this local store as distributed state.
+
+The unreleased storage correction retries only Windows replacement error 1175,
+which leaves both filenames intact, at most three times. Other failures and
+exhausted retries still throw; there is no delete-first or permission-bypassing
+fallback. Published 2.2.0 does not contain this correction. See
+[persistent client banning](docs/user-reports/context-client-banning.md#persistence-contract).
+
 ### Bearer authentication and authorization (2.2.0+)
 
 - Add `new BearerAuthenticationModule(baseRoute, validator)` before endpoints.

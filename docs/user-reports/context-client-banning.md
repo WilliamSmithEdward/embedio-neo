@@ -183,6 +183,22 @@ module lifetime. Dispose the module before reopening the same store. The lock fi
 may remain on disk after disposal; the open lease determines ownership. Do not edit
 the file externally or share it with noncooperating writers. Same-directory atomic
 replacement requires filesystem support; no fallback deletes the old file first.
+
+The unreleased Windows correction retains `File.Replace` and its metadata/ACL
+handling. It retries only `ERROR_UNABLE_TO_REMOVE_REPLACED` (1175), for which
+[Microsoft documents that both filenames remain intact](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilea).
+There are at most three retries, with requested waits of 1, 2 and 4 ms; scheduling
+can extend those waits. Other error codes, including sharing violations and
+1176/1177 (which may have moved a file), propagate immediately. Persistent 1175
+also propagates after the last attempt, without confirming a ban change. No ACL
+errors are ignored and the existing file is never deleted as a fallback.
+
+This was reproduced independently of EmbedIO on Windows 10.0.26300 / .NET 10.0.13:
+10 of 295 native replacements reported 1175 and all 10 succeeded on an immediate
+retry with the same paths. The interfering actor was not identified. Ten new
+regression cases cover recovery, bounded failure, other error codes and real
+sharing failures that preserve disk/memory state and clean temporary files.
+This correction is not in published 2.2.0.
 This is a single-host application store, not distributed state or a transaction
 across processes. It does not promise recovery from every power-loss/filesystem
 failure. Existing abandoned temporary files are not treated as committed bans.

@@ -7,6 +7,11 @@ case-sensitive routes without parameters. Parameterized and explicitly
 case-insensitive routes retain their regex path. No response cache, application
 handler warmup, public API, dependency, default or target changes are involved.
 
+The timing candidate contains only the routing optimization. The subsequent
+permanent-ban storage correction in the same PR is tested separately and is not
+included in these recorded binary hashes; none of these HTTP workloads configures
+a permanent-ban store. No storage-performance claim is made here.
+
 ## Measurement
 
 Windows 10.0.26300, .NET 10.0.13, x64, Ryzen 7 9800X3D (8 cores / 16 threads),
