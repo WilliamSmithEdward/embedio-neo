@@ -15,7 +15,7 @@ disagree, the guide and the source win.
 | NuGet package | `EmbedIO-Neo` (DI integration: `EmbedIO-Neo.DependencyInjection`) |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.0.0, the v2 engine. 1.0.x is the previous major version. |
+| Current version | 2.0.1, the v2 engine. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-15
+
 ### Added
 
 - `WebServerOptionsBase.MinimumRequestBodyDataRate`, with the `MinimumDataRate` type,
@@ -39,6 +41,10 @@
   during heartbeat registration also removes the registration reliably.
 
 ### Changed
+
+- Add test-only FsCheck properties and instrumented libFuzzer and AFL++ parser
+  campaigns with reproducible failure inputs. Production package dependencies are
+  unchanged.
 
 - Group source files by hosting, HTTP, modules and transport responsibilities;
   standardize partial-file names and collect linked sources under src/Shared.
