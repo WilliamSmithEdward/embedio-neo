@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Performance
+
+- Case-sensitive literal endpoint routes avoid regex construction and first-match
+  compilation while preserving matching semantics. A fresh-process HTTP latency
+  harness separates startup, first server request, first endpoint use and warm
+  requests; see the [measurement report](docs/project/first-endpoint-latency.md).
+
 ## [2.2.0] - 2026-10-16
 
 ### Added
