@@ -170,6 +170,14 @@ reports an error at build time instead:
 | EMBEDIO011 | The method returns by reference, or a type the serializer cannot receive. |
 | EMBEDIO012 (warning) | The method returns `ValueTask` or `ValueTask<T>`, which is serialized as an object rather than awaited, as with reflection. |
 
+| EMBEDIO013 | Authorization attributes are invalid or contradictory. |
+| EMBEDIO014 | A before-handler declaration names an invalid/ambiguous hook or behavior (unreleased after 2.2.0). |
+
+[Before-handler attributes](route-hooks.md) generate direct hook calls before
+parameter binding; they do not use reflection at request time. The AOT smoke host
+exercises an asynchronous class hook, an action Skip override, authorization and
+enum response/OpenAPI statuses.
+
 Differences from the reflection-based registration:
 
 - Parameters with a `null` default, such as `string? name = null`, work. The reflection

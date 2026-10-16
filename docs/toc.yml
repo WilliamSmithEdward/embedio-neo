@@ -52,6 +52,8 @@
       href: guides/websocket-receive-limits.md
     - name: WebSockets during a graceful drain (Neo v2)
       href: guides/graceful-drain-websockets.md
+    - name: Route hooks and enum statuses (unreleased)
+      href: guides/route-hooks.md
     - name: Controller base routes and fallback
       href: guides/controller-base-routes.md
     - name: Request trailers (Neo v2)

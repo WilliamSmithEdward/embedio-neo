@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
@@ -52,6 +53,21 @@ namespace EmbedIO
                 await text.FlushAsync().ConfigureAwait(false);
             }
         }
+
+        /// <summary>Sends standard HTML using an enum status and existing integer validation.</summary>
+        /// <param name="this">The context.</param>
+        /// <param name="statusCode">The status code.</param>
+        /// <returns>The send task.</returns>
+        public static Task SendStandardHtmlAsync(this IHttpContext @this, HttpStatusCode statusCode)
+            => SendStandardHtmlAsync(@this, (int)statusCode);
+
+        /// <summary>Sends standard HTML using an enum status and an additional HTML callback.</summary>
+        /// <param name="this">The context.</param>
+        /// <param name="statusCode">The status code.</param>
+        /// <param name="writeAdditionalHtml">The optional body writer.</param>
+        /// <returns>The send task.</returns>
+        public static Task SendStandardHtmlAsync(this IHttpContext @this, HttpStatusCode statusCode, Action<TextWriter>? writeAdditionalHtml)
+            => SendStandardHtmlAsync(@this, (int)statusCode, writeAdditionalHtml);
 
         /// <summary>
         /// Asynchronously sends a standard HTML response for the specified status code.

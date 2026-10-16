@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Collections.Generic;
 using EmbedIO.Utilities;
 
@@ -95,6 +96,15 @@ namespace EmbedIO.OpenApi
             Responses.Add(new DeclaredResponse(statusCode, description, type, contentType));
             return this;
         }
+
+        /// <summary>Declares a response using the existing integer response metadata path.</summary>
+        /// <param name="statusCode">The status code.</param>
+        /// <param name="description">The optional description.</param>
+        /// <param name="type">The optional body type.</param>
+        /// <param name="contentType">The optional body media type.</param>
+        /// <returns>This declaration.</returns>
+        public OpenApiOperationDeclaration Response(HttpStatusCode statusCode, string? description = null, Type? type = null, string? contentType = null)
+            => Response((int)statusCode, description, type, contentType);
 
         internal sealed class DeclaredParameter
         {

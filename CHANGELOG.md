@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- Controller/action `[BeforeHandler]` attributes with explicit Append, Replace
+  and Skip behavior, asynchronous hooks and cancellation, matching generated/AOT
+  and reflection bindings. Authorization remains before activation and hooks;
+  existing unannotated preprocessing and controller lifetimes are preserved.
+- `HttpStatusCode` overloads for empty/HTML/redirect/informational responses,
+  problem details and OpenAPI response declarations, plus `SetStatusCode` response
+  extensions. Existing integer APIs, properties and validation remain available.
+  See [route hooks and enum statuses](docs/guides/route-hooks.md).
+
 ### Fixed
 
 - Permanent client-ban storage retries the Windows replacement error that leaves
