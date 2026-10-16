@@ -1,6 +1,12 @@
 # Cold-path JIT latency follow-up
 
-These changes are unreleased after 2.2.0. This pass compares main
+The header/logging extraction was **deferred and removed from the proposed
+production change** after mixed warm results. Only the requested listener
+branding is retained in production source. This report and its evidence describe
+the historical experimental binaries; they do not establish a speedup for
+current main. The test-only runner and wire regressions remain available.
+
+The experiment compares main
 `c04e15d077a0b754234f5c9547dabc60d9bb17d7` with internal separation of
 cookie/large-header encoding and optional request-log formatting. Public APIs,
 header validation, cookie lines, transport batching, request cleanup, and log
@@ -139,9 +145,9 @@ should evaluate this tradeoff with their own request sequence.
 ## Warm-latency follow-up and merge decision
 
 William's priority is warm steady-state and tail latency when a cold/warm
-tradeoff is necessary, while aiming to improve both. The candidate remains
-unmerged: the following warm evidence establishes neither a consistent warm
-improvement nor a sufficiently strong non-regression conclusion.
+tradeoff is necessary, while aiming to improve both. The candidate was deferred
+and its helper changes removed from this PR: the following warm evidence establishes neither a consistent warm improvement
+nor a sufficiently strong non-regression conclusion.
 
 The sustained comparison used the same baseline and candidate binaries as the
 cold comparison, on the same Windows/.NET host. Four rounds alternated engine

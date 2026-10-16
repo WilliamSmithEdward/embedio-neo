@@ -345,7 +345,11 @@ namespace EmbedIO
             var headerPolicyRejected = false;
             try
             {
-                if (Log.IsEnabled(TraceEventType.Verbose)) LogRequestStarted(context);
+                if (Log.IsEnabled(TraceEventType.Verbose))
+                {
+                    $"[{context.Id}] {context.Request.SafeGetRemoteEndpointStr()}: {context.Request.HttpMethod} {context.Request.Url.PathAndQuery} - {context.Request.UserAgent}"
+                        .Debug(LogSource);
+                }
 
                 if (SessionManager != null)
                     context.Session = new SessionProxy(context, SessionManager);
@@ -526,7 +530,16 @@ namespace EmbedIO
                     // The leading "[id]" is read back: IPBanningModule.ResolveMessageClient takes
                     // the request id from it to charge a criterion match to the right client, and
                     // BanAttributionTest pins the shape. Keep the id first if this text changes.
-                    if (Log.IsEnabled(TraceEventType.Information)) LogRequestCompleted(context, requestStarted);
+                    if (Log.IsEnabled(TraceEventType.Information))
+                    {
+                        var handlingMilliseconds = (long)((Stopwatch.GetTimestamp() - requestStarted) * MillisecondsPerTimestamp);
+                        var statusCode = context.Response.StatusCode;
+                        var statusDescription = context.Response.StatusDescription;
+                        var sendChunked = context.Response.SendChunked;
+                        var contentLength = context.Response.ContentLength64;
+                        $"[{context.Id}] {context.Request.HttpMethod} {context.Request.Url.AbsolutePath}: \"{statusCode} {statusDescription}\" sent in {handlingMilliseconds}ms ({(sendChunked ? "chunked" : contentLength.ToString(CultureInfo.InvariantCulture) + " bytes")})"
+                            .Info(LogSource);
+                    }
                 }
             }
             catch (Exception exception) when (EmbedIO.Internal.ServerTelemetry.ObserveCleanup(telemetry, exception))
@@ -572,24 +585,6 @@ namespace EmbedIO
                 ex.Log(LogSource, $"[{context.Id}] Fatal exception.");
                 OnFatalException();
             }
-        }
-
-        // Keep formatting outside the request state machine, and compile it only when logging is enabled.
-        private void LogRequestStarted(IHttpContext context)
-        {
-            $"[{context.Id}] {context.Request.SafeGetRemoteEndpointStr()}: {context.Request.HttpMethod} {context.Request.Url.PathAndQuery} - {context.Request.UserAgent}"
-                        .Debug(LogSource);
-        }
-
-        private void LogRequestCompleted(IHttpContext context, long requestStarted)
-        {
-            var handlingMilliseconds = (long)((Stopwatch.GetTimestamp() - requestStarted) * MillisecondsPerTimestamp);
-            var statusCode = context.Response.StatusCode;
-            var statusDescription = context.Response.StatusDescription;
-            var sendChunked = context.Response.SendChunked;
-            var contentLength = context.Response.ContentLength64;
-            $"[{context.Id}] {context.Request.HttpMethod} {context.Request.Url.AbsolutePath}: \"{statusCode} {statusDescription}\" sent in {handlingMilliseconds}ms ({(sendChunked ? "chunked" : contentLength.ToString(CultureInfo.InvariantCulture) + " bytes")})"
-                .Info(LogSource);
         }
 
         private async Task HandleRawBodyLimitAsync(IHttpContextImpl context, RawRequestBodyLimitException error)

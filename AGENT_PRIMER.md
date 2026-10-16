@@ -516,16 +516,12 @@ unreleased literal-route optimization and its measured limits. Do not assume it
 is in the published 2.2.0 packages. Preserve existing public APIs and behavior
 when changing the library; follow [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The [cold-path follow-up](docs/project/cold-path-jit-latency.md) measures internal
-HTTP/1 header and optional logging separation, including logging-enabled and
-specialized endpoints and their deferred JIT tradeoff. These changes are also unreleased after 2.2.0; they do
-not cache response data or execute application handlers during startup. Compare
-both first-request and total launch latency; no general JSON or tail-latency
-improvement is established.
-
-The [warm follow-up](docs/project/cold-path-jit-latency.md#warm-latency-follow-up-and-merge-decision)
-retains mixed light-load results. The cold-path candidate remains unmerged;
-its cold gains do not establish warm or tail-latency non-regression.
+The [cold-path experiment](docs/project/cold-path-jit-latency.md) retains
+measurements of HTTP/1 header/logging extraction. That optimization was deferred
+after mixed warm results and is absent from the library source; the numbers
+describe experimental binaries, not current production behavior. The requested
+listener display name is `EmbedIO-Neo HTTP Listener`. The measurement runner,
+wire regressions and evidence remain available for future investigations.
 
 ## 17. Pitfalls checklist
 
