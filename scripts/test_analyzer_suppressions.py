@@ -5,6 +5,18 @@ from check_analyzer_suppressions import violations
 
 
 class SuppressionGuardTests(unittest.TestCase):
+    def test_namespace_exception_is_limited_to_root_editorconfig(self):
+        setting = 'dotnet_diagnostic.IDE0130.severity = none'
+        self.assertFalse(violations(setting, filename='.editorconfig'))
+        for filename in (None, '.globalconfig', 'src/.editorconfig', 'Example.cs'):
+            with self.subTest(filename=filename):
+                self.assertTrue(violations(setting, filename=filename))
+        for source in ('dotnet_diagnostic.CA1031.severity = none',
+                       'dotnet_diagnostic.IDE0130.severity = silent',
+                       setting + '\ndotnet_diagnostic.IDE0055.severity = none'):
+            with self.subTest(source=source):
+                self.assertTrue(violations(source, filename='.editorconfig'))
+
     def test_rejects_diagnostic_and_build_opt_outs(self):
         for source in (
             '#pragma warning disable CS8602',
