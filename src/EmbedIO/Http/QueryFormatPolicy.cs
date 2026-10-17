@@ -46,7 +46,7 @@ namespace EmbedIO
                     structured.Append(';').Append(key).Append('=');
                     Quote(structured, value);
                 }
-                _formats[index] = new Format(type, subtype, parameters.ToArray());
+                _formats[index] = new Format(type, subtype, [.. parameters]);
             }
             AcceptQueryHeaderValue = structured.ToString();
             AcceptHeaderValue = accept.ToString();
@@ -87,11 +87,11 @@ namespace EmbedIO
             parsed = null;
             parameters = false;
             if (!MediaTypeHeaderValue.TryParse(value, out var result) || result?.MediaType is null) return false;
-            if (result.MediaType.IndexOf("*", StringComparison.Ordinal) >= 0) return false;
-            parameters = value != null && value.IndexOf(";", StringComparison.Ordinal) >= 0;
+            if (Internal.StringOperations.IndexOfOrdinal(result.MediaType, '*') >= 0) return false;
+            parameters = value != null && Internal.StringOperations.IndexOfOrdinal(value, ';') >= 0;
             if (parameters)
             {
-                HashSet<string>? names = result.Parameters.Count > 1 ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
+                var names = result.Parameters.Count > 1 ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
                 foreach (var parameter in result.Parameters)
                     if (parameter.Value is null || (names != null && !names.Add(parameter.Name))) return false;
             }

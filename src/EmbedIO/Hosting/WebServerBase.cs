@@ -26,7 +26,7 @@ namespace EmbedIO
 
         private readonly WebModuleCollection _modules;
 
-        private readonly MimeTypeCustomizer _mimeTypeCustomizer = new MimeTypeCustomizer();
+        private readonly MimeTypeCustomizer _mimeTypeCustomizer = new();
 
         private ExceptionHandlerCallback _onUnhandledException = ExceptionHandler.Default;
         private HttpExceptionHandlerCallback _onHttpException = HttpExceptionHandler.Default;
@@ -663,7 +663,7 @@ namespace EmbedIO
             var maximumBytes = Options.MaximumRequestHeaderBytes;
             var maximumCount = Options.MaximumRequestHeaderCount;
             if ((maximumBytes == null && maximumCount == null)
-                || !(context.Request is EmbedIO.Internal.IRequestPolicyTarget request))
+                || context.Request is not EmbedIO.Internal.IRequestPolicyTarget request)
                 return;
             if (request.HeaderFieldBytes > maximumBytes || request.HeaderFieldCount > maximumCount)
             {
@@ -689,7 +689,7 @@ namespace EmbedIO
             var request = context.Request;
             // A bodyless request has nothing to time; CONNECT carries tunnel data, not a body.
             if ((readTimeout == null && dataRate == null) || !request.HasEntityBody || request.HttpMethod == "CONNECT") return;
-            if (!(request is IRequestPolicyTarget target)) return;
+            if (request is not IRequestPolicyTarget target) return;
             var onFailure = StopReuseOnBodyFailure(context);
             if (readTimeout is TimeSpan timeout) target.TimeBodyReads(timeout, onFailure);
             if (dataRate != null) target.EnforceBodyDataRate(dataRate, onFailure);
@@ -717,7 +717,7 @@ namespace EmbedIO
                 throw new HttpException(413, EmbedIO.Internal.LimitedRequestStream.TransferredLimitMessage);
             }
 
-            if (!(request is EmbedIO.Internal.IRequestPolicyTarget target)) return;
+            if (request is not EmbedIO.Internal.IRequestPolicyTarget target) return;
             var onFailure = StopReuseOnBodyFailure(context);
             if (limit is long bytes) target.LimitBody(bytes, onFailure);
             if (readTimeout is TimeSpan timeout) target.TimeBodyReads(timeout, onFailure);

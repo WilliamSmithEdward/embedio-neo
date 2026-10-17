@@ -39,7 +39,7 @@ namespace EmbedIO
             if (specifications == 0 || total == 0) return null;
             if (ranges.Count == 0) throw HttpException.RangeNotSatisfiable(total);
             MergeOverlapping(ranges);
-            return ranges.ToArray();
+            return [.. ranges];
         }
 
         // Combines overlapping and adjacent ranges in place, retaining request order.
