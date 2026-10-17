@@ -12,6 +12,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO;
 using EmbedIO.Routing;
+using EmbedIO.Security;
+using EmbedIO.Sessions;
+using EmbedIO.Actions;
 using EmbedIO.WebApi;
 
 public static class Program
@@ -56,7 +59,12 @@ public static class Program
             listener.Stop();
             var url = "http://127.0.0.1:" + port + "/";
             using var stop = new CancellationTokenSource();
+            using var protection = new BrowserRequestProtection(new BrowserRequestProtectionOptions(new[] { url }));
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(mode))
+                .WithSessionManager(new LocalSessionManager())
+                .WithModule(new ActionModule("/token", HttpVerbs.Get, context => context.SendStringAsync(protection.GetToken(context), "text/plain", WebServer.Utf8NoBomEncoding)))
+                .WithModule(new BrowserRequestProtectionModule("/browser", protection))
+                .WithModule(new ActionModule("/browser", HttpVerbs.Post, context => context.SendStringAsync("accepted", "text/plain", WebServer.Utf8NoBomEncoding)))
                 .WithWebApi("/api", m => m.WithController<Controller>());
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             var running = server.RunAsync(stop.Token);
@@ -79,6 +87,26 @@ public static class Program
                         throw new InvalidOperationException("Legacy streaming mismatch: " + path + ": " + body);
                     _checks++;
                 }
+                var token = await client.GetStringAsync(url + "token");
+                using (var missing = await client.PostAsync(url + "browser", new StringContent("payload")))
+                {
+                    if (missing.StatusCode != HttpStatusCode.Forbidden) throw new InvalidOperationException("Legacy missing CSRF token was accepted.");
+                    _checks++;
+                }
+                using (var request = new HttpRequestMessage(HttpMethod.Post, url + "browser"))
+                {
+                    request.Headers.Add(BrowserRequestProtection.TokenHeaderName, token);
+                    using var accepted = await client.SendAsync(request);
+                    if (accepted.StatusCode != HttpStatusCode.OK) throw new InvalidOperationException("Legacy session-bound CSRF token failed.");
+                    _checks++;
+                }
+                using (var request = new HttpRequestMessage(HttpMethod.Post, url + "browser"))
+                {
+                    request.Headers.Add(BrowserRequestProtection.TokenHeaderName, token); request.Headers.Add("Origin", "http://evil.example");
+                    using var denied = await client.SendAsync(request);
+                    if (denied.StatusCode != HttpStatusCode.Forbidden) throw new InvalidOperationException("Legacy foreign Origin was accepted.");
+                    _checks++;
+                }
             }
             finally
             {
@@ -96,7 +124,7 @@ public static class Program
             if (item == null || item.Id != id || item.Data != "after" || await subscriber.ReadAsync() != null) throw new InvalidOperationException("Legacy SSE replay mismatch.");
             _checks++;
         }
-        if (_checks != 22) throw new InvalidOperationException("Legacy route check count changed.");
+        if (_checks != 25) throw new InvalidOperationException("Legacy route check count changed.");
     }
 
     public enum Choice { One = 1 }

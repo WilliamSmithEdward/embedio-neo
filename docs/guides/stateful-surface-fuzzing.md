@@ -129,3 +129,12 @@ overflow, read cancellation, disposal and completion. Its `--event-hub-selftest`
 must reject deliberately corrupted event data. The checked replay trace is
 `test/EmbedIO.Fuzz/state-corpus/event-hub.json`; ordinary response defaults are
 unchanged. See [SSE event channels](sse-event-hub.md).
+
+
+The unreleased `browser-protection` campaign overlaps three clients at an admission
+barrier. Its independent cookie/identity/token model checks allowed and rejected
+requests, handler side effects and response isolation through fresh/shared sessions,
+identity changes, foreign policies, tampering and host/origin rejection. Its
+`--browser-protection-selftest` must detect injected response corruption. The checked
+trace includes the minimized empty-cookie-copy model case. See
+[browser request protection](browser-request-protection.md) for API scope and limits.

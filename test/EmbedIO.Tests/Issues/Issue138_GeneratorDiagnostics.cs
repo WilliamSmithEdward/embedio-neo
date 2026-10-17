@@ -60,6 +60,17 @@ namespace App
             Assert.That(result.Generated, Does.Contain("public static global::EmbedIO.WebApi.WebApiControllerBinding<global::App.PeopleController> PeopleController"));
         }
 
+        [TestCase(-1)]
+        [TestCase(2)]
+        public void BrowserRequestProtectionRejectsUnknownModes(int mode)
+        {
+            var result = Run(Usings + "using EmbedIO.Security;\n"
+                + "[GeneratedControllerBinding(typeof(C))] internal static partial class B {} "
+                + "[BrowserProtection((BrowserProtectionMode)(" + mode.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                + "))] public sealed class C : WebApiController { [Route(HttpVerbs.Post, \"/\")] public string Post() => \"ok\"; }");
+            Assert.That(result.GeneratorDiagnostics.Count(d => d.Id == "EMBEDIO016"), Is.EqualTo(1));
+        }
+
         [Test]
         public void NestedAndGlobalNamespaceContextsCompile()
         {

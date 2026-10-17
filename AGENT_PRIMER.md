@@ -325,6 +325,43 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
   `server.WithProblemDetails()` (namespace `EmbedIO.Problems`) for RFC 9457
   JSON errors. See [problem details](docs/guides/problem-details.md).
 
+### Browser request protection (unreleased)
+
+Published 2.6.0 packages do not contain these APIs. Own one
+`EmbedIO.Security.BrowserRequestProtection` for a deliberate security scope,
+constructed with immutable `BrowserRequestProtectionOptions`: explicit physical
+server origins, optional trusted browser origins, and a token lifetime (20 minutes
+by default, at most one day). Share it with token issuance and protected modules;
+stop its users before disposal. No policy is enabled automatically.
+
+Configure `WebApiModule.ConfigureBrowserProtection(protection)` before controllers.
+It guards every route after authorization and before activation/hooks/body binding.
+`[BrowserProtection]` requires unsafe-method tokens; a method overrides its inherited
+class setting. `[BrowserProtection(BrowserProtectionMode.IgnoreToken)]` exempts only
+tokens, retaining host/origin checks. Reserve exemptions for independently secured
+non-browser routes. `AllowAnonymous`, bearer header presence and hook Skip do not
+exempt token checks. Generated/reflection bindings preserve the same metadata.
+
+Issue through a GET endpoint with `protection.GetToken(HttpContext)` after the
+appropriate authentication/authorization. It uses the configured session manager,
+returns a 119-character token and marks the response no-store. The browser sends
+`X-CSRF-Token` for unsafe requests; URLs/bodies/cookies are not searched. GET, HEAD
+and OPTIONS must remain non-mutating. Supplied origins must be singular and trusted;
+WebSocket handshakes require Origin. Register `BrowserRequestProtectionModule`
+before non-controller handlers/upgrades and before CORS short-circuiting as needed.
+
+Tokens bind the current session and authenticated identity, including the type,
+value, issuer and original issuer of the configured name and name-identifier claims.
+Identical subjects from different issuers cannot reuse tokens in the same session.
+Tokens expire independently of session activity and fail after policy replacement
+or restart. Regenerate the session at login/logout, then fetch a new token. Regeneration resolves a cookie-backed
+session even before other session access; coordinate already active requests
+separately. This is not authentication, authorization caching, XSS protection or a
+distributed token store. Forwarded origins are never trusted automatically. Session
+store capacity remains application-owned. See the complete client/server example,
+origin rules, ownership/bounds and limitations in
+[browser request protection](docs/guides/browser-request-protection.md).
+
 ### Bounded SSE channels (2.6.0+)
 
 `ServerSentEventHub` requires 2.6.0+. Own one hub per channel/security scope and return `hub.Stream()` (or

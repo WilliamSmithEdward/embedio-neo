@@ -162,6 +162,8 @@ namespace EmbedIO.Generators
                     failed = true;
                     continue;
                 }
+                var browser = ReadBrowserProtection(controller, method);
+                if (!browser.Valid) { failed = true; continue; }
                 var before = ReadBeforeHandler(controller, method);
                 if (!before.Valid) { failed = true; continue; }
                 var operationName = "__EmbedIO_" + propertyName + "_Operation" + Literals.Int(invokerCount);
@@ -180,7 +182,9 @@ namespace EmbedIO.Generators
                     routes.Add("new global::EmbedIO.WebApi.WebApiRouteBinding<" + controllerName + ">((global::EmbedIO.HttpVerbs)("
                         + Literals.Int(route.Verb) + "), " + Literals.String(route.Route) + ", " + (route.IsBaseRoute ? "true" : "false")
                         + ", " + handlerId + ", " + invokerName + (_types.WebApiOperation is null ? string.Empty : ", " + operationName)
-                        + (before.Code is null ? string.Empty : ", " + operationName + ".Authorization, false") + ")");
+                        + (browser.Code is null
+                            ? (before.Code is null ? string.Empty : ", " + operationName + ".Authorization, false")
+                            : ", " + operationName + ".Authorization, " + (before.Code is null ? "true" : "false") + ", " + browser.Code) + ")");
                 }
             }
 

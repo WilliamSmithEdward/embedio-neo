@@ -94,6 +94,10 @@ namespace EmbedIO.Generators
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        internal static readonly DiagnosticDescriptor InvalidBrowserProtection = new(
+            "EMBEDIO016", "Invalid browser protection mode", "Browser protection on '{0}' uses an unknown mode",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
         internal static readonly DiagnosticDescriptor InvalidValidation = new(
             "EMBEDIO015", "Unsupported request validation", "Request validation is invalid: {0}",
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
