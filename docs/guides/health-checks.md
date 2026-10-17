@@ -1,6 +1,6 @@
 # Health checks and application readiness
 
-This feature is pending the next release; NuGet 2.7.0 does not contain these APIs.
+These APIs require EmbedIO-Neo 2.8.0 or later.
 It works with both core targets and adds no runtime dependencies. It is opt-in:
 constructing a service installs no endpoints and changes no ordinary request path.
 

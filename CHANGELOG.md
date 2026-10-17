@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-17
+
 ### Added
 
 - Opt-in health checks and application readiness, including finite dependency-check
