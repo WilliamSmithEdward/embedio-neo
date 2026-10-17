@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in bounded SSE event channels with replay cursors, subscriber/queue limits,
+  heartbeat and write cancellation deadlines, controller/AOT integration, OpenAPI,
+  regression tests and concurrent state-machine fuzzing. Existing SSE writers,
+  listener defaults, targets and runtime dependency groups remain unchanged.
+  See [SSE event channels](docs/guides/sse-event-hub.md).
+
 ## [2.5.0] - 2026-10-16
 
 ### Added

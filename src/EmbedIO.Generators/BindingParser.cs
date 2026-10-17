@@ -420,6 +420,8 @@ namespace EmbedIO.Generators
             var streamTask = returnType is INamedTypeSymbol taskType && taskType.IsGenericType
                 && SymbolEqualityComparer.Default.Equals(taskType.OriginalDefinition, _types.TaskOfT);
             if (streamTask && returnType is INamedTypeSymbol streamTaskType) streamReturn = streamTaskType.TypeArguments[0];
+            if (streamReturn.Name == "ServerSentEventStream" && streamReturn.ContainingNamespace.ToDisplayString() == "EmbedIO")
+                return (null, streamTask ? Services + ".WriteEventStreamResultAsync(__context, " + call + ")" : call + ".WriteAsync(__context)");
             if (IsJsonStreamResult(streamReturn))
                 return (null, streamTask ? Services + ".WriteStreamResultAsync(__context, " + call + ")" : call + ".WriteAsync(__context)");
 

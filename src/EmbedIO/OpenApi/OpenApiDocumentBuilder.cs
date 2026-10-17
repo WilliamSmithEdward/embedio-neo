@@ -938,7 +938,11 @@ namespace EmbedIO.OpenApi
                 {
                     var success = new JsonObject { ["description"] = "OK" };
                     var stream = operation.ResultType;
-                    if (stream != null && stream.IsGenericType
+                    if (stream == typeof(ServerSentEventStream))
+                    {
+                        success["content"] = new JsonObject { ["text/event-stream"] = new JsonObject { ["schema"] = new JsonObject { ["type"] = "string" }, ["x-embedio-streaming"] = true } };
+                    }
+                    else if (stream != null && stream.IsGenericType
                         && (stream.GetGenericTypeDefinition() == typeof(JsonArrayStream<>) || stream.GetGenericTypeDefinition() == typeof(NdjsonStream<>)))
                     {
                         var item = BodySchema(stream.GetGenericArguments()[0], where);

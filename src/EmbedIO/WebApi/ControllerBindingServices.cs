@@ -220,6 +220,17 @@ namespace EmbedIO.WebApi
             await serializer(context, await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
+        /// <summary>Awaits an explicit SSE controller result and its complete subscription lifetime.</summary>
+        /// <param name="context">The response context.</param>
+        /// <param name="task">The controller result.</param>
+        /// <returns>The complete response lifetime.</returns>
+        public static async Task WriteEventStreamResultAsync(IHttpContext context, Task<ServerSentEventStream> task)
+        {
+            var result = await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false);
+            if (result == null) throw new InvalidOperationException("A streaming controller returned null.");
+            await result.WriteAsync(context).ConfigureAwait(false);
+        }
+
         /// <summary>Awaits an explicitly streamed controller result and its complete response lifetime.</summary>
         /// <typeparam name="TResult">The declared streaming result type.</typeparam>
         /// <param name="context">The response context.</param>

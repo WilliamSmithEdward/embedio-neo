@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using EmbedIO.Utilities;
 
 if (FsCheckProperties.Run(args)) return;
+if (await EventHubFuzz.SelfTestAsync(args)) return;
 if (await HeaderPolicyFuzz.SelfTestAsync(args)) return;
 if (await ExtendedFuzzSelfTest.RunAsync(args)) return;
 if (await StateMachineSelfTest.RunAsync(args)) return;
@@ -31,6 +32,7 @@ if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateM
     ["server-lifecycle"] = LifecycleFuzz.RunAsync,
     ["file-mutation"] = FileMutationFuzz.RunAsync,
     ["json-streaming"] = JsonStreamingFuzz.RunAsync,
+    ["event-hub"] = EventHubFuzz.RunAsync,
     ["request-validation"] = RequestValidationFuzz.RunAsync,
     ["controller-parity"] = ControllerParityFuzz.RunAsync,
     ["permanent-bans"] = PermanentBanFuzz.RunAsync,
