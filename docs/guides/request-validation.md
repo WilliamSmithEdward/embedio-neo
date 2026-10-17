@@ -1,6 +1,6 @@
 # Opt-in request validation
 
-This feature is unreleased. EmbedIO-Neo 2.3.0 does not include it.
+Requires EmbedIO-Neo 2.4.0 or later.
 
 Add `[Validate]` to a controller parameter to validate its bound value before the
 action runs. Use standard `System.ComponentModel.DataAnnotations` attributes on

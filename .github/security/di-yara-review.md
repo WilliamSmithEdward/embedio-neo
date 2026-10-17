@@ -358,3 +358,34 @@ dismissal is claimed. Other findings, stale entries, scanner errors and missing
 scans remain fatal. Fresh exact-head scans must pass before merge/publication.
 Evidence is retained under ignored `TestResults/merge-ready/release-yara`,
 including archive checks, CodeView parsing and both full-rule printed-match logs.
+
+## 2.4.0 release revalidation
+
+Release PR #473 scan [38991457914](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/38991457914)
+reports the same two DI debug-symbol matches at the new 2.4.0 package paths.
+The reviewed PR head is `c21580221dae85c02464b56eca2a62d4353a797c`.
+Both pinned scanner/rule archives and their extracted contents were verified.
+The complete God Mode rule was reread, and full YARA-X 1.21.0 / YARA Forge
+20261011 rules were rerun with printed strings in a network-disabled,
+read-only container against both exact CI-built assemblies. Each has only
+`Injection.pdb` in its compiler-generated CodeView path, at `0x6c84`
+(net10.0) and `0x7573` (netstandard2.0). No other rule or string matches.
+DI source, targets and build behavior remain unchanged.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.4.0.nupkg` | `2ed85882988d977396b6f3709e78cecae7b4f01ae9f4736a3b0fa025d6613014` |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `d92f452240dadab985d22208a64c4c7bafaf22b9f8fde7ae2f06ab86f990ccfe` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `f82870fb2dc9dce931a29d2c0e652042b909005a73c12970fd19599e2f2b2240` |
+| `yara-x.json` | `087d9054aa167ad81d8b48da7a003bb67da39c53aca58d51c88e4fdb72d6a708` |
+| `clamav.json` | `40768578dceda5aa211f6917eedea1833f8a2e4a93b672e185f99099a14cbf74` |
+
+The complete CI report contains eleven expected matches and no scanner errors.
+ClamAV 1.5.4/28155/Fri Oct 16 06:24:17 2026 scanned 1,634 files with no matches or errors.
+Only the two exact package-version acceptance paths move to 2.4.0; the rule
+and evidence-file scope remain unchanged. GitHub's open code-scanning alert
+list is empty, and this YARA workflow creates no matching alert. The existing
+owner-approved unavailable-alert exception is carried forward; no dismissal
+is claimed. Other matches, stale entries, scanner errors and missing scans
+remain fatal. Fresh exact-head scans are required before merge/publication.
+Evidence is under ignored `TestResults/release-2.4.0/yara-review`.

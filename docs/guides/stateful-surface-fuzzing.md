@@ -106,6 +106,6 @@ operating-system schedules. Attribute-specific per-route hook matrices remain in
 fixtures; this campaign checks the existing controller override and registration paths. Existing focused regression/platform
 tests remain necessary for those surfaces.
 
-The unreleased `request-validation` campaign adds concurrent generated/reflection
+The 2.4.0 `request-validation` campaign adds concurrent generated/reflection
 validation parity with independent model expectations, limits, malformed JSON,
 opt-in compatibility and bounded error responses. See [request validation](request-validation.md).
