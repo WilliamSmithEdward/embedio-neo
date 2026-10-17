@@ -125,7 +125,27 @@ namespace EmbedIO.WebApi
         public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
             Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
             bool useControllerPreprocessing)
+            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, useControllerPreprocessing, null)
         {
+        }
+
+        /// <summary>Creates a route binding with explicit browser token policy metadata.</summary>
+        /// <param name="verb">The HTTP verb.</param>
+        /// <param name="route">The route template.</param>
+        /// <param name="isBaseRoute">Whether this is a base route.</param>
+        /// <param name="handlerId">The method identity.</param>
+        /// <param name="createInvoker">The invoker factory.</param>
+        /// <param name="operation">Optional OpenAPI metadata.</param>
+        /// <param name="authorization">Optional authorization metadata.</param>
+        /// <param name="useControllerPreprocessing">Whether the runtime invokes controller preprocessing.</param>
+        /// <param name="browserProtection">Optional per-action token requirement; null uses the configured default.</param>
+        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing, Security.BrowserProtectionMode? browserProtection)
+        {
+            if (browserProtection.HasValue && browserProtection != Security.BrowserProtectionMode.RequireToken
+                && browserProtection != Security.BrowserProtectionMode.IgnoreToken) throw new ArgumentOutOfRangeException(nameof(browserProtection));
+            BrowserProtection = browserProtection;
             UseControllerPreprocessing = useControllerPreprocessing;
             if (operation != null && !ReferenceEquals(operation.Authorization, authorization))
                 throw new ArgumentException("Route and operation must share the same authorization metadata.", nameof(authorization));
@@ -140,6 +160,9 @@ namespace EmbedIO.WebApi
 
         /// <summary>Gets whether the runtime calls the legacy controller hook before the invoker.</summary>
         public bool UseControllerPreprocessing { get; }
+
+        /// <summary>Gets the token requirement applied before controller activation; null uses the module default.</summary>
+        public Security.BrowserProtectionMode? BrowserProtection { get; }
 
         /// <summary>Gets authorization enforced before controller activation.</summary>
         public AuthorizationMetadata? Authorization { get; }

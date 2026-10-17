@@ -105,10 +105,10 @@ namespace EmbedIO.Sessions
         /// <inheritdoc/>
         public void Regenerate()
         {
-            EnsureSessionManagerExists();
-            if (_session != null)
-                _sessionManager.Delete(_context, _session.Id);
-
+            // Resolve a cookie-backed session before deleting it: CreateSession alone
+            // would otherwise find and reuse that same session on a fresh context.
+            EnsureSessionExists();
+            _sessionManager.Delete(_context, _session.Id);
             CreateSession();
         }
 

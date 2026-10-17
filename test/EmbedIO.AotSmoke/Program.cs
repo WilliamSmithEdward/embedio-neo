@@ -69,8 +69,11 @@ internal static class Program
             var url = $"http://127.0.0.1:{LoopbackPorts.Free()}/";
             var authorization = AuthorizationChecks.CreateModule();
             using var eventHub = new ServerSentEventHub();
+            using var browserProtection = new EmbedIO.Security.BrowserRequestProtection(new EmbedIO.Security.BrowserRequestProtectionOptions(new[] { url }));
 
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithTelemetry("aot-smoke"))
+                .WithSessionManager(new EmbedIO.Sessions.LocalSessionManager())
+                .WithModule(BrowserChecks.CreateModule(browserProtection))
                 .WithModule(AuthorizationChecks.CreateBearer())
                 .WithModule(authorization)
                 .WithModule(ValidationChecks.CreateModule())
@@ -109,6 +112,7 @@ internal static class Program
             await ValidationChecks.RunAsync(client, url, checks);
             await StreamingChecks.RunAsync(client, url, checks);
             await EventHubChecks.RunAsync(client, url, checks, eventHub);
+            await BrowserChecks.RunAsync(client, url, checks);
             var first = await client.GetStringAsync(url + "api/items/7");
             checks["startup_to_first_response_ms"] = Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
             var item = JsonSerializer.Deserialize(first, SmokeJson.Default.Item);
