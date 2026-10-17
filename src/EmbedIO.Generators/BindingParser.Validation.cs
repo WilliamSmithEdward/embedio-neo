@@ -44,7 +44,8 @@ namespace EmbedIO.Generators
 
         private string? ValidationParameter(IParameterSymbol parameter)
         {
-            var attribute = parameter.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "EmbedIO.WebApi.ValidateAttribute");
+            var attributes = ValidationAttributes(parameter);
+            var attribute = attributes.FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "EmbedIO.WebApi.ValidateAttribute");
             if (attribute == null) return null;
             foreach (var option in attribute.NamedArguments)
                 if (option.Value.Value is int limit && (limit < 1 || limit > (option.Key == "MaxDepth" ? 64 : option.Key == "MaxNodes" ? 100000 : 1024)))
@@ -54,7 +55,7 @@ namespace EmbedIO.Generators
             var name = "__validation" + Literals.Int(_validationParameters++);
             _fields.Append("        private static readonly ").Append(ValidationNamespace).Append("RequestValidationParameter ").Append(name)
                 .Append(" = new ").Append(ValidationNamespace).Append("RequestValidationParameter(").Append(plan).Append(", ")
-                .Append(ValidationRules(parameter.GetAttributes())).Append(", ").Append(AttributeExpression(attribute)).Append(");\n\n");
+                .Append(ValidationRules(attributes)).Append(", ").Append(AttributeExpression(attribute)).Append(");\n\n");
             return name;
         }
 
@@ -63,11 +64,15 @@ namespace EmbedIO.Generators
             var result = new List<AttributeData>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var inherited = false;
-            for (ISymbol? current = symbol; current != null; current = current is IPropertySymbol property ? property.OverriddenProperty : (current as INamedTypeSymbol)?.BaseType)
+            for (ISymbol? current = symbol; current != null; current = current is IPropertySymbol property ? property.OverriddenProperty
+                : current is IParameterSymbol parameter && parameter.ContainingSymbol is IMethodSymbol method ? method.OverriddenMethod?.Parameters[parameter.Ordinal]
+                : (current as INamedTypeSymbol)?.BaseType)
             {
                 foreach (var attribute in current.GetAttributes())
                 {
-                    var usage = attribute.AttributeClass?.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "System.AttributeUsageAttribute");
+                    AttributeData? usage = null;
+                    for (var attributeType = attribute.AttributeClass; attributeType != null && usage == null; attributeType = attributeType.BaseType)
+                        usage = attributeType.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "System.AttributeUsageAttribute");
                     if (inherited && usage?.NamedArguments.Any(a => a.Key == "Inherited" && a.Value.Value is false) == true) continue;
                     var multiple = usage?.NamedArguments.Any(a => a.Key == "AllowMultiple" && a.Value.Value is true) == true;
                     if (multiple || seen.Add(attribute.AttributeClass?.ToDisplayString() ?? string.Empty)) result.Add(attribute);

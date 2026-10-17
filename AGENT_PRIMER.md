@@ -257,6 +257,8 @@ file types. Guide: [OpenAPI documents](docs/guides/openapi.md).
 - Limits default to depth 16, 1024 nodes and 32 errors; exceeded traversal is a 400,
   not silently accepted input. Cycles stop and shared children retain each path.
   Parsing/body limits are separate. Validators must be synchronous/thread-safe.
+- Custom attribute usage/multiplicity and overridden action-parameter validation
+  annotations follow CLR inheritance in generated and reflection bindings.
 - Generated/AOT binding emits direct accessors and cached rules; no per-request
   reflection. EMBEDIO015 reports unsupported settings/models/reflection-dependent
   rules. OpenAPI overlays request-only constraints; string minimums conservatively

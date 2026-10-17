@@ -94,7 +94,21 @@ internal sealed class ValidationFuzzModel
 {
     [Required, StringLength(4, MinimumLength = 2)]
     public string? Name { get; set; }
-    [Range(1, 10)]
+    [CountRange(1, 100), CountRange(0, 10)]
     public int Count { get; set; }
     public ValidationFuzzModel? Child { get; set; }
+}
+
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
+internal abstract class CountRuleAttribute : ValidationAttribute
+{
+    private readonly int _minimum;
+    private readonly int _maximum;
+    protected CountRuleAttribute(int minimum, int maximum) { _minimum = minimum; _maximum = maximum; }
+    public override bool IsValid(object? value) => value is int number && number >= _minimum && number <= _maximum;
+}
+
+internal sealed class CountRangeAttribute : CountRuleAttribute
+{
+    public CountRangeAttribute(int minimum, int maximum) : base(minimum, maximum) { }
 }

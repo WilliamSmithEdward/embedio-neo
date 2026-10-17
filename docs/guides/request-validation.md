@@ -76,6 +76,8 @@ the response. The library does not replace existing handlers implicitly.
   rename error paths. Shared children are checked at every path; ancestor cycles
   stop recursion after validating the property's own rules.
 - Custom `ValidationAttribute` rules and `IValidatableObject` are supported.
+  AttributeUsage inheritance and AllowMultiple are honored in both bindings,
+  including validation annotations on overridden action parameters.
   Object-level results can name members; those rules also run when earlier property
   rules have reported errors, so handle null/invalid properties. Validators run synchronously, must be
   safe for concurrent requests, and must not perform unbounded work. Exceptions
@@ -108,7 +110,8 @@ to a streaming reader or a dependency-injected service.
 
 Generated parameter metadata adds validation constraints to the request schema
 with `allOf`; response schemas and unannotated actions keep their original shape.
-Required properties, non-null requirements, numeric ranges and string/collection
+Binding required flags describe the binder; validation can also reject an implicit
+default when an optional value is omitted. Required properties, non-null requirements, numeric ranges and string/collection
 length bounds are described. Custom rules, whitespace checks and other business
 rules still run only on the server.
 

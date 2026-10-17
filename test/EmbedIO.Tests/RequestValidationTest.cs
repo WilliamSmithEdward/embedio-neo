@@ -35,7 +35,7 @@ namespace EmbedIO.Tests
         [TestCase(true, "{\"Name\":\"ok\",\"Count\":5,\"Children\":[{}]}", 400, "input.Children[0].Name")]
         [TestCase(false, "null", 400, "input")]
         [TestCase(true, "null", 400, "input")]
-        public async Task BodyValidationPrecedesActionAndReleasesController(bool generated, string json, int status, string? field)
+        public async Task BodyValidationPrecedesActionAndReleasesController(bool generated, string json, int status, string? entry)
         {
             var controller = new RequestValidationController();
             await TestWebServer.UseAsync(server => server.WithProblemDetails(new ProblemDetailsOptions { HtmlHttpExceptionHandler = null })
@@ -46,11 +46,11 @@ namespace EmbedIO.Tests
                 Assert.That((int)response.StatusCode, Is.EqualTo(status));
                 Assert.That(controller.Calls, Is.EqualTo(status == 200 ? 1 : 0));
                 Assert.That(controller.Disposed, Is.EqualTo(1));
-                if (field != null)
+                if (entry != null)
                 {
                     var body = JsonNode.Parse(await response.Content.ReadAsStringAsync());
                     Assert.That(response.Content.Headers.ContentType?.MediaType, Is.EqualTo("application/problem+json"));
-                    Assert.That(body?["errors"]?[field], Is.Not.Null);
+                    Assert.That(body?["errors"]?[entry], Is.Not.Null);
                 }
                 using var healthy = await client.GetAsync("/api/healthy");
                 Assert.That(healthy.StatusCode, Is.EqualTo(HttpStatusCode.OK));
@@ -104,7 +104,7 @@ namespace EmbedIO.Tests
             var node = new ValidationInput { Name = "ok", Count = 1, Children = new[] { new ValidationInput(), new ValidationInput() } };
             var error = Assert.Throws<ProblemDetailsException>(() => Metadata(action).Validate(node, "input"));
             var problem = Problem(error);
-            var count = Present(problem.Extensions["errors"]).AsObject().Sum(field => Present(field.Value).AsArray().Count);
+            var count = Present(problem.Extensions["errors"]).AsObject().Sum(entry => Present(entry.Value).AsArray().Count);
             Assert.That(count, Is.InRange(1, action == "Errors" ? 1 : 32));
         }
 
@@ -150,7 +150,7 @@ namespace EmbedIO.Tests
             var validation = new RequestValidationParameter(plan, Array.Empty<ValidationAttribute>(), new ValidateAttribute { MaxNodes = 4 });
             var error = Assert.Throws<ProblemDetailsException>(() => validation.Validate(new InfiniteValidationInput(), "input"));
             var errors = Present(Problem(error).Extensions["errors"]).AsObject();
-            Assert.That(errors.Sum(field => Present(field.Value).AsArray().Count), Is.LessThanOrEqualTo(4));
+            Assert.That(errors.Sum(entry => Present(entry.Value).AsArray().Count), Is.LessThanOrEqualTo(4));
             Assert.That(errors.ToJsonString(), Does.Contain("traversal limit"));
         }
 
@@ -208,6 +208,35 @@ namespace EmbedIO.Tests
             });
         }
 
+        [TestCase(false, 7, HttpStatusCode.BadRequest)]
+        [TestCase(true, 7, HttpStatusCode.BadRequest)]
+        [TestCase(false, 10, HttpStatusCode.OK)]
+        [TestCase(true, 10, HttpStatusCode.OK)]
+        public async Task CustomAttributeUsageInheritedFromItsBasePreservesMultipleRules(bool generated, int value, HttpStatusCode expected)
+        {
+            await TestWebServer.UseAsync(server => server.WithModule(Module(generated, new RequestValidationController())), async client =>
+            {
+                using var content = new StringContent("{\"Value\":" + value + "}", Encoding.UTF8, "application/json");
+                using var response = await client.PostAsync("/api/multiple-rules", content);
+                Assert.That(response.StatusCode, Is.EqualTo(expected));
+            });
+        }
+
+        [TestCase(false, 0, HttpStatusCode.BadRequest)]
+        [TestCase(true, 0, HttpStatusCode.BadRequest)]
+        [TestCase(false, 1, HttpStatusCode.OK)]
+        [TestCase(true, 1, HttpStatusCode.OK)]
+        public async Task OverriddenActionsInheritParameterValidation(bool generated, int value, HttpStatusCode expected)
+        {
+            var module = generated ? new WebApiModule("/api").WithController(ValidationBindings.InheritedValidationController)
+                : new WebApiModule("/api").WithController<InheritedValidationController>();
+            await TestWebServer.UseAsync(server => server.WithModule(module), async client =>
+            {
+                using var response = await client.GetAsync("/api/value?value=" + value);
+                Assert.That(response.StatusCode, Is.EqualTo(expected));
+            });
+        }
+
         private static T Present<T>(T? value) where T : class
             => value ?? throw new InvalidOperationException("Expected a non-null validation test value.");
 
@@ -223,6 +252,7 @@ namespace EmbedIO.Tests
     }
 
     [GeneratedControllerBinding(typeof(RequestValidationController))]
+    [GeneratedControllerBinding(typeof(InheritedValidationController))]
     internal static partial class ValidationBindings { }
 
     public sealed class RequestValidationController : WebApiController, IDisposable
@@ -239,6 +269,8 @@ namespace EmbedIO.Tests
         public string Form([FormField, Validate, StringLength(4)] string name) => name;
         [Route(HttpVerbs.Post, "/inherited")]
         public string Inherited([JsonData, Validate] ValidationDerived input) => "ok";
+        [Route(HttpVerbs.Post, "/multiple-rules")]
+        public string MultipleRules([JsonData, Validate] MultipleRuleInput input) => "ok";
         [Route(HttpVerbs.Get, "/healthy")]
         public string Healthy() => "ok";
         [Route(HttpVerbs.Post, "/depth")]
@@ -291,6 +323,36 @@ namespace EmbedIO.Tests
         {
             if (Count == 0) yield return new ValidationResult("At least one value is required.");
         }
+    }
+
+    public abstract class InheritedValidationBaseController : WebApiController
+    {
+        [Route(HttpVerbs.Get, "/value")]
+        public virtual int Value([QueryField, Validate, Range(1, 10)] int value) => value;
+    }
+
+    public sealed class InheritedValidationController : InheritedValidationBaseController
+    {
+        public override int Value([QueryField] int value) => value;
+    }
+
+    public sealed class MultipleRuleInput
+    {
+        [AtLeast(5), AtLeast(10)]
+        public int Value { get; set; }
+    }
+
+    [AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
+    public abstract class MinimumRuleAttribute : ValidationAttribute
+    {
+        private readonly int _minimum;
+        protected MinimumRuleAttribute(int minimum) => _minimum = minimum;
+        public override bool IsValid(object? value) => value is int number && number >= _minimum;
+    }
+
+    public sealed class AtLeastAttribute : MinimumRuleAttribute
+    {
+        public AtLeastAttribute(int minimum) : base(minimum) { }
     }
 
     public sealed class AllowedCodeAttribute : ValidationAttribute
