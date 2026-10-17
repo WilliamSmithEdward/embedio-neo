@@ -16,6 +16,8 @@
     { "Actor": 2, "Command": 9, "Value": 12 },
     { "Actor": 0, "Command": 10, "Value": 13 },
     { "Actor": 1, "Command": 11, "Value": 14 },
-    { "Actor": 2, "Command": 0, "Value": 15 }
+    { "Actor": 2, "Command": 0, "Value": 15 },
+    { "Actor": 0, "Command": 7, "Value": 1 },
+    { "Actor": 2, "Command": 7, "Value": 2 }
   ]
 }

@@ -6,6 +6,11 @@ These test-only campaigns are included in the 2.3.0 source tree. They extend
 APIs, defaults, targets or dependency groups. The fuzz executable now references
 the repository's controller generator as a build-only analyzer.
 
+The JWT campaign also exercises explicitly configured token types: signed matching
+`at+jwt` credentials are admitted, while otherwise trusted tokens with a different
+or missing header `typ` are denied. The checked trace retains those cases and a
+malformed-token case, alongside shared-validator identity isolation.
+
 ## Run and reproduce
 
 Use the pinned SDK and locked dependencies:

@@ -518,9 +518,22 @@ fallback. Earlier releases, including 2.2.0, do not contain this correction. See
   `JwtBearerOptions`. Supply issuer, audience, trusted verification keys and an
   algorithm allowlist. It validates signed tokens and lifetime; it does not issue
   tokens or discover keys remotely. Core authentication has no JWT dependency.
-- Authentication is per request. Issued JWT claims and configured verification
-  keys do not track permission changes or key rotation automatically; applications
-  own token lifetime, revocation checks and trusted configuration replacement.
+- Unreleased (not in 2.6.0): `JwtBearerOptions.AllowedTokenTypes.Add("at+jwt")`
+  optionally enforces exact, case-sensitive signed header `typ` values. Empty lists
+  preserve existing acceptance, including missing `typ`. Configured lists reject
+  missing/wrong types; settings are copied when constructing the validator. Use
+  the issuing authority's actual type; ID tokens must not become API credentials
+  merely because they share signing keys. Keep audiences/policies distinct too.
+- Authentication is per request, but JWT claims reflect issuance time. Short-lived
+  access tokens bound that staleness; logout/session regeneration does not revoke
+  a copied bearer token. For immediate revocation or account/role changes, check
+  current application state in a validator wrapper or required named policy, using
+  the verified `(issuer, subject)` identity and issuer-scoped `jti` when applicable.
+  Reject missing required identifiers; fail closed on store failure. Cache lifetimes
+  create a revocation-delay window and active requests are not retroactively undone.
+- Verification keys are snapshotted, with no discovery or automatic rotation. Deploy
+  a new validator for trust changes; do not mutate the original key/options expecting
+  an existing validator to change. See the guide's revocation and rotation limits.
 
 Guide: [bearer authentication and authorization](docs/guides/bearer-authentication.md).
 

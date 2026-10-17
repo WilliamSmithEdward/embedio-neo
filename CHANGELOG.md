@@ -4,6 +4,11 @@
 
 ### Added
 
+- Optional exact JWT header token-type allowlist (`JwtBearerOptions.AllowedTokenTypes`),
+  with missing/wrong-type rejection when configured, snapshotted settings, regression,
+  fuzz and Native AOT coverage. Empty lists preserve existing behavior. The primer
+  and authentication guide explain token-purpose separation, revocation and stale claims.
+
 - Opt-in browser request protection with exact server/origin policies, expiring
   session/identity-bound anti-forgery tokens, controller attributes, middleware,
   Native AOT integration, regression tests and concurrent fuzzing. Existing
