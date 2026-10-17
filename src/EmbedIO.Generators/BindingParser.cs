@@ -416,6 +416,13 @@ namespace EmbedIO.Generators
             if (method.ReturnsVoid)
                 return (call, TaskType + ".CompletedTask");
 
+            var streamReturn = returnType;
+            var streamTask = returnType is INamedTypeSymbol taskType && taskType.IsGenericType
+                && SymbolEqualityComparer.Default.Equals(taskType.OriginalDefinition, _types.TaskOfT);
+            if (streamTask && returnType is INamedTypeSymbol streamTaskType) streamReturn = streamTaskType.TypeArguments[0];
+            if (IsJsonStreamResult(streamReturn))
+                return (null, streamTask ? Services + ".WriteStreamResultAsync(__context, " + call + ")" : call + ".WriteAsync(__context)");
+
             if (SymbolEqualityComparer.Default.Equals(returnType, _types.Task))
                 return (null, call);
 
@@ -432,6 +439,13 @@ namespace EmbedIO.Generators
                 Report(DiagnosticDescriptors.SerializedAwaitable, location, method.ToDisplayString(), returnType.ToDisplayString());
 
             return (null, "__serializer(__context, (object)" + call + ")");
+        }
+
+        private static bool IsJsonStreamResult(ITypeSymbol type)
+        {
+            for (var current = type as INamedTypeSymbol; current != null; current = current.BaseType)
+                if (current.Name == "JsonStreamResult" && current.ContainingNamespace.ToDisplayString() == "EmbedIO") return true;
+            return false;
         }
 
         private bool IsValueTask(ITypeSymbol type)

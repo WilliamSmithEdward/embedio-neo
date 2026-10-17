@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in streamed JSON arrays and NDJSON from async sequences, with bounded
+  records, configurable flushes, cooperative cancellation and response-abort
+  handling after commitment. Reflection/generated controllers, Native AOT,
+  OpenAPI metadata, regression tests and concurrent state-machine fuzzing cover
+  the new surface. Existing response serialization defaults and dependencies
+  are preserved. See [streaming JSON](docs/guides/streaming-json.md).
+
 ## [2.4.0] - 2026-10-16
 
 ### Added

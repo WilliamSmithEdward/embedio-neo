@@ -1,5 +1,7 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Collections.Generic;
+using System.Text.Json.Serialization.Metadata;
 using System.Globalization;
 using System.IO;
 using System.Net;
@@ -69,6 +71,14 @@ public static class Program
                             + ", received " + (int)response.StatusCode + ".");
                     _checks++;
                 }
+                foreach (var (path, expected) in new[] { ("stream-array", "[1\n,2\n]"), ("stream-lines", "1\n2\n") })
+                {
+                    using var response = await client.GetAsync(url + "api/" + path);
+                    var body = await response.Content.ReadAsStringAsync();
+                    if (response.StatusCode != HttpStatusCode.OK || body != expected)
+                        throw new InvalidOperationException("Legacy streaming mismatch: " + path + ": " + body);
+                    _checks++;
+                }
             }
             finally
             {
@@ -78,7 +88,7 @@ public static class Program
                 await running;
             }
         }
-        if (_checks != 19) throw new InvalidOperationException("Legacy route check count changed.");
+        if (_checks != 21) throw new InvalidOperationException("Legacy route check count changed.");
     }
 
     public enum Choice { One = 1 }
@@ -106,6 +116,14 @@ public static class Program
 
     public sealed class Controller : WebApiController
     {
+        private static readonly JsonTypeInfo<int> ItemInfo = (JsonTypeInfo<int>)new JsonSerializerOptions
+        { TypeInfoResolver = new DefaultJsonTypeInfoResolver() }.GetTypeInfo(typeof(int));
+        [Route(HttpVerbs.Get, "/stream-array")]
+        public JsonArrayStream<int> StreamArray() => JsonStream.Array(StreamValues(), ItemInfo);
+        [Route(HttpVerbs.Get, "/stream-lines")]
+        public Task<NdjsonStream<int>> StreamLines() => Task.FromResult(JsonStream.Ndjson(StreamValues(), ItemInfo));
+        private static async IAsyncEnumerable<int> StreamValues() { yield return 1; await Task.Yield(); yield return 2; }
+
         [Route(HttpVerbs.Get, "/validated")]
         public string Validated([QueryField, Validate, System.ComponentModel.DataAnnotations.Range(1, 10)] int value)
             => value.ToString(CultureInfo.InvariantCulture);

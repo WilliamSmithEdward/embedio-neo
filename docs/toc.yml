@@ -76,8 +76,10 @@
       href: guides/rate-limiting.md
     - name: Behind a reverse proxy (Neo v2)
       href: guides/forwarded-headers.md
-    - name: Request validation (unreleased)
+    - name: Request validation (2.4.0+)
       href: guides/request-validation.md
+    - name: Streaming JSON responses (unreleased)
+      href: guides/streaming-json.md
     - name: Problem details for API errors (Neo v2)
       href: guides/problem-details.md
     - name: Metrics and tracing
