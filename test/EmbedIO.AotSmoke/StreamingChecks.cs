@@ -15,7 +15,7 @@ internal static class StreamingChecks
             using var response = await client.GetAsync(url + "json-streams/" + path);
             response.EnsureSuccessStatusCode();
             var text = await response.Content.ReadAsStringAsync();
-            var expected = path == "array" ? "[\"one\",\"two\"]" : "\"one\"\n\"two\"\n";
+            var expected = path == "array" ? "[\"one\"\n,\"two\"\n]" : "\"one\"\n\"two\"\n";
             if (text != expected) throw new InvalidOperationException("AOT streaming mismatch: " + text);
         }
         var doc = new OpenApiDocumentBuilder("Streaming", "1").AddController("/json-streams", StreamingSmokeBindings.StreamingSmokeController).Build(SmokeJson.Default.Options);

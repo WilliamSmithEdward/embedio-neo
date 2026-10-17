@@ -23,10 +23,10 @@ namespace EmbedIO.Tests
 {
     public sealed class JsonStreamingTest
     {
-        [TestCase(false, "array", "[1,2,3]", "application/json")]
-        [TestCase(true, "array", "[1,2,3]", "application/json")]
-        [TestCase(false, "array-task", "[1,2,3]", "application/json")]
-        [TestCase(true, "array-task", "[1,2,3]", "application/json")]
+        [TestCase(false, "array", "[1\n,2\n,3\n]", "application/json")]
+        [TestCase(true, "array", "[1\n,2\n,3\n]", "application/json")]
+        [TestCase(false, "array-task", "[1\n,2\n,3\n]", "application/json")]
+        [TestCase(true, "array-task", "[1\n,2\n,3\n]", "application/json")]
         [TestCase(false, "lines", "1\n2\n3\n", "application/x-ndjson")]
         [TestCase(true, "lines", "1\n2\n3\n", "application/x-ndjson")]
         [TestCase(false, "lines-task", "1\n2\n3\n", "application/x-ndjson")]
@@ -135,7 +135,7 @@ namespace EmbedIO.Tests
                     Assert.That(disposed.Task.IsCompleted, Is.False);
                     advance.TrySetResult();
                     using var reader = new StreamReader(body);
-                    Assert.That(await reader.ReadToEndAsync(), Is.EqualTo(ndjson ? "8\n" : ",8]"));
+                    Assert.That(await reader.ReadToEndAsync(), Is.EqualTo(ndjson ? "8\n" : "\n,8\n]"));
                     await disposed.Task.WaitAsync(TimeSpan.FromSeconds(5));
                 }
                 finally { advance.TrySetResult(); }
@@ -263,7 +263,7 @@ namespace EmbedIO.Tests
                 await using var input = await response.Content.ReadAsStreamAsync();
                 await using var gzip = new System.IO.Compression.GZipStream(input, System.IO.Compression.CompressionMode.Decompress);
                 using var reader = new StreamReader(gzip);
-                Assert.That(await reader.ReadToEndAsync(), Is.EqualTo(ndjson ? "1\n2\n3\n" : "[1,2,3]"));
+                Assert.That(await reader.ReadToEndAsync(), Is.EqualTo(ndjson ? "1\n2\n3\n" : "[1\n,2\n,3\n]"));
             }, protocol);
         }
 
@@ -366,11 +366,45 @@ namespace EmbedIO.Tests
             {
                 using var response = await client.GetAsync(task ? "/api/task" : "/api/array");
                 Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
-                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("[1,2]"));
+                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("[1\n,2\n]"));
                 Assert.That(controller.Disposed, Is.EqualTo(1));
                 Assert.That(controller.EnumerationDisposed, Is.EqualTo(1));
                 Assert.That(controller.DisposedEarly, Is.False);
             });
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task IncrementalJsonClientReceivesAPrimitiveBeforeTheNextItemExists(int protocol)
+        {
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            async IAsyncEnumerable<int> Produce() { yield return 7; await release.Task; yield return 8; }
+            await Wire(context => JsonStream.Array(Produce(), JsonStreamingContext.Default.Int32).WriteAsync(context), async client =>
+            {
+                using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var response = await client.GetAsync("/", HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+                await using var body = await response.Content.ReadAsStreamAsync(deadline.Token);
+                var reader = JsonSerializer.DeserializeAsyncEnumerable<int>(body, cancellationToken: deadline.Token).GetAsyncEnumerator(deadline.Token);
+                var first = reader.MoveNextAsync().AsTask();
+                try
+                {
+                    Assert.That(await first.WaitAsync(TimeSpan.FromSeconds(1)), Is.True);
+                    Assert.That(reader.Current, Is.EqualTo(7));
+                    release.TrySetResult();
+                    Assert.That(await reader.MoveNextAsync(), Is.True);
+                    Assert.That(reader.Current, Is.EqualTo(8));
+                    Assert.That(await reader.MoveNextAsync(), Is.False);
+                }
+                finally
+                {
+                    release.TrySetResult();
+                    deadline.Cancel();
+                    try { await first; }
+                    catch (OperationCanceledException) { }
+                    await reader.DisposeAsync();
+                }
+            }, protocol);
         }
 
         [Test]

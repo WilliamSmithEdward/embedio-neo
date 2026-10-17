@@ -67,7 +67,9 @@ Use generated bindings and generated item metadata for trimming/Native AOT.
 
 ## What the client receives
 
-Array mode uses `application/json`, for example `[1,2,3]`. An ordinary JSON
+Array mode uses `application/json`, for example `[1,2,3]`. An LF after each
+record is insignificant JSON whitespace and lets an incremental parser finish
+a primitive token before the next record exists. An ordinary JSON
 client can still read the entire response, while an incremental reader can
 process items before the array ends:
 

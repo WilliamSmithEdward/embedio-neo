@@ -71,7 +71,7 @@ public static class Program
                             + ", received " + (int)response.StatusCode + ".");
                     _checks++;
                 }
-                foreach (var (path, expected) in new[] { ("stream-array", "[1,2]"), ("stream-lines", "1\n2\n") })
+                foreach (var (path, expected) in new[] { ("stream-array", "[1\n,2\n]"), ("stream-lines", "1\n2\n") })
                 {
                     using var response = await client.GetAsync(url + "api/" + path);
                     var body = await response.Content.ReadAsStringAsync();

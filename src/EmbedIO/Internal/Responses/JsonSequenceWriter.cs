@@ -65,7 +65,9 @@ namespace EmbedIO.Internal
                     token.ThrowIfCancellationRequested();
                     if (!_ndjson && !first) await output.WriteAsync(Comma, 0, 1, token).ConfigureAwait(false);
                     await output.WriteAsync(record.Buffer, 0, record.Count, token).ConfigureAwait(false);
-                    if (_ndjson) await output.WriteAsync(Line, 0, 1, token).ConfigureAwait(false);
+                    // Delimit primitive tokens even while the next MoveNext is pending.
+                    // LF is insignificant JSON whitespace in arrays and the record separator in NDJSON.
+                    await output.WriteAsync(Line, 0, 1, token).ConfigureAwait(false);
                     first = false;
                     if (++batch == _options.FlushEvery)
                     {
