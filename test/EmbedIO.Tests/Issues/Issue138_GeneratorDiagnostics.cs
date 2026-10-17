@@ -383,6 +383,26 @@ internal static class Use { internal static object[] All() { return new object[]
             Assert.That(result.GeneratorDiagnostics.Select(d => d.Id), Does.Contain("EMBEDIO014"));
         }
 
+        [TestCase("[Validate(MaxDepth = 0)] string value")]
+        [TestCase("[Validate(MaxNodes = 100001)] string value")]
+        [TestCase("[Validate(MaxErrors = -1)] string value")]
+        [TestCase("[Validate] object value")]
+        [TestCase("[Validate] System.Collections.Generic.Dictionary<string, string> value")]
+        [TestCase("[Validate, System.ComponentModel.DataAnnotations.Compare(\"Other\")] string value")]
+        public void RequestValidationRejectsUnsupportedModelsAndLimits(string parameter)
+        {
+            var result = Run(Usings + "[GeneratedControllerBinding(typeof(C))] internal static partial class B {} public sealed class C : WebApiController { [Route(HttpVerbs.Get, \"/\")] public void Get(" + parameter + ") {} }");
+            Assert.That(result.GeneratorDiagnostics.Select(d => d.Id), Does.Contain("EMBEDIO015"));
+        }
+
+        [Test]
+        public void RequestValidationUnannotatedHandlersDoNotCallValidation()
+        {
+            var result = Run(Usings + "[GeneratedControllerBinding(typeof(C))] internal static partial class B {} public sealed class C : WebApiController { [Route(HttpVerbs.Get, \"/\")] public void Get(string value) {} }");
+            Assert.That(result.GeneratorDiagnostics, Is.Empty);
+            Assert.That(result.Generated, Does.Not.Contain("__validation"));
+        }
+
         private static GeneratorResult Run(string source, LanguageVersion language = LanguageVersion.Latest, bool trimAnalyzed = false)
         {
             var parse = new CSharpParseOptions(language);

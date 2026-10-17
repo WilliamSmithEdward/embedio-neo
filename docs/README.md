@@ -36,6 +36,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Request-body byte limits](guides/request-body-limits.md): encoded versus decoded budgets, immutable routed ownership, configured error callbacks, unread-input validation and borrowed stream ownership.
 - [Rate limiting](guides/rate-limiting.md): new in Neo v2, opt-in request admission through System.Threading.RateLimiting, with client and identity keys, 429 and Retry-After, queues, cancellation, memory bounds and limits.
 - [Behind a reverse proxy](guides/forwarded-headers.md): new in Neo v2, trusted-proxy handling of Forwarded and X-Forwarded-* headers, with proxy allow-lists, hop limits, an allowed-host policy and what is rejected.
+- [Request validation](guides/request-validation.md): unreleased opt-in DataAnnotations validation, bounded nested models, field errors, generated/AOT bindings and OpenAPI constraints.
 - [Problem details for API errors](guides/problem-details.md): new in Neo v2, opt-in RFC 9457 `application/problem+json` error responses, with safe defaults, request IDs, content negotiation and migration notes.
 - [Metrics and tracing](guides/telemetry.md): opt-in HTTP server metrics and spans with W3C trace context, route templates and server identity.
 - [Trimming and Native AOT](guides/trimming-and-native-aot.md): AOT-safe JSON with source-generated metadata, Web API controllers through generated bindings and their build-time diagnostics, annotated reflection APIs and what a Native AOT host supports.

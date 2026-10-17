@@ -358,9 +358,13 @@ namespace EmbedIO.Generators
                 }
 
                 body.Append("                ").Append(Literals.TypeName(parameter.Type)).Append(' ').Append(argument).Append(" = ").Append(binding).Append(";\n");
+                var validation = ValidationParameter(parameter);
+                if (validation != null)
+                    body.Append("                ").Append(argument).Append(" = ").Append(validation).Append(".Validate(").Append(argument)
+                        .Append(", ").Append(Literals.String(parameter.Name)).Append(", __context.CancellationToken);\n");
                 arguments.Add(argument);
                 if (_meta is not null)
-                    metadata.Add(ParameterExpression(parameter, _meta));
+                    metadata.Add(ParameterExpression(parameter, _meta, validation));
             }
 
             var call = CallExpression(controller, method, arguments);
@@ -1002,10 +1006,10 @@ namespace EmbedIO.Generators
         private static ParameterMeta CustomMeta(AttributeData attribute, IParameterSymbol parameter)
             => new(ParameterSource.Custom, Literals.String(parameter.Name), false, Literals.String(attribute.AttributeClass?.ToDisplayString() ?? "(unknown)"));
 
-        private static string ParameterExpression(IParameterSymbol parameter, ParameterMeta meta)
+        private static string ParameterExpression(IParameterSymbol parameter, ParameterMeta meta, string? validation)
             => "new global::EmbedIO.WebApi.WebApiOperationParameter(" + Literals.String(parameter.Name) + ", " + meta.FieldName
                 + ", (global::EmbedIO.WebApi.WebApiParameterSource)(" + Literals.Int((int)meta.Source) + "), " + TypeOf(parameter.Type)
-                + ", " + (meta.Required ? "true" : "false") + ", " + EnumNames(parameter.Type) + ", " + (meta.CustomAttribute ?? "null") + ")";
+                + ", " + (meta.Required ? "true" : "false") + ", " + EnumNames(parameter.Type) + ", " + (meta.CustomAttribute ?? "null") + ", " + (validation ?? "null") + ")";
 
         private string OperationExpression(INamedTypeSymbol controller, IMethodSymbol method, List<string> parameters)
         {

@@ -245,6 +245,28 @@ the real module before protected endpoints; an OpenAPI security declaration alon
 does not enforce access. Streaming multipart metadata cannot infer part names or
 file types. Guide: [OpenAPI documents](docs/guides/openapi.md).
 
+### Request validation (unreleased)
+
+- Add `[Validate]` to an action parameter to enable DataAnnotations rules on it
+  and its declared model's public properties/typed collection elements. Existing
+  unannotated actions keep their behavior. Authorization/hooks precede validation.
+- Use `[Required]` on the parameter to reject null. Invalid input throws a 400
+  ProblemDetailsException with CLR field paths; configure WithProblemDetails with
+  HtmlHttpExceptionHandler = null for consistent JSON errors. Custom handlers remain
+  in control. The action is skipped and existing controller cleanup still runs.
+- Limits default to depth 16, 1024 nodes and 32 errors; exceeded traversal is a 400,
+  not silently accepted input. Cycles stop and shared children retain each path.
+  Parsing/body limits are separate. Validators must be synchronous/thread-safe.
+- Custom attribute usage/multiplicity and overridden action-parameter validation
+  annotations follow CLR inheritance in generated and reflection bindings.
+- Generated/AOT binding emits direct accessors and cached rules; no per-request
+  reflection. EMBEDIO015 reports unsupported settings/models/reflection-dependent
+  rules. OpenAPI overlays request-only constraints; string minimums conservatively
+  account for UTF-16 versus Unicode code-point length and retain exact extensions.
+- .NET Standard 2.0 adds pinned System.ComponentModel.Annotations 5.0.0; .NET 10
+  uses built-in annotations. Keep the guide, fuzz campaign and AOT smoke current.
+  Guide: [request validation](docs/guides/request-validation.md).
+
 ## 8. Reading requests
 
 - Helpers on the context: `GetRequestBodyAsStringAsync()`,

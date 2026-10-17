@@ -30,6 +30,7 @@ if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateM
     ["multipart-lifetime"] = MultipartLifetimeFuzz.RunAsync,
     ["server-lifecycle"] = LifecycleFuzz.RunAsync,
     ["file-mutation"] = FileMutationFuzz.RunAsync,
+    ["request-validation"] = RequestValidationFuzz.RunAsync,
     ["controller-parity"] = ControllerParityFuzz.RunAsync,
     ["permanent-bans"] = PermanentBanFuzz.RunAsync,
     ["response-http1"] = ResponsePipelineFuzz.Http1Async,

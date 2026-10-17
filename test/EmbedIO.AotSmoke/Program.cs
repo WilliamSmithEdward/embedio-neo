@@ -72,6 +72,7 @@ internal static class Program
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithTelemetry("aot-smoke"))
                 .WithModule(AuthorizationChecks.CreateBearer())
                 .WithModule(authorization)
+                .WithModule(ValidationChecks.CreateModule())
                 .WithModule(new RoutingModule("/api")
                     .OnGet("/items/{id}", (context, route) => context.SendDataWithMetadataAsync(new Item { Id = int.Parse(route["id"], System.Globalization.CultureInfo.InvariantCulture), Name = "item" }, SmokeJson.Default.Item))
                     .OnPost("/items", async (context, _) =>
@@ -102,6 +103,7 @@ internal static class Program
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             await AuthorizationChecks.RunAsync(client, url, checks);
+            await ValidationChecks.RunAsync(client, url, checks);
             var first = await client.GetStringAsync(url + "api/items/7");
             checks["startup_to_first_response_ms"] = Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
             var item = JsonSerializer.Deserialize(first, SmokeJson.Default.Item);
@@ -246,6 +248,7 @@ internal sealed class SmokeReport
 
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(Item))]
+[JsonSerializable(typeof(ValidatedSmokeInput))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(SmokeReport))]
 internal sealed partial class SmokeJson : JsonSerializerContext;

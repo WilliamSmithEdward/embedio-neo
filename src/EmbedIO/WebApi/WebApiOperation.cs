@@ -120,6 +120,23 @@ namespace EmbedIO.WebApi
             CustomAttribute = customAttribute;
         }
 
+        /// <summary>Creates parameter metadata including explicitly enabled validation.</summary>
+        /// <param name="name">Parameter name.</param>
+        /// <param name="fieldName">Bound field name.</param>
+        /// <param name="source">Binding source.</param>
+        /// <param name="type">Declared type.</param>
+        /// <param name="isRequired">Whether binding requires a value.</param>
+        /// <param name="enumNames">Enumeration names.</param>
+        /// <param name="customAttribute">Custom binding attribute name.</param>
+        /// <param name="validation">Opt-in validation metadata.</param>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public WebApiOperationParameter(string name, string fieldName, WebApiParameterSource source, Type type, bool isRequired,
+            string[]? enumNames, string? customAttribute, RequestValidationParameter? validation)
+            : this(name, fieldName, source, type, isRequired, enumNames, customAttribute) => Validation = validation;
+
+        /// <summary>Gets explicitly enabled parameter validation metadata, or null.</summary>
+        public RequestValidationParameter? Validation { get; }
+
         /// <summary>Gets the parameter's name.</summary>
         public string Name { get; }
 

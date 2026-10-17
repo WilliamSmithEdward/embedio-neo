@@ -66,14 +66,14 @@
       "EmbedIO-Neo.Jwt": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.1.0, )",
+          "EmbedIO-Neo": "[2.3.0, )",
           "Microsoft.IdentityModel.JsonWebTokens": "[8.23.0, )"
         }
       },
       "EmbedIO-Neo.Testing": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.1.0, )"
+          "EmbedIO-Neo": "[2.3.0, )"
         }
       },
       "Microsoft.IdentityModel.JsonWebTokens": {
