@@ -27,8 +27,8 @@ namespace EmbedIO.Forwarding
         private const int MaxHeaderLength = 8192;
 
         private readonly ForwardedHeaderSources _sources;
-        private readonly List<ClientNetwork> _trustedProxies = new();
-        private readonly List<(string Host, string? Port)> _allowedHosts = new();
+        private readonly List<ClientNetwork> _trustedProxies = [];
+        private readonly List<(string Host, string? Port)> _allowedHosts = [];
         private int _forwardLimit = 1;
 
         /// <summary>

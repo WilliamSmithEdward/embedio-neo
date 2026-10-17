@@ -18,6 +18,45 @@ csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_elsewhere = true:suggestion
 
+# Source folders organize implementation details without requiring matching namespaces.
+dotnet_diagnostic.IDE0130.severity = none
+
+# Owner-approved: preserve object locks shared with .NET Standard 2.0.
+dotnet_diagnostic.IDE0330.severity = none
+
+# Owner-approved: allow Substring without suggesting range syntax.
+dotnet_diagnostic.IDE0057.severity = none
+
+# Owner-approved: allow explicit indexing compatible with .NET Standard 2.0.
+dotnet_diagnostic.IDE0056.severity = none
+
+# Owner-approved: retain byte arrays shared with .NET Standard 2.0 instead of UTF-8 literals.
+dotnet_diagnostic.IDE0230.severity = none
+
+# Owner-approved: allow single-character string arguments without char-overload suggestions.
+dotnet_diagnostic.CA1865.severity = none
+
+# Owner-approved: retain string overloads compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1866.severity = none
+
+# Owner-approved: retain array-based async stream overloads compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1835.severity = none
+
+# Owner-approved: retain explicit null checks compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1510.severity = none
+
+# Owner-approved: retain explicit disposed checks compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1513.severity = none
+
+# Owner-approved: retain explicit range checks compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1512.severity = none
+
+# Owner-approved: retain Substring calls compatible with .NET Standard 2.0 APIs.
+dotnet_diagnostic.CA1846.severity = none
+
+# Owner-approved: retain runtime regex APIs shared with .NET Standard 2.0.
+dotnet_diagnostic.SYSLIB1045.severity = none
+
 # Preserve explicit inherited .NET analyzer severities.
 dotnet_diagnostic.CA1001.severity = warning
 dotnet_diagnostic.CA1009.severity = warning
@@ -91,3 +130,7 @@ dotnet_diagnostic.CA2241.severity = warning
 dotnet_diagnostic.CA2242.severity = warning
 dotnet_diagnostic.IDE0003.severity = warning
 dotnet_diagnostic.IDE0055.severity = warning
+
+[src/EmbedIO/Files/ZipFileProvider.cs]
+# Preserve ZipArchive.GetEntry's entryName exception parameter for compatibility.
+dotnet_diagnostic.CA2208.severity = none

@@ -120,7 +120,7 @@ namespace EmbedIO
                 _telemetryServerName = value;
             }
         }
-        private readonly System.Collections.Generic.List<RequestLimitPolicy> _routeRequestLimits = new();
+        private readonly System.Collections.Generic.List<RequestLimitPolicy> _routeRequestLimits = [];
         private System.Collections.ObjectModel.ReadOnlyCollection<RequestLimitPolicy>? _routeRequestLimitsView;
 
         /// <summary>

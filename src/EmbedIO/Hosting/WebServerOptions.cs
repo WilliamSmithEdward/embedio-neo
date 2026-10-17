@@ -19,7 +19,7 @@ namespace EmbedIO
     {
         private const string NetShLogSource = "NetSh";
 
-        private readonly List<string> _urlPrefixes = new List<string>();
+        private readonly List<string> _urlPrefixes = [];
 
         private HttpListenerMode _mode = HttpListenerMode.EmbedIO;
 
@@ -475,7 +475,7 @@ namespace EmbedIO
             return port;
         }
 
-        private Process GetNetsh(string verb, string options = "") => new Process
+        private Process GetNetsh(string verb, string options = "") => new()
         {
             StartInfo = new ProcessStartInfo
             {

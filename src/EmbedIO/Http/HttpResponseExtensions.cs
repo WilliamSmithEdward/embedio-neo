@@ -68,7 +68,7 @@ namespace EmbedIO
         // Representation fields describing the body a failed handler was about to send.
         // They would otherwise frame or label the replacement body incorrectly.
         private static readonly string[] ReplacedRepresentationHeaders =
-        {
+        [
             HttpHeaderNames.ContentLength,
             HttpHeaderNames.ContentEncoding,
             HttpHeaderNames.ContentRange,
@@ -77,7 +77,7 @@ namespace EmbedIO
             HttpHeaderNames.ContentDisposition,
             HttpHeaderNames.ETag,
             HttpHeaderNames.TransferEncoding,
-        };
+        ];
 
         // Prepares an uncommitted response to be replaced by an exception handler:
         // an empty response for the status plus removal of stale representation and

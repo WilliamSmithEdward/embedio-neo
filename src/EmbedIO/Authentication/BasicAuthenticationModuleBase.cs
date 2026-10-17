@@ -98,17 +98,17 @@ namespace EmbedIO.Authentication
             string credentials;
             try
             {
-                credentials = WebServer.DefaultEncoding.GetString(Convert.FromBase64String(authHeader.Substring(6).Trim()));
+                credentials = WebServer.DefaultEncoding.GetString(Convert.FromBase64String(EmbedIO.Internal.StringOperations.Slice(authHeader, 6).Trim()));
             }
             catch (FormatException)
             {
                 return default;
             }
 
-            var separatorPos = credentials.IndexOf(":", System.StringComparison.Ordinal);
+            var separatorPos = EmbedIO.Internal.StringOperations.IndexOfOrdinal(credentials, ':');
             return separatorPos < 0
                 ? (credentials, string.Empty)
-                : (credentials.Substring(0, separatorPos), credentials.Substring(separatorPos + 1));
+                : (EmbedIO.Internal.StringOperations.Slice(credentials, 0, separatorPos), EmbedIO.Internal.StringOperations.Slice(credentials, separatorPos + 1));
         }
     }
 }

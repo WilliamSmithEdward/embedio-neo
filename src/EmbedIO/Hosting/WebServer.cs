@@ -21,7 +21,7 @@ namespace EmbedIO
 
         private int _disposeStarted;
 
-        private readonly CancellationTokenSource _drainStarted = new CancellationTokenSource();
+        private readonly CancellationTokenSource _drainStarted = new();
 
         private int _drainSignaled;
 
@@ -313,7 +313,7 @@ namespace EmbedIO
 
                 // Once accepted, the context must reach the handler's cleanup even
                 // if shutdown wins before dispatch. The context still carries cancellation.
-                _ = Task.Run(() => DispatchAsync(context, cancellationToken));
+                _ = Task.Run(() => DispatchAsync(context, cancellationToken), CancellationToken.None);
             }
         }
 

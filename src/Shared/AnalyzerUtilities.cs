@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace EmbedIO.Internal
 {
@@ -22,6 +22,24 @@ namespace EmbedIO.Internal
 
     internal static class StringOperations
     {
+        internal static string Slice(string text, int start)
+        {
+#if NETSTANDARD2_0 || NETFRAMEWORK
+            return text.Substring(start);
+#else
+            return text[start..];
+#endif
+        }
+
+        internal static string Slice(string text, int start, int length)
+        {
+#if NETSTANDARD2_0 || NETFRAMEWORK
+            return text.Substring(start, length);
+#else
+            return text[start..(start + length)];
+#endif
+        }
+
         internal static int IndexOfOrdinal(string text, char value)
         {
 #if NETSTANDARD2_0 || NETFRAMEWORK

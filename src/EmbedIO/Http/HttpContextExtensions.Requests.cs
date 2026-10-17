@@ -9,8 +9,8 @@ namespace EmbedIO
 {
     partial class HttpContextExtensions
     {
-        private static readonly object FormDataKey = new object();
-        private static readonly object QueryDataKey = new object();
+        private static readonly object FormDataKey = new();
+        private static readonly object QueryDataKey = new();
 
         /// <summary>
         /// Asynchronously retrieves the request body as an array of <see langword="byte"/>s.
@@ -36,7 +36,7 @@ namespace EmbedIO
         /// whose result will be a read-only <see cref="MemoryStream"/> containing the request body.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         public static async Task<MemoryStream> GetRequestBodyAsMemoryStreamAsync(this IHttpContext @this)
-            => new MemoryStream(
+            => new(
                 await GetRequestBodyAsByteArrayAsync(@this).ConfigureAwait(false),
                 false);
 

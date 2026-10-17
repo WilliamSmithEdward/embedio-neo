@@ -82,9 +82,9 @@ namespace EmbedIO.Files
         internal readonly struct Scope : IDisposable
         {
             private readonly EmbedIO.Internal.BorrowedResource<ZipArchiveReadGate> _gateReference;
-            private ZipArchiveReadGate _gate => _gateReference.Value;
+            private ZipArchiveReadGate Gate => _gateReference.Value;
             internal Scope(ZipArchiveReadGate gate) => _gateReference = new EmbedIO.Internal.BorrowedResource<ZipArchiveReadGate>(gate);
-            public void Dispose() { _gate._semaphore.Release(); _gate.Release(); }
+            public void Dispose() { Gate._semaphore.Release(); Gate.Release(); }
         }
     }
 
@@ -92,7 +92,7 @@ namespace EmbedIO.Files
     {
         private readonly Stream _inner;
         private readonly EmbedIO.Internal.BorrowedResource<ZipArchiveReadGate> _gateReference;
-        private ZipArchiveReadGate _gate => _gateReference.Value;
+        private ZipArchiveReadGate Gate => _gateReference.Value;
         private int _disposed;
         private int _closed;
 
@@ -119,14 +119,14 @@ namespace EmbedIO.Files
         public override int Read(byte[] buffer, int offset, int count)
         {
             if (Volatile.Read(ref _closed) != 0) return _inner.Read(buffer, offset, count);
-            using var scope = _gate.Enter();
+            using var scope = Gate.Enter();
             return _inner.Read(buffer, offset, count);
         }
 
         public override int ReadByte()
         {
             if (Volatile.Read(ref _closed) != 0) return _inner.ReadByte();
-            using var scope = _gate.Enter();
+            using var scope = Gate.Enter();
             return _inner.ReadByte();
         }
 
@@ -136,7 +136,7 @@ namespace EmbedIO.Files
             if (buffer == null || offset < 0 || count < 0 || offset > buffer.Length - count)
             {
                 // Let the actual runtime retain its argument types and validation order.
-                using var scope = _gate.Enter();
+                using var scope = Gate.Enter();
                 if (buffer == null) throw new ArgumentNullException(nameof(buffer));
                 return _inner.ReadAsync(buffer, offset, count, cancellationToken);
             }
@@ -145,7 +145,7 @@ namespace EmbedIO.Files
 
         private async Task<int> ReadCoreAsync(byte[] buffer, int offset, int count, CancellationToken token)
         {
-            using var scope = await _gate.EnterAsync(token).ConfigureAwait(false);
+            using var scope = await Gate.EnterAsync(token).ConfigureAwait(false);
             return await _inner.ReadAsync(buffer, offset, count, token).ConfigureAwait(false);
         }
 
@@ -153,7 +153,7 @@ namespace EmbedIO.Files
         public override int Read(Span<byte> buffer)
         {
             if (Volatile.Read(ref _closed) != 0) return _inner.Read(buffer);
-            using var scope = _gate.Enter();
+            using var scope = Gate.Enter();
             return _inner.Read(buffer);
         }
 
@@ -162,7 +162,7 @@ namespace EmbedIO.Files
 
         private async ValueTask<int> ReadMemoryCoreAsync(Memory<byte> buffer, CancellationToken cancellationToken)
         {
-            using var scope = await _gate.EnterAsync(cancellationToken).ConfigureAwait(false);
+            using var scope = await Gate.EnterAsync(cancellationToken).ConfigureAwait(false);
             return await _inner.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
         }
 
@@ -171,10 +171,10 @@ namespace EmbedIO.Files
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
             try
             {
-                using var scope = await _gate.EnterAsync(CancellationToken.None).ConfigureAwait(false);
+                using var scope = await Gate.EnterAsync(CancellationToken.None).ConfigureAwait(false);
                 await _inner.DisposeAsync().ConfigureAwait(false);
             }
-            finally { Volatile.Write(ref _closed, 1); _gate.Release(); GC.SuppressFinalize(this); }
+            finally { Volatile.Write(ref _closed, 1); Gate.Release(); GC.SuppressFinalize(this); }
         }
 #endif
 
@@ -194,8 +194,8 @@ namespace EmbedIO.Files
         {
             if (disposing && Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                try { using var scope = _gate.Enter(); _inner.Dispose(); }
-                finally { Volatile.Write(ref _closed, 1); _gate.Release(); }
+                try { using var scope = Gate.Enter(); _inner.Dispose(); }
+                finally { Volatile.Write(ref _closed, 1); Gate.Release(); }
             }
             base.Dispose(disposing);
         }

@@ -7,7 +7,7 @@ namespace EmbedIO
 {
     public static partial class HttpContextExtensions
     {
-        private static readonly object CompletionKey = new object();
+        private static readonly object CompletionKey = new();
 
         /// <summary>
         /// Registers asynchronous cleanup after request handling and response flushing,

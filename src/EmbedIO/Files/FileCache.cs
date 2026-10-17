@@ -27,10 +27,10 @@ namespace EmbedIO.Files
 
         private static readonly Stopwatch TimeBase = Stopwatch.StartNew();
 
-        private static readonly object DefaultSyncRoot = new object();
+        private static readonly object DefaultSyncRoot = new();
         private static FileCache? _defaultInstance;
 
-        private readonly ConcurrentDictionary<string, Section> _sections = new ConcurrentDictionary<string, Section>(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, Section> _sections = new(StringComparer.Ordinal);
         private int _sectionCount; // Protected by the _sections lock; avoids locking every dictionary bucket.
         private int _maxSizeKb = DefaultMaxSizeKb;
         private int _maxFileSizeKb = DefaultMaxFileSizeKb;
@@ -63,8 +63,7 @@ namespace EmbedIO.Files
 
                 lock (DefaultSyncRoot)
                 {
-                    if (_defaultInstance == null)
-                        _defaultInstance = new FileCache();
+                    _defaultInstance ??= new FileCache();
                 }
 
                 return _defaultInstance;
@@ -105,14 +104,18 @@ namespace EmbedIO.Files
         {
             lock (_sections)
             {
-                if (_disposed) throw new ObjectDisposedException(nameof(FileCache));
-                var section = new Section();
-                (_sections as IDictionary<string, Section>).Add(name, section);
+                if (!_disposed)
+                {
+                    var section = new Section();
+                    (_sections as IDictionary<string, Section>).Add(name, section);
 
-                if (++_sectionCount == 1)
-                    _cleaner = new PeriodicTask(TimeSpan.FromMinutes(1), CheckMaxSize);
+                    if (++_sectionCount == 1)
+                        _cleaner = new PeriodicTask(TimeSpan.FromMinutes(1), CheckMaxSize);
 
-                return section;
+                    return section;
+                }
+
+                throw new ObjectDisposedException(nameof(FileCache));
             }
         }
 

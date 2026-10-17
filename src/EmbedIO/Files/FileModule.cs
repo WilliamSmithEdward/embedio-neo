@@ -31,11 +31,11 @@ namespace EmbedIO.Files
         private const int MappingCacheLimit = 1024;
 
         private readonly string _cacheSectionName = UniqueIdGenerator.GetNext();
-        private readonly MimeTypeCustomizer _mimeTypeCustomizer = new MimeTypeCustomizer();
+        private readonly MimeTypeCustomizer _mimeTypeCustomizer = new();
         private readonly ConcurrentDictionary<string, (MappedResourceInfo Info, string UrlPath)>? _mappingCache;
 
         private BorrowedResource<FileCache> _cacheReference = new(FileCache.Default);
-        private FileCache _cache
+        private FileCache CacheValue
         {
             get => _cacheReference.Value;
             set => _cacheReference = new BorrowedResource<FileCache>(value);
@@ -121,11 +121,11 @@ namespace EmbedIO.Files
         /// <exception cref="ArgumentNullException">This property is being set to <see langword="null"/>.</exception>
         public FileCache Cache
         {
-            get => _cache;
+            get => CacheValue;
             set
             {
                 EnsureConfigurationNotLocked();
-                _cache = Validate.NotNull(nameof(value), value);
+                CacheValue = Validate.NotNull(nameof(value), value);
             }
         }
 
