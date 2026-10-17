@@ -18,6 +18,9 @@ work; retain deadlines because disconnect detection is best effort. Generated
 bindings support AOT and omit the token from OpenAPI. The in-process testing
 context observes its caller token. See [request-abort cancellation](docs/guides/request-abort.md)
 for completion ownership, HTTP/2–3 resets, TLS/proxy limits and examples.
+Canceled request-abort tokens keep their cancellation source until the token can
+be collected, so retained-token registrations and signaled wait handles remain
+usable. Parent registrations still detach at completion.
 Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.

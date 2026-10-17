@@ -68,7 +68,12 @@ namespace EmbedIO.Internal
                 _disposed = true;
             }
             _parent.Dispose();
-            _source.Dispose();
+            // A retained canceled token may still register callbacks or use its wait handle.
+            // Register can observe not-canceled, race Cancel/Dispose, then return without
+            // invoking its callback when it observes the disposed source. Keep canceled
+            // sources alive with their tokens; GC reclaims their managed state and any
+            // lazily allocated wait handle. No timer or parent registration is retained.
+            if (!_aborted) _source.Dispose();
         }
     }
 }
