@@ -214,8 +214,11 @@ The default lifetime is 20 minutes; configure a positive value at most one day.
 Tokens are reusable until expiry, so several tabs can use separate tokens without
 invalidating each other. UTC clock rollback rejects future-issued tokens; clock
 advance can expire them. A new/disposed policy, expired/replaced session, or changed
-authenticated identity rejects old tokens. The binding includes authentication type,
-name and NameIdentifier of authenticated identities, with at most 16 identities and
+authenticated identity rejects old tokens. The binding includes authentication
+type and name, plus the type, value, issuer and original issuer of each authenticated identity's configured name claim and
+NameIdentifier claim. Equal names/subjects from different issuing authorities do
+not share a binding. Other claim changes are not bound; regenerate sessions when
+changing accounts. The binding permits at most 16 identities and
 1,024 UTF-16 characters per bound string. Role/policy decisions are still evaluated
 for each request; this does not cache authorization.
 
@@ -241,7 +244,7 @@ and [bearer authentication](bearer-authentication.md).
 ## Validation and fuzzing
 
 Focused tests cover controller parity, inherited overrides, token/cookie isolation,
-identity changes, expiry, duplicate/noncanonical headers, no-store issuance and
+identity/issuer changes, expiry, duplicate/noncanonical headers, no-store issuance and
 session regeneration. Real-listener tests exercise HTTP/1, HTTP/2, HTTP/3 and the
 HTTP/1, HTTP/2 and HTTP/3 WebSocket origin boundaries. Native AOT and the legacy-target smoke include
 browser protection; configured jobs alone are not evidence of a passing run.

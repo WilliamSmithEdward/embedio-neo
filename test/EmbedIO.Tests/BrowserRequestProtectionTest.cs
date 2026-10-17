@@ -257,6 +257,47 @@ namespace EmbedIO.Tests
             });
         }
 
+        [TestCase(ClaimTypes.NameIdentifier, false)]
+        [TestCase(ClaimTypes.NameIdentifier, true)]
+        [TestCase(ClaimTypes.Name, false)]
+        [TestCase(ClaimTypes.Name, true)]
+        [TestCase("sub", false)]
+        [TestCase("sub", true)]
+        public async Task IdentityClaimIssuerChangesInvalidateTokens(string claimType, bool originalIssuer)
+        {
+            using var protection = Policy();
+            await TestWebServer.UseAsync(server =>
+            {
+                server.WithModule(new BearerAuthenticationModule("/", (issuer, _) =>
+                {
+                    var claim = new Claim(claimType, "same-subject", ClaimValueTypes.String,
+                        originalIssuer ? "trusted-issuer" : issuer, originalIssuer ? issuer : "original-issuer");
+                    var nameType = claimType == ClaimTypes.NameIdentifier ? ClaimTypes.Name : claimType;
+                    return Task.FromResult<ClaimsPrincipal?>(new ClaimsPrincipal(new ClaimsIdentity(new[] { claim }, "test", nameType, ClaimTypes.Role)));
+                }));
+                Configure(server, protection);
+            }, async client =>
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "issuer-a");
+                var token = await client.GetStringAsync("/token");
+                using (var same = Post("/api/protected", token))
+                {
+                    using var accepted = await client.SendAsync(same);
+                    Assert.That(accepted.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+                }
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "issuer-b");
+                using (var changed = Post("/api/protected", token))
+                {
+                    using var rejected = await client.SendAsync(changed);
+                    Assert.That(rejected.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+                }
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "issuer-a");
+                using var restored = Post("/api/protected", token);
+                using var response = await client.SendAsync(restored);
+                Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            });
+        }
+
         [Test]
         public async Task SessionRegenerationInvalidatesTokens()
         {

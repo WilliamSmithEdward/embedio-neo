@@ -350,9 +350,11 @@ and OPTIONS must remain non-mutating. Supplied origins must be singular and trus
 WebSocket handshakes require Origin. Register `BrowserRequestProtectionModule`
 before non-controller handlers/upgrades and before CORS short-circuiting as needed.
 
-Tokens bind the current session and authenticated identity, expire independently of
-session activity and fail after policy replacement/restart. Regenerate the session
-at login/logout, then fetch a new token. Regeneration resolves a cookie-backed
+Tokens bind the current session and authenticated identity, including the type,
+value, issuer and original issuer of the configured name and name-identifier claims.
+Identical subjects from different issuers cannot reuse tokens in the same session.
+Tokens expire independently of session activity and fail after policy replacement
+or restart. Regenerate the session at login/logout, then fetch a new token. Regeneration resolves a cookie-backed
 session even before other session access; coordinate already active requests
 separately. This is not authentication, authorization caching, XSS protection or a
 distributed token store. Forwarded origins are never trusted automatically. Session

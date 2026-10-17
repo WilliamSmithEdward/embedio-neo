@@ -7,7 +7,9 @@
 - Opt-in browser request protection with exact server/origin policies, expiring
   session/identity-bound anti-forgery tokens, controller attributes, middleware,
   Native AOT integration, regression tests and concurrent fuzzing. Existing
-  listener, authentication and unconfigured route defaults are preserved.
+  listener, authentication and unconfigured route defaults are preserved. Identity
+  bindings include claim issuers and original issuers to distinguish equal subjects
+  from different trusted authorities.
   See [browser request protection](docs/guides/browser-request-protection.md).
 
 ### Fixed

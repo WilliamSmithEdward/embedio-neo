@@ -149,7 +149,14 @@ namespace EmbedIO.Security
                 void WriteIdentity(IIdentity identity)
                 {
                     Write(identity.AuthenticationType); Write(identity.Name);
-                    Write((identity as ClaimsIdentity)?.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+                    var claims = identity as ClaimsIdentity;
+                    WriteClaim(claims == null ? null : claims.FindFirst(claims.NameClaimType));
+                    WriteClaim(claims?.FindFirst(ClaimTypes.NameIdentifier));
+                }
+                void WriteClaim(Claim? claim)
+                {
+                    // Subject/name values are scoped to their issuing authority, including delegated identities.
+                    Write(claim?.Type); Write(claim?.Value); Write(claim?.Issuer); Write(claim?.OriginalIssuer);
                 }
                 void Write(string? value)
                 {

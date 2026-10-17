@@ -34,12 +34,13 @@ internal static class BrowserProtectionFuzz
         using var server = new TestWebServer(); using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
         var calls = new ConcurrentDictionary<string, Call>(StringComparer.Ordinal);
         var clients = Enumerable.Range(0, 3).Select(_ => TestHttpClient.Create(server)).ToArray();
-        var users = new[] { "user0", "user1", "user2" }; var tokens = new Saved?[3]; var sequence = 0;
+        var users = new[] { "user0", "user1", "user2" }; var issuers = new[] { "issuer0", "issuer1", "issuer2" }; var tokens = new Saved?[3]; var sequence = 0;
         server.WithSessionManager(new LocalSessionManager());
         server.WithModule(new Gate(context =>
         {
             var user = context.Request.Headers["X-Model-User"] ?? "anonymous";
-            context.GetImplementation().User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, user) }, "model"));
+            var issuer = context.Request.Headers["X-Model-Issuer"] ?? "default";
+            context.GetImplementation().User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, user, ClaimValueTypes.String, issuer) }, "model"));
             return Task.CompletedTask;
         }));
         server.WithModule(new ActionModule("/token", HttpVerbs.Get, context => context.SendStringAsync(protection.GetToken(context), "text/plain", WebServer.Utf8NoBomEncoding)));
@@ -70,6 +71,7 @@ internal static class BrowserProtectionFuzz
                     case 0: await Issue(actor); trace.Cover("browser.issue"); break;
                     case 1: users[actor] = users[actor] == "changed" ? "user" + actor : "changed"; trace.Cover("browser.identity-change"); break;
                     case 2: clients[actor].Dispose(); clients[actor] = TestHttpClient.Create(server); trace.Cover("browser.fresh-session"); break;
+                    case 4: issuers[actor] = issuers[actor] == "changed" ? "issuer" + actor : "changed"; trace.Cover("browser.issuer-change"); break;
                     case 3:
                         var other = (actor + 1) % 3;
                         clients[actor].Dispose(); clients[actor] = TestHttpClient.Create(server);
@@ -87,10 +89,10 @@ internal static class BrowserProtectionFuzz
         string? Cookie(int actor) => clients[actor].CookieContainer.GetCookies(server.BaseUrl)[LocalSessionManager.DefaultCookieName]?.Value;
         async Task Issue(int actor)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, "/token"); request.Headers.Add("X-Model-User", users[actor]);
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/token"); request.Headers.Add("X-Model-User", users[actor]); request.Headers.Add("X-Model-Issuer", issuers[actor]);
             using var response = await clients[actor].SendAsync(request, token).ConfigureAwait(false); response.EnsureSuccessStatusCode();
             var value = await response.Content.ReadAsStringAsync(token).ConfigureAwait(false); Require(value.Length == 119, "browser.bounded-token");
-            tokens[actor] = new Saved(value, Cookie(actor) ?? throw new InvalidOperationException("Token issuance did not set a session cookie."), users[actor]);
+            tokens[actor] = new Saved(value, Cookie(actor) ?? throw new InvalidOperationException("Token issuance did not set a session cookie."), users[actor], issuers[actor]);
         }
         async Task Batch(int variant, int selected)
         {
@@ -111,16 +113,16 @@ internal static class BrowserProtectionFuzz
         async Task Execute(int actor, int variant, Call call)
         {
             var saved = tokens[variant == 1 ? (actor + 1) % 3 : actor];
-            var value = saved?.Value; var accepted = saved != null && saved.Session == Cookie(actor) && saved.User == users[actor];
+            var value = saved?.Value; var accepted = saved != null && saved.Session == Cookie(actor) && saved.User == users[actor] && saved.Issuer == issuers[actor];
             if (variant == 2 && value != null) { value = "!" + value.Substring(1); accepted = false; }
             if (variant == 3) { value = null; accepted = false; }
             if (variant == 8)
             {
-                using var issuing = new HttpRequestMessage(HttpMethod.Get, "/foreign"); issuing.Headers.Add("X-Model-User", users[actor]);
+                using var issuing = new HttpRequestMessage(HttpMethod.Get, "/foreign"); issuing.Headers.Add("X-Model-User", users[actor]); issuing.Headers.Add("X-Model-Issuer", issuers[actor]);
                 using var issued = await clients[actor].SendAsync(issuing, token).ConfigureAwait(false); issued.EnsureSuccessStatusCode(); value = await issued.Content.ReadAsStringAsync(token).ConfigureAwait(false); accepted = false;
             }
             using var request = new HttpRequestMessage(variant == 9 ? HttpMethod.Get : HttpMethod.Post, "/guard") { Content = variant == 9 ? null : new StringContent("payload") };
-            request.Headers.Add("X-Model-User", users[actor]); request.Headers.Add("X-Model-Call", call.Id);
+            request.Headers.Add("X-Model-User", users[actor]); request.Headers.Add("X-Model-Issuer", issuers[actor]); request.Headers.Add("X-Model-Call", call.Id);
             if (value != null) request.Headers.TryAddWithoutValidation(BrowserRequestProtection.TokenHeaderName, value);
             if (variant == 4) { request.Headers.Add("Origin", "http://evil.example"); accepted = false; }
             if (variant == 5) { request.Headers.Host = "evil.example:8080"; accepted = false; }
@@ -135,7 +137,7 @@ internal static class BrowserProtectionFuzz
         }
     }
     private static void Require(bool condition, string invariant) { if (!condition) throw new StateMachineFailure(invariant, "Browser model invariant failed."); }
-    private sealed record Saved(string Value, string Session, string User);
+    private sealed record Saved(string Value, string Session, string User, string Issuer);
     private sealed class Call(string id)
     {
         internal string Id { get; } = id;
