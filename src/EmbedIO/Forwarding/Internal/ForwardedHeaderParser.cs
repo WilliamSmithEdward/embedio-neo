@@ -99,9 +99,9 @@ namespace EmbedIO.Forwarding.Internal
         // from the nearest proxy, so a list shorter than the others has nothing for the outermost hops.
         internal static List<ForwardedHop>? ParseXForwarded(string? forHeader, string? protoHeader, string? hostHeader)
         {
-            var fors = forHeader == null ? new List<string>() : SplitList(forHeader);
-            var protos = protoHeader == null ? new List<string>() : SplitList(protoHeader);
-            var hosts = hostHeader == null ? new List<string>() : SplitList(hostHeader);
+            var fors = forHeader == null ? [] : SplitList(forHeader);
+            var protos = protoHeader == null ? [] : SplitList(protoHeader);
+            var hosts = hostHeader == null ? [] : SplitList(hostHeader);
             var count = Math.Max(fors.Count, Math.Max(protos.Count, hosts.Count));
             if (count > MaxHops)
                 return null;
@@ -125,7 +125,7 @@ namespace EmbedIO.Forwarding.Internal
                 hops[count - fromEnd] = new ForwardedHop(client, proto, host);
             }
 
-            return new List<ForwardedHop>(hops);
+            return [.. hops];
         }
 
         // "http" or "https", lowercased; anything else is not a scheme the module accepts.
@@ -424,7 +424,7 @@ namespace EmbedIO.Forwarding.Internal
                 }
             }
 
-            internal readonly ForwardedHop ToHop() => new ForwardedHop(_client, _proto, _host);
+            internal readonly ForwardedHop ToHop() => new(_client, _proto, _host);
         }
     }
 }

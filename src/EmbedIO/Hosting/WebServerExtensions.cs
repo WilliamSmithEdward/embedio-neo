@@ -31,7 +31,7 @@ namespace EmbedIO
             @this.StateChanged += OnStateChanged;
             try
             {
-                var running = Task.Run(() => @this.RunAsync(cancellationToken));
+                var running = Task.Run(() => @this.RunAsync(cancellationToken), CancellationToken.None);
                 _ = running.ContinueWith(task =>
                 {
                     // Start has historically returned on startup failure. RunAsync carries the error.

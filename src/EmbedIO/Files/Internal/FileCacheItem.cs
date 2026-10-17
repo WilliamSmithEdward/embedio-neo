@@ -47,7 +47,7 @@ namespace EmbedIO.Files.Internal
         private static readonly long SizeOfItem = Environment.Is64BitProcess ? 96 : 128;
 #endif
 
-        private readonly object _syncRoot = new object();
+        private readonly object _syncRoot = new();
 
         // Used to update total size of section.
         // Weak reference avoids circularity.

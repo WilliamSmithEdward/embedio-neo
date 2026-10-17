@@ -13,7 +13,7 @@ namespace EmbedIO.Files.Internal
 {
     internal class HtmlDirectoryLister : IDirectoryLister
     {
-        private static readonly Lazy<IDirectoryLister> LazyInstance = new Lazy<IDirectoryLister>(() => new HtmlDirectoryLister());
+        private static readonly Lazy<IDirectoryLister> LazyInstance = new(() => new HtmlDirectoryLister());
 
         private HtmlDirectoryLister()
         {
@@ -55,7 +55,7 @@ namespace EmbedIO.Files.Internal
             if (encodedPath.Length > 1)
                 text.Write(linkBase.Length == 0 ? "<a href='../'>../</a>\n" : "<a href='./'>../</a>\n");
 
-            entries = entries.ToArray();
+            entries = [.. entries];
 
             foreach (var directory in entries.Where(m => m.IsDirectory).OrderBy(e => e.Name))
             {

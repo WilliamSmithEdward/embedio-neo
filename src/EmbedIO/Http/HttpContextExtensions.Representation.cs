@@ -90,7 +90,7 @@ namespace EmbedIO
             if (!content.CanRead || !content.CanSeek) throw new ArgumentException("A readable seekable representation is required.", nameof(content));
             if (maximumRanges < 1 || maximumRanges > 128) throw new ArgumentOutOfRangeException(nameof(maximumRanges));
             if (!MediaTypeHeaderValue.TryParse(contentType, out var parsed) || parsed is null || parsed.MediaType is null
-                || parsed.MediaType.IndexOf("*", StringComparison.Ordinal) >= 0) throw new ArgumentException("Invalid representation media type.", nameof(contentType));
+                || EmbedIO.Internal.StringOperations.IndexOfOrdinal(parsed.MediaType, '*') >= 0) throw new ArgumentException("Invalid representation media type.", nameof(contentType));
             var mediaType = parsed.ToString();
             foreach (var character in mediaType)
                 if (character < 32 || character > 126) throw new ArgumentException("Multipart representation metadata must be printable ASCII.", nameof(contentType));

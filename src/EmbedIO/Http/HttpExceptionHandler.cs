@@ -34,7 +34,12 @@ namespace EmbedIO
         /// <param name="httpException">The HTTP exception.</param>
         /// <returns>A <see cref="Task" /> representing the ongoing operation.</returns>
         public static Task EmptyResponse(IHttpContext context, IHttpException httpException)
-            => Task.CompletedTask;
+        {
+            // The callback signature is shared with handlers that use these arguments.
+            _ = context;
+            _ = httpException;
+            return Task.CompletedTask;
+        }
 
         /// <summary>
         /// <para>Sends a HTTP exception's <see cref="IHttpException.Message">Message</see> property
@@ -124,7 +129,7 @@ namespace EmbedIO
 
         internal static async Task Handle(string logSource, IHttpContext context, Exception exception, HttpExceptionHandlerCallback? handler)
         {
-            if (handler == null || !(exception is IHttpException httpException))
+            if (handler == null || exception is not IHttpException httpException)
             {
                 ExceptionDispatchInfo.Capture(exception).Throw();
                 return;

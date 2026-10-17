@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Threading;
 
 namespace EmbedIO.Files
@@ -125,7 +124,7 @@ namespace EmbedIO.Files
 
         /// <inheritdoc />
         public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider)
-            => Enumerable.Empty<MappedResourceInfo>();
+            => [];
 
         /// <summary>
         /// Releases unmanaged and - optionally - managed resources.

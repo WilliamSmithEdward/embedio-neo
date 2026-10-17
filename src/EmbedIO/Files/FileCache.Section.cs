@@ -8,8 +8,8 @@ namespace EmbedIO.Files
     {
         internal class Section
         {
-            private readonly object _syncRoot = new object();
-            private readonly Dictionary<string, FileCacheItem> _items = new Dictionary<string, FileCacheItem>(StringComparer.Ordinal);
+            private readonly object _syncRoot = new();
+            private readonly Dictionary<string, FileCacheItem> _items = new(StringComparer.Ordinal);
             private long _totalSize;
             private string? _oldestKey;
             private string? _newestKey;

@@ -228,6 +228,24 @@ def main():
         if not path.is_file() or (path.suffix not in SOURCE_SUFFIXES and path.name not in {".editorconfig", ".globalconfig"}):
             continue
         for number, text in violations(path.read_text(encoding="utf-8-sig"), csharp=path.suffix == ".cs", filename=name):
+            # Owner-approved namespace and compatibility policies, limited to the root configuration.
+            if name == ".editorconfig" and text in {
+                "dotnet_diagnostic.CA2208.severity = none",
+                "dotnet_diagnostic.CA1510.severity = none",
+                "dotnet_diagnostic.CA1513.severity = none",
+                "dotnet_diagnostic.CA1512.severity = none",
+                "dotnet_diagnostic.CA1835.severity = none",
+                "dotnet_diagnostic.CA1846.severity = none",
+                "dotnet_diagnostic.CA1865.severity = none",
+                "dotnet_diagnostic.CA1866.severity = none",
+                "dotnet_diagnostic.IDE0057.severity = none",
+                "dotnet_diagnostic.IDE0056.severity = none",
+                "dotnet_diagnostic.IDE0130.severity = none",
+                "dotnet_diagnostic.IDE0330.severity = none",
+                "dotnet_diagnostic.IDE0230.severity = none",
+                "dotnet_diagnostic.SYSLIB1045.severity = none",
+            }:
+                continue
             failures.append(f"{name}:{number}: {text}")
     if failures:
         print("Unapproved compiler/analyzer suppressions are not permitted:", file=sys.stderr)

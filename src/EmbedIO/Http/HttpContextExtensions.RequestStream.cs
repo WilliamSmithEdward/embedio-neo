@@ -27,7 +27,7 @@ namespace EmbedIO
             if (encoding != null) encoding = RequestCodingChain.TrimValue(encoding);
             if (encoding == null || encoding.Length == 0 || encoding.Equals(CompressionMethodNames.None, System.StringComparison.OrdinalIgnoreCase))
                 return stream;
-            if (encoding.IndexOf(",", System.StringComparison.Ordinal) >= 0 && RequestCodingChain.TryOpen(stream, encoding, @this.SupportCompressedRequests, out var decoded))
+            if (StringOperations.IndexOfOrdinal(encoding, ',') >= 0 && RequestCodingChain.TryOpen(stream, encoding, @this.SupportCompressedRequests, out var decoded))
                 return decoded == stream ? stream : RequestDecompressionPolicy.Apply(@this, decoded ?? throw new System.InvalidOperationException("Missing decoded request stream."));
             if (@this.SupportCompressedRequests)
             {
