@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-16
+
 ### Added
 
 - Opt-in streamed JSON arrays and NDJSON from async sequences, with bounded
