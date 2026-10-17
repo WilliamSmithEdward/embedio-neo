@@ -12,6 +12,7 @@
   Generated OpenAPI gains request constraints; tests, state-machine fuzzing and
   Native AOT smoke cover the new surface. The netstandard2.0 asset adds the pinned
   System.ComponentModel.Annotations 5.0.0 dependency; .NET 10 uses framework types.
+  See the [request-validation guide](docs/guides/request-validation.md).
 
 ## [2.3.0] - 2026-10-16
 
