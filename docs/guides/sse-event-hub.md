@@ -1,6 +1,6 @@
 # Bounded SSE event channels
 
-This feature is unreleased; the published 2.5.0 packages do not contain it.
+This feature requires EmbedIO-Neo 2.6.0 or later.
 The existing `OpenEventStream()` writer remains unchanged.
 
 Use a `ServerSentEventHub` when an application needs to broadcast progress,

@@ -78,7 +78,7 @@
       href: guides/forwarded-headers.md
     - name: Request validation (2.4.0+)
       href: guides/request-validation.md
-    - name: Bounded SSE event channels (unreleased)
+    - name: Bounded SSE event channels (2.6.0+)
       href: guides/sse-event-hub.md
     - name: Streaming JSON responses (2.5.0+)
       href: guides/streaming-json.md
