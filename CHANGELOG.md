@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-16
+
 ### Added
 
 - Opt-in controller parameter validation through `[Validate]`, DataAnnotations and
