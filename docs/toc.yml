@@ -76,7 +76,7 @@
       href: guides/rate-limiting.md
     - name: Behind a reverse proxy (Neo v2)
       href: guides/forwarded-headers.md
-    - name: Browser request protection (unreleased)
+    - name: Browser request protection (2.7.0+)
       href: guides/browser-request-protection.md
     - name: Request validation (2.4.0+)
       href: guides/request-validation.md

@@ -131,7 +131,7 @@ must reject deliberately corrupted event data. The checked replay trace is
 unchanged. See [SSE event channels](sse-event-hub.md).
 
 
-The unreleased `browser-protection` campaign overlaps three clients at an admission
+The `browser-protection` campaign introduced in 2.7.0 overlaps three clients at an admission
 barrier. Its independent cookie/identity/token model checks allowed and rejected
 requests, handler side effects and response isolation through fresh/shared sessions,
 identity changes, foreign policies, tampering and host/origin rejection. Its
