@@ -43,6 +43,7 @@ public static class Program
 
     private static async Task RunAsync()
     {
+        _checks += await LegacyHealthChecks.RunAsync();
         var cases = new (string Path, int Status)[]
         {
             ("u/oops", 400), ("u/65536", 400), ("u/-1", 400), ("u/65535", 200), ("u/0xFFFF", 200),
@@ -124,7 +125,7 @@ public static class Program
             if (item == null || item.Id != id || item.Data != "after" || await subscriber.ReadAsync() != null) throw new InvalidOperationException("Legacy SSE replay mismatch.");
             _checks++;
         }
-        if (_checks != 25) throw new InvalidOperationException("Legacy route check count changed.");
+        if (_checks != 31) throw new InvalidOperationException("Legacy route and health check count changed.");
     }
 
     public enum Choice { One = 1 }

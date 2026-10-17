@@ -41,6 +41,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Bounded SSE event channels](guides/sse-event-hub.md): opt-in broadcast (2.6.0+), bounded replay, reconnect gaps, subscriber limits, controller integration and fuzzing.
 - [Streaming JSON responses](guides/streaming-json.md): opt-in JSON arrays and NDJSON in 2.5.0+, bounded records, client consumption, cancellation and failure handling.
 - [Problem details for API errors](guides/problem-details.md): new in Neo v2, opt-in RFC 9457 `application/problem+json` error responses, with safe defaults, request IDs, content negotiation and migration notes.
+- [Health checks and readiness](guides/health-checks.md): pending next release, opt-in dependency checks, desktop startup waits, protected health endpoints and shutdown readiness.
 - [Metrics and tracing](guides/telemetry.md): opt-in HTTP server metrics and spans with W3C trace context, route templates and server identity.
 - [Trimming and Native AOT](guides/trimming-and-native-aot.md): AOT-safe JSON with source-generated metadata, Web API controllers through generated bindings and their build-time diagnostics, annotated reflection APIs and what a Native AOT host supports.
 - [OpenAPI documents](guides/openapi.md): new in Neo v2, OpenAPI 3.1 documents written from generated controller bindings, with operation attributes, security requirements from authentication modules, declared routes for other modules, routes the document cannot describe and its limits.

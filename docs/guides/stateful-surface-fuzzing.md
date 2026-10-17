@@ -138,3 +138,21 @@ identity changes, foreign policies, tampering and host/origin rejection. Its
 `--browser-protection-selftest` must detect injected response corruption. The checked
 trace includes the minimized empty-cookie-copy model case. See
 [browser request protection](browser-request-protection.md) for API scope and limits.
+
+
+## Health and readiness (pending next release)
+
+`health-readiness` checks three independent in-process hosts against a separate
+owner/dependency ledger. Mandatory overlapping checks and one canceled waiter
+precede generated dependency transitions, liveness probes, concurrent readiness
+requests, stop/disposal and fresh host generations. Invariants cover no stale
+completed results, generic exception text, no-store headers, liveness independent
+of dependencies and isolation between host owners. HTTP/1, HTTP/2 and HTTP/3
+transport behavior is covered by focused unit-suite integration cases; this
+campaign itself uses the in-process test transport.
+
+The retained `state-corpus/health-readiness.json` trace replays the transitions.
+`--health-readiness-selftest` must reject an injected foreign-owner diagnostic
+with `health.owner-isolation`. The ordinary fuzz workflow runs that negative
+oracle and includes this campaign in its shared-resource models. See
+[health and readiness](health-checks.md) for lifecycle and cancellation limits.
