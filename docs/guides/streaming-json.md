@@ -1,6 +1,6 @@
 # Streaming JSON responses
 
-This feature is unreleased; EmbedIO-Neo 2.4.0 does not include it.
+Streaming JSON requires EmbedIO-Neo 2.5.0 or later.
 
 Return `JsonStream.Array(source, itemTypeInfo)` or
 `JsonStream.Ndjson(source, itemTypeInfo)` to stream an `IAsyncEnumerable<T>`.
