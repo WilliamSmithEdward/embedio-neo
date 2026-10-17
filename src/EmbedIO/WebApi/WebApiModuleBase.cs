@@ -573,6 +573,14 @@ namespace EmbedIO.WebApi
                 return Expression.Block(typeof(Task), callMethod, Expression.Constant(Task.CompletedTask));
             }
 
+            if (methodReturnType == typeof(ServerSentEventStream))
+                return Expression.Call(callMethod, typeof(ServerSentEventStream).GetMethod(nameof(ServerSentEventStream.WriteAsync))
+                    ?? throw new MissingMethodException(nameof(ServerSentEventStream.WriteAsync)),
+                    contextInLambda, Expression.Constant(default(System.Threading.CancellationToken)));
+            if (IsGenericTaskType(methodReturnType, out var eventType) && eventType == typeof(ServerSentEventStream))
+                return Expression.Call(typeof(ControllerBindingServices), nameof(ControllerBindingServices.WriteEventStreamResultAsync),
+                    null, contextInLambda, callMethod);
+
             if (typeof(JsonStreamResult).IsAssignableFrom(methodReturnType))
                 return Expression.Call(Expression.Convert(callMethod, typeof(JsonStreamResult)),
                     typeof(JsonStreamResult).GetMethod(nameof(JsonStreamResult.WriteAsync)) ?? throw new MissingMethodException(nameof(JsonStreamResult.WriteAsync)),
@@ -929,8 +937,8 @@ namespace EmbedIO.WebApi
         }
 
         private static bool IsStreamingResultType(Type? type)
-            => type != null && (typeof(JsonStreamResult).IsAssignableFrom(type)
-                || IsGenericTaskType(type, out var item) && typeof(JsonStreamResult).IsAssignableFrom(item));
+            => type != null && (typeof(JsonStreamResult).IsAssignableFrom(type) || type == typeof(ServerSentEventStream)
+                || IsGenericTaskType(type, out var item) && (typeof(JsonStreamResult).IsAssignableFrom(item) || item == typeof(ServerSentEventStream)));
 
         private static Task ReleaseStreamingController(IHttpContext context, WebApiController controller)
         {

@@ -325,6 +325,23 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
   `server.WithProblemDetails()` (namespace `EmbedIO.Problems`) for RFC 9457
   JSON errors. See [problem details](docs/guides/problem-details.md).
 
+### Bounded SSE channels (unreleased)
+
+The published 2.5.0 packages do not contain `ServerSentEventHub` yet. In current
+source, own one hub per channel/security scope and return `hub.Stream()` (or
+`Task<ServerSentEventStream>`) from a controller. Existing authorization runs
+before subscription/replay, and owned controller disposal awaits the stream.
+`Publish(data, eventName)` returns an opaque ID. Reconnects use `Last-Event-ID`;
+missing history returns 409 and requires an application snapshot/resync. Replay
+is bounded, in-memory and lost on hub replacement/restart, not acknowledged or
+exactly-once delivery. Queues are bounded; overflow ends that subscriber.
+`Complete()` drains; `Dispose()` discards. Direct `Subscribe()` users must dispose
+their subscription. Ordinary SSE writers/default listeners remain unchanged.
+Native EventSource cannot set bearer headers; use an authenticated fetch client
+or the application's established cookie policy. Never put bearer tokens in URLs.
+See [SSE event channels](docs/guides/sse-event-hub.md) for all default budgets,
+heartbeat/disconnect limits, controller/browser examples and fuzzing.
+
 ## 10. JSON
 
 - The serializer is `EmbedIO.Serialization.Json` over System.Text.Json, with

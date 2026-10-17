@@ -88,7 +88,15 @@ public static class Program
                 await running;
             }
         }
-        if (_checks != 21) throw new InvalidOperationException("Legacy route check count changed.");
+        using (var hub = new ServerSentEventHub())
+        {
+            var cursor = hub.Publish("before"); var id = hub.Publish("after");
+            using var subscriber = hub.Subscribe(cursor);
+            var item = await subscriber.ReadAsync(); hub.Complete();
+            if (item == null || item.Id != id || item.Data != "after" || await subscriber.ReadAsync() != null) throw new InvalidOperationException("Legacy SSE replay mismatch.");
+            _checks++;
+        }
+        if (_checks != 22) throw new InvalidOperationException("Legacy route check count changed.");
     }
 
     public enum Choice { One = 1 }

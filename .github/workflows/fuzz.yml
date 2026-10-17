@@ -112,13 +112,16 @@ jobs:
             name="$(basename "$trace" .json)"
             dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines-replay "$trace" 2>&1 | tee "TestResults/fuzz/$name.log"
           done
+      - name: Verify the SSE independent oracle rejects corruption
+        shell: bash
+        run: dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --event-hub-selftest 2>&1 | tee TestResults/fuzz/event-hub-selftest.log
       - name: Exercise shared resource models
         shell: bash
         run: |
           set -euo pipefail
           seed=$((GITHUB_RUN_ID % 2147483647))
           if (( seed == 0 )); then seed=1; fi
-          for scenario in websocket-budget rate-limits routes tunnels sessions auth-state auth-jwt controller-parity request-validation json-streaming multipart-lifetime forwarded-policy cors-policy conditional-ranges; do
+          for scenario in websocket-budget rate-limits routes tunnels sessions auth-state auth-jwt controller-parity request-validation json-streaming event-hub multipart-lifetime forwarded-policy cors-policy conditional-ranges; do
             dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$MODEL_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
           done
       - name: Exercise real HTTP/1 and HTTP/2 connections

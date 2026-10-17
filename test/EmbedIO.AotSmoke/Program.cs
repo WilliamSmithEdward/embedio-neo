@@ -68,12 +68,14 @@ internal static class Program
             await File.WriteAllTextAsync(Path.Combine(root, "index.html"), "<p>static</p>");
             var url = $"http://127.0.0.1:{LoopbackPorts.Free()}/";
             var authorization = AuthorizationChecks.CreateModule();
+            using var eventHub = new ServerSentEventHub();
 
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithTelemetry("aot-smoke"))
                 .WithModule(AuthorizationChecks.CreateBearer())
                 .WithModule(authorization)
                 .WithModule(ValidationChecks.CreateModule())
                 .WithModule(StreamingChecks.CreateModule())
+                .WithModule(EventHubChecks.CreateModule(eventHub))
                 .WithModule(new RoutingModule("/api")
                     .OnGet("/items/{id}", (context, route) => context.SendDataWithMetadataAsync(new Item { Id = int.Parse(route["id"], System.Globalization.CultureInfo.InvariantCulture), Name = "item" }, SmokeJson.Default.Item))
                     .OnPost("/items", async (context, _) =>
@@ -106,6 +108,7 @@ internal static class Program
             await AuthorizationChecks.RunAsync(client, url, checks);
             await ValidationChecks.RunAsync(client, url, checks);
             await StreamingChecks.RunAsync(client, url, checks);
+            await EventHubChecks.RunAsync(client, url, checks, eventHub);
             var first = await client.GetStringAsync(url + "api/items/7");
             checks["startup_to_first_response_ms"] = Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
             var item = JsonSerializer.Deserialize(first, SmokeJson.Default.Item);

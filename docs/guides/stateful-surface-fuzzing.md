@@ -116,3 +116,11 @@ HEAD suppression and concurrent producer cleanup. It uses independent parsed
 value/count expectations and an enumerator ledger. See
 [streaming JSON](streaming-json.md) for wire-level regression coverage and
 cancellation/producer limitations.
+
+
+The unreleased `event-hub` campaign exercises three concurrent publishers and
+subscribers, independent known payload sets and queue ledgers, cursor replay,
+overflow, read cancellation, disposal and completion. Its `--event-hub-selftest`
+must reject deliberately corrupted event data. The checked replay trace is
+`test/EmbedIO.Fuzz/state-corpus/event-hub.json`; ordinary response defaults are
+unchanged. See [SSE event channels](sse-event-hub.md).
