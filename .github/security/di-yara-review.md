@@ -449,3 +449,32 @@ unavailable-alert exception is carried forward; no dismissal is claimed. Other
 matches, stale entries, scanner errors and missing scans remain fatal. Fresh
 exact-head scans must pass before merge/publication. Evidence is retained under
 ignored `TestResults/release-2.6.0/yara-review`.
+
+
+## 2.7.0 release revalidation
+
+The locally built 2.7.0 candidate retains the two previously reviewed DI compiler
+CodeView debug-symbol matches. The pinned YARA-X 1.21.0 and YARA Forge 20261011
+archives and extracted contents were verified, the complete God Mode rule was
+reread, and full rules were scanned with printed strings in a read-only,
+network-disabled container. Each assembly matches only `Injection.pdb` in its
+compiler-generated debug-symbol path: `0x6c9e` (net10.0) and `0x758d`
+(netstandard2.0). No other rule or string matches either assembly. The DI source,
+targets and build behavior are unchanged; the release changes assembly version
+metadata. These are Windows-built candidate bytes, not final CI artifact hashes.
+
+| Local candidate artifact | SHA-256 |
+| --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.7.0.nupkg` | `0a93174fd371532b2000cb4a52daa6167c3f9299026607d9b40553607cbb3fed` |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `636d03f08e74b93051c25cddff3c7fb861981a6275fa9dfc3bb60ea79072d3db` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `f2cfece9e0b1de73d786cc15a3c6ed74148138520369b12e02119dc4ca05edaf` |
+
+Only the two exact package-version paths move to 2.7.0. The rule and evidence-file
+acceptances remain unchanged. The current GitHub code-scanning alert list contains
+no corresponding YARA alert; this workflow exposes no matching alert to dismiss.
+The existing owner-approved unavailable-alert exception is retained; no dismissal
+is claimed. Fresh exact-head full CI scans, review of final CI artifact matches and
+every other check remain required before merge/publication. Other findings, errors
+and stale entries remain fatal. Local source, pins, assembly hashes, CodeView
+metadata and printed-match evidence are under ignored
+`TestResults/release-2.7.0/yara-review`.

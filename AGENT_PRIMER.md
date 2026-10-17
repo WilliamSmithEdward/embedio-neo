@@ -327,7 +327,7 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
 
 ### Browser request protection (2.7.0+)
 
-Published 2.6.0 packages do not contain these APIs. Own one
+These APIs require 2.7.0+. Own one
 `EmbedIO.Security.BrowserRequestProtection` for a deliberate security scope,
 constructed with immutable `BrowserRequestProtectionOptions`: explicit physical
 server origins, optional trusted browser origins, and a token lifetime (20 minutes
