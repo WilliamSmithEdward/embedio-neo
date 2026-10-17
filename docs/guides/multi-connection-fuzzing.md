@@ -55,6 +55,12 @@ The Fuzz workflow runs shared models, runner self-tests, the native-independent 
 traces, and real HTTP/1 and HTTP/2 connection cases on Ubuntu 24.04 and Windows
 2025. Pull-request and other nonscheduled runs execute 500 cases per model and
 32 cases per network protocol; scheduled runs execute 5,000 and 128 respectively.
+The shared-state job allows 45 minutes on ordinary runs and three hours on the
+full scheduled campaign. The physical request-abort model alone took 6m24s for
+500 Linux cases in run 39057735937; 5,000 cases cannot fit the old 45-minute
+whole-job allowance. This changes only the scheduled job allowance: every case
+still has its 15-second deadline and five-second cleanup grace, and all cases,
+assertions and negative oracles remain required.
 A separate Ubuntu job requires HTTP/3, using the SHA-256-verified libmsquic 2.6.2
 package pinned by the repository's main CI. It also replays QUIC-dependent traces under `state-corpus/quic` and runs the
 response HTTP/3 campaign. Each network campaign executes 32 HTTP/3 cases normally

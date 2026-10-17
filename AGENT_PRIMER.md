@@ -21,6 +21,9 @@ for completion ownership, HTTP/2–3 resets, TLS/proxy limits and examples.
 Canceled request-abort tokens keep their cancellation source until the token can
 be collected, so retained-token registrations and signaled wait handles remain
 usable. Parent registrations still detach at completion.
+The full 5,000-case nightly shared-state campaign has a three-hour job allowance
+for physical connection waits; ordinary jobs remain 45 minutes. Individual
+15-second case deadlines and five-second cleanup grace remain unchanged.
 Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.
