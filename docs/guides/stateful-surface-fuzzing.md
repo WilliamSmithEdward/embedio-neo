@@ -118,7 +118,7 @@ value/count expectations and an enumerator ledger. See
 cancellation/producer limitations.
 
 
-The unreleased `event-hub` campaign exercises three concurrent publishers and
+The `event-hub` campaign introduced in 2.6.0 exercises three concurrent publishers and
 subscribers, independent known payload sets and queue ledgers, cursor replay,
 overflow, read cancellation, disposal and completion. Its `--event-hub-selftest`
 must reject deliberately corrupted event data. The checked replay trace is

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-10-16
+
 ### Added
 
 - Opt-in bounded SSE event channels with replay cursors, subscriber/queue limits,

@@ -15,7 +15,7 @@ disagree, the guide and the source win.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.5.0, the v2 engine. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current version | 2.6.0, the v2 engine. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -325,10 +325,9 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
   `server.WithProblemDetails()` (namespace `EmbedIO.Problems`) for RFC 9457
   JSON errors. See [problem details](docs/guides/problem-details.md).
 
-### Bounded SSE channels (unreleased)
+### Bounded SSE channels (2.6.0+)
 
-The published 2.5.0 packages do not contain `ServerSentEventHub` yet. In current
-source, own one hub per channel/security scope and return `hub.Stream()` (or
+`ServerSentEventHub` requires 2.6.0+. Own one hub per channel/security scope and return `hub.Stream()` (or
 `Task<ServerSentEventStream>`) from a controller. Existing authorization runs
 before subscription/replay, and owned controller disposal awaits the stream.
 `Publish(data, eventName)` returns an opaque ID. Reconnects use `Last-Event-ID`;

@@ -419,3 +419,33 @@ unavailable-alert exception is carried forward; no dismissal is claimed. Other
 matches, stale entries, scanner errors and missing scans remain fatal. Fresh
 exact-head scans must pass before merge/publication. Evidence is retained under
 ignored `TestResults/release-2.5.0/yara-review`.
+
+## 2.6.0 release revalidation
+
+Release PR #477 scan [39006903104](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/39006903104)
+reports the same two DI debug-symbol matches at the new 2.6.0 package paths.
+The reviewed PR head is `fc1c427e3fa4c7e6115a3d37fa7025e745490d36`.
+Both pinned scanner/rule archives and extracted contents were verified. The complete
+God Mode rule was reread, and full YARA-X 1.21.0 / YARA Forge 20261011 rules were
+rerun with printed strings against both exact CI-built assemblies in a read-only,
+network-disabled container. Each assembly has only `Injection.pdb` in its compiler
+generated CodeView path, at `0x6c84` (net10.0) and `0x7573` (netstandard2.0).
+No other rule or string matches. DI source, targets and build behavior are unchanged.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.6.0.nupkg` | `8013195947694442df9635e6015856151f307447a8655bd8290285a8607bd434` |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `7c8ba95b3c7f657db2c461346632b076d0929452cd5210cad9b2ee577831baca` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `91a355d479923cef0e681b10442777b524366966846cb89f973432f9702194d1` |
+| `yara-x.json` | `2067e858d689a3dd4e5598d5eb842ef4310f9608fc44f243c595389b6d86854b` |
+| `clamav.json` | `bc94452c22ddec8fd9b4a23703909b3021564dade2530ba8a52c52dece60d07f` |
+
+The complete CI report contains 11 expected matches and no scanner errors.
+ClamAV 1.5.4/28155/Fri Oct 16 06:24:17 2026 scanned 1,652 files with no matches or errors.
+Only the two exact package-version acceptance paths move to 2.6.0; the rule and
+evidence-file scope remain unchanged. GitHub's open code-scanning alert list is
+empty, and this YARA workflow creates no matching alert. The existing owner-approved
+unavailable-alert exception is carried forward; no dismissal is claimed. Other
+matches, stale entries, scanner errors and missing scans remain fatal. Fresh
+exact-head scans must pass before merge/publication. Evidence is retained under
+ignored `TestResults/release-2.6.0/yara-review`.
