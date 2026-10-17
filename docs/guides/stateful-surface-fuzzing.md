@@ -109,3 +109,10 @@ tests remain necessary for those surfaces.
 The 2.4.0 `request-validation` campaign adds concurrent generated/reflection
 validation parity with independent model expectations, limits, malformed JSON,
 opt-in compatibility and bounded error responses. See [request validation](request-validation.md).
+
+The unreleased `json-streaming` campaign exercises array/NDJSON framing,
+empty and Unicode records, per-record budgets, generated/reflection parity,
+HEAD suppression and concurrent producer cleanup. It uses independent parsed
+value/count expectations and an enumerator ledger. See
+[streaming JSON](streaming-json.md) for wire-level regression coverage and
+cancellation/producer limitations.

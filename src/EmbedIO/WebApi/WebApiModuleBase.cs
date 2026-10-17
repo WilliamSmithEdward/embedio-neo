@@ -414,6 +414,13 @@ namespace EmbedIO.WebApi
             var handlerArguments = BindHandlerArguments(method, controllerType, matcher, controller, routeInLambda);
             var callMethod = WrapHandlerResult(Expression.Call(controller, method, handlerArguments), method.ReturnType, contextInLambda);
 
+            if (contextFactory == null && IsStreamingResultType(method.ReturnType))
+            {
+                var streamingFactory = Expression.Lambda<Func<WebApiController>>(Expression.Convert(factoryExpression, typeof(WebApiController))).Compile();
+                return CompileActivatedHandler(controllerType, controller, callMethod, contextInLambda, routeInLambda,
+                    _ => streamingFactory(), ReleaseStreamingController, before);
+            }
+
             return contextFactory != null
                 ? CompileActivatedHandler(controllerType, controller, callMethod, contextInLambda, routeInLambda, contextFactory, release, before)
                 : before != null ? CompileHookedOwnedHandler(controllerType, controller, factoryExpression, callMethod, contextInLambda, routeInLambda, before)
@@ -565,6 +572,15 @@ namespace EmbedIO.WebApi
                 // Convert void to Task by evaluating Task.CompletedTask
                 return Expression.Block(typeof(Task), callMethod, Expression.Constant(Task.CompletedTask));
             }
+
+            if (typeof(JsonStreamResult).IsAssignableFrom(methodReturnType))
+                return Expression.Call(Expression.Convert(callMethod, typeof(JsonStreamResult)),
+                    typeof(JsonStreamResult).GetMethod(nameof(JsonStreamResult.WriteAsync)) ?? throw new MissingMethodException(nameof(JsonStreamResult.WriteAsync)),
+                    contextInLambda, Expression.Constant(default(System.Threading.CancellationToken)));
+
+            if (IsGenericTaskType(methodReturnType, out var streamType) && typeof(JsonStreamResult).IsAssignableFrom(streamType))
+                return Expression.Call(typeof(ControllerBindingServices), nameof(ControllerBindingServices.WriteStreamResultAsync),
+                    new[] { streamType }, contextInLambda, callMethod);
 
             if (IsGenericTaskType(methodReturnType, out var resultType))
             {
@@ -837,7 +853,9 @@ namespace EmbedIO.WebApi
 
         private void RegisterBinding<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
             where TController : WebApiController
-            => RegisterBinding(binding, route => CreateBoundHandler(route.CreateInvoker(), Serializer, factory, route.UseControllerPreprocessing));
+            => RegisterBinding(binding, route => IsStreamingResultType(route.Operation?.ResultType)
+                ? CreateBoundHandler(route.CreateInvoker(), Serializer, _ => factory(), ReleaseStreamingController, route.UseControllerPreprocessing)
+                : CreateBoundHandler(route.CreateInvoker(), Serializer, factory, route.UseControllerPreprocessing));
 
         private void RegisterBinding<TController>(
             WebApiControllerBinding<TController> binding,
@@ -908,6 +926,16 @@ namespace EmbedIO.WebApi
 
             // Existing case-only aliases on one method need no duplicate handler.
             return !overlapping.Any(d => d.Verb == verb && Equals(d.Method, method));
+        }
+
+        private static bool IsStreamingResultType(Type? type)
+            => type != null && (typeof(JsonStreamResult).IsAssignableFrom(type)
+                || IsGenericTaskType(type, out var item) && typeof(JsonStreamResult).IsAssignableFrom(item));
+
+        private static Task ReleaseStreamingController(IHttpContext context, WebApiController controller)
+        {
+            if (controller is IDisposable disposable) disposable.Dispose();
+            return Task.CompletedTask;
         }
 
         // The per-request sequence of a compiled reflection handler: create the controller,

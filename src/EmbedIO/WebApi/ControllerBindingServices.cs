@@ -220,6 +220,18 @@ namespace EmbedIO.WebApi
             await serializer(context, await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
+        /// <summary>Awaits an explicitly streamed controller result and its complete response lifetime.</summary>
+        /// <typeparam name="TResult">The declared streaming result type.</typeparam>
+        /// <param name="context">The response context.</param>
+        /// <param name="task">The controller result.</param>
+        /// <returns>The response lifetime.</returns>
+        public static async Task WriteStreamResultAsync<TResult>(IHttpContext context, Task<TResult> task) where TResult : JsonStreamResult
+        {
+            var result = await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false);
+            if (result == null) throw new InvalidOperationException("A streaming controller returned null.");
+            await result.WriteAsync(context).ConfigureAwait(false);
+        }
+
         private static System.Collections.Specialized.NameValueCollection QueryData(WebApiController controller)
             => (controller ?? throw new ArgumentNullException(nameof(controller))).HttpContext.GetRequestQueryData();
 

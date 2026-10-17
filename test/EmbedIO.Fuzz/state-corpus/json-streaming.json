@@ -1,0 +1,66 @@
+{
+  "Scenario": "json-streaming",
+  "Seed": 1729,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 1
+    },
+    {
+      "Actor": 2,
+      "Command": 2,
+      "Value": 4
+    },
+    {
+      "Actor": 0,
+      "Command": 3,
+      "Value": 15
+    },
+    {
+      "Actor": 1,
+      "Command": 4,
+      "Value": 2
+    },
+    {
+      "Actor": 2,
+      "Command": 5,
+      "Value": 3
+    },
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 8
+    },
+    {
+      "Actor": 2,
+      "Command": 2,
+      "Value": 15
+    },
+    {
+      "Actor": 0,
+      "Command": 3,
+      "Value": 4
+    },
+    {
+      "Actor": 1,
+      "Command": 4,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 5,
+      "Value": 2
+    }
+  ]
+}

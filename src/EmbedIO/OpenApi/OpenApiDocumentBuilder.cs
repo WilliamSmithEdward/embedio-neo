@@ -937,7 +937,21 @@ namespace EmbedIO.OpenApi
                 if (!operation.Responses.Any(r => r.StatusCode >= 200 && r.StatusCode < 300))
                 {
                     var success = new JsonObject { ["description"] = "OK" };
-                    if (operation.ResultType != null && IsPolymorphic(operation.ResultType))
+                    var stream = operation.ResultType;
+                    if (stream != null && stream.IsGenericType
+                        && (stream.GetGenericTypeDefinition() == typeof(JsonArrayStream<>) || stream.GetGenericTypeDefinition() == typeof(NdjsonStream<>)))
+                    {
+                        var item = BodySchema(stream.GetGenericArguments()[0], where);
+                        if (item != null)
+                        {
+                            var ndjson = stream.GetGenericTypeDefinition() == typeof(NdjsonStream<>);
+                            var schema = ndjson ? item : new JsonObject { ["type"] = "array", ["items"] = item };
+                            var media = new JsonObject { ["schema"] = schema, ["x-embedio-streaming"] = true };
+                            if (ndjson) media["x-embedio-framing"] = "ndjson";
+                            success["content"] = new JsonObject { [ndjson ? "application/x-ndjson" : JsonMediaType] = media };
+                        }
+                    }
+                    else if (operation.ResultType != null && IsPolymorphic(operation.ResultType))
                     {
                         Problems.Add($"{where}: {operation.ResultType.FullName} is polymorphic, but a returned value is serialized as its runtime type, without the type discriminator its schema requires. Add [OpenApiIgnore] to leave the operation out.");
                     }

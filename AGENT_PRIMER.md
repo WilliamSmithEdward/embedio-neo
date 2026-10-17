@@ -343,6 +343,22 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
 
 Guides: [JSON compatibility](docs/user-reports/json-migration-compatibility.md) and [over-posting](docs/user-reports/json-migration-compatibility.md#over-posting-and-the-binding-surface).
 
+### Streaming JSON (unreleased)
+
+EmbedIO-Neo 2.4.0 does not include this feature. In current source, return
+`JsonStream.Array(source, itemTypeInfo)` as `JsonArrayStream<T>` or
+`JsonStream.Ndjson(source, itemTypeInfo)` as `NdjsonStream<T>`; `Task` results
+are also supported by generated/reflection bindings. Owned controllers stay
+alive through streaming cleanup; non-streaming disposal timing and serializers
+are unchanged. Use generated item metadata for AOT. Defaults are a 1 MiB
+per-record limit, flush after each record and no compression preference.
+The sequence is not collected; producer cancellation is cooperative and a
+remote disconnect may only be detected by a later write. After commitment,
+failures interrupt the response rather than appending an error or a successful
+ending. Clients must handle incomplete arrays/streams. See
+[streaming JSON](docs/guides/streaming-json.md) for a complete program,
+client examples, NDJSON schema conventions and buffer/lifetime limits.
+
 ## 11. WebSockets
 
 - Derive from `WebSocketMessageModule(path)` and override
