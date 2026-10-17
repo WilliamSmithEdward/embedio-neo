@@ -88,15 +88,15 @@ namespace EmbedIO.WebApi
                 else if (plan.Members.Length > 0)
                 {
                     var properties = new JsonObject();
-                    var required = new JsonArray();
+                    var requiredProperties = new JsonArray();
                     foreach (var member in plan.Members)
                     {
                         var name = member.JsonName ?? options.PropertyNamingPolicy?.ConvertName(member.Name) ?? member.Name;
                         properties[name] = Shape(member.Plan(), member.Rules, options, ancestors, depth + 1);
-                        if (member.Rules.Any(rule => rule.GetType() == typeof(RequiredAttribute))) required.Add((JsonNode?)JsonValue.Create(name));
+                        if (member.Rules.Any(rule => rule.GetType() == typeof(RequiredAttribute))) requiredProperties.Add((JsonNode?)JsonValue.Create(name));
                     }
                     schema["properties"] = properties;
-                    if (required.Count > 0) schema["required"] = required;
+                    if (requiredProperties.Count > 0) schema["required"] = requiredProperties;
                 }
                 return schema;
             }
