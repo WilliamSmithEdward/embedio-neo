@@ -26,12 +26,15 @@ CS_LITERALS = re.compile(r'//[^\n]*|/\*[\s\S]*?\*/|@"(?:""|[^"])*"|"(?:\\.|[^"\\
 NULL_FORGIVING = re.compile(r'(?P<previous>\b\w+|[\]\)])\s*!(?!=)')
 
 
-def violations(text, csharp=False):
+def violations(text, csharp=False, filename=None):
     """Return source lines that explicitly disable or exempt diagnostics."""
     failures = [
         (number, line.strip())
         for number, line in enumerate(text.splitlines(), 1)
         if any(pattern.search(line) for pattern in PATTERNS)
+        # Owner-approved folder/namespace convention; no other diagnostic is exempt.
+        and not (filename == ".editorconfig"
+                 and line.strip() == "dotnet_diagnostic.IDE0130.severity = none")
     ]
     if csharp:
         code = CS_LITERALS.sub(lambda match: re.sub(r'[^\n]', ' ', match.group()), text)
@@ -56,7 +59,7 @@ def main():
         path = ROOT / name
         if not path.is_file() or (path.suffix not in SOURCE_SUFFIXES and path.name not in {".editorconfig", ".globalconfig"}):
             continue
-        for number, text in violations(path.read_text(encoding="utf-8-sig"), csharp=path.suffix == ".cs"):
+        for number, text in violations(path.read_text(encoding="utf-8-sig"), csharp=path.suffix == ".cs", filename=name):
             failures.append(f"{name}:{number}: {text}")
     if failures:
         print("Compiler/analyzer suppressions are not permitted:", file=sys.stderr)

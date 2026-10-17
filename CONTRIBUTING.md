@@ -19,7 +19,9 @@ does not substitute for approval.
 CI uses the SDK's C# parser in `tools/EmbedIO.AnalyzerGuard` to reject every
 null-forgiving expression, including interpolation and inactive preprocessor branches.
 Logical negation and exclamation marks in literal text are permitted. The separate
-Python guard rejects compiler/analyzer directives and build configuration opt-outs.
+Python guard rejects compiler/analyzer directives and build configuration opt-outs,
+except the owner-approved IDE0130 setting in the root `.editorconfig`: implementation
+folders do not have to mirror namespaces.
 
 ## Development
 
