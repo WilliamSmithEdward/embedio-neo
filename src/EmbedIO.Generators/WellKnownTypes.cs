@@ -30,6 +30,7 @@ namespace EmbedIO.Generators
             Authorize = compilation.GetTypeByMetadataName("EmbedIO.Authorization.AuthorizeAttribute");
             AllowAnonymous = compilation.GetTypeByMetadataName("EmbedIO.Authorization.AllowAnonymousAttribute");
             AuthorizationMetadata = compilation.GetTypeByMetadataName("EmbedIO.Authorization.AuthorizationMetadata");
+            RequestAborted = compilation.GetTypeByMetadataName("EmbedIO.WebApi.RequestAbortedAttribute");
             MultipartForm = compilation.GetTypeByMetadataName("EmbedIO.WebApi.MultipartFormAttribute");
             WebApiOperation = compilation.GetTypeByMetadataName("EmbedIO.WebApi.WebApiOperation");
             OpenApiOperation = compilation.GetTypeByMetadataName("EmbedIO.OpenApi.OpenApiOperationAttribute");
@@ -43,6 +44,8 @@ namespace EmbedIO.Generators
         internal INamedTypeSymbol? Authorize { get; }
         internal INamedTypeSymbol? AllowAnonymous { get; }
         internal INamedTypeSymbol? AuthorizationMetadata { get; }
+
+        internal INamedTypeSymbol? RequestAborted { get; }
 
         internal INamedTypeSymbol? MultipartForm { get; }
 

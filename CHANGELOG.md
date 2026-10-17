@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-10-17
+
+### Added
+
+- Opt-in request-abort cancellation with a half-close-safe HTTP/1 default,
+  explicit input-end cancellation, HTTP/2–3 stream ownership, controller binding,
+  OpenAPI/AOT and in-process testing support. Existing tokens, APIs and defaults
+  are preserved. Includes streaming/upload integration regressions and a
+  replayable three-connection state machine with an independent negative oracle.
+  See [request-abort cancellation](docs/guides/request-abort.md).
+
 ## [2.8.0] - 2026-10-17
 
 ### Added

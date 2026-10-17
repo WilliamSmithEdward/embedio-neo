@@ -828,7 +828,8 @@ namespace EmbedIO.OpenApi
                             break;
 
                         // A service the dependency injection package supplies reads nothing from the request.
-                        case WebApiParameterSource.Custom when parameter.CustomAttribute == FromServicesAttributeName:
+                        case WebApiParameterSource.Custom when parameter.CustomAttribute == FromServicesAttributeName
+                            || parameter.CustomAttribute == "EmbedIO.WebApi.RequestAbortedAttribute":
                             break;
 
                         case WebApiParameterSource.Custom:

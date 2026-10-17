@@ -26,9 +26,11 @@ namespace EmbedIO.Net.Internal
         private int _closed;
         private int _completionFinished;
         private int _failed;
+        internal bool HasOutputFailure => Volatile.Read(ref _failed) != 0;
         private bool _headCaptured;
-        // The chunked terminator (or trailer section) already left with the last body write.
-        private bool _endingSent;
+        // A complete fixed-length/suppressed body or chunked terminator has left the writer.
+        private bool _wireEndSent;
+        internal bool HasWireEnd => Volatile.Read(ref _wireEndSent);
         private long? _bodyLimit;
         private long _committedBody;
         private long _sentBody;
@@ -91,9 +93,11 @@ namespace EmbedIO.Net.Internal
             }
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
+                RequestAbortRegistry.Find(this)?.Abort();
                 Volatile.Write(ref _failed, 1);
                 if (!_ignoreErrors || error is OperationCanceledException && token.IsCancellationRequested) throw;
             }
+            ObserveWireEnd();
         }
 
         public override void Write(byte[] buffer, int offset, int count)
@@ -219,6 +223,7 @@ namespace EmbedIO.Net.Internal
                 if (count == 0)
                 {
                     await SubmitAsync(head.Buffer, 0, length, synchronous, token).ConfigureAwait(false);
+                    ObserveWireEnd();
                     return;
                 }
                 if (length <= BatchedBodyBound)
@@ -274,7 +279,16 @@ namespace EmbedIO.Net.Internal
             if (Volatile.Read(ref _failed) != 0) return;
             if (_bodyLimit.HasValue) _committedBody += count;
             Volatile.Write(ref _sentBody, _sentBody + count);
-            if (tail != null) _endingSent = true;
+            if (tail != null) _wireEndSent = true;
+            ObserveWireEnd();
+        }
+
+        private void ObserveWireEnd()
+        {
+            if (HasOutputFailure || !_response.HeadersSent || _response.IsTunnelResponse) return;
+            if (!_wireEndSent && !_response.SuppressesBody && (!_bodyLimit.HasValue || _committedBody != _bodyLimit.Value)) return;
+            Volatile.Write(ref _wireEndSent, true);
+            _response.CompleteRequestAbortObservation();
         }
 
         private async ValueTask SubmitAsync(byte[] bytes, int offset, int count, bool synchronous, CancellationToken token)
@@ -289,6 +303,7 @@ namespace EmbedIO.Net.Internal
             }
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
+                RequestAbortRegistry.Find(this)?.Abort();
                 Volatile.Write(ref _failed, 1);
                 if (!_ignoreErrors || error is OperationCanceledException && token.IsCancellationRequested) throw;
             }
@@ -308,22 +323,25 @@ namespace EmbedIO.Net.Internal
                 {
                     if (Volatile.Read(ref _failed) == 0)
                     {
-                        if (!_transport.Value.CanWrite) Volatile.Write(ref _failed, 1);
+                        if (!_transport.Value.CanWrite) { RequestAbortRegistry.Find(this)?.Abort(); Volatile.Write(ref _failed, 1); }
                         else
                         {
                             using var head = PrepareHead(true, 0);
                             if (!head.IsEmpty)
                                 SubmitAsync(head.Buffer, 0, head.Length, true, default).GetAwaiter().GetResult();
-                            if (_response.SendChunked && !_response.SuppressesBody && !_endingSent)
+                            if (_response.SendChunked && !_response.SuppressesBody && !_wireEndSent)
                             {
                                 var ending = _response.EndingChunk ?? EndOfChunks;
                                 SubmitAsync(ending, 0, ending.Length, true, default).GetAwaiter().GetResult();
+                                if (!HasOutputFailure) _wireEndSent = true;
                             }
+                            ObserveWireEnd();
                         }
                     }
                 }
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 {
+                    RequestAbortRegistry.Find(this)?.Abort();
                     Volatile.Write(ref _failed, 1);
                     if (error is not IOException and not ObjectDisposedException) throw;
                 }

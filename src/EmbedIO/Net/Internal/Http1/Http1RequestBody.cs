@@ -52,7 +52,12 @@ namespace EmbedIO.Net.Internal
             base.Dispose(disposing);
         }
 
-        protected void RememberFramingError(Exception error) => _bodyFailure = ExceptionDispatchInfo.Capture(error);
+        protected void RememberFramingError(Exception error)
+        {
+            _bodyFailure = ExceptionDispatchInfo.Capture(error);
+            ObserveInputFailure();
+        }
+        protected void ObserveInputFailure() => EmbedIO.Internal.RequestAbortRegistry.Find(this)?.Abort();
 
         internal bool IsFramingError(Exception error)
         {
@@ -82,8 +87,10 @@ namespace EmbedIO.Net.Internal
             var limit = ReadLimit(count);
             if (limit == 0) return 0;
             var buffered = CopyReadAhead(buffer, offset, limit);
-            return buffered != 0 ? buffered
-                : AccountTransportRead(_connectionInput.Value.Read(buffer, offset, limit));
+            if (buffered != 0) return buffered;
+            try { return AccountTransportRead(_connectionInput.Value.Read(buffer, offset, limit)); }
+            catch (IOException) { ObserveInputFailure(); throw; }
+            catch (System.Net.Sockets.SocketException) { ObserveInputFailure(); throw; }
         }
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -98,7 +105,11 @@ namespace EmbedIO.Net.Internal
         }
 
         private async Task<int> ReadConnectionAsync(byte[] buffer, int offset, int count, CancellationToken token)
-            => AccountTransportRead(await _connectionInput.Value.ReadAsync(buffer, offset, count, token).ConfigureAwait(false));
+        {
+            try { return AccountTransportRead(await _connectionInput.Value.ReadAsync(buffer, offset, count, token).ConfigureAwait(false)); }
+            catch (IOException) { ObserveInputFailure(); throw; }
+            catch (System.Net.Sockets.SocketException) { ObserveInputFailure(); throw; }
+        }
 
 #if NET10_0_OR_GREATER
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
@@ -117,7 +128,11 @@ namespace EmbedIO.Net.Internal
         }
 
         private async ValueTask<int> ReadConnectionAsync(Memory<byte> buffer, CancellationToken token)
-            => AccountTransportRead(await _connectionInput.Value.ReadAsync(buffer, token).ConfigureAwait(false));
+        {
+            try { return AccountTransportRead(await _connectionInput.Value.ReadAsync(buffer, token).ConfigureAwait(false)); }
+            catch (IOException) { ObserveInputFailure(); throw; }
+            catch (System.Net.Sockets.SocketException) { ObserveInputFailure(); throw; }
+        }
 #endif
 
         private int ReadLimit(int requested)

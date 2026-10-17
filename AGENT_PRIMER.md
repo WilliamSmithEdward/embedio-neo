@@ -8,6 +8,17 @@ guide; see [CONTRIBUTING.md](CONTRIBUTING.md) for changing the library itself.
 Every API named here exists in the v2 source. When this primer and a guide
 disagree, the guide and the source win.
 
+Request-abort cancellation requires 2.9.0+. Opt in with
+`context.GetRequestAbortedToken()` or a `[RequestAborted] CancellationToken`
+controller parameter; existing context tokens and bare parameter binding are
+unchanged. HTTP/1 FIN remains a valid half-close by default. Explicit
+`CancelOnHttp1InputEnd = true` is appropriate only for clients that will not
+half-close before reading. Pass the token to streaming, upload and application
+work; retain deadlines because disconnect detection is best effort. Generated
+bindings support AOT and omit the token from OpenAPI. The in-process testing
+context observes its caller token. See [request-abort cancellation](docs/guides/request-abort.md)
+for completion ownership, HTTP/2–3 resets, TLS/proxy limits and examples.
+
 ## 1. What you are building on
 
 | Item | Value |
@@ -15,7 +26,7 @@ disagree, the guide and the source win.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.8.0, the v2 engine. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current version | 2.9.0, the v2 engine. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x

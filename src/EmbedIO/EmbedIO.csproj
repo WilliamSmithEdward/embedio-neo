@@ -50,6 +50,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../Shared/RequestAbortToken.cs" Link="Internal/RequestAbortToken.cs" />
     <Compile Include="../Shared/ResponseCookieFormatter.cs" Link="Internal/ResponseCookieFormatter.cs" />
     <Compile Include="../Shared/TrimmingAttributes.cs" Link="Internal/TrimmingAttributes.cs" />
   </ItemGroup>

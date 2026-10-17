@@ -28,7 +28,7 @@ namespaces or assemblies: existing `EmbedIO`, `EmbedIO.Internal` and
 | `src/EmbedIO/Net/Internal/Headers` | Shared field parsing, framing metadata and cookie serialization. |
 | `src/EmbedIO/Net/Internal/Tunnels` | Internal capsule transport. |
 | `src/EmbedIO/Net/Internal/WebTransport` | WebTransport session core. |
-| `src/Shared` | Source files explicitly linked into multiple projects. |
+| `src/Shared` | Source files explicitly linked into multiple projects, including request-abort token ownership shared by core and in-process testing. |
 
 Existing feature folders, such as `Files`, `Routing`, `Sessions`, `WebApi` and
 `WebSockets`, retain their boundaries. General internal helpers remain directly
@@ -49,3 +49,8 @@ This reorganization moves or renames 186 files without changing any of the 434
 production C# files' contents. Namespaces, public signatures, runtime behavior,
 target frameworks and dependency groups are preserved. Debugger and Source Link
 paths naturally follow the new physical locations.
+
+Request-abort observation is lazy: public capability/extension contracts live in
+`Http`, controller binding in `WebApi`, request ownership in
+`Internal/RequestAbortScope.cs`, and the HTTP/1 socket observer in
+`Net/Internal/Transport/Http1RequestAbortObserver.cs`.

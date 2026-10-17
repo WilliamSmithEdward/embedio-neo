@@ -17,7 +17,7 @@ namespace EmbedIO.Net.Internal
 {
     // Independently authored request context. One cold transition claims
     // completion and detaches callbacks; transport and callback work is outside it.
-    internal sealed class HttpListenerContext : IHttpContextImpl, IHttpTunnelContext, ITelemetryContext, ILazyItems
+    internal sealed class HttpListenerContext : IHttpContextImpl, IHttpTunnelContext, ITelemetryContext, ILazyItems, IHttpRequestAbortFeature, IRequestAbortState
     {
         private readonly object _lifetime = new();
         private readonly TimeKeeper _age = new();
@@ -53,6 +53,19 @@ namespace EmbedIO.Net.Internal
         }
         public string Id { get; }
         public CancellationToken CancellationToken { get; set; }
+        public CancellationToken GetRequestAbortedToken(bool cancelOnHttp1InputEnd = false)
+        {
+            lock (_lifetime)
+            {
+                if (_protocolClaimed || _closing)
+                {
+                    if (RequestAbortRegistry.Find(this)?.TryGet(cancelOnHttp1InputEnd, out var retained) == true) return retained;
+                    throw new InvalidOperationException("The HTTP request has completed or handed off its protocol.");
+                }
+                return Connection.GetRequestAbortedToken(this, cancelOnHttp1InputEnd);
+            }
+        }
+        bool IRequestAbortState.IsRequestAborted => RequestAbortRegistry.Find(this)?.IsAborted == true;
         public long Age => _age.ElapsedTime;
         public IPEndPoint LocalEndPoint { get; }
         public IPEndPoint RemoteEndPoint { get; }
@@ -169,6 +182,7 @@ namespace EmbedIO.Net.Internal
                 _protocolClaimed = true;
                 if (_closing) throw new ObjectDisposedException(nameof(HttpListenerContext));
             }
+            Connection.CompleteRequestAbortObservation(this);
         }
         public async Task<HttpTunnel> AcceptTunnelAsync(string? protocol, bool useCapsules = false, CancellationToken cancellationToken = default)
         {

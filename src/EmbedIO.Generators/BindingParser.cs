@@ -641,6 +641,18 @@ namespace EmbedIO.Generators
                 return "await " + call + ".ConfigureAwait(false)";
             }
 
+            if (IsBuiltIn(attribute, _types.RequestAborted))
+            {
+                if (type.ToDisplayString() != "System.Threading.CancellationToken")
+                {
+                    problem = "RequestAborted requires a CancellationToken parameter";
+                    return null;
+                }
+                _meta = CustomMeta(attribute, parameter);
+                var inputEnd = attribute.NamedArguments.Any(pair => pair.Key == "CancelOnHttp1InputEnd" && pair.Value.Value is true);
+                return "global::EmbedIO.HttpContextExtensions.GetRequestAbortedToken(__context, " + (inputEnd ? "true" : "false") + ")";
+            }
+
             awaits = true;
             if (IsBuiltIn(attribute, _types.JsonData))
             {

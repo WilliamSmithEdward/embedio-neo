@@ -1,0 +1,66 @@
+{
+  "Scenario": "request-abort",
+  "Seed": 1729,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 3
+    },
+    {
+      "Actor": 2,
+      "Command": 2,
+      "Value": 6
+    },
+    {
+      "Actor": 0,
+      "Command": 3,
+      "Value": 9
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 12
+    },
+    {
+      "Actor": 2,
+      "Command": 1,
+      "Value": 15
+    },
+    {
+      "Actor": 0,
+      "Command": 2,
+      "Value": 18
+    },
+    {
+      "Actor": 1,
+      "Command": 3,
+      "Value": 21
+    },
+    {
+      "Actor": 2,
+      "Command": 0,
+      "Value": 24
+    },
+    {
+      "Actor": 0,
+      "Command": 1,
+      "Value": 27
+    },
+    {
+      "Actor": 1,
+      "Command": 2,
+      "Value": 30
+    },
+    {
+      "Actor": 2,
+      "Command": 3,
+      "Value": 33
+    }
+  ]
+}

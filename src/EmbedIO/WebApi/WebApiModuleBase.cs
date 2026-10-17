@@ -536,8 +536,11 @@ namespace EmbedIO.WebApi
             if (attr == null)
                 return null;
 
-            // Use the request data interface to get a value for the parameter.
+            // Validate built-in struct binding at registration, matching generated diagnostics.
             var parameterType = parameter.ParameterType;
+            if (attr is RequestAbortedAttribute && parameterType != typeof(System.Threading.CancellationToken))
+                throw new InvalidOperationException("RequestAborted requires a CancellationToken parameter.");
+            // Use the request data interface to get a value for the parameter.
             Expression useRequestDataInterface = Expression.Call(
                 Expression.Constant(attr),
                 intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),

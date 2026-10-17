@@ -119,6 +119,8 @@ namespace EmbedIO.Net.Internal
                 _phase = Phase.Failed;
                 throw;
             }
+            catch (IOException) { ObserveInputFailure(); _phase = Phase.Failed; throw; }
+            catch (System.Net.Sockets.SocketException) { ObserveInputFailure(); _phase = Phase.Failed; throw; }
             catch { _phase = Phase.Failed; throw; }
         }
 
