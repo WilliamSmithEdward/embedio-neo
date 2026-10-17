@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Health checks and readiness
+      href: guides/health-checks.md
     - name: Bearer authentication and authorization
       href: guides/bearer-authentication.md
     - name: Stateful application-surface fuzzing

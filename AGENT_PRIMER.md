@@ -552,6 +552,32 @@ Guide: [bearer authentication and authorization](docs/guides/bearer-authenticati
 
 Guide: [metrics and tracing](docs/guides/telemetry.md).
 
+### Health and readiness (pending next release)
+
+NuGet 2.7.0 does not include this feature. `EmbedIO.Health.HealthCheckService`
+monitors one server, with up to 32 immutable `HealthCheckRegistration` entries.
+`CheckLiveness()` observes Listening without dependency checks;
+`CheckReadinessAsync()` requires Listening, no drain and all Healthy results.
+Degraded and Unhealthy both mean not ready. Results are not cached; overlapping
+probes share an evaluation. Individual waiter cancellation does not cancel the
+shared checks. Per-check deadlines default to 5 seconds; an uncooperative check
+retains one execution slot until it finishes, preventing overlapping replacements.
+
+Desktop hosts can await `WaitForReadyAsync(timeout, token)` before navigating a
+WebView. It issues no HTTP request and does not warm controller routes, though
+application checks can warm their dependencies. Observe `RunAsync` separately for
+startup failures. Drain, stop or health-service disposal rejects readiness;
+dispose the service with its host. Health checks do not gate ordinary requests.
+
+Optional `HealthCheckModule` serves exact GET/HEAD `/health/live` and
+`/health/ready` endpoints, 200 or 503 with no-store and minimal text. Place it after
+required authentication/access-control modules, before catch-all routes.
+Controller authorization attributes do not protect module endpoints. Detailed
+JSON requires an explicit authorization callback; never put secrets in check
+descriptions. No endpoints or background checks are installed by constructing a
+service alone. Both core targets are supported with no added dependencies.
+Guide: [health and readiness](docs/guides/health-checks.md).
+
 ## 15. Dependency injection and hosting
 
 - Package `EmbedIO-Neo.DependencyInjection`.

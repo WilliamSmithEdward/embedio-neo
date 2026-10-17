@@ -98,8 +98,9 @@ internal static class Program
                         await stream.WriteAsync(Encoding.ASCII.GetBytes("chunk" + i + ";"), context.CancellationToken);
                         await stream.FlushAsync(context.CancellationToken);
                     }
-                }))
-                .WithStaticFolder("/", root, false);
+                }));
+            using var health = HealthChecks.Create(server);
+            server.WithStaticFolder("/", root, false);
             server.OnUnhandledException = (context, error) =>
             {
                 context.Response.StatusCode = 500;
@@ -113,6 +114,7 @@ internal static class Program
             await StreamingChecks.RunAsync(client, url, checks);
             await EventHubChecks.RunAsync(client, url, checks, eventHub);
             await BrowserChecks.RunAsync(client, url, checks);
+            await HealthChecks.RunAsync(client, url, checks, health);
             var first = await client.GetStringAsync(url + "api/items/7");
             checks["startup_to_first_response_ms"] = Stopwatch.GetElapsedTime(started).TotalMilliseconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
             var item = JsonSerializer.Deserialize(first, SmokeJson.Default.Item);

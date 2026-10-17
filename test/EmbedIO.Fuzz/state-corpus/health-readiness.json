@@ -1,0 +1,46 @@
+{
+  "Scenario": "health-readiness",
+  "Seed": 1729,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 1
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 2
+    },
+    {
+      "Actor": 2,
+      "Command": 0,
+      "Value": 3
+    },
+    {
+      "Actor": 0,
+      "Command": 2,
+      "Value": 0
+    },
+    {
+      "Actor": 1,
+      "Command": 3,
+      "Value": 0
+    },
+    {
+      "Actor": 2,
+      "Command": 4,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 0
+    },
+    {
+      "Actor": 0,
+      "Command": 5,
+      "Value": 0
+    }
+  ]
+}

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in health checks and application readiness, including finite dependency-check
+  deadlines, shared probes, in-process desktop startup waits and drain/stop
+  invalidation. Optional GET/HEAD endpoints provide minimal no-store responses or
+  explicitly authorized diagnostic JSON. Includes HTTP/1, HTTP/2, HTTP/3, Native
+  AOT and state-machine coverage; existing request paths and defaults are unchanged.
+  See [health checks and readiness](docs/guides/health-checks.md).
+
 ## [2.7.0] - 2026-10-17
 
 ### Added
