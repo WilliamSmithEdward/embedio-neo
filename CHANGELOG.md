@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-17
+
 ### Added
 
 - Optional exact JWT header token-type allowlist (`JwtBearerOptions.AllowedTokenTypes`),

@@ -15,7 +15,7 @@ disagree, the guide and the source win.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.6.0, the v2 engine. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current version | 2.7.0, the v2 engine. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -325,7 +325,7 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
   `server.WithProblemDetails()` (namespace `EmbedIO.Problems`) for RFC 9457
   JSON errors. See [problem details](docs/guides/problem-details.md).
 
-### Browser request protection (unreleased)
+### Browser request protection (2.7.0+)
 
 Published 2.6.0 packages do not contain these APIs. Own one
 `EmbedIO.Security.BrowserRequestProtection` for a deliberate security scope,
@@ -518,7 +518,7 @@ fallback. Earlier releases, including 2.2.0, do not contain this correction. See
   `JwtBearerOptions`. Supply issuer, audience, trusted verification keys and an
   algorithm allowlist. It validates signed tokens and lifetime; it does not issue
   tokens or discover keys remotely. Core authentication has no JWT dependency.
-- Unreleased (not in 2.6.0): `JwtBearerOptions.AllowedTokenTypes.Add("at+jwt")`
+- In 2.7.0+: `JwtBearerOptions.AllowedTokenTypes.Add("at+jwt")`
   optionally enforces exact, case-sensitive signed header `typ` values. Empty lists
   preserve existing acceptance, including missing `typ`. Configured lists reject
   missing/wrong types; settings are copied when constructing the validator. Use

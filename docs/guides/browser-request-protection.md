@@ -1,6 +1,6 @@
 # Browser request protection
 
-This feature is unreleased. Published 2.6.0 packages do not contain these APIs.
+Browser request protection requires EmbedIO-Neo 2.7.0 or later.
 
 `BrowserRequestProtection` adds opt-in host/origin validation and session-bound
 anti-forgery tokens. Existing applications retain their defaults. This is separate
@@ -9,7 +9,7 @@ for the current session/identity, not permission to perform an action.
 
 ## A complete same-origin browser application
 
-Use the current source, target `net10.0`, and reference `EmbedIO-Neo`. Put this in
+Use EmbedIO-Neo 2.7.0 or later, target `net10.0`, and reference `EmbedIO-Neo`. Put this in
 `Program.cs`. Put the HTML below in `wwwroot/index.html` relative to the working
 directory. The example deliberately binds only `127.0.0.1:9696`; open that exact URL.
 The in-memory counter demonstrates a mutation, not durable application storage.

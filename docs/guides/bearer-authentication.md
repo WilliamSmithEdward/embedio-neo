@@ -173,8 +173,8 @@ Validation errors return no principal, without returning token details to client
 
 ## Optional token-purpose enforcement
 
-`AllowedTokenTypes` is unreleased and is not available in published 2.6.0 packages.
-With the current source, add exact allowed JOSE header `typ` values before creating
+`AllowedTokenTypes` requires EmbedIO-Neo.Jwt 2.7.0 or later.
+Add exact allowed JOSE header `typ` values before creating
 `JwtBearerTokenValidator`:
 
 ```csharp
