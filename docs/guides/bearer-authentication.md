@@ -171,6 +171,74 @@ slashes. Clock skew defaults to zero and can be configured explicitly. Original
 claim names are retained; name and role claim types default to `sub` and `role`.
 Validation errors return no principal, without returning token details to clients.
 
+## Optional token-purpose enforcement
+
+`AllowedTokenTypes` is unreleased and is not available in published 2.6.0 packages.
+With the current source, add exact allowed JOSE header `typ` values before creating
+`JwtBearerTokenValidator`:
+
+```csharp
+// Add to the options in the JWT example above, before constructing validator.
+// Use the actual type emitted by your trusted issuer for API access tokens.
+options.AllowedTokenTypes.Add("at+jwt");
+```
+
+The list is empty by default, preserving existing type acceptance, including a
+missing `typ`. A nonempty list requires a present string header matching an entry
+ordinally and case-sensitively: `at+jwt`, `AT+JWT` and `application/at+jwt` are
+separate values. Add multiple entries only when intentionally trusted. Null, empty
+or whitespace entries fail construction. The list is copied; changing it later
+cannot change an existing validator. A payload claim named `typ` does not satisfy
+this requirement. Signature, issuer, audience, algorithm and lifetime checks still
+apply; a matching type alone never authenticates a token.
+
+This separates token purposes when an issuer signs multiple token families.
+Do not accept an ID token as an API credential. Use separate API audiences and
+required authorization policies as well; a generic `JWT` type alone does not
+establish an access-token purpose. See [JWT typing and mutually exclusive validation
+rules](https://www.rfc-editor.org/rfc/rfc8725.html#section-3.11). Enforcement uses
+[IdentityModel's ValidTypes](https://learn.microsoft.com/en-us/dotnet/api/microsoft.identitymodel.tokens.tokenvalidationparameters.validtypes).
+
+## Revocation, stale permissions and key rotation
+
+Every request validates its credential, but signed JWT claims describe the state
+when the token was issued. Validation does not query an identity provider or an
+account database. Removing a role, disabling a user or logging out does not by
+itself change an already issued JWT. Deleting a client's token, clearing a session
+or regenerating a session ID does not revoke a copied bearer token. Cookie-backed
+browser anti-forgery controls and bearer-token revocation are separate concerns.
+
+Use short-lived access tokens appropriate to the application. Expiration limits
+how long old claims can remain usable, including any explicitly configured clock
+skew; it does not provide immediate revocation. Refresh-token issuance, rotation,
+storage and revocation remain the application's identity-provider responsibility.
+
+For immediate checks, wrap `validator.ValidateAsync`: first validate cryptographic
+trust, then consult application-owned current account/revocation state and return
+null for a revoked credential. Alternatively, attach a required named policy to
+protected actions that checks current account status and permissions. A denied
+policy returns 403; a validator returning null yields a 401 bearer challenge.
+`[AllowAnonymous]` bypasses controller policies, so do not put an essential global
+revocation requirement only in a policy on optionally anonymous actions.
+
+Identify accounts by the verified issuer and subject together, not a display name
+or subject alone. If using a token denylist, require the issuer's unique `jti` and
+scope entries by verified issuer; retain entries through expiration plus allowed
+clock skew and bound storage. Reject missing identifiers when your revocation
+scheme requires them. Do not trust claims decoded before signature validation.
+A failed lookup must not silently grant access: propagate failure or deny according
+to application policy. Any cache of account/revocation decisions creates a maximum
+staleness window; document its lifetime and invalidation behavior. Denying future
+requests does not undo operations already admitted or reauthorize an open stream.
+
+The validator snapshots trusted keys and options and never fetches keys remotely.
+Mutating the original settings or key collection does not rotate an existing
+validator. Deploy a replacement validator (or restart with new trusted settings).
+Plan normal overlap around token lifetimes. For a compromised key, remove its
+trust promptly; that invalidates all tokens relying on it rather than revoking
+only one token. Revoking a single token/account normally belongs in the current
+state check instead of routine signing-key rotation.
+
 ## OpenAPI and fuzzing
 
 Call `OpenApiDocumentBuilder.AddBearerAuthentication("bearer", authentication)` to

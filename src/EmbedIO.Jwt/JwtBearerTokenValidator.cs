@@ -39,6 +39,12 @@ namespace EmbedIO.Jwt
                     throw new ArgumentException("Unsupported signing algorithm in the allowlist.", nameof(options));
                 if (!algorithms.Contains(algorithm)) algorithms.Add(algorithm);
             }
+            var tokenTypes = new List<string>();
+            foreach (var type in options.AllowedTokenTypes)
+            {
+                Required(type, nameof(options.AllowedTokenTypes));
+                if (!tokenTypes.Contains(type)) tokenTypes.Add(type);
+            }
             var keys = new List<SecurityKey>();
             foreach (var key in options.SigningKeys)
             {
@@ -94,6 +100,7 @@ namespace EmbedIO.Jwt
                 IssuerSigningKeys = keys.ToArray(),
                 RequireSignedTokens = true,
                 ValidAlgorithms = algorithms.ToArray(),
+                ValidTypes = tokenTypes.Count == 0 ? null : tokenTypes.ToArray(),
                 ValidateLifetime = true,
                 RequireExpirationTime = true,
                 ClockSkew = options.ClockSkew,

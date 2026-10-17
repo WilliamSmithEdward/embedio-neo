@@ -18,6 +18,11 @@ namespace EmbedIO.Jwt
         public IList<SecurityKey> SigningKeys { get; } = new List<SecurityKey>();
         /// <summary>Gets the required explicit JOSE signing-algorithm allowlist, for example RS256.</summary>
         public IList<string> AllowedAlgorithms { get; } = new List<string>();
+        /// <summary>Gets optional exact, case-sensitive JWT header typ values, for example at+jwt.</summary>
+        /// <remarks>Empty by default, preserving acceptance of any token type, including a missing typ.
+        /// When nonempty, typ must be present and match an entry. Values must not be null or whitespace.
+        /// The validator snapshots this list at construction; payload claims do not satisfy this check.</remarks>
+        public IList<string> AllowedTokenTypes { get; } = new List<string>();
         /// <summary>Gets or sets the lifetime clock skew, zero by default.</summary>
         public TimeSpan ClockSkew { get; set; } = TimeSpan.Zero;
         /// <summary>Gets or sets the maximum encoded token size in UTF-8 bytes, 16,384 by default.</summary>

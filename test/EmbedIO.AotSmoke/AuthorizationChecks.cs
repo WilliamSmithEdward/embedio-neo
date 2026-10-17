@@ -78,6 +78,7 @@ internal static class AuthorizationChecks
         var options = new JwtBearerOptions { Issuer = "aot-smoke", Audience = "aot-client" };
         options.SigningKeys.Add(new SymmetricSecurityKey(key));
         options.AllowedAlgorithms.Add("HS256");
+        options.AllowedTokenTypes.Add("JWT");
         var validator = new JwtBearerTokenValidator(options);
         var unsigned = Encode(Encoding.UTF8.GetBytes("{\"alg\":\"HS256\",\"typ\":\"JWT\"}")) + "."
             + Encode(Encoding.UTF8.GetBytes("{\"iss\":\"aot-smoke\",\"aud\":\"aot-client\",\"sub\":\"smoke\",\"role\":\"reader\",\"nbf\":1700000000,\"exp\":4102444800}"));
@@ -85,6 +86,14 @@ internal static class AuthorizationChecks
         var principal = await validator.ValidateAsync(unsigned + "." + Encode(signature), CancellationToken.None);
         Require(principal?.Identity?.IsAuthenticated == true && principal.Identity.Name == "smoke" && principal.IsInRole("reader"),
             "AOT JWT signature or claims validation failed.");
+        foreach (var header in new[] { "{\"alg\":\"HS256\",\"typ\":\"at+jwt\"}", "{\"alg\":\"HS256\"}" })
+        {
+            var other = Encode(Encoding.UTF8.GetBytes(header)) + "." + unsigned.Split('.')[1];
+            var otherSignature = HMACSHA256.HashData(key, Encoding.ASCII.GetBytes(other));
+            Require(await validator.ValidateAsync(other + "." + Encode(otherSignature), CancellationToken.None) == null,
+                "AOT JWT accepted a wrong or missing token type.");
+        }
+        checks["jwt_token_types"] = "configured JWT accepted; signed at+jwt and missing typ rejected";
         signature[0] ^= 1;
         Require(await validator.ValidateAsync(unsigned + "." + Encode(signature), CancellationToken.None) == null,
             "AOT JWT accepted a modified signature.");

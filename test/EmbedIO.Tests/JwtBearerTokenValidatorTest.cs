@@ -19,7 +19,7 @@ using NUnit.Framework;
 namespace EmbedIO.Tests
 {
     [TestFixture]
-    public sealed class JwtBearerTokenValidatorTest
+    public sealed partial class JwtBearerTokenValidatorTest
     {
         private const string Issuer = "https://issuer.example.test";
         private const string Audience = "https://api.example.test";

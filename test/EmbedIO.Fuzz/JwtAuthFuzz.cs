@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Jwt;
@@ -128,6 +130,7 @@ internal static class JwtAuthFuzz
                 var options = new JwtBearerOptions { Issuer = Issuer(actor), Audience = Audience(actor), MaxTokenSizeInBytes = MaximumSize };
                 options.SigningKeys.Add(_keys[actor]);
                 options.AllowedAlgorithms.Add(SecurityAlgorithms.HmacSha256);
+                options.AllowedTokenTypes.Add("at+jwt");
                 return new JwtBearerTokenValidator(options);
             }).ToArray();
         }
@@ -137,10 +140,11 @@ internal static class JwtAuthFuzz
 
         private Fixture Create(int issuer, int user, int counter, int kind)
         {
-            if (kind == 7) return new Fixture("invalid." + new string((char)('a' + counter % 26), counter + 1) + ".!", false, user, counter, "malformed");
+            if (kind == 7 && counter % 4 >= 2) return new Fixture("invalid." + new string((char)('a' + counter % 26), counter + 1) + ".!", false, user, counter, "malformed");
             if (kind == 8) return new Fixture(new string('a', MaximumSize + counter + 1), false, user, counter, "oversize");
             var descriptor = new SecurityTokenDescriptor
             {
+                TokenType = kind == 7 ? "JWT" : "at+jwt",
                 Issuer = Issuer(kind == 1 ? (issuer + 1) % 3 : issuer),
                 Audience = Audience(kind == 2 ? (issuer + 1) % 3 : issuer),
                 NotBefore = _origin.AddDays(kind == 4 ? 1 : -2),
@@ -154,6 +158,11 @@ internal static class JwtAuthFuzz
                 SigningCredentials = kind == 6 ? null : new SigningCredentials(_keys[kind == 5 ? (issuer + 1) % 3 : issuer], SecurityAlgorithms.HmacSha256),
             };
             var encoded = new JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false }.CreateToken(descriptor);
+            if (kind == 7 && counter % 4 == 1)
+            {
+                var input = Base64UrlEncoder.Encode("{\"alg\":\"HS256\"}") + "." + encoded.Split('.')[1];
+                encoded = input + "." + Base64UrlEncoder.Encode(HMACSHA256.HashData(_keys[issuer].Key, Encoding.ASCII.GetBytes(input)));
+            }
             var label = kind switch
             {
                 0 => "valid",
@@ -163,6 +172,7 @@ internal static class JwtAuthFuzz
                 4 => "not-yet-valid",
                 5 => "wrong-key",
                 6 => "unsigned",
+                7 => counter % 4 == 1 ? "missing-token-type" : "wrong-token-type",
                 _ => throw new ArgumentOutOfRangeException(nameof(kind)),
             };
             return new Fixture(encoded, kind == 0, user, counter, label);
