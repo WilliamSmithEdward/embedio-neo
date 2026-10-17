@@ -4,7 +4,6 @@ using EmbedIO.WebApi;
 
 internal static class RequestValidationTiming
 {
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1303", Justification = "Developer benchmark diagnostics are not localized.")]
     internal static bool Run(string[] args)
     {
         if (!args.Contains("--request-validation", StringComparer.Ordinal)) return false;
@@ -35,7 +34,6 @@ internal static class RequestValidationTiming
         var bytes = (GC.GetAllocatedBytesForCurrentThread() - allocated) / (double)(batches * batchSize);
         Array.Sort(samples);
         Console.WriteLine($"valid-dto-batch-average-ns p50={samples[499]:F1} p95={samples[949]:F1} p99={samples[989]:F1}; bytes/op={bytes:F1}");
-        Console.WriteLine("Microbenchmark of validation only; first sample includes JIT. Batch percentiles are not endpoint latency percentiles.");
         return true;
     }
 

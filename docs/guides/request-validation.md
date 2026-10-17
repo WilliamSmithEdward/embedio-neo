@@ -76,7 +76,8 @@ the response. The library does not replace existing handlers implicitly.
   rename error paths. Shared children are checked at every path; ancestor cycles
   stop recursion after validating the property's own rules.
 - Custom `ValidationAttribute` rules and `IValidatableObject` are supported.
-  Object-level results can name members. Validators run synchronously, must be
+  Object-level results can name members; those rules also run when earlier property
+  rules have reported errors, so handle null/invalid properties. Validators run synchronously, must be
   safe for concurrent requests, and must not perform unbounded work. Exceptions
   from validators/getters remain server errors, not client validation errors.
   Validation contexts have an explicit display name and no service provider;
@@ -129,7 +130,8 @@ are not expanded into the document.
 Tests cover reflection/generated binding parity, opt-in compatibility, rejected
 inputs never reaching the action, controller cleanup, nested paths, cycles,
 shared objects, cancellation, custom rules, limits, OpenAPI and diagnostics.
-The Native AOT smoke exercises real HTTP and generated schemas. The
+The Native AOT smoke exercises real HTTP and generated schemas. The net472-targeted
+compatibility smoke also checks accepted and rejected validated query values. The
 `request-validation` state-machine campaign checks overlapping requests against
 independent validity expectations and preserves replay/shrink provenance:
 

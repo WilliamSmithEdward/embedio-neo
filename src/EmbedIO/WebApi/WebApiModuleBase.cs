@@ -433,7 +433,7 @@ namespace EmbedIO.WebApi
                 var validation = ReflectionRequestValidation.For(parameter);
                 if (validation != null)
                     argument = Expression.Call(typeof(ReflectionRequestValidation), nameof(ReflectionRequestValidation.ValidateBound), new[] { parameter.ParameterType },
-                        argument, Expression.Constant(parameter.Name!), Expression.Constant(validation), Expression.Property(controller, nameof(WebApiController.CancellationToken)));
+                        argument, Expression.Constant(parameter.Name ?? throw new InvalidOperationException("The validated parameter has no name.")), Expression.Constant(validation), Expression.Property(controller, nameof(WebApiController.CancellationToken)));
                 handlerArguments.Add(argument);
             }
 

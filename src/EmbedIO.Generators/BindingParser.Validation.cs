@@ -87,7 +87,7 @@ namespace EmbedIO.Generators
             if (_validationPlans.Count > 128)
             {
                 Report(DiagnosticDescriptors.InvalidValidation, type.Locations.FirstOrDefault(), "validation model graphs may contain at most 128 declared types");
-                _fields.Append("        private static readonly ").Append(ValidationNamespace).Append("RequestValidationPlan ").Append(name).Append(" = null!;\n");
+                _fields.Append("        private static readonly ").Append(ValidationNamespace).Append("RequestValidationPlan ").Append(name).Append(" = new ").Append(ValidationNamespace).Append("RequestValidationPlan(typeof(object), global::System.Array.Empty<" + RulesType + ">(), global::System.Array.Empty<" + ValidationNamespace + "RequestValidationMember>());\n");
                 return name;
             }
             string? element = null;

@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -117,17 +116,21 @@ namespace EmbedIO.WebApi
                 {
                     _token.ThrowIfCancellationRequested();
                     var result = rule.GetValidationResult(value, context);
-                    if (result != ValidationResult.Success) Error(path, result!.ErrorMessage ?? "The value is invalid.");
+                    if (result is { } failure) Error(path, failure.ErrorMessage ?? "The value is invalid.");
                     if (_count >= _options.MaxErrors) break;
                 }
             }
 
-            // DisplayName is supplied explicitly; ValidationContext need not discover attributes through reflection.
-#if NET10_0_OR_GREATER
-            [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "DisplayName and MemberName are explicitly set; model members are accessed by cached/generated delegates.")]
-#endif
+            // The modern constructor accepts the display name without reflection.
             private static ValidationContext Context(object owner, string member)
-                => new(owner) { MemberName = member.Length == 0 ? null : member, DisplayName = member.Length == 0 ? owner.GetType().Name : member };
+            {
+                var displayName = member.Length == 0 ? owner.GetType().Name : member;
+#if NET10_0_OR_GREATER
+                return new ValidationContext(owner, displayName, serviceProvider: null, items: null) { MemberName = member.Length == 0 ? null : member };
+#else
+                return new ValidationContext(owner) { DisplayName = displayName, MemberName = member.Length == 0 ? null : member };
+#endif
+            }
 
             private void Error(string path, string message)
             {

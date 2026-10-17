@@ -66,7 +66,7 @@ internal static class RequestValidationFuzz
                 if ((int)response.StatusCode == 400 && mode != 2)
                 {
                     var errors = JsonNode.Parse(text)?["errors"]?.AsObject() ?? throw new InvalidOperationException("Validation errors missing.");
-                    var total = errors.Sum(field => field.Value!.AsArray().Count);
+                    var total = errors.Sum(field => (field.Value ?? throw new InvalidOperationException("Missing error array.")).AsArray().Count);
                     if (total < 1 || total > (mode == 6 ? 1 : 32)) throw new InvalidOperationException("Validation error budget violated.");
                 }
                 return (int)response.StatusCode;

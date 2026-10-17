@@ -43,6 +43,7 @@ public static class Program
             ("u/oops", 400), ("u/65536", 400), ("u/-1", 400), ("u/65535", 200), ("u/0xFFFF", 200),
             ("u/%20", 400), ("optional", 200), ("optional/9", 200), ("choice/oNe", 200), ("choice/99", 200),
             ("u", 404), ("throws/7", 500), ("required-optional", 500), ("custom/generic-wrapper", 500),
+            ("validated?value=0", 400), ("validated?value=1", 200),
             ("custom/bad-format", 400), ("custom/not-supported", 500), ("query?value=oops", 500),
         };
         foreach (var mode in new[] { HttpListenerMode.EmbedIO })
@@ -77,7 +78,7 @@ public static class Program
                 await running;
             }
         }
-        if (_checks != 17) throw new InvalidOperationException("Legacy route check count changed.");
+        if (_checks != 19) throw new InvalidOperationException("Legacy route check count changed.");
     }
 
     public enum Choice { One = 1 }
@@ -105,6 +106,10 @@ public static class Program
 
     public sealed class Controller : WebApiController
     {
+        [Route(HttpVerbs.Get, "/validated")]
+        public string Validated([QueryField, Validate, System.ComponentModel.DataAnnotations.Range(1, 10)] int value)
+            => value.ToString(CultureInfo.InvariantCulture);
+
         [Route(HttpVerbs.Get, "/u/{value}")]
         public string U(ushort value) => value.ToString(CultureInfo.InvariantCulture);
 

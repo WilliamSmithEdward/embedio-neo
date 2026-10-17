@@ -52,7 +52,7 @@ namespace EmbedIO.WebApi
                         if (property.GetCustomAttribute<JsonIgnoreAttribute>()?.Condition == JsonIgnoreCondition.Always) continue;
                         var value = Expression.Parameter(typeof(object), "value");
                         var getter = Expression.Lambda<Func<object, object?>>(Expression.Convert(
-                            Expression.Property(Expression.Convert(value, property.DeclaringType!), property), typeof(object)), value).Compile();
+                            Expression.Property(Expression.Convert(value, (property.DeclaringType ?? throw new InvalidOperationException("The validated property has no declaring type."))), property), typeof(object)), value).Compile();
                         members.Add(new RequestValidationMember(property.Name, property.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name,
                             getter, Attributes(property), Reference(property.PropertyType)));
                     }

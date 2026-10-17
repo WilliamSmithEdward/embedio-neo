@@ -88,7 +88,7 @@ namespace EmbedIO.Tests
             var invalid = new ValidationInput();
             node.Children = new[] { invalid, invalid };
             var error = Assert.Throws<ProblemDetailsException>(() => validation.Validate(node, "input"));
-            var problem = (ProblemDetails)error!.DataObject!;
+            var problem = Problem(error);
             Assert.That(problem.Extensions["errors"]?["input.Children[0].Name"], Is.Not.Null);
             Assert.That(problem.Extensions["errors"]?["input.Children[1].Name"], Is.Not.Null);
             using var stop = new CancellationTokenSource();
@@ -103,8 +103,8 @@ namespace EmbedIO.Tests
         {
             var node = new ValidationInput { Name = "ok", Count = 1, Children = new[] { new ValidationInput(), new ValidationInput() } };
             var error = Assert.Throws<ProblemDetailsException>(() => Metadata(action).Validate(node, "input"));
-            var problem = (ProblemDetails)error!.DataObject!;
-            var count = problem.Extensions["errors"]!.AsObject().Sum(field => field.Value!.AsArray().Count);
+            var problem = Problem(error);
+            var count = Present(problem.Extensions["errors"]).AsObject().Sum(field => Present(field.Value).AsArray().Count);
             Assert.That(count, Is.InRange(1, action == "Errors" ? 1 : 32));
         }
 
@@ -113,7 +113,7 @@ namespace EmbedIO.Tests
         {
             var input = new ValidationInput { Name = "ok", Count = 1, Code = "bad", Confirm = false };
             var error = Assert.Throws<ProblemDetailsException>(() => Metadata("Body").Validate(input, "input"));
-            var errors = ((ProblemDetails)error!.DataObject!).Extensions["errors"];
+            var errors = (Problem(error)).Extensions["errors"];
             Assert.That(errors?["input.Code"], Is.Not.Null);
             Assert.That(errors?["input.Confirm"], Is.Not.Null);
         }
@@ -123,7 +123,7 @@ namespace EmbedIO.Tests
         {
             var document = new OpenApiDocumentBuilder("Validation", "1").AddController("/api", ValidationBindings.RequestValidationController)
                 .Build(new JsonSerializerOptions(Serialization.Json.CreateOptions()) { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            var paths = document.Root["paths"]!;
+            var paths = Present(document.Root["paths"]);
             var validated = paths["/api/body"]?["post"]?["requestBody"]?["content"]?["application/json"]?["schema"]?["allOf"]?[1];
             Assert.That(validated?["properties"]?["name"]?["maxLength"]?.GetValue<int>(), Is.EqualTo(4));
             Assert.That(validated?["properties"]?["count"]?["minimum"]?.GetValue<double>(), Is.EqualTo(1));
@@ -144,11 +144,14 @@ namespace EmbedIO.Tests
         }
 
         [Test]
-        public void InfiniteSuccessfulObjectResultsConsumeTheNodeBudget()
+        public void InfiniteObjectResultsConsumeTheNodeBudget()
         {
             var plan = new RequestValidationPlan(typeof(InfiniteValidationInput), Array.Empty<ValidationAttribute>(), Array.Empty<RequestValidationMember>());
             var validation = new RequestValidationParameter(plan, Array.Empty<ValidationAttribute>(), new ValidateAttribute { MaxNodes = 4 });
-            Assert.Throws<ProblemDetailsException>(() => validation.Validate(new InfiniteValidationInput(), "input"));
+            var error = Assert.Throws<ProblemDetailsException>(() => validation.Validate(new InfiniteValidationInput(), "input"));
+            var errors = Present(Problem(error).Extensions["errors"]).AsObject();
+            Assert.That(errors.Sum(field => Present(field.Value).AsArray().Count), Is.LessThanOrEqualTo(4));
+            Assert.That(errors.ToJsonString(), Does.Contain("traversal limit"));
         }
 
         [TestCase(0, 1, 1)]
@@ -205,8 +208,14 @@ namespace EmbedIO.Tests
             });
         }
 
+        private static T Present<T>(T? value) where T : class
+            => value ?? throw new InvalidOperationException("Expected a non-null validation test value.");
+
+        private static ProblemDetails Problem(ProblemDetailsException? error)
+            => error?.DataObject as ProblemDetails ?? throw new InvalidOperationException("Expected a validation problem.");
+
         private static RequestValidationParameter Metadata(string method)
-            => ValidationBindings.RequestValidationController.Routes.First(route => route.Operation?.MethodName == method).Operation!.Parameters[0].Validation!;
+            => Present(Present(ValidationBindings.RequestValidationController.Routes.First(route => route.Operation?.MethodName == method).Operation).Parameters[0].Validation);
 
         private static WebApiModule Module(bool generated, RequestValidationController controller)
             => generated ? new WebApiModule("/api").WithController(ValidationBindings.RequestValidationController, () => controller)
@@ -272,7 +281,7 @@ namespace EmbedIO.Tests
     {
         public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
         {
-            while (true) yield return ValidationResult.Success!;
+            while (true) yield return new ValidationResult("Invalid.");
         }
     }
 
