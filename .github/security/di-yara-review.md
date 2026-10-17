@@ -505,3 +505,30 @@ their actual package bytes remain required before merge and publication. Other
 findings, scanner errors and stale entries remain fatal. Local packages, pins,
 CodeView paths, full printed-match scans and the paginated alert receipt are
 under ignored `TestResults/release-2.8.0/yara-review`.
+
+
+## 2.9.0 request-abort release revalidation
+
+The locally built 2.9.0 candidate retains the two reviewed DI compiler CodeView
+matches. Verified pinned YARA-X 1.21.0 / YARA Forge 20261011 archives, extracted
+contents and the complete God Mode rule. Full read-only, network-disabled scans
+with printed strings match only `Injection.pdb` in each compiler-generated symbol
+path: `0x6c9e` (net10.0) and `0x758d` (netstandard2.0). No other rule or string
+matches either assembly. DI source, targets and executable behavior are unchanged;
+its rebuilt metadata reflects the updated core reference/version. These are local
+Windows candidate bytes before the feature commit, not final CI artifact hashes.
+
+| Local candidate artifact | SHA-256 |
+| --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.9.0.nupkg` | `0a5dd40f026e543ff13e9cd4e671dfb484fb2b3dc03d1c89ff1847a02a822a5c` |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `59ffced1413b2573ac66fe2cbecca2f571f722f940ec15661c9412f0415a892b` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `20d245d7f539c36a94e13d32c571c326d2e39c40e2241d3ef5cf79d5b25126aa` |
+
+Only the two exact package assembly paths move from 2.8.0 to 2.9.0. Rule and
+source/evidence-file acceptances are unchanged. Explicit queries of open, fixed
+and dismissed GitHub alerts expose no matching YARA alert; the existing
+owner-approved unavailable-alert exception for this finding is retained, and no
+dismissal is claimed. Exact-head full CI scans and review of the final CI package
+bytes remain required before merge/publication. Other findings, scanner errors
+and stale entries remain fatal. Source, pins, CodeView paths, printed-match scans
+and alert receipts are under ignored `TestResults/request-abort/yara-review`.

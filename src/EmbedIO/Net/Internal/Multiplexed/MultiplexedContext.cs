@@ -17,7 +17,7 @@ using EmbedIO.WebSockets.Internal;
 
 namespace EmbedIO.Net.Internal
 {
-    internal sealed class MultiplexedContext : IHttpContextImpl, IHttpTunnelContext, IDisposable, EmbedIO.Internal.ITelemetryContext, ILazyItems
+    internal sealed class MultiplexedContext : IHttpContextImpl, IHttpTunnelContext, IDisposable, EmbedIO.Internal.ITelemetryContext, ILazyItems, IHttpRequestAbortFeature, IRequestAbortState
     {
         private readonly object _sync = new();
         private readonly long _started = Stopwatch.GetTimestamp();
@@ -47,6 +47,18 @@ namespace EmbedIO.Net.Internal
             Request = new MultiplexedRequest(exchange, local, remote, secure, clientCertificate);
             Response = new MultiplexedResponse(exchange);
         }
+        public CancellationToken GetRequestAbortedToken(bool cancelOnHttp1InputEnd = false)
+        {
+            lock (_sync)
+            {
+                var scope = RequestAbortRegistry.Find(_exchange);
+                if (scope?.TryGet(false, out var retained) == true) return retained;
+                if (_closed || _exchange.Ended || _acceptedTunnel != null || _webSocketAccepted != 0)
+                    throw new InvalidOperationException("The HTTP request has already completed or handed off its protocol.");
+                return RequestAbortRegistry.Get(_exchange).Get(false, CancellationToken);
+            }
+        }
+        bool IRequestAbortState.IsRequestAborted => RequestAbortRegistry.Find(_exchange)?.IsAborted == true;
         public string Id { get; } = UniqueIdGenerator.GetNext();
         public CancellationToken CancellationToken
         {
@@ -163,6 +175,7 @@ namespace EmbedIO.Net.Internal
                         if (!ReferenceEquals(cleanup, failure)) LogCleanupFailure(cleanup, "Exception thrown while releasing failed tunnel output.");
                     }
                 }
+                RequestAbortRegistry.Complete(_exchange);
                 _acceptedTunnel?.Dispose();
                 ((MultiplexedRequest)Request).RetireBodyLimit();
                 PropagateCancellation();
@@ -231,6 +244,7 @@ namespace EmbedIO.Net.Internal
             if (Interlocked.Exchange(ref _webSocketAccepted, 1) != 0) throw new InvalidOperationException("A protocol handoff was already accepted.");
             lock (_sync) if (_closed) throw new ObjectDisposedException(nameof(MultiplexedContext));
             var control = _exchange as IMultiplexedTunnelControl ?? throw new NotSupportedException("Tunnel control is unavailable.");
+            RequestAbortRegistry.Complete(_exchange);
             Response.StatusCode = 200;
             try { ((MultiplexedResponse)Response).BeginTunnel(useCapsules); }
             catch (System.IO.InvalidDataException error)
@@ -255,6 +269,7 @@ namespace EmbedIO.Net.Internal
                 throw new InvalidOperationException("A WebSocket tunnel requires extended CONNECT and version 13.");
             if (Interlocked.Exchange(ref _webSocketAccepted, 1) != 0)
                 throw new InvalidOperationException("WebSocket already accepted.");
+            RequestAbortRegistry.Complete(_exchange);
             Response.StatusCode = 200;
             if (!string.IsNullOrEmpty(acceptedProtocol)) Response.Headers[HttpHeaderNames.SecWebSocketProtocol] = acceptedProtocol;
             // RFC 8441 / RFC 9220 replace the key/accept exchange with :protocol. Headers

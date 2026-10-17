@@ -1,4 +1,4 @@
-name: Fuzz
+﻿name: Fuzz
 on:
   push:
     branches: [main]
@@ -122,6 +122,9 @@ jobs:
       - name: Verify health readiness model rejects owner corruption
         shell: bash
         run: dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --health-readiness-selftest 2>&1 | tee TestResults/fuzz/health-readiness-selftest.log
+      - name: Request abort negative oracle
+        shell: bash
+        run: dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --request-abort-selftest 2>&1 | tee TestResults/fuzz/request-abort-selftest.log
 
       - name: Exercise shared resource models
         shell: bash
@@ -129,7 +132,7 @@ jobs:
           set -euo pipefail
           seed=$((GITHUB_RUN_ID % 2147483647))
           if (( seed == 0 )); then seed=1; fi
-          for scenario in websocket-budget rate-limits routes tunnels sessions auth-state auth-jwt controller-parity request-validation json-streaming event-hub browser-protection health-readiness multipart-lifetime forwarded-policy cors-policy conditional-ranges; do
+          for scenario in websocket-budget rate-limits routes tunnels sessions auth-state auth-jwt controller-parity request-validation json-streaming event-hub browser-protection health-readiness request-abort multipart-lifetime forwarded-policy cors-policy conditional-ranges; do
             dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$MODEL_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
           done
       - name: Exercise real HTTP/1 and HTTP/2 connections

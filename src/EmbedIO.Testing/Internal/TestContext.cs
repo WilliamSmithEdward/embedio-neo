@@ -14,13 +14,14 @@ using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Testing.Internal
 {
-    internal sealed class TestContext : IHttpContextImpl
+    internal sealed class TestContext : IHttpContextImpl, IHttpRequestAbortFeature, IDisposable
     {
         private readonly TimeKeeper _ageKeeper = new TimeKeeper();
 
         private readonly Stack<Action<IHttpContext>> _closeCallbacks = new Stack<Action<IHttpContext>>();
 
         private bool _closed;
+        private RequestAbortToken? _requestAbort;
 
         internal TestContext(IHttpRequest request)
         {
@@ -37,6 +38,19 @@ namespace EmbedIO.Testing.Internal
         public string Id { get; }
 
         public CancellationToken CancellationToken { get; set; }
+
+        public CancellationToken GetRequestAbortedToken(bool cancelOnHttp1InputEnd = false)
+        {
+            lock (_closeCallbacks)
+            {
+                if (_requestAbort != null) return _requestAbort.Token;
+                if (_closed) throw new InvalidOperationException("The HTTP context has already closed.");
+                _requestAbort = new RequestAbortToken(CancellationToken, static error =>
+                    Log.Source.TraceEvent(System.Diagnostics.TraceEventType.Error, 0, "HTTP context: request-abort callback failed: {0}", error));
+                return _requestAbort.Token;
+            }
+        }
+        public void Dispose() => Close();
 
         public long Age => _ageKeeper.ElapsedTime;
 
@@ -96,6 +110,8 @@ namespace EmbedIO.Testing.Internal
                 callbacks = _closeCallbacks.ToArray();
                 _closeCallbacks.Clear();
             }
+
+            _requestAbort?.Dispose();
 
             // Always close the response stream no matter what.
             Response.Close();

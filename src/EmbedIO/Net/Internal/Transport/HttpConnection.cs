@@ -26,6 +26,7 @@ namespace EmbedIO.Net.Internal
         private bool _http2;
         private EmbedIO.Internal.BorrowedResource<CancellationTokenSource>? _http2Stop;
         private Dictionary<HttpListener, Dictionary<Http2Exchange, MultiplexedContext>>? _http2Listeners;
+        private Http1RequestAbortObserver? _requestAborts;
         private int _responseFinishing;
         private volatile bool _draining;
         private EmbedIO.Internal.BorrowedResource<Http2Dispatcher>? _http2Dispatcher;
@@ -89,6 +90,41 @@ namespace EmbedIO.Net.Internal
             _lifetime.ArmDeadline(_sTimeout);
         }
 
+        internal CancellationToken GetRequestAbortedToken(HttpListenerContext context, bool inputEnd)
+        {
+            lock (_connectionSync)
+            {
+                var existing = EmbedIO.Internal.RequestAbortRegistry.Find(context);
+                if (existing?.TryGet(inputEnd, out var retained) == true) return retained;
+                if (!ReferenceEquals(context, _context) || _protocolEnded != 0 || _responseEnded || _tunnel || _oStream?.HasWireEnd == true)
+                    throw new InvalidOperationException("The HTTP request has already completed or handed off its protocol.");
+                var socket = _protocolSocket ?? throw new ObjectDisposedException(nameof(HttpConnection));
+                var scope = EmbedIO.Internal.RequestAbortRegistry.Get(context);
+                var token = scope.Get(inputEnd, context.CancellationToken);
+                if (_iStream != null)
+                {
+                    EmbedIO.Internal.RequestAbortRegistry.Attach(_iStream, scope);
+                    if (_iStream.HasBodyFramingFailure) scope.Abort();
+                }
+                if (_oStream != null)
+                {
+                    EmbedIO.Internal.RequestAbortRegistry.Attach(_oStream, scope);
+                    if (_oStream.HasOutputFailure) scope.Abort();
+                }
+                (_requestAborts ??= new Http1RequestAbortObserver(socket, ForceClose)).Activate(scope);
+                return token;
+            }
+        }
+        internal void CompleteRequestAbortObservation(HttpListenerResponse response)
+        {
+            if (Volatile.Read(ref _requestAborts) == null) return;
+            lock (_connectionSync)
+                if (ReferenceEquals(_context.HttpListenerResponse, response)) _requestAborts?.Complete(_context);
+        }
+        internal void CompleteRequestAbortObservation(HttpListenerContext context)
+        {
+            lock (_connectionSync) _requestAborts?.Complete(context);
+        }
         public int Reuses { get; private set; }
 
         // Value of the HTTP/1 Keep-Alive response header.
@@ -162,6 +198,8 @@ namespace EmbedIO.Net.Internal
                 _iStream = chunked ? new ChunkedRequestStream(Stream, buffer, pending.Offset, pending.Count)
                     : new RequestStream(Stream, buffer, pending.Offset, pending.Count, contentLength);
                 _pendingInput = default;
+                var abort = _requestAborts == null ? null : EmbedIO.Internal.RequestAbortRegistry.Find(_context);
+                if (abort != null) EmbedIO.Internal.RequestAbortRegistry.Attach(_iStream, abort);
                 return _iStream;
             }
         }
@@ -255,6 +293,8 @@ namespace EmbedIO.Net.Internal
                 var owner = new ResponseStream(Stream, _context.HttpListenerResponse,
                     _context.Listener?.IgnoreWriteExceptions ?? true);
                 _oStream = owner;
+                var abort = _requestAborts == null ? null : EmbedIO.Internal.RequestAbortRegistry.Find(_context);
+                if (abort != null) EmbedIO.Internal.RequestAbortRegistry.Attach(owner, abort);
                 return owner;
             }
         }
@@ -370,6 +410,7 @@ namespace EmbedIO.Net.Internal
                 var reusable = !_tunnel && !_draining && _forceClosing == 0
                     && _context.Request.KeepAlive && _context.Response.KeepAlive
                     && _context.Response.Headers["connection"] != "close";
+                if (_forceClosing == 0 && !_tunnel) _requestAborts?.Complete(_context);
                 if (reusable) { EndResponse(true); return; }
             }
             CloseTransport(true);
@@ -482,6 +523,7 @@ namespace EmbedIO.Net.Internal
                 protocolVersion = _http2 ? "2" : "1.1";
                 _protocolSocket = null;
                 _protocolEnded = 1;
+                _requestAborts?.Retire();
                 EndResponse(false);
                 protocolStop = _http2Stop?.Value;
                 protocolListeners = _http2Listeners == null ? Array.Empty<HttpListener>() : new List<HttpListener>(_http2Listeners.Keys).ToArray();

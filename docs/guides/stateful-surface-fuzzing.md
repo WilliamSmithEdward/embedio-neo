@@ -156,3 +156,15 @@ The retained `state-corpus/health-readiness.json` trace replays the transitions.
 with `health.owner-isolation`. The ordinary fuzz workflow runs that negative
 oracle and includes this campaign in its shared-resource models. See
 [health and readiness](health-checks.md) for lifecycle and cancellation limits.
+
+## Request-abort lifetimes
+
+`request-abort` holds three physical HTTP/1 connections concurrently. Its separate
+owner/generation ledger commands healthy completion, half-close, reset, concurrent
+token acquisition and replacement. Retained old tokens must preserve their own
+outcomes after successor requests and server stop. The safe token stays healthy
+on FIN; only the explicit input-end token cancels. The retained
+`state-corpus/request-abort.json` trace replays these transitions.
+`--request-abort-selftest` must reject a deliberately substituted foreign-owner
+token. This model complements HTTP/2–3 stream-reset regressions; it does not claim
+physical packet-loss, every TLS closure, or all proxy behaviors are detectable.

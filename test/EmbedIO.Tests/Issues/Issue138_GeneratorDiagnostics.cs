@@ -71,6 +71,16 @@ namespace App
             Assert.That(result.GeneratorDiagnostics.Count(d => d.Id == "EMBEDIO016"), Is.EqualTo(1));
         }
 
+        [TestCase("int")]
+        [TestCase("string")]
+        [TestCase("System.Threading.CancellationToken?")]
+        public void RequestAbortRejectsInvalidParameterTypes(string type)
+        {
+            var result = Run(Usings + "[GeneratedControllerBinding(typeof(C))] internal static partial class B {} "
+                + "public sealed class C : WebApiController { [Route(HttpVerbs.Get, \"/\")] public string Get([RequestAborted] " + type + " token) => \"ok\"; }");
+            Assert.That(result.GeneratorDiagnostics.Any(d => d.GetMessage().Contains("RequestAborted requires a CancellationToken", StringComparison.Ordinal)), Is.True);
+        }
+
         [Test]
         public void NestedAndGlobalNamespaceContextsCompile()
         {

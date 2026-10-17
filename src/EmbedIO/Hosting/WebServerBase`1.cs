@@ -423,7 +423,7 @@ namespace EmbedIO
                         await HttpExceptionHandler.Handle(LogSource, context,
                             new HttpException(503, "The request exceeded its configured deadline."), _onHttpException).ConfigureAwait(false);
                     }
-                    catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+                    catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested || (context is EmbedIO.Internal.IRequestAbortState aborted && aborted.IsRequestAborted))
                     {
                         throw; // Let outer catch block handle it
                     }
@@ -546,8 +546,10 @@ namespace EmbedIO
             {
                 throw; // Never reached: the filter only records the exception type.
             }
-            catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException error) when (context.CancellationToken.IsCancellationRequested || (context is EmbedIO.Internal.IRequestAbortState aborted && aborted.IsRequestAborted))
             {
+                if (context is EmbedIO.Internal.IRequestAbortState requestAbort && requestAbort.IsRequestAborted)
+                    await EmbedIO.Internal.ResponseCommitment.AbortAsync(context, error).ConfigureAwait(false);
                 $"[{context.Id}] Operation canceled.".Debug(LogSource);
             }
             catch (OperationCanceledException error) when (context.Request is Net.Internal.HttpListenerRequest request

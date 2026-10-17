@@ -267,6 +267,7 @@ namespace EmbedIO.Net.Internal
             RejectUnacceptedExtendedConnect();
             await _exchange.SendHeadersAsync(BuildHeaders(closing), _extendedConnectRejected || (closing && _trailerNames == null) || SuppressBody, token).ConfigureAwait(false);
             _headersSent = true;
+            CompleteAbortObservation();
         }
         private async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken token)
         {
@@ -287,6 +288,7 @@ namespace EmbedIO.Net.Internal
                 {
                     try { await coalescing.SendHeadersAndWriteAsync(BuildHeaders(false), buffer, offset, count, token).ConfigureAwait(false); }
                     finally { _headersSent = coalescing.FinalHeadersSent; }
+                    CompleteAbortObservation();
                     Volatile.Write(ref _sentBody, _sentBody + count);
                     return;
                 }
@@ -294,6 +296,7 @@ namespace EmbedIO.Net.Internal
                 if (!SuppressBody)
                 {
                     await _exchange.WriteAsync(buffer, offset, count, false, token).ConfigureAwait(false);
+                    CompleteAbortObservation();
                     Volatile.Write(ref _sentBody, _sentBody + count);
                 }
             }
@@ -344,7 +347,16 @@ namespace EmbedIO.Net.Internal
                     else await _exchange.CompleteAsync(token).ConfigureAwait(false);
                 }
             }
-            finally { _output.Dispose(); Exit(); }
+            catch
+            {
+                EmbedIO.Internal.RequestAbortRegistry.Find(_exchange)?.Abort();
+                throw;
+            }
+            finally { CompleteAbortObservation(); _output.Dispose(); Exit(); }
+        }
+        private void CompleteAbortObservation()
+        {
+            if (_exchange.Ended) EmbedIO.Internal.RequestAbortRegistry.Complete(_exchange);
         }
         private async Task<bool> EnterAsync(CancellationToken token, bool closing)
         {

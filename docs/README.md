@@ -33,6 +33,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [Capsule and tunnel carriers](guides/capsule-tunnels.md): optional Neo v2 APIs, still under validation, authorization, streamed values, native datagram packet ownership and carrier lifetime.
 
+- [Request-abort cancellation](guides/request-abort.md): opt-in request-owned tokens, explicit HTTP/1 input-end policy, controller binding and streaming integration.
 - [Request limits, admission and deadlines](guides/request-limits.md): opt-in header and body byte limits, body read and connection deadlines, connection count, bounded concurrent requests and queue, cooperative request deadlines, deferred `100 Continue` and per-route policies.
 - [Request-body byte limits](guides/request-body-limits.md): encoded versus decoded budgets, immutable routed ownership, configured error callbacks, unread-input validation and borrowed stream ownership.
 - [Rate limiting](guides/rate-limiting.md): new in Neo v2, opt-in request admission through System.Threading.RateLimiting, with client and identity keys, 429 and Retry-After, queues, cancellation, memory bounds and limits.

@@ -37,6 +37,7 @@ namespace EmbedIO.Net.Internal
             _request = context.HttpListenerRequest;
             _identity = context.Id;
         }
+        internal void CompleteRequestAbortObservation() => _transport.CompleteRequestAbortObservation(this);
         public WebHeaderCollection Headers { get; } = new();
         public Encoding? ContentEncoding { get; set; } = WebServer.DefaultEncoding;
         private string _statusDescription = "OK";

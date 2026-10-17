@@ -21,6 +21,7 @@ internal static class LegacyHealthChecks
         server.WithModule(new HealthCheckModule(health));
         server.WithModule(new HealthCheckModule(health, "/internal/health/", includeDetails: true,
             authorize: context => Task.FromResult(context.Request.Headers["X-Smoke-Health"] == "allowed")));
+        EmbedIO.PlatformTests.RequestAbortSmoke.Configure(server);
         using var stop = new CancellationTokenSource(); var running = server.RunAsync(stop.Token);
         using var client = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(10) };
         try
@@ -36,11 +37,12 @@ internal static class LegacyHealthChecks
             using var request = new HttpRequestMessage(HttpMethod.Get, url + "internal/health/ready"); request.Headers.Add("X-Smoke-Health", "allowed");
             using var allowed = await client.SendAsync(request);
             using var json = JsonDocument.Parse(await allowed.Content.ReadAsStringAsync());
+            await EmbedIO.PlatformTests.RequestAbortSmoke.RunAsync(client, url);
             Require(allowed.StatusCode == HttpStatusCode.OK && json.RootElement.GetProperty("checks").GetProperty("application").GetProperty("description").GetString() == "legacy-ready", "diagnostic serialization");
         }
         finally { stop.Cancel(); await running; }
         Require((await health.CheckReadinessAsync()).Status == HealthStatus.Unhealthy, "stop invalidates readiness");
-        return 6;
+        return 8;
     }
     private static void Require(bool condition, string detail)
     { if (!condition) throw new InvalidOperationException("Legacy health check failed: " + detail); }
