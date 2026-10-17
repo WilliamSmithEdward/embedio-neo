@@ -167,3 +167,13 @@ HTTP/3 native listener retirement remains covered by its separate runtime tests.
 Additional [stateful application campaigns](stateful-surface-fuzzing.md) cover
 controller parity, persistence rollback, lifecycle, mutable files, request
 codings and multipart ownership, with their own negative oracle checks.
+
+
+Request-abort timeout artifacts identify the wait for handler entry, cancellation
+or context close and record the public token state at the deadline. These values
+can race shutdown cancellation; they locate the outstanding wait, rather than
+establishing the cause. The original Windows and Linux reset-timeout traces from
+main run 39054323280 are retained in the corpus. Isolated replays passed, so those
+traces are historical failure inputs, not deterministic reproductions. The
+15-second case deadline and all cancellation and ownership assertions remain
+unchanged.

@@ -77,7 +77,7 @@ internal static class RequestAbortFuzz
                     case 1:
                         request.InputEnded = true;
                         request.Socket.Shutdown(SocketShutdown.Send);
-                        await Canceled(request.Strict);
+                        await Canceled(request.Strict, "input-end", request);
                         Require(!request.Normal.IsCancellationRequested, "abort.half-close-safe-default");
                         await Finish(request); actors[step.Actor] = await Start(step.Actor); trace.Cover("abort.explicit-input-end"); break;
                     case 2:
@@ -115,7 +115,7 @@ internal static class RequestAbortFuzz
             var bytes = Encoding.ASCII.GetBytes($"GET {request.Id} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
             var sent = 0;
             while (sent != bytes.Length) sent += await request.Socket.SendAsync(bytes.AsMemory(sent), SocketFlags.None, token);
-            await request.Entered.Task.WaitAsync(token);
+            await Observe(request.Entered.Task, "handler-entry", request);
             Require(!request.Normal.IsCancellationRequested && !request.Strict.IsCancellationRequested, "abort.fresh-generation");
             return request;
         }
@@ -126,7 +126,7 @@ internal static class RequestAbortFuzz
             using var reader = new StreamReader(stream, leaveOpen: true);
             var response = await reader.ReadToEndAsync(token);
             Require(response.StartsWith("HTTP/1.1 200", StringComparison.Ordinal) && response.EndsWith(request.Id, StringComparison.Ordinal), "abort.complete-body");
-            await request.Closed.Task.WaitAsync(token);
+            await Observe(request.Closed.Task, "context-close", request);
             Require(!request.Normal.IsCancellationRequested, "abort.normal-completion");
             history.Add(request); request.Dispose();
         }
@@ -135,15 +135,27 @@ internal static class RequestAbortFuzz
             request.Reset = true;
             request.Socket.LingerState = new LingerOption(true, 0);
             request.Socket.Dispose();
-            await Canceled(request.Normal); await Canceled(request.Strict);
-            request.Release.TrySetResult(); await request.Closed.Task.WaitAsync(token);
+            await Canceled(request.Normal, "reset-normal", request); await Canceled(request.Strict, "reset-strict", request);
+            request.Release.TrySetResult(); await Observe(request.Closed.Task, "context-close", request);
             history.Add(request); request.Dispose();
         }
-        async Task Canceled(CancellationToken cancellation)
+        async Task Observe(Task operation, string stage, Request request)
+        {
+            try { await operation.WaitAsync(token); }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                // Preserve the exact wait and independent public token state on a case deadline.
+                trace.Cover("abort.deadline." + stage + ".normal-" + request.Normal.IsCancellationRequested
+                    + ".strict-" + request.Strict.IsCancellationRequested + ".closed-" + request.Closed.Task.IsCompleted
+                    + ".reset-" + request.Reset + ".input-ended-" + request.InputEnded);
+                throw;
+            }
+        }
+        async Task Canceled(CancellationToken cancellation, string stage, Request request)
         {
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             using var registration = cancellation.Register(() => completion.TrySetResult());
-            await completion.Task.WaitAsync(token);
+            await Observe(completion.Task, stage, request);
         }
     }
     private static void Require(bool condition, string invariant)
