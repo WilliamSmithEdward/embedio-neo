@@ -704,6 +704,12 @@ namespace EmbedIO.OpenApi
                     || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase);
             }
 
+            private JsonNode ValidatedSchema(JsonNode schema, WebApiOperationParameter parameter)
+                => parameter.Validation == null ? schema : new JsonObject
+                {
+                    ["allOf"] = new JsonArray(schema, parameter.Validation.Schema(_options)),
+                };
+
             private JsonObject Describe(WebApiOperation operation, List<(string Name, bool Optional)> routeParameters, string where)
             {
                 var controller = TrimSuffix(operation.ControllerName, "Controller");
@@ -735,7 +741,7 @@ namespace EmbedIO.OpenApi
                     result["deprecated"] = true;
 
                 var parameters = new JsonArray();
-                var canFailBinding = false;
+                var canFailBinding = operation.Parameters.Any(parameter => parameter.Validation != null);
                 var queryParameters = new Dictionary<string, JsonObject>(StringComparer.Ordinal);
                 foreach (var (name, optional) in routeParameters)
                 {
@@ -745,7 +751,7 @@ namespace EmbedIO.OpenApi
                         ["name"] = name,
                         ["in"] = "path",
                         ["required"] = true,
-                        ["schema"] = bound == null ? StringSchema() : ValueSchema(bound.Type, bound.EnumNames),
+                        ["schema"] = bound == null ? StringSchema() : ValidatedSchema(ValueSchema(bound.Type, bound.EnumNames), bound),
                     };
                     if (optional)
                         parameter["description"] = "May be empty.";
@@ -769,7 +775,7 @@ namespace EmbedIO.OpenApi
                                 ["name"] = parameter.FieldName,
                                 ["in"] = "query",
                                 ["required"] = parameter.IsRequired,
-                                ["schema"] = ValueSchema(parameter.Type, parameter.EnumNames),
+                                ["schema"] = ValidatedSchema(ValueSchema(parameter.Type, parameter.EnumNames), parameter),
                             }, where);
                             canFailBinding |= parameter.IsRequired || ElementType(parameter.Type) != typeof(string);
                             break;
@@ -788,7 +794,7 @@ namespace EmbedIO.OpenApi
                         case WebApiParameterSource.Form:
                             formProperties ??= new JsonObject();
                             formRequired ??= new List<string>();
-                            var formSchema = ValueSchema(parameter.Type, parameter.EnumNames);
+                            var formSchema = ValidatedSchema(ValueSchema(parameter.Type, parameter.EnumNames), parameter);
                             // Two parameters can bind one field, as for query fields; JSON Schema's required list must be unique.
                             if (formProperties.TryGetPropertyValue(parameter.FieldName, out var bound) && !JsonNode.DeepEquals(bound, formSchema))
                             {
@@ -860,6 +866,7 @@ namespace EmbedIO.OpenApi
                 else if (jsonBody != null)
                 {
                     var schema = BodySchema(jsonBody.Type, where);
+                    if (schema != null) schema = ValidatedSchema(schema, jsonBody);
                     if (schema != null)
                     {
                         result["requestBody"] = new JsonObject

@@ -261,13 +261,13 @@
       "EmbedIO-Neo.Cli": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.1.0, )"
+          "EmbedIO-Neo": "[2.3.0, )"
         }
       },
       "EmbedIO-Neo.DependencyInjection": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.1.0, )",
+          "EmbedIO-Neo": "[2.3.0, )",
           "Microsoft.Extensions.DependencyInjection": "[10.0.13, )",
           "Microsoft.Extensions.Hosting.Abstractions": "[10.0.13, )"
         }
@@ -275,26 +275,26 @@
       "EmbedIO-Neo.JsonServer": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.1.0, )"
+          "EmbedIO-Neo": "[2.3.0, )"
         }
       },
       "EmbedIO-Neo.Jwt": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.1.0, )",
+          "EmbedIO-Neo": "[2.3.0, )",
           "Microsoft.IdentityModel.JsonWebTokens": "[8.23.0, )"
         }
       },
       "EmbedIO-Neo.Testing": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.1.0, )"
+          "EmbedIO-Neo": "[2.3.0, )"
         }
       },
       "embedio.cli.testplugin": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.1.0, )"
+          "EmbedIO-Neo": "[2.3.0, )"
         }
       },
       "embedio.generators": {
