@@ -11,6 +11,8 @@
   OpenAPI/AOT and in-process testing support. Existing tokens, APIs and defaults
   are preserved. Includes streaming/upload integration regressions and a
   replayable three-connection state machine with an independent negative oracle.
+  Canceled tokens retain their sources for concurrent/late registration and
+  signaled wait-handle use after transport retirement.
   See [request-abort cancellation](docs/guides/request-abort.md).
 
 ## [2.8.0] - 2026-10-17

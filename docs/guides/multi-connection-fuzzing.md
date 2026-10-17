@@ -12,11 +12,11 @@ dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode
 dotnet run --project test/EmbedIO.Fuzz -c Release --no-restore -- --state-machines 1729 100 websocket-budget
 ```
 
-The arguments are the campaign seed and total number of cases (1–100,000).
+The arguments are the campaign seed and total number of cases (1â€“100,000).
 Select an explicit scenario for local campaigns. Without a name, the
 runner sorts the registered names and cycles through them. Each generated case
-contains 48 commands for three actors. Actor IDs are 0–2, command IDs 0–11 and
-values 0–63; their interpretation belongs to the scenario.
+contains 48 commands for three actors. Actor IDs are 0â€“2, command IDs 0â€“11 and
+values 0â€“63; their interpretation belongs to the scenario.
 
 | Scenario | Exercised surface |
 | --- | --- |
@@ -167,3 +167,16 @@ HTTP/3 native listener retirement remains covered by its separate runtime tests.
 Additional [stateful application campaigns](stateful-surface-fuzzing.md) cover
 controller parity, persistence rollback, lifecycle, mutable files, request
 codings and multipart ownership, with their own negative oracle checks.
+
+
+Request-abort timeout artifacts identify the wait for handler entry, cancellation
+or context close and record the public token state at the deadline. These values
+can race shutdown cancellation; they locate the outstanding wait, rather than
+establishing the cause. The original Windows and Linux reset-timeout traces from
+main run 39054323280 are retained in the corpus. The follow-up
+run 39055778078 located another timeout at the strict-token callback wait.
+Cancellation-source disposal could race registration; canceled sources now remain
+usable with retained tokens. Isolated replays passed even before the correction, so these traces are
+historical failure inputs, not deterministic reproductions. The
+15-second case deadline and all cancellation and ownership assertions remain
+unchanged.

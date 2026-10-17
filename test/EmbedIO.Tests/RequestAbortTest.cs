@@ -76,6 +76,41 @@ namespace EmbedIO.Tests
 
         [TestCase(false)]
         [TestCase(true)]
+        public async Task CanceledTokenRetainsItsSignaledWaitHandleAndLateCallbacks(bool inputEnd)
+        {
+            var entered = Signal<CancellationToken>();
+            var closed = Signal<bool>();
+            await WithServer(async context =>
+            {
+                var token = context.GetRequestAbortedToken(inputEnd);
+                context.OnClose(_ => closed.TrySetResult(true));
+                entered.TrySetResult(token);
+                await Task.Delay(Timeout.Infinite, token);
+            }, async (port, _) =>
+            {
+                using var socket = await Request(port);
+                var token = await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                var waitHandle = token.WaitHandle;
+                socket.LingerState = new LingerOption(true, 0);
+                socket.Dispose();
+                await Canceled(token);
+                await closed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                // Completion can precede the cancellation worker leaving its last callback.
+                // Keep using the retained token/handle across that asynchronous handoff.
+                for (var iteration = 0; iteration < 20; iteration++)
+                {
+                    await Task.Delay(10);
+                    Assert.That(waitHandle.WaitOne(0), Is.True);
+                    Assert.That(token.WaitHandle, Is.SameAs(waitHandle));
+                    var calls = 0;
+                    using var registration = token.Register(() => Interlocked.Increment(ref calls));
+                    Assert.That(calls, Is.EqualTo(1));
+                }
+            });
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
         public async Task HalfClosePreservesDefaultTokenAndOnlyCancelsExplicitInputEndMode(bool acquireStrictFirst)
         {
             var entered = Signal<(CancellationToken Normal, CancellationToken Strict)>();

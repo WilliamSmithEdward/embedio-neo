@@ -34,6 +34,11 @@ not prove whether a client received or committed any part of the response.
 unsupported contexts return false, while the direct getter throws
 `NotSupportedException`. First acquisition after completion or protocol handoff
 throws `InvalidOperationException`; previously acquired tokens remain retrievable.
+Canceled tokens retain their cancellation source for late callback registration and
+wait-handle use. Parent registrations detach after completion and cancellation
+callbacks finish. The canceled source has no timer; its managed state and any
+lazily created wait handle are reclaimed when the retained token becomes
+unreachable. Do not dispose a token's wait handle yourself.
 
 ## HTTP/1 half-close and browser-style endpoints
 
