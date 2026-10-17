@@ -478,3 +478,30 @@ every other check remain required before merge/publication. Other findings, erro
 and stale entries remain fatal. Local source, pins, assembly hashes, CodeView
 metadata and printed-match evidence are under ignored
 `TestResults/release-2.7.0/yara-review`.
+
+
+## 2.8.0 release revalidation
+
+The locally built 2.8.0 candidate retains the two previously reviewed DI compiler
+CodeView debug-symbol matches. Verified pinned YARA-X 1.21.0 / YARA Forge
+20261011 archives and extracted contents, the complete God Mode rule and full
+read-only, network-disabled scans with printed strings identify only
+`Injection.pdb` in each compiler-generated symbol path: `0x6c9e` (net10.0) and
+`0x758d` (netstandard2.0). Neither assembly matches another rule or string.
+The DI source, targets and executable behavior are unchanged. These are local
+Windows candidate bytes, before the release commit, not final CI artifact hashes.
+
+| Local candidate artifact | SHA-256 |
+| --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.8.0.nupkg` | `bba59b5b608252c5c5e6d8445f1e6c7cc1643b9bffb05dd1e5724899a3b9d01e` |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `9229bc7bbaceae0ab0e8e2dc201b2b89094df2d62834b806b5247e5aff1c24d4` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `a9ed4b73cdc6e0b1b5c0099c0be6ff40fd6bf2faefde8261d4e0ace6d4fa0876` |
+
+Only the two exact package-version paths move from 2.7.0 to 2.8.0. Rule and
+evidence-file acceptances remain unchanged. GitHub exposes no matching YARA alert
+in any state to dismiss; the existing owner-approved unavailable-alert exception
+is retained, and no dismissal is claimed. Final exact-head CI scans and review of
+their actual package bytes remain required before merge and publication. Other
+findings, scanner errors and stale entries remain fatal. Local packages, pins,
+CodeView paths, full printed-match scans and the paginated alert receipt are
+under ignored `TestResults/release-2.8.0/yara-review`.
