@@ -1,4 +1,4 @@
-﻿name: Fuzz
+name: Fuzz
 on:
   push:
     branches: [main]
@@ -75,7 +75,9 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # Real request-abort connections take over six minutes per 500 cases on Linux.
+    # Keep all 5,000 scheduled cases; case/cleanup deadlines stay 15/5 seconds.
+    timeout-minutes: ${{ github.event_name == 'schedule' && 180 || 45 }}
     env:
       MODEL_CASES: ${{ github.event_name == 'schedule' && '5000' || '500' }}
       CONNECTION_CASES: ${{ github.event_name == 'schedule' && '128' || '32' }}
