@@ -1,6 +1,6 @@
 ﻿using System;
-using EmbedIO.Utilities;
 using EmbedIO.Internal;
+using EmbedIO.Utilities;
 
 namespace EmbedIO
 {
@@ -23,8 +23,10 @@ namespace EmbedIO
         /// <exception cref="EmbedIOInternalErrorException">
         /// <paramref name="this"/> does not implement <see cref="IHttpContextImpl"/>.
         /// </exception>
-        public static IHttpContextImpl GetImplementation(this IHttpContext @this)
-            => Validate.NotNull(nameof(@this), @this) as IHttpContextImpl
-            ?? throw SelfCheck.Failure($"{@this.GetType().FullName} does not implement {nameof(IHttpContextImpl)}.");
+        public static IHttpContextImpl GetImplementation(this IHttpContext @this) =>
+            Validate.NotNull(nameof(@this), @this) as IHttpContextImpl
+                ?? throw SelfCheck.Failure(
+                    $"{@this.GetType().FullName} does not implement {nameof(IHttpContextImpl)}."
+                );
     }
 }

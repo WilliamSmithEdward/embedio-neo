@@ -12,11 +12,17 @@ namespace EmbedIO
         /// <returns>A stable token owned by this request. Successful completion leaves it uncanceled.</returns>
         /// <exception cref="NotSupportedException">The context has no request-abort feature.</exception>
         /// <exception cref="InvalidOperationException">First acquisition is after completion or protocol handoff.</exception>
-        public static CancellationToken GetRequestAbortedToken(this IHttpContext @this, bool cancelOnHttp1InputEnd = false)
+        public static CancellationToken GetRequestAbortedToken(
+            this IHttpContext @this,
+            bool cancelOnHttp1InputEnd = false
+        )
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
-            return (@this as IHttpRequestAbortFeature ?? throw new NotSupportedException("This context does not support request-abort observation."))
-                .GetRequestAbortedToken(cancelOnHttp1InputEnd);
+
+            return (@this as IHttpRequestAbortFeature
+                ?? throw new NotSupportedException(
+                    "This context does not support request-abort observation."
+                )).GetRequestAbortedToken(cancelOnHttp1InputEnd);
         }
 
         /// <summary>Attempts to obtain a request-abort token from a supporting context.</summary>
@@ -24,10 +30,20 @@ namespace EmbedIO
         /// <param name="token">The request token, or the default token when unsupported.</param>
         /// <param name="cancelOnHttp1InputEnd">Whether HTTP/1 input closure also cancels the token.</param>
         /// <returns>Whether the context supports this feature. Lifecycle errors still throw.</returns>
-        public static bool TryGetRequestAbortedToken(this IHttpContext @this, out CancellationToken token, bool cancelOnHttp1InputEnd = false)
+        public static bool TryGetRequestAbortedToken(
+            this IHttpContext @this,
+            out CancellationToken token,
+            bool cancelOnHttp1InputEnd = false
+        )
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
-            if (@this is IHttpRequestAbortFeature feature) { token = feature.GetRequestAbortedToken(cancelOnHttp1InputEnd); return true; }
+
+            if (@this is IHttpRequestAbortFeature feature)
+            {
+                token = feature.GetRequestAbortedToken(cancelOnHttp1InputEnd);
+                return true;
+            }
+
             token = default;
             return false;
         }

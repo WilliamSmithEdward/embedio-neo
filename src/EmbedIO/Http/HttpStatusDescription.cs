@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using EmbedIO.Net.Internal;
 
 namespace EmbedIO
@@ -35,7 +35,10 @@ namespace EmbedIO
         /// otherwise, <see langword="false"/>.</returns>
         /// <seealso cref="TryGet(int,out string)"/>
         /// <seealso cref="Get(HttpStatusCode)"/>
-        public static bool TryGet(HttpStatusCode code, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? description) => TryGet((int)code, out description);
+        public static bool TryGet(
+            HttpStatusCode code,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? description
+        ) => TryGet((int)code, out description);
 
         /// <summary>
         /// Attempts to get the standard status description for a HTTP status code

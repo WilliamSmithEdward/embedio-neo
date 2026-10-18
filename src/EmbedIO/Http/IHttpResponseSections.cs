@@ -20,7 +20,11 @@ namespace EmbedIO
         /// <param name="cancellationToken">Cancellation for the serialized transport write.</param>
         /// <returns>A task completing after the interim section has been written.</returns>
         /// <remarks>HTTP/1.0, accepted tunnels and responses whose final headers were sent reject the operation.</remarks>
-        Task SendInformationalAsync(int statusCode, WebHeaderCollection headers, CancellationToken cancellationToken = default);
+        Task SendInformationalAsync(
+            int statusCode,
+            WebHeaderCollection headers,
+            CancellationToken cancellationToken = default
+        );
 
         /// <summary>Reserves an ending trailer section before final headers are sent.</summary>
         /// <param name="fieldNames">Names that may appear in trailers; at least one is required.</param>

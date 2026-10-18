@@ -19,9 +19,14 @@ namespace EmbedIO
         /// otherwise, <see langword="false"/>.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
-        public static bool TryGetItem<T>(this IHttpContext @this, object key, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out T value)
+        public static bool TryGetItem<T>(
+            this IHttpContext @this,
+            object key,
+            [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out T value
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             if (@this.Items.TryGetValue(key, out var item) && item is T typedItem)
             {
                 value = typedItem;
@@ -43,6 +48,7 @@ namespace EmbedIO
         public static T? GetItem<T>(this IHttpContext @this, object key)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             return @this.Items.TryGetValue(key, out var item) && item is T typedItem ? typedItem : default;
         }
     }

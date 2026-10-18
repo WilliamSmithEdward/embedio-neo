@@ -10,8 +10,8 @@ namespace EmbedIO
         /// <param name="this">The context.</param>
         /// <param name="location">The target URL.</param>
         /// <param name="statusCode">The redirection status code.</param>
-        public static void Redirect(this IHttpContext @this, string location, HttpStatusCode statusCode)
-            => Redirect(@this, location, (int)statusCode);
+        public static void Redirect(this IHttpContext @this, string location, HttpStatusCode statusCode) =>
+            Redirect(@this, location, (int)statusCode);
 
         /// <summary>
         /// Sets a redirection status code and adds a <c>Location</c> header to the response.
@@ -26,10 +26,17 @@ namespace EmbedIO
         /// <para>- or -</para>
         /// <para><paramref name="statusCode"/> is not a redirection (3xx) status code.</para>
         /// </exception>
-        public static void Redirect(this IHttpContext @this, string location, int statusCode = (int)HttpStatusCode.Found)
+        public static void Redirect(
+            this IHttpContext @this,
+            string location,
+            int statusCode = (int)HttpStatusCode.Found
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
-            location = Validate.Url(nameof(location), location, @this.Request.Url).ToString();
+
+            location = Validate
+                .Url(nameof(location), location, @this.Request.Url)
+                .ToString();
 
             if (statusCode < 300 || statusCode > 399)
                 throw new ArgumentException("Redirect status code is not valid.", nameof(statusCode));

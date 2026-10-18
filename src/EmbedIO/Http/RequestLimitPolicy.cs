@@ -53,7 +53,9 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
+
                 _maximumRequestBodyBytes = value;
             }
         }
@@ -115,20 +117,24 @@ namespace EmbedIO
         internal void Lock() => LockConfiguration();
 
         // Applies this policy over a server-wide value. The lifted markers become null.
-        internal static long? Resolve(long? route, long? server)
-            => route is long value ? (value == long.MaxValue ? null : value) : server;
+        internal static long? Resolve(long? route, long? server) =>
+            route is long value ? (value == long.MaxValue ? null : value) : server;
 
-        internal static TimeSpan? Resolve(TimeSpan? route, TimeSpan? server)
-            => route is TimeSpan value ? (value == Timeout.InfiniteTimeSpan ? null : value) : server;
+        internal static TimeSpan? Resolve(TimeSpan? route, TimeSpan? server) =>
+            route is TimeSpan value ? (value == Timeout.InfiniteTimeSpan ? null : value) : server;
 
-        internal static MinimumDataRate? Resolve(MinimumDataRate? route, MinimumDataRate? server)
-            => route != null ? (route.IsNone ? null : route) : server;
+        internal static MinimumDataRate? Resolve(MinimumDataRate? route, MinimumDataRate? server) =>
+            route != null ? (route.IsNone ? null : route) : server;
 
         private static TimeSpan? ValidateDeadline(TimeSpan? value)
         {
-            if (value.HasValue && value.Value != Timeout.InfiniteTimeSpan
-                && (value.Value <= TimeSpan.Zero || value.Value.TotalMilliseconds > int.MaxValue))
+            if (
+                value.HasValue
+                && value.Value != Timeout.InfiniteTimeSpan
+                && (value.Value <= TimeSpan.Zero || value.Value.TotalMilliseconds > int.MaxValue)
+            )
                 throw new ArgumentOutOfRangeException(nameof(value));
+
             return value;
         }
     }

@@ -16,9 +16,7 @@ namespace EmbedIO
     /// </remarks>
     public sealed class MinimumDataRate
     {
-        private MinimumDataRate()
-        {
-        }
+        private MinimumDataRate() { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="MinimumDataRate"/> class.
@@ -33,9 +31,20 @@ namespace EmbedIO
         public MinimumDataRate(double bytesPerSecond, TimeSpan gracePeriod)
         {
             if (!(bytesPerSecond > 0) || double.IsInfinity(bytesPerSecond))
-                throw new ArgumentOutOfRangeException(nameof(bytesPerSecond), "The rate must be a positive finite number of bytes per second.");
-            if (gracePeriod <= EmbedIO.Internal.RequestBodyRateHeartbeat.Interval || gracePeriod.TotalMilliseconds > int.MaxValue)
-                throw new ArgumentOutOfRangeException(nameof(gracePeriod), "The grace period must be longer than the check interval and fit a timer.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(bytesPerSecond),
+                    "The rate must be a positive finite number of bytes per second."
+                );
+
+            if (
+                gracePeriod <= EmbedIO.Internal.RequestBodyRateHeartbeat.Interval
+                || gracePeriod.TotalMilliseconds > int.MaxValue
+            )
+                throw new ArgumentOutOfRangeException(
+                    nameof(gracePeriod),
+                    "The grace period must be longer than the check interval and fit a timer."
+                );
+
             BytesPerSecond = bytesPerSecond;
             GracePeriod = gracePeriod;
         }
@@ -58,11 +67,17 @@ namespace EmbedIO
         /// <see cref="TimeSpan.Zero"/> for <see cref="None"/>.
         /// </summary>
         public TimeSpan GracePeriod { get; }
-
         internal bool IsNone => ReferenceEquals(this, None);
 
         /// <inheritdoc />
-        public override string ToString() => IsNone ? "None"
-            : string.Format(CultureInfo.InvariantCulture, "{0} bytes per second after {1}", BytesPerSecond, GracePeriod);
+        public override string ToString() =>
+            IsNone
+                ? "None"
+                : string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} bytes per second after {1}",
+                    BytesPerSecond,
+                    GracePeriod
+                );
     }
 }

@@ -23,6 +23,7 @@
         /// </summary>
         /// <see cref="CompressionMethod.Gzip"/>
         public const string Gzip = "gzip";
+
         /// <summary>
         /// Specifies the Brotli content coding.
         /// </summary>

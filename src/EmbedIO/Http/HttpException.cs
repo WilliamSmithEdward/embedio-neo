@@ -14,20 +14,14 @@ namespace EmbedIO
         /// with no message to include in the response.
         /// </summary>
         /// <param name="statusCode">The status code to set on the response.</param>
-        public HttpException(int statusCode)
-        {
-            StatusCode = statusCode;
-        }
+        public HttpException(int statusCode) => StatusCode = statusCode;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpException"/> class,
         /// with no message to include in the response.
         /// </summary>
         /// <param name="statusCode">The status code to set on the response.</param>
-        public HttpException(HttpStatusCode statusCode)
-            : this((int)statusCode)
-        {
-        }
+        public HttpException(HttpStatusCode statusCode) : this((int)statusCode) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpException"/> class,
@@ -35,8 +29,7 @@ namespace EmbedIO
         /// </summary>
         /// <param name="statusCode">The status code to set on the response.</param>
         /// <param name="message">A message to include in the response as plain text.</param>
-        public HttpException(int statusCode, string? message)
-            : base(message)
+        public HttpException(int statusCode, string? message) : base(message)
         {
             StatusCode = statusCode;
             HttpExceptionMessage = message;
@@ -48,10 +41,7 @@ namespace EmbedIO
         /// </summary>
         /// <param name="statusCode">The status code to set on the response.</param>
         /// <param name="message">A message to include in the response as plain text.</param>
-        public HttpException(HttpStatusCode statusCode, string? message)
-            : this((int)statusCode, message)
-        {
-        }
+        public HttpException(HttpStatusCode statusCode, string? message) : this((int)statusCode, message) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpException" /> class,
@@ -60,11 +50,8 @@ namespace EmbedIO
         /// <param name="statusCode">The status code to set on the response.</param>
         /// <param name="message">A message to include in the response as plain text.</param>
         /// <param name="data">The data object to include in the response.</param>
-        public HttpException(int statusCode, string? message, object? data)
-            : this(statusCode, message)
-        {
+        public HttpException(int statusCode, string? message, object? data) : this(statusCode, message) =>
             DataObject = data;
-        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="HttpException" /> class,
@@ -75,8 +62,7 @@ namespace EmbedIO
         /// <param name="data">The data object to include in the response.</param>
         public HttpException(HttpStatusCode statusCode, string? message, object? data)
             : this((int)statusCode, message, data)
-        {
-        }
+        { }
 
         /// <inheritdoc />
         public int StatusCode { get; }
@@ -96,8 +82,6 @@ namespace EmbedIO
         /// <para>This method does nothing; there is no need to call
         /// <c>base.PrepareResponse</c> in overrides of this method.</para>
         /// </remarks>
-        public virtual void PrepareResponse(IHttpContext context)
-        {
-        }
+        public virtual void PrepareResponse(IHttpContext context) { }
     }
 }

@@ -8,6 +8,6 @@
         /// <summary>Allows same-site use and certain top-level cross-site navigations.</summary>
         Lax = 1,
         /// <summary>Allows same-site use only.</summary>
-        Strict = 2,
+        Strict = 2
     }
 }

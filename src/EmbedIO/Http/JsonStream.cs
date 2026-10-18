@@ -16,8 +16,11 @@ namespace EmbedIO
         /// <param name="preferCompression">Whether to prefer negotiated compression, which may add buffering.</param>
         public JsonStreamOptions(int maxItemBytes = 1024 * 1024, int flushEvery = 1, bool preferCompression = false)
         {
-            if (maxItemBytes < 1 || maxItemBytes > 64 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(maxItemBytes));
+            if (maxItemBytes < 1 || maxItemBytes > 64 * 1024 * 1024)
+                throw new ArgumentOutOfRangeException(nameof(maxItemBytes));
+
             if (flushEvery < 1) throw new ArgumentOutOfRangeException(nameof(flushEvery));
+
             MaxItemBytes = maxItemBytes;
             FlushEvery = flushEvery;
             PreferCompression = preferCompression;
@@ -25,8 +28,10 @@ namespace EmbedIO
 
         /// <summary>Gets the maximum serialized UTF-8 record size.</summary>
         public int MaxItemBytes { get; }
+
         /// <summary>Gets the number of records between explicit flushes.</summary>
         public int FlushEvery { get; }
+
         /// <summary>Gets whether negotiated compression is preferred.</summary>
         public bool PreferCompression { get; }
     }
@@ -40,8 +45,11 @@ namespace EmbedIO
         /// <param name="typeInfo">Metadata for one item; use a generated JSON context for Native AOT.</param>
         /// <param name="options">Optional immutable limits and flush policy.</param>
         /// <returns>An explicitly streamed array response.</returns>
-        public static JsonArrayStream<T> Array<T>(IAsyncEnumerable<T> source, JsonTypeInfo<T> typeInfo, JsonStreamOptions? options = null)
-            => new(source, typeInfo, options ?? new JsonStreamOptions());
+        public static JsonArrayStream<T> Array<T>(
+            IAsyncEnumerable<T> source,
+            JsonTypeInfo<T> typeInfo,
+            JsonStreamOptions? options = null
+        ) => new(source, typeInfo, options ?? new JsonStreamOptions());
 
         /// <summary>Streams one compact JSON value per LF-terminated line.</summary>
         /// <typeparam name="T">The item type.</typeparam>
@@ -49,14 +57,18 @@ namespace EmbedIO
         /// <param name="typeInfo">Metadata for one item. Indentation is ignored; converters must not emit literal CR/LF.</param>
         /// <param name="options">Optional immutable limits and flush policy.</param>
         /// <returns>An explicitly streamed NDJSON response.</returns>
-        public static NdjsonStream<T> Ndjson<T>(IAsyncEnumerable<T> source, JsonTypeInfo<T> typeInfo, JsonStreamOptions? options = null)
-            => new(source, typeInfo, options ?? new JsonStreamOptions());
+        public static NdjsonStream<T> Ndjson<T>(
+            IAsyncEnumerable<T> source,
+            JsonTypeInfo<T> typeInfo,
+            JsonStreamOptions? options = null
+        ) => new(source, typeInfo, options ?? new JsonStreamOptions());
     }
 
     /// <summary>An opt-in response understood by controller bindings, or written directly with <see cref="WriteAsync"/>.</summary>
     public abstract class JsonStreamResult
     {
         internal JsonStreamResult() { }
+
         /// <summary>Writes the sequence and awaits producer cleanup. Failures after commitment abort the response.</summary>
         /// <param name="context">The response context.</param>
         /// <param name="cancellationToken">Additional cooperative cancellation.</param>
@@ -69,10 +81,13 @@ namespace EmbedIO
     public sealed class JsonArrayStream<T> : JsonStreamResult
     {
         private readonly JsonSequenceWriter<T> _writer;
-        internal JsonArrayStream(IAsyncEnumerable<T> source, JsonTypeInfo<T> typeInfo, JsonStreamOptions options)
-            => _writer = new(source, typeInfo, options, false);
+
+        internal JsonArrayStream(IAsyncEnumerable<T> source, JsonTypeInfo<T> typeInfo, JsonStreamOptions options) =>
+            _writer = new(source, typeInfo, options, false);
+
         /// <inheritdoc/>
-        public override Task WriteAsync(IHttpContext context, CancellationToken cancellationToken = default) => _writer.WriteAsync(context, cancellationToken);
+        public override Task WriteAsync(IHttpContext context, CancellationToken cancellationToken = default) =>
+            _writer.WriteAsync(context, cancellationToken);
     }
 
     /// <summary>A streamed NDJSON response returned by <see cref="JsonStream.Ndjson{T}"/>.</summary>
@@ -80,10 +95,12 @@ namespace EmbedIO
     public sealed class NdjsonStream<T> : JsonStreamResult
     {
         private readonly JsonSequenceWriter<T> _writer;
-        internal NdjsonStream(IAsyncEnumerable<T> source, JsonTypeInfo<T> typeInfo, JsonStreamOptions options)
-            => _writer = new(source, typeInfo, options, true);
-        /// <inheritdoc/>
-        public override Task WriteAsync(IHttpContext context, CancellationToken cancellationToken = default) => _writer.WriteAsync(context, cancellationToken);
-    }
 
+        internal NdjsonStream(IAsyncEnumerable<T> source, JsonTypeInfo<T> typeInfo, JsonStreamOptions options) =>
+            _writer = new(source, typeInfo, options, true);
+
+        /// <inheritdoc/>
+        public override Task WriteAsync(IHttpContext context, CancellationToken cancellationToken = default) =>
+            _writer.WriteAsync(context, cancellationToken);
+    }
 }

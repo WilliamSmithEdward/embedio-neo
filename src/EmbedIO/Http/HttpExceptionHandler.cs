@@ -3,8 +3,8 @@ using System.Net;
 using System.Runtime.ExceptionServices;
 using System.Threading.Tasks;
 using System.Web;
-using EmbedIO.Utilities;
 using EmbedIO.Diagnostics;
+using EmbedIO.Utilities;
 
 namespace EmbedIO
 {
@@ -33,8 +33,7 @@ namespace EmbedIO
         /// <param name="context">An <see cref="IHttpContext" /> interface representing the context of the request.</param>
         /// <param name="httpException">The HTTP exception.</param>
         /// <returns>A <see cref="Task" /> representing the ongoing operation.</returns>
-        public static Task EmptyResponse(IHttpContext context, IHttpException httpException)
-            => Task.CompletedTask;
+        public static Task EmptyResponse(IHttpContext context, IHttpException httpException) => Task.CompletedTask;
 
         /// <summary>
         /// <para>Sends a HTTP exception's <see cref="IHttpException.Message">Message</see> property
@@ -47,7 +46,12 @@ namespace EmbedIO
         public static Task PlainTextResponse(IHttpContext context, IHttpException httpException)
         {
             if (httpException is null) throw new System.NullReferenceException();
-            return context.SendStringAsync(httpException.Message ?? string.Empty, MimeType.PlainText, WebServer.DefaultEncoding);
+
+            return context.SendStringAsync(
+                httpException.Message ?? string.Empty,
+                MimeType.PlainText,
+                WebServer.DefaultEncoding
+            );
         }
 
         /// <summary>
@@ -63,29 +67,23 @@ namespace EmbedIO
         public static Task HtmlResponse(IHttpContext context, IHttpException httpException)
         {
             if (httpException is null) throw new System.NullReferenceException();
-            return context.SendStandardHtmlAsync(
-                httpException.StatusCode,
-                text =>
+
+            return context.SendStandardHtmlAsync(httpException.StatusCode, text =>
+            {
+                text.Write("<p><strong>Exception type:</strong> {0}<p><strong>Message:</strong> {1}", HttpUtility.HtmlEncode(httpException.GetType().FullName ?? "<unknown>"), HttpUtility.HtmlEncode(httpException.Message));
+
+                text.Write("<hr><p>If this error is completely unexpected to you, and you think you should not seeing this page, please contact the server administrator");
+
+                if (!string.IsNullOrEmpty(ExceptionHandler.ContactInformation))
+                    text.Write(" ({0})", HttpUtility.HtmlEncode(ExceptionHandler.ContactInformation));
+
+                text.Write(", informing them of the time this error occurred and the action(s) you performed that resulted in this error.</p>");
+
+                if (ExceptionHandler.IncludeStackTraces)
                 {
-                    text.Write(
-                        "<p><strong>Exception type:</strong> {0}<p><strong>Message:</strong> {1}",
-                        HttpUtility.HtmlEncode(httpException.GetType().FullName ?? "<unknown>"),
-                        HttpUtility.HtmlEncode(httpException.Message));
-
-                    text.Write("<hr><p>If this error is completely unexpected to you, and you think you should not seeing this page, please contact the server administrator");
-
-                    if (!string.IsNullOrEmpty(ExceptionHandler.ContactInformation))
-                        text.Write(" ({0})", HttpUtility.HtmlEncode(ExceptionHandler.ContactInformation));
-
-                    text.Write(", informing them of the time this error occurred and the action(s) you performed that resulted in this error.</p>");
-
-                    if (ExceptionHandler.IncludeStackTraces)
-                    {
-                        text.Write(
-                            "</p><p><strong>Stack trace:</strong></p><br><pre>{0}</pre>",
-                            HttpUtility.HtmlEncode(httpException.StackTrace));
-                    }
-                });
+                    text.Write("</p><p><strong>Stack trace:</strong></p><br><pre>{0}</pre>", HttpUtility.HtmlEncode(httpException.StackTrace));
+                }
+            });
         }
 
         /// <summary>
@@ -118,15 +116,22 @@ namespace EmbedIO
             return (context, httpException) => serializerCallback(context, new
             {
                 message = httpException.Message,
-                data = httpException.DataObject,
+                data = httpException.DataObject
             });
         }
 
-        internal static async Task Handle(string logSource, IHttpContext context, Exception exception, HttpExceptionHandlerCallback? handler)
+        internal static async Task Handle(
+            string logSource,
+            IHttpContext context,
+            Exception exception,
+            HttpExceptionHandlerCallback? handler
+        )
         {
             if (handler == null || exception is not IHttpException httpException)
             {
-                ExceptionDispatchInfo.Capture(exception).Throw();
+                ExceptionDispatchInfo
+                    .Capture(exception)
+                    .Throw();
                 return;
             }
 
@@ -136,8 +141,12 @@ namespace EmbedIO
             {
                 // A committed status cannot become this exception's status; end the
                 // response visibly instead of terminating the partial body cleanly.
-                $"[{context.Id}] The response was already committed; aborting it instead of sending HTTP exception {httpException.StatusCode}.".Warn(logSource);
-                await EmbedIO.Internal.ResponseCommitment.AbortAsync(context, exception).ConfigureAwait(false);
+                $"[{context.Id}] The response was already committed; aborting it instead of sending HTTP exception {httpException.StatusCode}.".Warn(
+                    logSource
+                );
+                await EmbedIO.Internal.ResponseCommitment
+                    .AbortAsync(context, exception)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -146,20 +155,25 @@ namespace EmbedIO
                 context.Response.PrepareReplacement(httpException.StatusCode);
                 context.Response.DisableCaching();
                 httpException.PrepareResponse(context);
-                await handler(context, httpException)
-                    .ConfigureAwait(false);
+                await handler(context, httpException).ConfigureAwait(false);
             }
+
             catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
             {
                 throw;
             }
+
             catch (HttpListenerException)
             {
                 throw;
             }
+
             catch (Exception exception2) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception2))
             {
-                exception2.Log(logSource, $"[{context.Id}] Unhandled exception while handling HTTP exception {httpException.StatusCode}");
+                exception2.Log(
+                    logSource,
+                    $"[{context.Id}] Unhandled exception while handling HTTP exception {httpException.StatusCode}"
+                );
             }
         }
     }

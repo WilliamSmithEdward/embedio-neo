@@ -23,6 +23,6 @@
         /// <summary>
         /// Specifies Brotli compression, supported by the .NET 10 asset.
         /// </summary>
-        Brotli,
+        Brotli
     }
 }

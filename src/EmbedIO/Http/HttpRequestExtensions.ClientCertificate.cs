@@ -23,6 +23,7 @@ namespace EmbedIO
         public static X509Certificate2? GetClientCertificate(this IHttpRequest @this)
         {
             if (@this is null) throw new NullReferenceException();
+
             return (@this as IClientCertificateCarrier)?.ClientCertificate;
         }
     }

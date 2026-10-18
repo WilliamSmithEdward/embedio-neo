@@ -17,6 +17,7 @@ namespace EmbedIO
         public static ServerSentEventWriter OpenEventStream(this IHttpContext? @this)
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
+
             var response = @this.Response;
             response.ContentType = "text/event-stream";
             response.ContentEncoding = WebServer.Utf8NoBomEncoding;
