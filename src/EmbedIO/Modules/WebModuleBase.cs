@@ -2,10 +2,10 @@
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Configuration;
 using EmbedIO.Internal;
 using EmbedIO.Routing;
 using EmbedIO.Utilities;
-using EmbedIO.Configuration;
 
 namespace EmbedIO
 {
@@ -27,7 +27,6 @@ namespace EmbedIO
     public abstract class WebModuleBase : ConfiguredObject, IWebModule
     {
         private readonly RouteMatcher _routeMatcher;
-
         private ExceptionHandlerCallback? _onUnhandledException;
         private HttpExceptionHandlerCallback? _onHttpException;
 
@@ -98,40 +97,51 @@ namespace EmbedIO
         public async Task HandleRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             var contextImpl = context.GetImplementation();
             var mimeTypeProvider = this as IMimeTypeProvider;
+
             if (mimeTypeProvider != null)
                 contextImpl?.MimeTypeProviders.Push(mimeTypeProvider);
 
             try
             {
                 await OnRequestAsync(context).ConfigureAwait(false);
+
                 if (IsFinalHandler)
                     context.SetHandled();
             }
-            catch (RequestHandlerPassThroughException)
-            { }
+
+            catch (RequestHandlerPassThroughException) { }
+
             catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
             {
                 throw; // Let the web server handle it
             }
+
             catch (HttpListenerException)
             {
                 throw; // Let the web server handle it
             }
-            catch (Exception exception) when (exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+
+            catch (Exception exception) when (exception is IHttpException
+                && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
             {
                 // Handle rethrows when this module has no handler; otherwise the module answered.
-                await HttpExceptionHandler.Handle(LogSource, context, exception, _onHttpException)
+                await HttpExceptionHandler
+                    .Handle(LogSource, context, exception, _onHttpException)
                     .ConfigureAwait(false);
                 context.SetHandled();
             }
+
             catch (Exception exception) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
             {
-                await ExceptionHandler.Handle(LogSource, context, exception, _onUnhandledException, _onHttpException)
+                await ExceptionHandler
+                    .Handle(LogSource, context, exception, _onUnhandledException, _onHttpException)
                     .ConfigureAwait(false);
                 context.SetHandled();
             }
+
             finally
             {
                 if (mimeTypeProvider != null)
@@ -150,8 +160,6 @@ namespace EmbedIO
         /// Called when a module is started, immediately before locking the module's configuration.
         /// </summary>
         /// <param name="cancellationToken">A <see cref="CancellationToken"/> used to stop the web server.</param>
-        protected virtual void OnStart(CancellationToken cancellationToken)
-        {
-        }
+        protected virtual void OnStart(CancellationToken cancellationToken) { }
     }
 }

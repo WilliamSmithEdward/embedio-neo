@@ -1,6 +1,6 @@
-﻿using EmbedIO.Routing;
+﻿using System;
+using EmbedIO.Routing;
 using EmbedIO.Utilities;
-using System;
 
 namespace EmbedIO
 {
@@ -20,9 +20,11 @@ namespace EmbedIO
         /// <seealso cref="RoutingModuleExtensions"/>
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
-        public static TContainer WithRouting<TContainer>(this TContainer? @this, string baseRoute, Action<RoutingModule> configure)
-            where TContainer : class, IWebModuleContainer
-            => WithRouting(@this, null, baseRoute, configure);
+        public static TContainer WithRouting<TContainer>(
+            this TContainer? @this,
+            string baseRoute,
+            Action<RoutingModule> configure
+        ) where TContainer : class, IWebModuleContainer => WithRouting(@this, null, baseRoute, configure);
 
         /// <summary>
         /// Creates an instance of <see cref="RoutingModule"/> and adds it to a module container,
@@ -40,8 +42,12 @@ namespace EmbedIO
         /// <seealso cref="RoutingModuleExtensions"/>
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
-        public static TContainer WithRouting<TContainer>(this TContainer? @this, string? name, string baseRoute, Action<RoutingModule> configure)
-            where TContainer : class, IWebModuleContainer
+        public static TContainer WithRouting<TContainer>(
+            this TContainer? @this,
+            string? name,
+            string baseRoute,
+            Action<RoutingModule> configure
+        ) where TContainer : class, IWebModuleContainer
         {
             configure = Validate.NotNull(nameof(configure), configure);
             var module = new RoutingModule(baseRoute);

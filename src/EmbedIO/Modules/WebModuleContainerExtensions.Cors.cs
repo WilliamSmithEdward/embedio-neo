@@ -23,10 +23,11 @@ namespace EmbedIO
             string baseRoute,
             string origins,
             string headers,
-            string methods)
-            where TContainer : class, IWebModuleContainer
+            string methods
+        ) where TContainer : class, IWebModuleContainer
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.Modules.Add(new CorsModule(baseRoute, origins, headers, methods));
             return @this;
         }
@@ -46,8 +47,7 @@ namespace EmbedIO
             this TContainer? @this,
             string origins = CorsModule.All,
             string headers = CorsModule.All,
-            string methods = CorsModule.All)
-            where TContainer : class, IWebModuleContainer
-            => WithCors(@this, UrlPath.Root, origins, headers, methods);
+            string methods = CorsModule.All
+        ) where TContainer : class, IWebModuleContainer => WithCors(@this, UrlPath.Root, origins, headers, methods);
     }
 }
