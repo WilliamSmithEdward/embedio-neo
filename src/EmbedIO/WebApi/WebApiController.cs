@@ -121,7 +121,7 @@ namespace EmbedIO.WebApi
         /// </summary>
         protected virtual void OnBeforeHandler()
         {
-            if (OutputCaching == null) HttpContext.Response.DisableCaching();
+            if (OutputCaching == null || !Caching.OutputCache.Eligible(HttpContext)) HttpContext.Response.DisableCaching();
         }
     }
 }

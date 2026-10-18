@@ -36,7 +36,8 @@ support the same policies. Authorization and hooks run on every hit; argument
 binding, action execution and serialization do not. Uncached defaults and legacy
 controller disposal timing remain unchanged. Opted-in actions use awaited
 controller release after serialization and before cache publication; release
-faults publish nothing and cleanup runs once. Explicit no-store, credentials, cookies,
+faults publish nothing and cleanup runs once. Sensitive bypasses retain the base
+client no-store behavior, and hits preserve current supported Vary fields. Explicit no-store, credentials, cookies,
 streams, conditions, ranges, failures and canceled/oversize fills bypass storage.
 Always declare all representation-selecting request headers. Data remains a
 snapshot until TTL or explicit tag invalidation after a successful data commit;

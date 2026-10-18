@@ -278,6 +278,41 @@ namespace EmbedIO.Tests
             });
         }
 
+        [TestCase(false, "Authorization", "Bearer private")]
+        [TestCase(true, "Authorization", "Bearer private")]
+        [TestCase(false, "Cookie", "session=private")]
+        [TestCase(true, "Cookie", "session=private")]
+        public async Task SensitiveControllerRequestsRetainTheDefaultClientNoStore(bool generated, string header, string value)
+        {
+            var cache = new OutputCache(); var state = new CachedControllerState();
+            var module = new WebApiModule("/api", ResponseSerializer.None(false));
+            module.ConfigureOutputCaching(cache, new Dictionary<string, OutputCachePolicy> { ["public"] = Policy() });
+            if (generated) module.RegisterController(OutputCacheBindings.CachedController, () => new CachedController(state));
+            else module.RegisterController(() => new CachedController(state));
+            await TestWebServer.UseAsync(server => server.WithModule(module), async client =>
+            {
+                Assert.That(await Read(client, "/api/value"), Is.EqualTo("value-1"));
+                client.DefaultRequestHeaders.TryAddWithoutValidation(header, value);
+                using var response = await client.GetAsync("/api/value");
+                Assert.That(await response.Content.ReadAsStringAsync(), Is.EqualTo("value-2"));
+                Assert.That(response.Headers.CacheControl?.NoStore, Is.True);
+                Assert.That(cache.Count, Is.EqualTo(1));
+            });
+        }
+
+        [Test]
+        public async Task SupportedVaryFromTheCurrentHookSurvivesAHit()
+        {
+            var expanded = false; var calls = 0;
+            await With(new OutputCache(), Policy(), context => { calls++; return Write(context, "snapshot"); }, async client =>
+            {
+                await Read(client); expanded = true;
+                using var response = await client.GetAsync("/items");
+                Assert.That(response.Headers.Vary, Does.Contain("Origin"));
+                Assert.That(response.Headers.Vary, Does.Contain("Accept-Language")); Assert.That(calls, Is.EqualTo(1));
+            }, context => context.Response.Headers["Vary"] = expanded ? "Origin, Accept-Language" : "Origin");
+        }
+
         [Test]
         public void PolicyValidationRejectsMalformedOrUnboundedMetadata()
         {

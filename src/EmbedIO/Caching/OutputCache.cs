@@ -191,7 +191,7 @@ namespace EmbedIO.Caching
             return (request.HttpVerb == HttpVerbs.Get || request.HttpVerb == HttpVerbs.Head)
                 && !request.HasEntityBody && !request.IsWebSocketRequest && !request.IsAuthenticated
                 && context.User?.Identity?.IsAuthenticated != true
-                && request.Cookies.Count == 0 && headers["Cookie"] == null && headers["Authorization"] == null
+                && headers["Cookie"] == null && headers["Authorization"] == null && request.Cookies.Count == 0
                 && headers["Upgrade"] == null && headers["Proxy-Authorization"] == null && headers["Range"] == null
                 && headers["If-Match"] == null && headers["If-None-Match"] == null
                 && headers["If-Modified-Since"] == null && headers["If-Unmodified-Since"] == null && headers["If-Range"] == null
@@ -245,8 +245,14 @@ namespace EmbedIO.Caching
                 if (StatusDescription != null) response.StatusDescription = StatusDescription;
                 foreach (var header in Headers)
                 {
+                    // Current hook/middleware requirements remain authoritative for client
+                    // caches; a stored representation must not erase a new supported Vary field.
+                    var values = header.Key.Equals("Vary", StringComparison.OrdinalIgnoreCase) && response.Headers[header.Key] is { } current
+                        ? header.Value.Concat(new[] { current }).SelectMany(value => value.Split(','))
+                            .Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+                        : header.Value;
                     response.Headers.Remove(header.Key);
-                    foreach (var value in header.Value) response.Headers.Add(header.Key, value);
+                    foreach (var value in values) response.Headers.Add(header.Key, value);
                 }
                 response.SendChunked = false;
                 response.ContentLength64 = ContentLength;

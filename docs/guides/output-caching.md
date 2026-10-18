@@ -46,7 +46,9 @@ fail controller registration. Policies are immutable; the configuration copies
 the supplied dictionary.
 
 The base controller's automatic client `no-store` headers are omitted only for
-an action with an output-cache policy. Explicit `Response.DisableCaching()` in
+an eligible public request to an action with an output-cache policy. Sensitive
+or otherwise ineligible controller requests retain the base client no-store
+behavior. Explicit `Response.DisableCaching()` in
 an override, hook or action still prevents storage. No client cache lifetime is
 added automatically. Do not use these policies for personalized responses, live
 streams, actions with side effects, custom request binders or validators that
@@ -104,7 +106,8 @@ finite string/JSON serialization, including its completion flush, is supported.
 Only representation fields (content type/coding/language/disposition, ETag,
 Last-Modified, Vary and Server) are replayed. The transport supplies fresh Date
 and framing. Upstream and hook headers are recomputed for each request, so CORS
-and request identifiers are not taken from an earlier request. An action that
+and request identifiers are not taken from an earlier request. Current supported
+Vary fields are merged with the stored representation's requirements. An action that
 adds other fields is conservatively excluded rather than losing those fields
 on a hit. Do not use action headers for per-request security or diagnostics.
 
