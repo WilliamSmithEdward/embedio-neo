@@ -1,6 +1,6 @@
 # Security-header policy adversarial audit
 
-Status: unreleased feature branch. This review covers the complete **new feature
+Status: prepared for 2.13.0; publication requires final release validation. This review covers the complete **new feature
 integration surface**, not an independent fresh audit of every unrelated subsystem.
 No library can certify the security of application-selected CSP text or HTML.
 

@@ -1,6 +1,6 @@
-# Opt-in response security headers (unreleased)
+# Opt-in response security headers (2.13.0+)
 
-These APIs are on the feature branch and are **not in NuGet 2.12.0**.
+These APIs require **EmbedIO-Neo 2.13.0+**; NuGet 2.12.0 does not include them.
 Nothing is installed by default. Existing manually written headers remain unchanged
 until an application explicitly selects a policy.
 

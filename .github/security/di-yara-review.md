@@ -624,3 +624,30 @@ builds. Exact-head full scans, final CI package byte review and every other
 merge/publication gate remain required. Raw packages, verified pins, complete
 rule, CodeView paths, printed-match scans, alert receipts and the approved
 proposal are retained under ignored `TestResults/release-2.12.0/yara-review`.
+
+## 2.13.0 response security-header release revalidation
+
+Pinned YARA-X 1.21.0 / YARA Forge 20261011 archives and extracted bytes were
+verified again. Full-rule scans with printed strings in a read-only,
+network-disabled container matched only `Injection.pdb` in each compiler
+RSDS/CodeView symbol path under `GODMODERULES_IDDQD_God_Mode_Rule`. No other
+rule matched either assembly. DI source and scanner pins are unchanged.
+
+| Reviewed local precommit candidate | SHA-256 | Match offset |
+| --- | --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.13.0.nupkg` | `23ee1f75acf30c920fd9ccaa6400d8dc0597a5e348013df49c9f8c884eea7636` | n/a |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `b2764a89046b050a5d4a78226ddd58dcf9230c031182813357de861840dbc6bc` | `0x6ca2` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `4cce8bfeec925107408ed65cd8ad753b8106f6dd579e99c133818f9bf6f8ed05` | `0x758d` |
+
+Only the two exact version-qualified package assembly paths move to 2.13.0.
+Paginated open, fixed and dismissed GitHub code-scanning queries expose no
+matching YARA alert. On 2026-10-18 William explicitly approved: "Approve both
+2.13.0 paths and the unavailable-alert waiver." No dismissal is claimed. This
+waiver covers only this reviewed rule on these two paths. Other matches,
+scanner errors, stale acceptances and every final CI gate remain blocking.
+
+Candidate hashes identify local precommit bytes, not future CI/release builds.
+Verified pins, full rule, printed scans, exact bytes, alert-query receipts and
+the approved proposal remain under ignored `TestResults/release-2.13.0/yara-review`
+and `local-yara`. Final CI and published packages require independent exact-byte
+and full-scan verification.
