@@ -207,7 +207,7 @@ namespace EmbedIO.Tests
                         using (Assert.EnterMultipleScope())
                         {
                             Assert.That(Convert.FromBase64String(body), Has.Length.EqualTo(32));
-                            Assert.That(csp.Length, Is.LessThanOrEqualTo(4096));
+                            Assert.That(csp, Has.Length.LessThanOrEqualTo(4096));
                             Assert.That(body, Is.Not.EqualTo(previous));
                         }
 
