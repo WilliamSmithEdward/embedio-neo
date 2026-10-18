@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Resumable uploads using tus (pending release)
+      href: guides/resumable-uploads.md
     - name: Finite write idempotency (2.11.0+)
       href: guides/idempotency.md
     - name: Opt-in output caching

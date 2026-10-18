@@ -61,6 +61,7 @@ public static class Program
             var url = "http://127.0.0.1:" + port + "/";
             using var stop = new CancellationTokenSource();
             using var protection = new BrowserRequestProtection(new BrowserRequestProtectionOptions(new[] { url }));
+            using var tusUploads = new EmbedIO.PlatformTests.TusUploadSmoke.State();
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(mode))
                 .WithSessionManager(new LocalSessionManager())
                 .WithModule(new ActionModule("/token", HttpVerbs.Get, context => context.SendStringAsync(protection.GetToken(context), "text/plain", WebServer.Utf8NoBomEncoding)))
@@ -69,6 +70,7 @@ public static class Program
                 .WithWebApi("/api", m => m.WithController<Controller>());
             var outputCaching = EmbedIO.PlatformTests.OutputCacheSmoke.Configure(server);
             var idempotency = EmbedIO.PlatformTests.IdempotencySmoke.Configure(server);
+            EmbedIO.PlatformTests.TusUploadSmoke.Configure(server, tusUploads);
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             var running = server.RunAsync(stop.Token);
             try
@@ -76,6 +78,7 @@ public static class Program
                 await EmbedIO.PlatformTests.OutputCacheSmoke.RunAsync(url, outputCaching);
                 _checks += 5;
                 _checks += await EmbedIO.PlatformTests.IdempotencySmoke.RunAsync(url, idempotency);
+                _checks += await EmbedIO.PlatformTests.TusUploadSmoke.RunAsync(url, tusUploads);
                 foreach (var test in cases)
                 {
                     using var response = await client.GetAsync(url + "api/" + test.Path);
@@ -130,7 +133,7 @@ public static class Program
             if (item == null || item.Id != id || item.Data != "after" || await subscriber.ReadAsync() != null) throw new InvalidOperationException("Legacy SSE replay mismatch.");
             _checks++;
         }
-        if (_checks != 42) throw new InvalidOperationException("Legacy route and health check count changed.");
+        if (_checks != 50) throw new InvalidOperationException("Legacy route and health check count changed.");
     }
 
     public enum Choice { One = 1 }

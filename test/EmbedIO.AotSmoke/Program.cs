@@ -71,6 +71,7 @@ internal static class Program
             using var eventHub = new ServerSentEventHub();
             using var browserProtection = new EmbedIO.Security.BrowserRequestProtection(new EmbedIO.Security.BrowserRequestProtectionOptions(new[] { url }));
 
+            using var tusUploads = new EmbedIO.PlatformTests.TusUploadSmoke.State();
             using var server = new WebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO).WithTelemetry("aot-smoke"))
                 .WithSessionManager(new EmbedIO.Sessions.LocalSessionManager())
                 .WithModule(BrowserChecks.CreateModule(browserProtection))
@@ -101,6 +102,7 @@ internal static class Program
                 }));
             var outputCaching = EmbedIO.PlatformTests.OutputCacheSmoke.Configure(server);
             var idempotency = EmbedIO.PlatformTests.IdempotencySmoke.Configure(server);
+            EmbedIO.PlatformTests.TusUploadSmoke.Configure(server, tusUploads);
             EmbedIO.PlatformTests.RequestAbortSmoke.Configure(server);
             using var health = HealthChecks.Create(server);
             server.WithStaticFolder("/", root, false);
@@ -120,6 +122,8 @@ internal static class Program
             await HealthChecks.RunAsync(client, url, checks, health);
             await EmbedIO.PlatformTests.OutputCacheSmoke.RunAsync(url, outputCaching);
             await EmbedIO.PlatformTests.IdempotencySmoke.RunAsync(url, idempotency);
+            await EmbedIO.PlatformTests.TusUploadSmoke.RunAsync(url, tusUploads);
+            checks["tus_uploads"] = "owner isolation, resume offsets and exact completed bytes";
             checks["idempotency"] = "generated finite write replay, payload isolation and unconfigured no-store behavior";
             checks["output_caching"] = "generated async hooks, query binding, cache hits, invalidation and uncached defaults";
             await EmbedIO.PlatformTests.RequestAbortSmoke.RunAsync(client, url);

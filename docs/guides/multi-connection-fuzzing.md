@@ -208,3 +208,14 @@ the pool must reject new keys without evicting prior results. The
 it. The retained `state-corpus/idempotency.json` trace replays these transitions;
 actual HTTP wire protocols have separate regression tests. See the
 [finite write idempotency guide](idempotency.md) for ownership and durability limits.
+
+## Resumable upload model
+
+The `tus-uploads` scenario compares three in-process hosts sharing a disk store
+with an independent owner/byte ledger. It covers overlapping appends, stale
+offsets, caller isolation, checksums, quotas, termination and restart recovery
+with uncommitted tails. `--tus-selftest` rejects an injected offset mismatch;
+`--tus-recovery-selftest` kills an owned child process and verifies offset/owner
+recovery and exact final bytes. The retained `state-corpus/tus-uploads.json`
+trace replays the main transitions. These model checks complement the owned
+HTTP/1-3 regressions; see [resumable uploads](resumable-uploads.md).

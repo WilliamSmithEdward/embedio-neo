@@ -47,6 +47,44 @@ length bypass caching; an explicit zero Content-Length permits reuse. See the
 [output-caching guide](docs/guides/output-caching.md) for exclusions, ownership,
 key dimensions, limits, fuzzing and real-loopback latency measurement.
 
+### Resumable uploads (pending next release)
+
+`EmbedIO.Tus.TusUploadModule` and application-owned `DiskTusUploadStore` add opt-in
+tus 1.0 creation/HEAD/PATCH/DELETE endpoints. They are not in NuGet 2.11.0.
+Install authentication/security middleware before the module and require a stable
+trusted tenant/issuer/subject owner selector on every request. Its second argument
+is the effective method, including `X-HTTP-Method-Override`; authorize that method.
+Controller authorization attributes do not protect this separate module.
+
+Use a dedicated private local directory outside static mounts, with host-only OS
+permissions and protected parent directories. One store exclusively owns it;
+modules may borrow that instance. Dispose after all hosts stop. Fixed-length
+uploads reserve their full length at creation; configure global/per-owner byte
+and session caps, per-PATCH bytes and active participants. Set client chunk sizes
+within the patch cap. Defaults: 1 GiB/upload, 4 GiB total, 128 sessions,
+16 sessions/1 GiB per owner (bounded by global caps), 16 MiB/PATCH, four active
+operations per store/participants per module and 24-hour fixed expiry. Completed
+files expire too. Periodically call `RemoveExpired()`; creation/reopen also clean
+expired idle sessions. No background maintenance is installed.
+
+HEAD returns the durable committed offset; use it after any ambiguous PATCH
+response. Recovery truncates uncommitted tails and fails closed for damaged
+committed records or incompatible lower budgets. Failed/checksum-mismatched
+patches roll back. Checksum support is sha1 for tus interoperability and sha256;
+these are not authentication. Creation-with-upload, deferred lengths,
+concatenation and checksum trailers are not advertised.
+
+`OnCompleted` is awaited after the first durable completion transition, including
+empty creation. It is not durable/exactly-once job delivery: crashes can lose a
+notification, and callback failure leaves completed bytes. Reconcile
+`GetUploads(owner)` using application-maintained owner scopes and idempotent
+publication keyed by upload ID. Copy completed bytes with `CopyCompletedToAsync`,
+validate privately and publish using application rules. Client metadata never
+names a store path. Both targets retain existing APIs/defaults/dependencies;
+unconfigured requests do not enter this feature. See the
+[resumable upload guide](docs/guides/resumable-uploads.md) for protocol, security,
+client limits, recovery and fuzz replay.
+
 ### Write idempotency (2.11.0+)
 
 `EmbedIO.Idempotency.IdempotencyCoordinator` and immutable `IdempotencyPolicy` protect
@@ -791,7 +829,7 @@ passing run. See [property testing](docs/guides/property-testing.md) and
 | Topic | Guide |
 | --- | --- |
 | First app | [Getting started](docs/guides/getting-started/README.md) |
-| Files | [Static files](docs/guides/getting-started/files.md), [streaming uploads](docs/guides/streaming-multipart.md) |
+| Files | [Static files](docs/guides/getting-started/files.md), [streaming uploads](docs/guides/streaming-multipart.md), [resumable uploads](docs/guides/resumable-uploads.md) |
 | Authentication | [Bearer authentication, policies and optional JWT](docs/guides/bearer-authentication.md) |
 | Startup and latency | [First-endpoint measurements](docs/project/first-endpoint-latency.md), [Native AOT](docs/guides/trimming-and-native-aot.md) |
 | Limits and deadlines | [Request limits](docs/guides/request-limits.md), [body limits](docs/guides/request-body-limits.md) |

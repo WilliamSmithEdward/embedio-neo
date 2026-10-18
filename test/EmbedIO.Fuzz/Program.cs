@@ -13,6 +13,8 @@ if (await HealthReadinessFuzz.SelfTestAsync(args)) return;
 if (await RequestAbortFuzz.SelfTestAsync(args)) return;
 if (await OutputCacheFuzz.SelfTestAsync(args)) return;
 if (await IdempotencyFuzz.SelfTestAsync(args)) return;
+if (await TusUploadFuzz.SelfTestAsync(args)) return;
+if (await TusUploadFuzz.RecoverySelfTestAsync(args)) return;
 if (await HeaderPolicyFuzz.SelfTestAsync(args)) return;
 if (await ExtendedFuzzSelfTest.RunAsync(args)) return;
 if (await StateMachineSelfTest.RunAsync(args)) return;
@@ -42,6 +44,7 @@ if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateM
     ["request-abort"] = RequestAbortFuzz.RunAsync,
     ["output-cache"] = OutputCacheFuzz.RunAsync,
     ["idempotency"] = IdempotencyFuzz.RunAsync,
+    ["tus-uploads"] = TusUploadFuzz.RunAsync,
     ["browser-protection"] = BrowserProtectionFuzz.RunAsync,
     ["request-validation"] = RequestValidationFuzz.RunAsync,
     ["controller-parity"] = ControllerParityFuzz.RunAsync,

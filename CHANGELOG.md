@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in tus 1.0 resumable uploads with authenticated owner/effective-method
+  authorization, global/per-owner storage and session quotas, bounded patches,
+  checksums, fixed expiry, cleanup and disk-backed process-restart recovery.
+  Includes awaited completion notifications with reconciliation guidance,
+  HTTP/1-3 regressions and independent state-machine/killed-process fuzz checks.
+  Existing multipart/controller behavior and runtime dependencies are preserved.
+  See [resumable uploads](docs/guides/resumable-uploads.md).
+
 ## [2.11.0] - 2026-10-18
 
 ### Added

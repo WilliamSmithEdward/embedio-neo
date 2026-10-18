@@ -1,0 +1,14 @@
+{
+  "Scenario": "tus-uploads",
+  "Seed": 1729,
+  "Steps": [
+    {"Actor": 0, "Command": 0, "Value": 8},
+    {"Actor": 1, "Command": 1, "Value": 0},
+    {"Actor": 2, "Command": 3, "Value": 0},
+    {"Actor": 0, "Command": 6, "Value": 0},
+    {"Actor": 1, "Command": 5, "Value": 0},
+    {"Actor": 2, "Command": 2, "Value": 0},
+    {"Actor": 0, "Command": 1, "Value": 0},
+    {"Actor": 1, "Command": 4, "Value": 1}
+  ]
+}
