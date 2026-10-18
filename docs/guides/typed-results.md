@@ -165,6 +165,10 @@ owner. Do not dispose a result or mutate/share its stream while execution is act
 Cleanup failures are retained alongside body failures; committed failures abort
 rather than pretend the body completed successfully.
 
+A typed alternative delegates cancellation and cleanup to its selected result. If
+a stream alternative is abandoned before execution, dispose its `SelectedResult`
+as `IDisposable` (or retain and dispose the original stream result).
+
 Copy operations observe the context cancellation token and transport errors.
 Request-abort remains opt-in: long-lived producers should also cooperate with the
 existing `[RequestAborted]` token or `GetRequestAbortedToken()` and keep deadlines.

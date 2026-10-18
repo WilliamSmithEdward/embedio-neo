@@ -62,7 +62,11 @@ namespace EmbedIO
         /// <remarks>Pass the module serializer for payload results. Direct execution defaults to JSON.
         /// Stream results execute once; dispose an owned stream result if it is never executed.
         /// Cancellation follows the context token and transport errors, preserving existing request-abort opt-in.</remarks>
-        public async Task ExecuteAsync(IHttpContext context, ResponseSerializerCallback? serializer = null)
+        public Task ExecuteAsync(IHttpContext context, ResponseSerializerCallback? serializer = null) =>
+            // Unwrap before cancellation and single-use claiming: the selected response owns cleanup.
+            SelectedResult.ExecuteCoreAsync(context, serializer);
+
+        private async Task ExecuteCoreAsync(IHttpContext context, ResponseSerializerCallback? serializer)
         {
             if (_singleUse && Interlocked.CompareExchange(ref _claimed, 1, 0) != 0)
                 throw new InvalidOperationException("A stream result can execute only once.");

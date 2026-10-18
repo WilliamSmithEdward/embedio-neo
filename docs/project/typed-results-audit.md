@@ -18,7 +18,7 @@ ordinary regression suite; explicit results await body completion before release
 - JSON uses configured serializer metadata; Problem Details takes a snapshot and
   reuses existing client-safe error formatting. Do not put secrets in payloads.
 - Stream ownership transfers only after successful construction. A stream result
-  claims execution once; cancellation and ordinary read/write/cleanup failures
+  claims execution once. Typed alternatives unwrap before cancellation and claiming, so the selected response owns cleanup. Cancellation and ordinary read/write/cleanup failures
   release owned input once. Borrowed inputs stay open. The host owns output closure.
 - Files and streams bypass output-cache publication and reject idempotency
   recording, including when hidden inside an alternative. Finite responses retain

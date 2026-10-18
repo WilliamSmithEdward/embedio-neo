@@ -105,11 +105,14 @@ namespace EmbedIO.Tests
                 protocol
             );
 
-        [Test]
-        public async Task ConcurrentStreamExecutionDoesNotCloseTheActiveOwner()
+        [TestCase(0)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task ConcurrentStreamExecutionDoesNotCloseTheActiveOwner(int alternatives)
         {
             var source = new BlockingResultStream();
-            using var result = HttpResults.Stream(source);
+            using var owned = HttpResults.Stream(source);
+            var result = SelectStreamResult(owned, alternatives);
             await TestWebServer.UseAsync(
                 s => s.WithModule(new ActionModule(c => result.ExecuteAsync(c))),
                 async client =>
@@ -132,23 +135,35 @@ namespace EmbedIO.Tests
             Assert.That(source.Closes, Is.EqualTo(1));
         }
 
-        [Test]
-        public async Task CancellationBeforeExecutionDisposesTheTransferredSource()
+        [TestCase(0)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task CancellationBeforeExecutionDisposesTheTransferredSource(int alternatives)
         {
             using var stop = new CancellationTokenSource();
             stop.Cancel();
             var context = DispatchProxy.Create<IHttpContext, ResultContextProxy>();
             ((ResultContextProxy)(object)context).Token = stop.Token;
             var source = new CountedResultStream([1]);
-            using var result = HttpResults.Stream(source);
+            using var owned = HttpResults.Stream(source);
+            var result = SelectStreamResult(owned, alternatives);
             await Assert.ThatAsync(() => result.ExecuteAsync(context), Throws.InstanceOf<OperationCanceledException>());
             Assert.That(source.Closes, Is.EqualTo(1));
         }
 
+        private static HttpResult SelectStreamResult(StreamHttpResult stream, int alternatives) => alternatives switch
+        {
+            2 => (HttpResult<StreamHttpResult, NoContentResult>)stream,
+            3 => (HttpResult<StreamHttpResult, NoContentResult, ProblemHttpResult>)stream,
+            _ => stream
+        };
+
         private static readonly string[] ExpectedFailureMessages = ["read failure", "cleanup failure"];
 
-        [Test]
-        public async Task BodyAndCleanupFailuresAreBothRetained()
+        [TestCase(0)]
+        [TestCase(2)]
+        [TestCase(3)]
+        public async Task BodyAndCleanupFailuresAreBothRetained(int alternatives)
         {
             var request = DispatchProxy.Create<IHttpRequest, RequestPreconditionsTest.RequestProxy>();
             ((RequestPreconditionsTest.RequestProxy)(object)request).Method = "GET";
@@ -159,7 +174,8 @@ namespace EmbedIO.Tests
             state.Request = request;
             state.Response = response;
             var source = new BlockingResultStream { Fail = true };
-            using var result = HttpResults.Stream(source);
+            using var owned = HttpResults.Stream(source);
+            var result = SelectStreamResult(owned, alternatives);
             AggregateException? failure = null;
 
             try

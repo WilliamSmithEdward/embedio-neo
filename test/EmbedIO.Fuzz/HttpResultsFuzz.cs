@@ -74,18 +74,24 @@ internal static class HttpResultsFuzz
                     Interlocked.Increment(ref calls);
                     HttpResult result = kind switch
                     {
-                        "/missing" => HttpResults.NotFound<string>(),
+                        "/missing" => (HttpResult<OkResult<string>, NotFoundResult<string>>)HttpResults.NotFound<string>(
+                        ),
                         "/created" => HttpResults.CreatedAt(
                             routes,
                             "item",
                             new Dictionary<string, object?> { ["id"] = payload },
                             payload
                         ),
-                        "/bytes" => HttpResults.Bytes(Encoding.UTF8.GetBytes(payload), "text/plain"),
+                        "/bytes" => (HttpResult<FileHttpResult, NoContentResult>)HttpResults.Bytes(
+                            Encoding.UTF8.GetBytes(payload),
+                            "text/plain"
+                        ),
                         "/problem" => HttpResults.Problem(new ProblemDetails(409) { Detail = payload }),
                         "/redirect" => HttpResults.Redirect("/next/" + actor + "?v=" + value),
                         "/nonce" => HttpResults.Text(payload + ":" + captured.GetSecurityHeadersNonce()),
-                        _ => HttpResults.Ok(injectFault && actor == "1" ? "wrong-actor" : payload)
+                        _ => (HttpResult<OkResult<string>, NotFoundResult<string>, ConflictResult<string>>)HttpResults.Ok(
+                            injectFault && actor == "1" ? "wrong-actor" : payload
+                        )
                     };
                     await result.ExecuteAsync(captured, ResponseSerializer.None(false));
                 });

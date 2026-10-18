@@ -45,7 +45,7 @@ or ControllerName.MethodName; duplicate aliases need explicit names/templates.
 `CreatedAt` generates escaped root-relative Locations with invariant values and
 never trusts request Host/forwarding headers. File paths are trusted application
 input. Stream results transfer ownership unless leaveOpen, execute once and must
-be disposed if abandoned. Files/streams reuse range/conditional handling, bypass
+be disposed if abandoned, including the SelectedResult of a typed alternative. Files/streams reuse range/conditional handling, bypass
 cache publication and reject idempotent recording; finite results support both.
 Security policies and nonce no-store/replay restrictions remain authoritative.
 See [typed results](docs/guides/typed-results.md) for helpers, limits, lifecycle,
