@@ -35,6 +35,18 @@ class SuppressionGuardTests(unittest.TestCase):
             with self.subTest(source=changed, filename=filename):
                 self.assertTrue(violations(changed, csharp=True, filename=filename))
 
+    def test_security_header_lock_exceptions_are_member_specific(self):
+        for path, member in (
+            ('src/EmbedIO/Caching/OutputCache.cs', '_gate'),
+            ('src/EmbedIO/Net/Internal/Multiplexed/MultiplexedResponse.cs', '_lifecycle'),
+            ('src/EmbedIO/Security/SecurityHeadersState.cs', '_gate'),
+        ):
+            source = f"""[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0330:Use 'System.Threading.Lock'", Justification = "The shared implementation targets netstandard2.0, which has no System.Threading.Lock.")]
+private readonly object {member} = new();"""
+            self.assertFalse(violations(source, csharp=True, filename=path))
+            self.assertTrue(violations(source.replace(member, '_other'), csharp=True, filename=path))
+            self.assertTrue(violations(source, csharp=True, filename='src/Other.cs'))
+
     def test_rejects_diagnostic_and_build_opt_outs(self):
         for source in (
             '#pragma warning disable CS8602',

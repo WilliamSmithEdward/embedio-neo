@@ -16,6 +16,18 @@ namespace EmbedIO
         internal const int DefaultMaximumRequestHeaderBytes = 32 * 1024;
         internal const int DefaultMaximumRequestHeaderCount = 100;
         internal static readonly MinimumDataRate DefaultMinimumRequestBodyDataRate = new(240, TimeSpan.FromSeconds(5));
+        private Security.SecurityHeadersPolicy? _securityHeaders;
+
+        /// <summary>Gets or sets an opt-in server-wide response security policy. Null preserves existing behavior.</summary>
+        public Security.SecurityHeadersPolicy? SecurityHeaders
+        {
+            get => _securityHeaders;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _securityHeaders = value;
+            }
+        }
 
         private bool _supportCompressedRequests;
         private bool _decompressedLimitSet;
@@ -59,7 +71,9 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
+
                 _maximumDecompressedRequestBodyBytes = value;
                 _decompressedLimitSet = true;
             }
@@ -67,8 +81,8 @@ namespace EmbedIO
 
         // The decoded limit of a request whose effective body limit is bodyLimit, null
         // when the body limit is lifted: the configured value, or else that body limit.
-        internal long? DecompressedLimitFor(long? bodyLimit)
-            => _decompressedLimitSet ? _maximumDecompressedRequestBodyBytes : bodyLimit;
+        internal long? DecompressedLimitFor(long? bodyLimit) =>
+            _decompressedLimitSet ? _maximumDecompressedRequestBodyBytes : bodyLimit;
 
         private long? _maximumRequestBodyBytes = DefaultMaximumRequestBodyBytes;
         private int? _maximumConcurrentRequests;
@@ -116,11 +130,15 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
-                if (value != null && value.Trim().Length == 0) throw new ArgumentException("The name cannot be empty.", nameof(value));
+
+                if (value != null && value.Trim().Length == 0)
+                    throw new ArgumentException("The name cannot be empty.", nameof(value));
+
                 _telemetryServerName = value;
             }
         }
-        private readonly System.Collections.Generic.List<RequestLimitPolicy> _routeRequestLimits = new();
+
+        private readonly System.Collections.Generic.List<RequestLimitPolicy> _routeRequestLimits = [];
         private System.Collections.ObjectModel.ReadOnlyCollection<RequestLimitPolicy>? _routeRequestLimitsView;
 
         /// <summary>
@@ -131,8 +149,8 @@ namespace EmbedIO
         /// read and request deadline values for it. Header limits, admission and connection
         /// limits stay server-wide.
         /// </remarks>
-        public System.Collections.Generic.IReadOnlyList<RequestLimitPolicy> RouteRequestLimits
-            => _routeRequestLimitsView ??= _routeRequestLimits.AsReadOnly();
+        public System.Collections.Generic.IReadOnlyList<RequestLimitPolicy> RouteRequestLimits =>
+            _routeRequestLimitsView ??= _routeRequestLimits.AsReadOnly();
 
         /// <summary>
         /// Adds a request limit policy for requests under a base route.
@@ -148,11 +166,18 @@ namespace EmbedIO
         public RequestLimitPolicy AddRouteRequestLimits(string baseRoute, Action<RequestLimitPolicy> configure)
         {
             EnsureConfigurationNotLocked();
-            if (configure == null) throw new ArgumentNullException(nameof(configure));
+
+            configure = global::EmbedIO.Utilities.Validate.NotNull(nameof(configure), configure);
+
             var policy = new RequestLimitPolicy(baseRoute);
+
             foreach (var existing in _routeRequestLimits)
                 if (existing.BaseRoute == policy.BaseRoute)
-                    throw new ArgumentException("The base route already has a request limit policy.", nameof(baseRoute));
+                    throw new ArgumentException(
+                        "The base route already has a request limit policy.",
+                        nameof(baseRoute)
+                    );
+
             configure(policy);
             _routeRequestLimits.Add(policy);
             return policy;
@@ -163,6 +188,7 @@ namespace EmbedIO
         {
             foreach (var policy in _routeRequestLimits)
                 if (policy.Matches(requestedPath)) return policy;
+
             return null;
         }
 
@@ -172,8 +198,10 @@ namespace EmbedIO
             get
             {
                 if (_maximumRequestBodyBytes.HasValue) return true;
+
                 foreach (var policy in _routeRequestLimits)
                     if (policy.MaximumRequestBodyBytes.HasValue) return true;
+
                 return false;
             }
         }
@@ -182,6 +210,7 @@ namespace EmbedIO
         protected override void OnBeforeLockConfiguration()
         {
             base.OnBeforeLockConfiguration();
+
             foreach (var policy in _routeRequestLimits) policy.Lock();
         }
 
@@ -206,8 +235,13 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
-                if (value.HasValue && (value.Value.TotalMilliseconds < 1 || value.Value.TotalMilliseconds > int.MaxValue))
+
+                if (
+                    value.HasValue
+                    && (value.Value.TotalMilliseconds < 1 || value.Value.TotalMilliseconds > int.MaxValue)
+                )
                     throw new ArgumentOutOfRangeException(nameof(value));
+
                 _requestBodyReadTimeout = value;
             }
         }
@@ -269,7 +303,9 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
+
                 _maximumRequestBodyBytes = value;
             }
         }
@@ -294,7 +330,9 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+
                 _maximumConcurrentRequests = value;
             }
         }
@@ -307,13 +345,20 @@ namespace EmbedIO
         /// <remarks>Ignored when <see cref="MaximumConcurrentRequests"/> is null.</remarks>
         /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
         /// <exception cref="InvalidOperationException">Configuration is locked.</exception>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Maintainability",
+            "CA1512:Use ArgumentOutOfRangeException throw helper",
+            Justification = "The shared implementation targets netstandard2.0, which has no ArgumentOutOfRangeException throw helpers."
+        )]
         public int RequestQueueLimit
         {
             get => _requestQueueLimit;
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
+
                 _requestQueueLimit = value;
             }
         }
@@ -342,8 +387,10 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value.HasValue && (value.Value <= TimeSpan.Zero || value.Value.TotalMilliseconds > int.MaxValue))
                     throw new ArgumentOutOfRangeException(nameof(value));
+
                 _requestTimeout = value;
             }
         }
@@ -367,7 +414,9 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+
                 _maximumRequestHeaderBytes = value;
             }
         }
@@ -389,7 +438,9 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+
                 _maximumRequestHeaderCount = value;
             }
         }

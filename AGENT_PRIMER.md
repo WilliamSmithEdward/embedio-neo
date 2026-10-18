@@ -28,6 +28,28 @@ Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.
 
+### Response security headers (2.13.0+)
+
+Version 2.13.0 adds opt-in `EmbedIO.Security.SecurityHeadersPolicy`,
+`SecurityHeadersModule` and `[SecurityHeaders("name")]`. These APIs require
+NuGet 2.13.0+. Configure server `options.SecurityHeaders` or configure copied named
+controller profiles before registration. Method attributes override inherited class
+attributes and module defaults. A selected profile replaces all seven managed fields,
+including omissions; keep host-wide HSTS consistent across profiles. Static values and rendered-size bounds are
+precomputed, including nonce expansion. Existing defaults/manual headers are unchanged until explicitly selected.
+
+Use exact CSP source `'nonce-{nonce}'` and `context.GetSecurityHeadersNonce()` for
+trusted, attribute-encoded script/style markup only. Each response has fresh 256-bit
+randomness. Nonce profiles force no-store, remove validators, bypass existing output
+cache entries and reject partial/304 representations and idempotent recording.
+Select policies before cache wrappers; selecting inside a skipped cached handler
+cannot affect a hit. External caches must honor no-store. HSTS requires explicit
+lifetime and actual TLS; forwarded text/simulated test URLs do not establish TLS.
+First-party listeners and TestWebServer prepare final headers automatically; external
+adapters must call `SecurityHeadersPolicy.PrepareResponse` immediately before copying
+headers to their transport. See [security headers](docs/guides/security-headers.md)
+and the [scoped adversarial audit](docs/project/security-headers-audit.md).
+
 ### Output caching (2.10.0+)
 
 `OutputCache` in `EmbedIO.Caching` is explicitly opt-in through a fluent wrapper
@@ -130,7 +152,7 @@ limits, failure matrix, concurrency fuzzing and cross-target support.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current source version | 2.12.0, the v2 engine. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current source version | 2.13.0, the v2 engine. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -843,3 +865,7 @@ passing run. See [property testing](docs/guides/property-testing.md) and
 | Graceful shutdown | [Draining with WebSockets](docs/guides/graceful-drain-websockets.md) |
 | Trailers and 1xx | [Response field sections](docs/guides/response-field-sections.md) |
 | Everything else | [Documentation index](docs/README.md) |
+
+SSE wire EOF can arrive before the server handler finishes disposing its subscription.
+Lifetime tests must await handler completion before asserting released subscriber slots;
+a successful server shutdown alone does not join every request continuation.

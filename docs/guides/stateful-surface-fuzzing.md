@@ -168,3 +168,14 @@ on FIN; only the explicit input-end token cancels. The retained
 `--request-abort-selftest` must reject a deliberately substituted foreign-owner
 token. This model complements HTTP/2–3 stream-reset regressions; it does not claim
 physical packet-loss, every TLS closure, or all proxy behaviors are detectable.
+
+## Security-header policies (unreleased)
+
+The `security-headers` scenario gates three clients at application entry before
+releasing them. It checks independent body/actor/nonce binding, fresh 256-bit nonces,
+static versus enforced/report-only policies, shared output-cache invalidation,
+no-store/validator handling and rejected control text. Run
+`--security-headers-selftest` to prove that an injected nonce mismatch is detected.
+See [security-header policies](security-headers.md) and their
+[adversarial audit](../project/security-headers-audit.md). This scenario is also
+included in the shared-resource CI campaign.

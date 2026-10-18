@@ -1,4 +1,4 @@
-﻿# Contributing to EmbedIO-Neo
+# Contributing to EmbedIO-Neo
 
 EmbedIO-Neo is maintained by William Smith. Use the issues and pull requests at
 https://github.com/WilliamSmithEdward/embedio-neo for this fork.
@@ -83,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7287
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7337
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions

@@ -1,13 +1,13 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
+using EmbedIO.Internal;
 using EmbedIO.Routing;
 using EmbedIO.Utilities;
-using EmbedIO.Internal;
 
 namespace EmbedIO.WebApi
 {
@@ -19,22 +19,51 @@ namespace EmbedIO.WebApi
     {
         internal const string ReflectionMessage = "Controllers are discovered, bound and invoked through reflection and runtime code generation, "
             + "which trimming and Native AOT do not support. Register routes with RoutingModule or ActionModule delegates instead.";
+        private const string GetRequestDataAsyncMethodName = nameof(IRequestDataAttribute<>.GetRequestDataAsync);
+        private static readonly MethodInfo PreProcessRequestMethod = typeof(WebApiController).GetMethod(
+            nameof(WebApiController.PreProcessRequest)
+        )
+            ?? throw new MissingMemberException("PreProcessRequestMethod");
+        private static readonly MethodInfo HttpContextSetter = typeof(WebApiController)
+            .GetProperty(nameof(WebApiController.HttpContext))
+            ?.GetSetMethod(true)
+            ?? throw new MissingMemberException("HttpContextSetter");
+        private static readonly MethodInfo RouteSetter = typeof(WebApiController)
+            .GetProperty(nameof(WebApiController.Route))
+            ?.GetSetMethod(true)
+            ?? throw new MissingMemberException("RouteSetter");
+        private static readonly MethodInfo AwaitResultMethod = typeof(WebApiModuleBase).GetMethod(
+            nameof(AwaitResult),
+            BindingFlags.Static | BindingFlags.NonPublic
+        )
+            ?? throw new MissingMemberException("AwaitResultMethod");
+        private static readonly MethodInfo AwaitAndCastResultMethod = typeof(WebApiModuleBase).GetMethod(
+            nameof(AwaitAndCastResult),
+            BindingFlags.Static | BindingFlags.NonPublic
+        )
+            ?? throw new MissingMemberException("AwaitAndCastResultMethod");
+        private static readonly MethodInfo DisposeMethod = typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose))
+            ?? throw new MissingMemberException("DisposeMethod");
+        private static readonly MethodInfo CastControllerMethod = typeof(WebApiModuleBase).GetMethod(
+            nameof(CastController),
+            BindingFlags.Static | BindingFlags.NonPublic
+        )
+            ?? throw new MissingMemberException("CastControllerMethod");
+        private static readonly MethodInfo SerializeResultAsyncMethod = typeof(WebApiModuleBase).GetMethod(
+            nameof(SerializeResultAsync),
+            BindingFlags.Instance | BindingFlags.NonPublic
+        )
+            ?? throw new MissingMemberException("SerializeResultAsyncMethod");
+        private readonly HashSet<Type> _controllerTypes = [];
 
-        private const string GetRequestDataAsyncMethodName = nameof(IRequestDataAttribute<WebApiController>.GetRequestDataAsync);
-
-        private static readonly MethodInfo PreProcessRequestMethod = typeof(WebApiController).GetMethod(nameof(WebApiController.PreProcessRequest)) ?? throw new MissingMemberException("PreProcessRequestMethod");
-        private static readonly MethodInfo HttpContextSetter = typeof(WebApiController).GetProperty(nameof(WebApiController.HttpContext))?.GetSetMethod(true) ?? throw new MissingMemberException("HttpContextSetter");
-        private static readonly MethodInfo RouteSetter = typeof(WebApiController).GetProperty(nameof(WebApiController.Route))?.GetSetMethod(true) ?? throw new MissingMemberException("RouteSetter");
-        private static readonly MethodInfo AwaitResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitResult), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("AwaitResultMethod");
-        private static readonly MethodInfo AwaitAndCastResultMethod = typeof(WebApiModuleBase).GetMethod(nameof(AwaitAndCastResult), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("AwaitAndCastResultMethod");
-        private static readonly MethodInfo DisposeMethod = typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose)) ?? throw new MissingMemberException("DisposeMethod");
-        private static readonly MethodInfo CastControllerMethod = typeof(WebApiModuleBase).GetMethod(nameof(CastController), BindingFlags.Static | BindingFlags.NonPublic) ?? throw new MissingMemberException("CastControllerMethod");
-        private static readonly MethodInfo SerializeResultAsyncMethod = typeof(WebApiModuleBase).GetMethod(nameof(SerializeResultAsync), BindingFlags.Instance | BindingFlags.NonPublic) ?? throw new MissingMemberException("SerializeResultAsyncMethod");
-
-        private readonly HashSet<Type> _controllerTypes = new HashSet<Type>();
         // Method identifies the handler: a MethodInfo for reflection registration,
         // a generated handler ID string for a WebApiControllerBinding.
-        private List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, Type ControllerType)>? _caseInsensitiveDeclarations;
+        private List<(
+            HttpVerbs Verb,
+            RouteMatcher Matcher,
+            object Method,
+            Type ControllerType
+        )>? _caseInsensitiveDeclarations;
         private bool _caseInsensitiveRoutes;
 
         /// <summary>
@@ -53,8 +82,10 @@ namespace EmbedIO.WebApi
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value != _caseInsensitiveRoutes && _controllerTypes.Count != 0)
                     throw new InvalidOperationException("Set CaseInsensitiveRoutes before registering controllers.");
+
                 _caseInsensitiveRoutes = value;
             }
         }
@@ -66,10 +97,7 @@ namespace EmbedIO.WebApi
         /// <param name="baseRoute">The base route served by this module.</param>
         /// <seealso cref="IWebModule.BaseRoute" />
         /// <seealso cref="Validate.RoutePath" />
-        protected WebApiModuleBase(string baseRoute)
-            : this(baseRoute, ResponseSerializer.Default)
-        {
-        }
+        protected WebApiModuleBase(string baseRoute) : this(baseRoute, ResponseSerializer.Default) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebApiModuleBase" /> class,
@@ -82,10 +110,10 @@ namespace EmbedIO.WebApi
         /// <exception cref="ArgumentNullException"><paramref name="serializer"/> is <see langword="null"/>.</exception>
         /// <seealso cref="IWebModule.BaseRoute" />
         /// <seealso cref="Validate.RoutePath" />
-        protected WebApiModuleBase(string baseRoute, ResponseSerializerCallback serializer)
-            : base(baseRoute)
+        protected WebApiModuleBase(string baseRoute, ResponseSerializerCallback serializer) : base(baseRoute)
         {
-            Serializer = Validate.NotNull(nameof(serializer), serializer);
+            serializer = Validate.NotNull(nameof(serializer), serializer);
+            Serializer = serializer;
         }
 
         /// <summary>
@@ -133,9 +161,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="RegisterControllerType(Type)"/>
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
-        protected void RegisterControllerType<TController>()
-            where TController : WebApiController, new()
-            => RegisterControllerType(typeof(TController));
+        protected void RegisterControllerType<TController>() where TController : WebApiController, new() =>
+            RegisterControllerType(typeof(TController));
 
         /// <summary>
         /// <para>Registers a controller type using a factory method.</para>
@@ -182,8 +209,7 @@ namespace EmbedIO.WebApi
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         protected void RegisterControllerType<TController>(Func<TController> factory)
-            where TController : WebApiController
-            => RegisterControllerType(typeof(TController), factory);
+            where TController : WebApiController => RegisterControllerType(typeof(TController), factory);
 
         /// <summary>
         /// <para>Registers a controller type using a constructor.</para>
@@ -227,13 +253,13 @@ namespace EmbedIO.WebApi
 
             controllerType = ValidateControllerType(nameof(controllerType), controllerType, false);
 
-            var constructor = controllerType.GetConstructors().FirstOrDefault(c => c.GetParameters().Length == 0);
-            if (constructor == null)
-            {
-                throw new ArgumentException(
+            var constructor = controllerType
+                .GetConstructors()
+                .FirstOrDefault(c => c.GetParameters().Length == 0)
+                ?? throw new ArgumentException(
                     "Controller type must have a public parameterless constructor.",
-                    nameof(controllerType));
-            }
+                    nameof(controllerType)
+                );
 
             if (!TryRegisterControllerTypeCore(controllerType, Expression.New(constructor)))
                 throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.");
@@ -299,12 +325,15 @@ namespace EmbedIO.WebApi
             // A lambda converted to Func<WebApiController> is compiled with that return type, so only
             // a return type unrelated to the controller is rejected here; the instance is checked when created.
             var returnType = factory.Method.ReturnType;
+
             if (!controllerType.IsAssignableFrom(returnType) && !returnType.IsAssignableFrom(controllerType))
                 throw new ArgumentException("Factory method has an incorrect return type.", nameof(factory));
 
             Expression expression = Expression.Call(
                 factory.Target == null ? null : Expression.Constant(factory.Target),
-                factory.Method);
+                factory.Method
+            );
+
             if (!controllerType.IsAssignableFrom(returnType))
                 expression = Expression.Call(CastControllerMethod.MakeGenericMethod(controllerType), expression);
 
@@ -324,12 +353,14 @@ namespace EmbedIO.WebApi
         protected void RegisterControllerTypeWithContext(
             Type controllerType,
             Func<IHttpContext, WebApiController?> factory,
-            Func<IHttpContext, WebApiController, Task> release)
+            Func<IHttpContext, WebApiController, Task> release
+        )
         {
             EnsureConfigurationNotLocked();
             controllerType = ValidateControllerType(nameof(controllerType), controllerType, true);
             Validate.NotNull(nameof(factory), factory);
             Validate.NotNull(nameof(release), release);
+
             if (!TryRegisterControllerTypeCore(controllerType, Expression.Default(controllerType), factory, release))
                 throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.");
         }
@@ -337,6 +368,7 @@ namespace EmbedIO.WebApi
         private static int IndexOfRouteParameter(RouteMatcher matcher, string name)
         {
             var names = matcher.ParameterNames;
+
             for (var i = 0; i < names.Count; i++)
             {
                 if (names[i] == name)
@@ -346,28 +378,50 @@ namespace EmbedIO.WebApi
             return -1;
         }
 
-        private static T AwaitResult<T>(Task<T> task) => task.ConfigureAwait(false).GetAwaiter().GetResult();
+        private static T AwaitResult<T>(Task<T> task) =>
+            task
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
 
         // The constructed request data interfaces of one generic definition that a parameter's
         // attributes implement, in attribute and interface order.
         [RequiresUnreferencedCode(ReflectionMessage)]
-        private static List<(Attribute Attr, Type Intf)> RequestDataInterfaces(ParameterInfo parameter, Type definition)
-            => parameter.GetCustomAttributes<Attribute>()
-                .SelectMany(attr => attr.GetType().GetInterfaces()
+        private static List<(Attribute Attr, Type Intf)> RequestDataInterfaces(
+            ParameterInfo parameter,
+            Type definition
+        ) =>
+        [
+            .. parameter
+                .GetCustomAttributes<Attribute>()
+                .SelectMany(attr => attr
+                    .GetType()
+                    .GetInterfaces()
                     .Where(x => x.IsConstructedGenericType && x.GetGenericTypeDefinition() == definition)
                     .Select(x => (attr, x)))
-                .ToList();
+        ];
 
         // Checks what a factory declared with a base return type actually created.
         private static TController CastController<TController>(WebApiController? controller)
-            where TController : WebApiController
-            => controller as TController ?? throw new InvalidOperationException(
-                $"The controller factory for {typeof(TController).FullName} returned {controller?.GetType().FullName ?? "null"}.");
+            where TController : WebApiController =>
+            controller as TController
+                ?? throw new InvalidOperationException(
+                    $"The controller factory for {typeof(TController).FullName} returned {controller?.GetType().FullName ?? "null"}."
+                );
 
-        private static T? AwaitAndCastResult<T>(string parameterName, Task<object> task)
-            => RequestFieldBinding.CastResult<T>(parameterName, task.ConfigureAwait(false).GetAwaiter().GetResult());
+        private static T? AwaitAndCastResult<T>(string parameterName, Task<object> task) =>
+            RequestFieldBinding.CastResult<T>(
+                parameterName,
+                task
+                    .ConfigureAwait(false)
+                    .GetAwaiter()
+                    .GetResult()
+            );
 
-        private static bool IsGenericTaskType(Type type, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Type? resultType)
+        private static bool IsGenericTaskType(
+            Type type,
+            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Type? resultType
+        )
         {
             resultType = null;
 
@@ -398,61 +452,149 @@ namespace EmbedIO.WebApi
         [RequiresUnreferencedCode(ReflectionMessage)]
         [RequiresDynamicCode(ReflectionMessage)]
         private RouteHandlerCallback CompileHandler(
-            Expression factoryExpression, MethodInfo method, RouteMatcher matcher,
+            Expression factoryExpression,
+            MethodInfo method,
+            RouteMatcher matcher,
             Func<IHttpContext, WebApiController?>? contextFactory,
-            Func<IHttpContext, WebApiController, Task>? release, BeforeHandlerPlan? before, OutputCacheRegistration? caching)
+            Func<IHttpContext, WebApiController, Task>? release,
+            BeforeHandlerPlan? before,
+            OutputCacheRegistration? caching
+        )
         {
             // Lambda parameters
             var contextInLambda = Expression.Parameter(typeof(IHttpContext), "context");
             var routeInLambda = Expression.Parameter(typeof(RouteMatch), "route");
 
             // Local variable for controller
-            var controllerType = method.ReflectedType ?? throw new InvalidOperationException("The handler has no reflected controller type.");
+            var controllerType = method.ReflectedType
+                ?? throw new InvalidOperationException("The handler has no reflected controller type.");
             var controller = Expression.Variable(controllerType, "controller");
 
             // Build the handler method call, then wrap its result in a Task that serializes it when needed.
             var handlerArguments = BindHandlerArguments(method, controllerType, matcher, controller, routeInLambda);
-            var callMethod = WrapHandlerResult(Expression.Call(controller, method, handlerArguments), method.ReturnType, contextInLambda);
+            var callMethod = WrapHandlerResult(
+                Expression.Call(controller, method, handlerArguments),
+                method.ReturnType,
+                contextInLambda
+            );
 
             if (caching != null && !IsStreamingResultType(method.ReturnType))
             {
                 var action = Expression.Lambda<Func<IHttpContext, Task>>(callMethod, contextInLambda);
-                callMethod = Expression.Call(typeof(ControllerBindingServices), nameof(ControllerBindingServices.ExecuteOutputCachedAsync),
-                    null, Expression.Convert(controller, typeof(WebApiController)), contextInLambda, action);
+                callMethod = Expression.Call(
+                    typeof(ControllerBindingServices),
+                    nameof(ControllerBindingServices.ExecuteOutputCachedAsync),
+                    null,
+                    Expression.Convert(controller, typeof(WebApiController)),
+                    contextInLambda,
+                    action
+                );
                 var ownedFactory = contextFactory == null
-                    ? Expression.Lambda<Func<WebApiController>>(Expression.Convert(factoryExpression, typeof(WebApiController))).Compile() : null;
-                return CompileActivatedHandler(controllerType, controller, callMethod, contextInLambda, routeInLambda,
+                    ? Expression
+                        .Lambda<Func<WebApiController>>(Expression.Convert(factoryExpression, typeof(WebApiController)))
+                        .Compile()
+                    : null;
+                return CompileActivatedHandler(
+                    controllerType,
+                    controller,
+                    callMethod,
+                    contextInLambda,
+                    routeInLambda,
                     contextFactory ?? (_ => (ownedFactory ?? throw new InvalidOperationException())()),
-                    release ?? ReleaseStreamingController, before, caching);
+                    release ?? ReleaseStreamingController,
+                    before,
+                    caching
+                );
             }
 
             if (contextFactory == null && IsStreamingResultType(method.ReturnType))
             {
-                var streamingFactory = Expression.Lambda<Func<WebApiController>>(Expression.Convert(factoryExpression, typeof(WebApiController))).Compile();
-                return CompileActivatedHandler(controllerType, controller, callMethod, contextInLambda, routeInLambda,
-                    _ => streamingFactory(), ReleaseStreamingController, before);
+                var streamingFactory = Expression
+                    .Lambda<Func<WebApiController>>(Expression.Convert(factoryExpression, typeof(WebApiController)))
+                    .Compile();
+                return CompileActivatedHandler(
+                    controllerType,
+                    controller,
+                    callMethod,
+                    contextInLambda,
+                    routeInLambda,
+                    _ => streamingFactory(),
+                    ReleaseStreamingController,
+                    before
+                );
             }
 
             return contextFactory != null
-                ? CompileActivatedHandler(controllerType, controller, callMethod, contextInLambda, routeInLambda, contextFactory, release, before)
-                : before != null ? CompileHookedOwnedHandler(controllerType, controller, factoryExpression, callMethod, contextInLambda, routeInLambda, before)
-                : CompileOwnedHandler(controllerType, controller, factoryExpression, callMethod, contextInLambda, routeInLambda);
+                ? CompileActivatedHandler(
+                    controllerType,
+                    controller,
+                    callMethod,
+                    contextInLambda,
+                    routeInLambda,
+                    contextFactory,
+                    release,
+                    before
+                )
+                : before != null
+                    ? CompileHookedOwnedHandler(
+                        controllerType,
+                        controller,
+                        factoryExpression,
+                        callMethod,
+                        contextInLambda,
+                        routeInLambda,
+                        before
+                    )
+                    : CompileOwnedHandler(
+                        controllerType,
+                        controller,
+                        factoryExpression,
+                        callMethod,
+                        contextInLambda,
+                        routeInLambda
+                    );
         }
 
         // One argument expression per handler parameter: request data provided by an attribute,
         // the converted route parameter with the same name, or the parameter's default.
         [RequiresUnreferencedCode(ReflectionMessage)]
         [RequiresDynamicCode(ReflectionMessage)]
-        private static List<Expression> BindHandlerArguments(MethodInfo method, Type controllerType, RouteMatcher matcher, ParameterExpression controller, ParameterExpression routeInLambda)
+        private static List<Expression> BindHandlerArguments(
+            MethodInfo method,
+            Type controllerType,
+            RouteMatcher matcher,
+            ParameterExpression controller,
+            ParameterExpression routeInLambda
+        )
         {
             var handlerArguments = new List<Expression>();
+
             foreach (var parameter in method.GetParameters())
             {
-                var argument = BindHandlerArgument(parameter, method, controllerType, matcher, controller, routeInLambda);
+                var argument = BindHandlerArgument(
+                    parameter,
+                    method,
+                    controllerType,
+                    matcher,
+                    controller,
+                    routeInLambda
+                );
                 var validation = ReflectionRequestValidation.For(parameter);
+
                 if (validation != null)
-                    argument = Expression.Call(typeof(ReflectionRequestValidation), nameof(ReflectionRequestValidation.ValidateBound), new[] { parameter.ParameterType },
-                        argument, Expression.Constant(parameter.Name ?? throw new InvalidOperationException("The validated parameter has no name.")), Expression.Constant(validation), Expression.Property(controller, nameof(WebApiController.CancellationToken)));
+                    argument = Expression.Call(
+                        typeof(ReflectionRequestValidation),
+                        nameof(ReflectionRequestValidation.ValidateBound),
+                        [parameter.ParameterType],
+                        argument,
+                        Expression.Constant(
+                            parameter.Name
+                                ?? throw new InvalidOperationException("The validated parameter has no name.")
+                        ),
+                        Expression.Constant(validation),
+                        Expression.Property(controller, nameof(WebApiController.CancellationToken))
+                    );
+
                 handlerArguments.Add(argument);
             }
 
@@ -461,30 +603,45 @@ namespace EmbedIO.WebApi
 
         [RequiresUnreferencedCode(ReflectionMessage)]
         [RequiresDynamicCode(ReflectionMessage)]
-        private static Expression BindHandlerArgument(ParameterInfo parameter, MethodInfo method, Type controllerType, RouteMatcher matcher, ParameterExpression controller, ParameterExpression routeInLambda)
+        private static Expression BindHandlerArgument(
+            ParameterInfo parameter,
+            MethodInfo method,
+            Type controllerType,
+            RouteMatcher matcher,
+            ParameterExpression controller,
+            ParameterExpression routeInLambda
+        )
         {
             // First, check for generic request data interfaces in attributes, then for non-generic ones.
             var requestData = TypedRequestData(parameter, controllerType, controller, out var typedAttributes);
             var untypedAttributes = false;
-            if (requestData == null)
-                requestData = UntypedRequestData(parameter, controllerType, controller, out untypedAttributes);
+
+            requestData ??= UntypedRequestData(parameter, controllerType, controller, out untypedAttributes);
+
             if (requestData != null)
                 return requestData;
 
             // There are request data attributes, but none is suitable for the type of the parameter:
             // the user expects data to be injected but provided no way of injecting the right data type.
             if (typedAttributes || untypedAttributes)
-                throw new InvalidOperationException($"No request data attribute for parameter {parameter.Name} of method {controllerType.Name}.{method.Name} can provide the expected data type.");
+                throw new InvalidOperationException(
+                    $"No request data attribute for parameter {parameter.Name} of method {controllerType.Name}.{method.Name} can provide the expected data type."
+                );
 
             // Check whether the name of the handler parameter matches the name of a route parameter.
             var parameterType = parameter.ParameterType;
-            var index = IndexOfRouteParameter(matcher, parameter.Name ?? throw new InvalidOperationException("The handler parameter has no name."));
+            var index = IndexOfRouteParameter(
+                matcher,
+                parameter.Name ?? throw new InvalidOperationException("The handler parameter has no name.")
+            );
+
             if (index >= 0)
             {
                 // Convert the parameter to the handler's parameter type.
                 var convertFromRoute = FromString.ConvertExpressionTo(
                     parameterType,
-                    Expression.Property(routeInLambda, "Item", Expression.Constant(index)));
+                    Expression.Property(routeInLambda, "Item", Expression.Constant(index))
+                );
 
                 return convertFromRoute ?? throw SelfCheck.Failure($"{nameof(convertFromRoute)} is null.");
             }
@@ -501,10 +658,16 @@ namespace EmbedIO.WebApi
         // whether the parameter carries any attribute of that kind.
         [RequiresUnreferencedCode(ReflectionMessage)]
         [RequiresDynamicCode(ReflectionMessage)]
-        private static Expression? TypedRequestData(ParameterInfo parameter, Type controllerType, ParameterExpression controller, out bool declared)
+        private static MethodCallExpression? TypedRequestData(
+            ParameterInfo parameter,
+            Type controllerType,
+            ParameterExpression controller,
+            out bool declared
+        )
         {
             var requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<,>));
             declared = requestDataInterfaces.Count > 0;
+
             if (!declared)
                 return null;
 
@@ -512,22 +675,27 @@ namespace EmbedIO.WebApi
             var parameterType = parameter.ParameterType;
             var (attr, intf) = requestDataInterfaces.FirstOrDefault(
                 x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType)
-                  && parameterType.IsAssignableFrom(x.Intf.GenericTypeArguments[1]));
+                    && parameterType.IsAssignableFrom(x.Intf.GenericTypeArguments[1])
+            );
+
             if (attr == null)
                 return null;
 
             // Use the request data interface to get a value for the parameter.
             Expression useRequestDataInterface = Expression.Call(
                 Expression.Constant(attr),
-                intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
+                intf.GetMethod(GetRequestDataAsyncMethodName)
+                    ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
                 controller,
-                Expression.Constant(parameter.Name));
+                Expression.Constant(parameter.Name)
+            );
 
             // We should await the call to GetRequestDataAsync.
             // For lack of a better way, call AwaitResult with an appropriate type argument.
             return Expression.Call(
                 AwaitResultMethod.MakeGenericMethod(intf.GenericTypeArguments[1]),
-                useRequestDataInterface);
+                useRequestDataInterface
+            );
         }
 
         // Request data from the first IRequestDataAttribute<TController> attribute that applies to the
@@ -535,30 +703,42 @@ namespace EmbedIO.WebApi
         // the parameter carries any attribute of that kind.
         [RequiresUnreferencedCode(ReflectionMessage)]
         [RequiresDynamicCode(ReflectionMessage)]
-        private static Expression? UntypedRequestData(ParameterInfo parameter, Type controllerType, ParameterExpression controller, out bool declared)
+        private static MethodCallExpression? UntypedRequestData(
+            ParameterInfo parameter,
+            Type controllerType,
+            ParameterExpression controller,
+            out bool declared
+        )
         {
             var requestDataInterfaces = RequestDataInterfaces(parameter, typeof(IRequestDataAttribute<>));
             declared = requestDataInterfaces.Count > 0;
+
             if (!declared)
                 return null;
 
             // Take the first that applies to the controller
             var (attr, intf) = requestDataInterfaces.FirstOrDefault(
-                x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType));
+                x => x.Intf.GenericTypeArguments[0].IsAssignableFrom(controllerType)
+            );
+
             if (attr == null)
                 return null;
 
             // Validate built-in struct binding at registration, matching generated diagnostics.
             var parameterType = parameter.ParameterType;
+
             if (attr is RequestAbortedAttribute && parameterType != typeof(System.Threading.CancellationToken))
                 throw new InvalidOperationException("RequestAborted requires a CancellationToken parameter.");
+
             // Use the request data interface to get a value for the parameter.
             Expression useRequestDataInterface = Expression.Call(
                 Expression.Constant(attr),
-                intf.GetMethod(GetRequestDataAsyncMethodName) ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
+                intf.GetMethod(GetRequestDataAsyncMethodName)
+                    ?? throw new MissingMethodException(intf.FullName, GetRequestDataAsyncMethodName),
                 controller,
                 Expression.Constant(parameterType),
-                Expression.Constant(parameter.Name));
+                Expression.Constant(parameter.Name)
+            );
 
             // We should await the call to GetRequestDataAsync,
             // then cast the result to the parameter type.
@@ -567,14 +747,19 @@ namespace EmbedIO.WebApi
             return Expression.Call(
                 AwaitAndCastResultMethod.MakeGenericMethod(parameterType),
                 Expression.Constant(parameter.Name),
-                useRequestDataInterface);
+                useRequestDataInterface
+            );
         }
 
         // Wraps the handler call in a Task: a Task passes through, void completes immediately,
         // and a Task<TResult> or a synchronous result is serialized.
         [RequiresUnreferencedCode(ReflectionMessage)]
         [RequiresDynamicCode(ReflectionMessage)]
-        private Expression WrapHandlerResult(Expression callMethod, Type methodReturnType, ParameterExpression contextInLambda)
+        private Expression WrapHandlerResult(
+            Expression callMethod,
+            Type methodReturnType,
+            ParameterExpression contextInLambda
+        )
         {
             if (methodReturnType == typeof(Task))
             {
@@ -589,21 +774,43 @@ namespace EmbedIO.WebApi
             }
 
             if (methodReturnType == typeof(ServerSentEventStream))
-                return Expression.Call(callMethod, typeof(ServerSentEventStream).GetMethod(nameof(ServerSentEventStream.WriteAsync))
-                    ?? throw new MissingMethodException(nameof(ServerSentEventStream.WriteAsync)),
-                    contextInLambda, Expression.Constant(default(System.Threading.CancellationToken)));
+                return Expression.Call(
+                    callMethod,
+                    typeof(ServerSentEventStream).GetMethod(nameof(ServerSentEventStream.WriteAsync))
+                        ?? throw new MissingMethodException(nameof(ServerSentEventStream.WriteAsync)),
+                    contextInLambda,
+                    Expression.Constant(default(System.Threading.CancellationToken))
+                );
+
             if (IsGenericTaskType(methodReturnType, out var eventType) && eventType == typeof(ServerSentEventStream))
-                return Expression.Call(typeof(ControllerBindingServices), nameof(ControllerBindingServices.WriteEventStreamResultAsync),
-                    null, contextInLambda, callMethod);
+                return Expression.Call(
+                    typeof(ControllerBindingServices),
+                    nameof(ControllerBindingServices.WriteEventStreamResultAsync),
+                    null,
+                    contextInLambda,
+                    callMethod
+                );
 
             if (typeof(JsonStreamResult).IsAssignableFrom(methodReturnType))
-                return Expression.Call(Expression.Convert(callMethod, typeof(JsonStreamResult)),
-                    typeof(JsonStreamResult).GetMethod(nameof(JsonStreamResult.WriteAsync)) ?? throw new MissingMethodException(nameof(JsonStreamResult.WriteAsync)),
-                    contextInLambda, Expression.Constant(default(System.Threading.CancellationToken)));
+                return Expression.Call(
+                    Expression.Convert(callMethod, typeof(JsonStreamResult)),
+                    typeof(JsonStreamResult).GetMethod(nameof(JsonStreamResult.WriteAsync))
+                        ?? throw new MissingMethodException(nameof(JsonStreamResult.WriteAsync)),
+                    contextInLambda,
+                    Expression.Constant(default(System.Threading.CancellationToken))
+                );
 
-            if (IsGenericTaskType(methodReturnType, out var streamType) && typeof(JsonStreamResult).IsAssignableFrom(streamType))
-                return Expression.Call(typeof(ControllerBindingServices), nameof(ControllerBindingServices.WriteStreamResultAsync),
-                    new[] { streamType }, contextInLambda, callMethod);
+            if (
+                IsGenericTaskType(methodReturnType, out var streamType)
+                && typeof(JsonStreamResult).IsAssignableFrom(streamType)
+            )
+                return Expression.Call(
+                    typeof(ControllerBindingServices),
+                    nameof(ControllerBindingServices.WriteStreamResultAsync),
+                    [streamType],
+                    contextInLambda,
+                    callMethod
+                );
 
             if (IsGenericTaskType(methodReturnType, out var resultType))
             {
@@ -612,7 +819,8 @@ namespace EmbedIO.WebApi
                     Expression.Constant(this),
                     SerializeResultAsyncMethod.MakeGenericMethod(resultType),
                     contextInLambda,
-                    callMethod);
+                    callMethod
+                );
             }
 
             // Return a Task that serializes a result obtained synchronously
@@ -620,49 +828,78 @@ namespace EmbedIO.WebApi
                 Serializer.Target == null ? null : Expression.Constant(Serializer.Target),
                 Serializer.Method,
                 contextInLambda,
-                Expression.Convert(callMethod, typeof(object)));
+                Expression.Convert(callMethod, typeof(object))
+            );
         }
 
         // Compiles binding and invocation once, with activation and the awaited release
         // outside the expression tree.
         [RequiresDynamicCode(ReflectionMessage)]
         private static RouteHandlerCallback CompileActivatedHandler(
-            Type controllerType, ParameterExpression controller, Expression callMethod,
-            ParameterExpression contextInLambda, ParameterExpression routeInLambda,
+            Type controllerType,
+            ParameterExpression controller,
+            Expression callMethod,
+            ParameterExpression contextInLambda,
+            ParameterExpression routeInLambda,
             Func<IHttpContext, WebApiController?> contextFactory,
-            Func<IHttpContext, WebApiController, Task>? release, BeforeHandlerPlan? before, OutputCacheRegistration? caching = null)
+            Func<IHttpContext, WebApiController, Task>? release,
+            BeforeHandlerPlan? before,
+            OutputCacheRegistration? caching = null
+        )
         {
             var instance = Expression.Parameter(typeof(WebApiController), "instance");
-            var invoke = Expression.Lambda<Func<WebApiController, IHttpContext, RouteMatch, Task>>(
-                Expression.Block(new[] { controller },
-                    Expression.Assign(controller, Expression.Convert(instance, controllerType)),
-                    before == null ? Expression.Call(controller, PreProcessRequestMethod) : Expression.Empty(),
-                    callMethod),
-                instance, contextInLambda, routeInLambda).Compile();
+            var invoke = Expression
+                .Lambda<Func<WebApiController, IHttpContext, RouteMatch, Task>>(
+                    Expression.Block(
+                        [controller],
+                        Expression.Assign(controller, Expression.Convert(instance, controllerType)),
+                        before == null ? Expression.Call(controller, PreProcessRequestMethod) : Expression.Empty(),
+                        callMethod
+                    ),
+                    instance,
+                    contextInLambda,
+                    routeInLambda
+                )
+                .Compile();
 
             if (caching != null)
-                return CreateCachedControllerHandler(controllerType, contextFactory,
-                    release ?? throw new InvalidOperationException("No controller release callback is configured."), invoke, before, caching);
+                return CreateCachedControllerHandler(
+                    controllerType,
+                    contextFactory,
+                    release ?? throw new InvalidOperationException("No controller release callback is configured."),
+                    invoke,
+                    before,
+                    caching
+                );
 
+            var releaseController = release
+                ?? throw new InvalidOperationException("No controller release callback is configured.");
             return async (context, route) =>
             {
-                var created = contextFactory(context);
-                if (created == null)
-                    throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
+                var created = contextFactory(context)
+                    ?? throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
 
                 try
                 {
                     if (!controllerType.IsInstanceOfType(created))
-                        throw new InvalidOperationException($"The factory for {controllerType.FullName} returned {created.GetType().FullName}.");
+                        throw new InvalidOperationException(
+                            $"The factory for {controllerType.FullName} returned {created.GetType().FullName}."
+                        );
 
                     created.HttpContext = context;
                     created.Route = route;
-                    if (before != null) await before.ExecuteAsync(created, context.CancellationToken).ConfigureAwait(false);
+
+                    if (before != null)
+                        await before
+                            .ExecuteAsync(created, context.CancellationToken)
+                            .ConfigureAwait(false);
+
                     await invoke(created, context, route).ConfigureAwait(false);
                 }
+
                 finally
                 {
-                    await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false);
+                    await releaseController(context, created).ConfigureAwait(false);
                 }
             };
         }
@@ -671,8 +908,13 @@ namespace EmbedIO.WebApi
         // initializes its properties, calls the method and disposes a disposable controller.
         [RequiresDynamicCode(ReflectionMessage)]
         private static RouteHandlerCallback CompileOwnedHandler(
-            Type controllerType, ParameterExpression controller, Expression factoryExpression, Expression callMethod,
-            ParameterExpression contextInLambda, ParameterExpression routeInLambda)
+            Type controllerType,
+            ParameterExpression controller,
+            Expression factoryExpression,
+            Expression callMethod,
+            ParameterExpression contextInLambda,
+            ParameterExpression routeInLambda
+        )
         {
             // Label for return statement
             var returnTarget = Expression.Label(typeof(Task));
@@ -683,7 +925,8 @@ namespace EmbedIO.WebApi
             //     return controller.method(handlerArguments);
             Expression workWithController = Expression.Block(
                 Expression.Call(controller, PreProcessRequestMethod),
-                Expression.Return(returnTarget, callMethod));
+                Expression.Return(returnTarget, callMethod)
+            );
 
             // If the controller type implements IDisposable,
             // wrap operations in a simulated using block.
@@ -700,45 +943,51 @@ namespace EmbedIO.WebApi
                 //     }
                 workWithController = Expression.TryFinally(
                     workWithController,
-                    Expression.Call(Expression.TypeAs(controller, typeof(IDisposable)), DisposeMethod));
+                    Expression.Call(Expression.TypeAs(controller, typeof(IDisposable)), DisposeMethod)
+                );
             }
 
             // Create the controller and initialize its properties, work with it, and end the body
             // at the target of return statements. Then build and compile the lambda.
-            return Expression.Lambda<RouteHandlerCallback>(
-                Expression.Block(new[] { controller },
-                    Expression.Assign(controller, factoryExpression),
-                    Expression.Call(controller, HttpContextSetter, contextInLambda),
-                    Expression.Call(controller, RouteSetter, routeInLambda),
-                    workWithController,
-                    Expression.Label(returnTarget, Expression.Constant(Task.FromResult(false)))),
-                contextInLambda,
-                routeInLambda)
+            return Expression
+                .Lambda<RouteHandlerCallback>(
+                    Expression.Block(
+                        [controller],
+                        Expression.Assign(controller, factoryExpression),
+                        Expression.Call(controller, HttpContextSetter, contextInLambda),
+                        Expression.Call(controller, RouteSetter, routeInLambda),
+                        workWithController,
+                        Expression.Label(returnTarget, Expression.Constant(Task.FromResult(false)))
+                    ),
+                    contextInLambda,
+                    routeInLambda
+                )
                 .Compile();
         }
 
-        private async Task SerializeResultAsync<TResult>(IHttpContext context, Task<TResult> task)
-        {
-            await Serializer(
-                context,
-                await task.ConfigureAwait(false)).ConfigureAwait(false);
-        }
+        private async Task SerializeResultAsync<TResult>(IHttpContext context, Task<TResult> task) =>
+            await Serializer(context, await task.ConfigureAwait(false)).ConfigureAwait(false);
 
         private Type ValidateControllerType(string argumentName, Type value, bool canBeAbstract)
         {
             value = Validate.NotNull(argumentName, value);
+
             if (canBeAbstract)
             {
-                if (value.IsGenericTypeDefinition
-                 || !value.IsSubclassOf(typeof(WebApiController)))
-                    throw new ArgumentException($"Controller type must be a subclass of {nameof(WebApiController)}.", argumentName);
+                if (value.IsGenericTypeDefinition || !value.IsSubclassOf(typeof(WebApiController)))
+                    throw new ArgumentException(
+                        $"Controller type must be a subclass of {nameof(WebApiController)}.",
+                        argumentName
+                    );
             }
+
             else
             {
-                if (value.IsAbstract
-                 || value.IsGenericTypeDefinition
-                 || !value.IsSubclassOf(typeof(WebApiController)))
-                    throw new ArgumentException($"Controller type must be a non-abstract subclass of {nameof(WebApiController)}.", argumentName);
+                if (value.IsAbstract || value.IsGenericTypeDefinition || !value.IsSubclassOf(typeof(WebApiController)))
+                    throw new ArgumentException(
+                        $"Controller type must be a non-abstract subclass of {nameof(WebApiController)}.",
+                        argumentName
+                    );
             }
 
             if (_controllerTypes.Contains(value))
@@ -750,33 +999,69 @@ namespace EmbedIO.WebApi
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
         private bool TryRegisterControllerTypeCore(
-            Type controllerType, Expression factoryExpression,
+            Type controllerType,
+            Expression factoryExpression,
             Func<IHttpContext, WebApiController?>? contextFactory = null,
-            Func<IHttpContext, WebApiController, Task>? release = null)
+            Func<IHttpContext, WebApiController, Task>? release = null
+        )
         {
             var handlerCount = 0;
             var caseInsensitive = _caseInsensitiveRoutes;
-            var pending = caseInsensitive ? new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>() : null;
-            var methods = controllerType.GetMethods(BindingFlags.Instance | BindingFlags.Public)
-                .Where(m => !m.ContainsGenericParameters).ToArray();
-            var authorization = methods.Where(method => method.GetCustomAttributes().OfType<RouteAttribute>().Any())
+            var pending = caseInsensitive
+                ? new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>()
+                : null;
+            var methods = controllerType
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public)
+                .Where(m => !m.ContainsGenericParameters)
+                .ToArray();
+            var authorization = methods
+                .Where(method => method
+                    .GetCustomAttributes()
+                    .OfType<RouteAttribute>()
+                    .Any())
                 .ToDictionary(method => method, method => ReadAuthorization(controllerType, method));
-            var beforeHandlers = authorization.Keys.ToDictionary(method => method, method => ReadBeforeHandler(controllerType, method));
-            var outputCaching = authorization.Keys.ToDictionary(method => method, method => ResolveOutputCache(ReadOutputCache(controllerType, method)));
-            var browserProtection = authorization.Keys.ToDictionary(method => method, method => ReadBrowserProtection(controllerType, method));
-            var idempotency = authorization.Keys.ToDictionary(method => method, method => ReadIdempotency(controllerType, method));
+            var beforeHandlers = authorization.Keys.ToDictionary(
+                method => method,
+                method => ReadBeforeHandler(controllerType, method)
+            );
+            var outputCaching = authorization.Keys.ToDictionary(
+                method => method,
+                method => ResolveOutputCache(ReadOutputCache(controllerType, method))
+            );
+            var browserProtection = authorization.Keys.ToDictionary(
+                method => method,
+                method => ReadBrowserProtection(controllerType, method)
+            );
+            var idempotency = authorization.Keys.ToDictionary(
+                method => method,
+                method => ReadIdempotency(controllerType, method)
+            );
+            var securityHeaders = authorization.Keys.ToDictionary(
+                method => method,
+                method => ResolveSecurityHeaders(ReadSecurityHeaders(controllerType, method), idempotency[method])
+            );
+
             foreach (var method in authorization.Keys)
                 foreach (var route in method.GetCustomAttributes<RouteAttribute>())
-                    ResolveIdempotency(idempotency[method], route.Verb, method.ReturnType, ReadOutputCache(controllerType, method));
+                    ResolveIdempotency(
+                        idempotency[method],
+                        route.Verb,
+                        method.ReturnType,
+                        ReadOutputCache(controllerType, method)
+                    );
+
             foreach (var mode in browserProtection.Values) ValidateBrowserProtection(mode);
+
             foreach (var metadata in authorization.Values)
                 if (metadata != null) _authorization.Validate(metadata);
 
             foreach (var method in methods)
             {
-                var attributes = method.GetCustomAttributes()
+                var attributes = method
+                    .GetCustomAttributes()
                     .OfType<RouteAttribute>()
                     .ToArray();
+
                 if (attributes.Length < 1)
                     continue;
 
@@ -785,15 +1070,89 @@ namespace EmbedIO.WebApi
                     if (caseInsensitive)
                     {
                         var matcher = attribute.Matcher.WithCaseInsensitiveLiterals();
-                        var staged = pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.");
-                        if (!AcceptCaseInsensitiveDeclaration(attribute.Verb, matcher, method, controllerType, staged.Select(p => (p.Verb, p.Matcher, p.Method))))
+                        var staged = pending
+                            ?? throw new InvalidOperationException(
+                                "Case-insensitive declarations have not been initialized."
+                            );
+
+                        if (!AcceptCaseInsensitiveDeclaration(
+                            attribute.Verb,
+                            matcher,
+                            method,
+                            controllerType,
+                            staged.Select(p => (p.Verb, p.Matcher, p.Method))
+                        ))
                             continue;
-                        staged.Add((attribute.Verb, matcher, method, WrapAuthorization(WrapBrowserProtection(WrapIdempotency(CompileHandler(factoryExpression, method, matcher, contextFactory, release, beforeHandlers[method], outputCaching[method]), ResolveIdempotency(idempotency[method], attribute.Verb, method.ReturnType, ReadOutputCache(controllerType, method))), browserProtection[method]), authorization[method])));
+
+                        staged.Add(
+                            (
+                                attribute.Verb,
+                                matcher,
+                                method,
+                                WrapSecurityHeaders(
+                                    WrapAuthorization(
+                                        WrapBrowserProtection(
+                                            WrapIdempotency(
+                                                CompileHandler(
+                                                    factoryExpression,
+                                                    method,
+                                                    matcher,
+                                                    contextFactory,
+                                                    release,
+                                                    beforeHandlers[method],
+                                                    outputCaching[method]
+                                                ),
+                                                ResolveIdempotency(
+                                                    idempotency[method],
+                                                    attribute.Verb,
+                                                    method.ReturnType,
+                                                    ReadOutputCache(controllerType, method)
+                                                )
+                                            ),
+                                            browserProtection[method]
+                                        ),
+                                        authorization[method]
+                                    ),
+                                    securityHeaders[method]
+                                )
+                            )
+                        );
                     }
+
                     else
                     {
-                        AddHandler(attribute.Verb, attribute.Matcher, WrapAuthorization(WrapBrowserProtection(WrapIdempotency(CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release, beforeHandlers[method], outputCaching[method]), ResolveIdempotency(idempotency[method], attribute.Verb, method.ReturnType, ReadOutputCache(controllerType, method))), browserProtection[method]), authorization[method]));
+                        AddHandler(
+                            attribute.Verb,
+                            attribute.Matcher,
+                            WrapSecurityHeaders(
+                                WrapAuthorization(
+                                    WrapBrowserProtection(
+                                        WrapIdempotency(
+                                            CompileHandler(
+                                                factoryExpression,
+                                                method,
+                                                attribute.Matcher,
+                                                contextFactory,
+                                                release,
+                                                beforeHandlers[method],
+                                                outputCaching[method]
+                                            ),
+                                            ResolveIdempotency(
+                                                idempotency[method],
+                                                attribute.Verb,
+                                                method.ReturnType,
+                                                ReadOutputCache(controllerType, method)
+                                            )
+                                        ),
+                                        browserProtection[method]
+                                    ),
+                                    authorization[method]
+                                ),
+                                securityHeaders[method]
+                            )
+                        );
                     }
+
                     handlerCount++;
                 }
             }
@@ -803,10 +1162,13 @@ namespace EmbedIO.WebApi
 
             if (pending != null)
             {
-                foreach (var entry in pending)
+                foreach (var (Verb, Matcher, Method, Handler) in pending)
                 {
-                    AddHandler(entry.Verb, entry.Matcher, entry.Handler);
-                    (_caseInsensitiveDeclarations ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Add((entry.Verb, entry.Matcher, entry.Method, controllerType));
+                    AddHandler(Verb, Matcher, Handler);
+                    (_caseInsensitiveDeclarations
+                        ?? throw new InvalidOperationException(
+                            "Case-insensitive declarations have not been initialized."
+                        )).Add((Verb, Matcher, Method, controllerType));
                 }
             }
 
@@ -831,8 +1193,7 @@ namespace EmbedIO.WebApi
         /// </exception>
         /// <seealso cref="GeneratedControllerBindingAttribute"/>
         protected void RegisterControllerType<TController>(WebApiControllerBinding<TController> binding)
-            where TController : WebApiController, new()
-            => RegisterBinding(binding, static () => new TController());
+            where TController : WebApiController, new() => RegisterBinding(binding, static () => new TController());
 
         /// <summary>
         /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
@@ -851,9 +1212,10 @@ namespace EmbedIO.WebApi
         /// <para><paramref name="binding"/> contains no routes.</para>
         /// </exception>
         /// <seealso cref="GeneratedControllerBindingAttribute"/>
-        protected void RegisterControllerType<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
-            where TController : WebApiController
-            => RegisterBinding(binding, Validate.NotNull(nameof(factory), factory));
+        protected void RegisterControllerType<TController>(
+            WebApiControllerBinding<TController> binding,
+            Func<TController> factory
+        ) where TController : WebApiController => RegisterBinding(binding, Validate.NotNull(nameof(factory), factory));
 
         /// <summary>
         /// Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
@@ -877,24 +1239,50 @@ namespace EmbedIO.WebApi
         protected void RegisterControllerTypeWithContext<TController>(
             WebApiControllerBinding<TController> binding,
             Func<IHttpContext, TController?> factory,
-            Func<IHttpContext, TController, Task> release)
-            where TController : WebApiController
+            Func<IHttpContext, TController, Task> release
+        ) where TController : WebApiController
         {
             Validate.NotNull(nameof(factory), factory);
             Validate.NotNull(nameof(release), release);
-            RegisterBinding(binding, route => CreateBoundHandler(route.CreateInvoker(), Serializer, factory, release, route.UseControllerPreprocessing, IsStreamingResultType(route.Operation?.ResultType) ? null : ResolveOutputCache(route.OutputCachePolicy)));
+            RegisterBinding(
+                binding,
+                route => CreateBoundHandler(
+                    route.CreateInvoker(),
+                    Serializer,
+                    factory,
+                    release,
+                    route.UseControllerPreprocessing,
+                    IsStreamingResultType(route.Operation?.ResultType)
+                        ? null
+                        : ResolveOutputCache(route.OutputCachePolicy)
+                )
+            );
         }
-
-        private void RegisterBinding<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
-            where TController : WebApiController
-            => RegisterBinding(binding, route => IsStreamingResultType(route.Operation?.ResultType) || route.OutputCachePolicy != null
-                ? CreateBoundHandler(route.CreateInvoker(), Serializer, _ => factory(), ReleaseStreamingController, route.UseControllerPreprocessing, IsStreamingResultType(route.Operation?.ResultType) ? null : ResolveOutputCache(route.OutputCachePolicy))
-                : CreateBoundHandler(route.CreateInvoker(), Serializer, factory, route.UseControllerPreprocessing));
 
         private void RegisterBinding<TController>(
             WebApiControllerBinding<TController> binding,
-            Func<WebApiRouteBinding<TController>, RouteHandlerCallback> createHandler)
-            where TController : WebApiController
+            Func<TController> factory
+        ) where TController : WebApiController =>
+            RegisterBinding(
+                binding,
+                route => IsStreamingResultType(route.Operation?.ResultType) || route.OutputCachePolicy != null
+                    ? CreateBoundHandler(
+                        route.CreateInvoker(),
+                        Serializer,
+                        _ => factory(),
+                        ReleaseStreamingController,
+                        route.UseControllerPreprocessing,
+                        IsStreamingResultType(route.Operation?.ResultType)
+                            ? null
+                            : ResolveOutputCache(route.OutputCachePolicy)
+                    )
+                    : CreateBoundHandler(route.CreateInvoker(), Serializer, factory, route.UseControllerPreprocessing)
+            );
+
+        private void RegisterBinding<TController>(
+            WebApiControllerBinding<TController> binding,
+            Func<WebApiRouteBinding<TController>, RouteHandlerCallback> createHandler
+        ) where TController : WebApiController
         {
             EnsureConfigurationNotLocked();
             binding = Validate.NotNull(nameof(binding), binding);
@@ -902,41 +1290,116 @@ namespace EmbedIO.WebApi
 
             // Parse every route before adding any handler, so an invalid route leaves the module unchanged.
             var routes = binding.Routes;
+
             if (routes.Count < 1)
-                throw new ArgumentException($"Type {controllerType.Name} contains no controller methods.", nameof(binding));
+                throw new ArgumentException(
+                    $"Type {controllerType.Name} contains no controller methods.",
+                    nameof(binding)
+                );
 
             var matchers = new RouteMatcher[routes.Count];
+
             for (var i = 0; i < routes.Count; i++)
             {
                 matchers[i] = RouteMatcher.Parse(routes[i].Route, routes[i].IsBaseRoute);
+
                 if (routes[i].Authorization is { } metadata) _authorization.Validate(metadata);
+
                 ValidateBrowserProtection(routes[i].BrowserProtection);
+                ResolveSecurityHeaders(routes[i].SecurityHeadersPolicy, routes[i].IdempotencyPolicy);
                 ResolveOutputCache(routes[i].OutputCachePolicy);
-                ResolveIdempotency(routes[i].IdempotencyPolicy, routes[i].Verb, routes[i].Operation?.ResultType, routes[i].OutputCachePolicy);
+                ResolveIdempotency(
+                    routes[i].IdempotencyPolicy,
+                    routes[i].Verb,
+                    routes[i].Operation?.ResultType,
+                    routes[i].OutputCachePolicy
+                );
             }
 
             if (!_caseInsensitiveRoutes)
             {
                 for (var i = 0; i < routes.Count; i++)
-                    AddHandler(routes[i].Verb, matchers[i], WrapAuthorization(WrapBrowserProtection(WrapIdempotency(createHandler(routes[i]), ResolveIdempotency(routes[i].IdempotencyPolicy, routes[i].Verb, routes[i].Operation?.ResultType, routes[i].OutputCachePolicy)), routes[i].BrowserProtection), routes[i].Authorization));
+                    AddHandler(
+                        routes[i].Verb,
+                        matchers[i],
+                        WrapSecurityHeaders(
+                            WrapAuthorization(
+                                WrapBrowserProtection(
+                                    WrapIdempotency(
+                                        createHandler(routes[i]),
+                                        ResolveIdempotency(
+                                            routes[i].IdempotencyPolicy,
+                                            routes[i].Verb,
+                                            routes[i].Operation?.ResultType,
+                                            routes[i].OutputCachePolicy
+                                        )
+                                    ),
+                                    routes[i].BrowserProtection
+                                ),
+                                routes[i].Authorization
+                            ),
+                            ResolveSecurityHeaders(routes[i].SecurityHeadersPolicy, routes[i].IdempotencyPolicy)
+                        )
+                    );
             }
+
             else
             {
-                var pending = new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>();
+                var pending = new List<(
+                    HttpVerbs Verb,
+                    RouteMatcher Matcher,
+                    object Method,
+                    RouteHandlerCallback Handler
+                )>();
+
                 for (var i = 0; i < routes.Count; i++)
                 {
                     var route = routes[i];
                     var matcher = matchers[i].WithCaseInsensitiveLiterals();
-                    if (!AcceptCaseInsensitiveDeclaration(route.Verb, matcher, route.HandlerId, controllerType, pending.Select(p => (p.Verb, p.Matcher, p.Method))))
+
+                    if (!AcceptCaseInsensitiveDeclaration(
+                        route.Verb,
+                        matcher,
+                        route.HandlerId,
+                        controllerType,
+                        pending.Select(p => (p.Verb, p.Matcher, p.Method))
+                    ))
                         continue;
 
-                    pending.Add((route.Verb, matcher, route.HandlerId, WrapAuthorization(WrapBrowserProtection(WrapIdempotency(createHandler(route), ResolveIdempotency(route.IdempotencyPolicy, route.Verb, route.Operation?.ResultType, route.OutputCachePolicy)), route.BrowserProtection), route.Authorization)));
+                    pending.Add(
+                        (
+                            route.Verb,
+                            matcher,
+                            route.HandlerId,
+                            WrapSecurityHeaders(
+                                WrapAuthorization(
+                                    WrapBrowserProtection(
+                                        WrapIdempotency(
+                                            createHandler(route),
+                                            ResolveIdempotency(
+                                                route.IdempotencyPolicy,
+                                                route.Verb,
+                                                route.Operation?.ResultType,
+                                                route.OutputCachePolicy
+                                            )
+                                        ),
+                                        route.BrowserProtection
+                                    ),
+                                    route.Authorization
+                                ),
+                                ResolveSecurityHeaders(route.SecurityHeadersPolicy, route.IdempotencyPolicy)
+                            )
+                        )
+                    );
                 }
 
-                foreach (var entry in pending)
+                foreach (var (Verb, Matcher, Method, Handler) in pending)
                 {
-                    AddHandler(entry.Verb, entry.Matcher, entry.Handler);
-                    (_caseInsensitiveDeclarations ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.")).Add((entry.Verb, entry.Matcher, entry.Method, controllerType));
+                    AddHandler(Verb, Matcher, Handler);
+                    (_caseInsensitiveDeclarations
+                        ?? throw new InvalidOperationException(
+                            "Case-insensitive declarations have not been initialized."
+                        )).Add((Verb, Matcher, Method, controllerType));
                 }
             }
 
@@ -950,28 +1413,45 @@ namespace EmbedIO.WebApi
             RouteMatcher matcher,
             object method,
             Type controllerType,
-            IEnumerable<(HttpVerbs Verb, RouteMatcher Matcher, object Method)> pending)
+            IEnumerable<(HttpVerbs Verb, RouteMatcher Matcher, object Method)> pending
+        )
         {
-            _caseInsensitiveDeclarations ??= new List<(HttpVerbs, RouteMatcher, object, Type)>();
-            var declarations = _caseInsensitiveDeclarations.Concat(pending.Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType)));
-            var overlapping = declarations.Where(d => (d.Verb == verb || d.Verb == HttpVerbs.Any || verb == HttpVerbs.Any)
-                && matcher.HasCaseEquivalentTemplate(d.Matcher)).ToArray();
+            _caseInsensitiveDeclarations ??= [];
+            var declarations = _caseInsensitiveDeclarations.Concat(
+                pending.Select(p => (p.Verb, p.Matcher, p.Method, ControllerType: controllerType))
+            );
+            var overlapping = declarations
+                .Where(
+                    d => (d.Verb == verb || d.Verb == HttpVerbs.Any || verb == HttpVerbs.Any)
+                        && matcher.HasCaseEquivalentTemplate(d.Matcher)
+                )
+                .ToArray();
+
             if (overlapping.Any(d => !Equals(d.Method, method) || d.ControllerType != controllerType))
-                throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' has conflicting handlers for overlapping HTTP verbs.");
+                throw new ArgumentException(
+                    $"Case-equivalent controller route '{matcher.Route}' has conflicting handlers for overlapping HTTP verbs."
+                );
+
             if (overlapping.Any(d => !d.Matcher.ParameterNames.SequenceEqual(matcher.ParameterNames)))
-                throw new ArgumentException($"Case-equivalent controller route '{matcher.Route}' must retain the same parameter names.");
+                throw new ArgumentException(
+                    $"Case-equivalent controller route '{matcher.Route}' must retain the same parameter names."
+                );
 
             // Existing case-only aliases on one method need no duplicate handler.
             return !overlapping.Any(d => d.Verb == verb && Equals(d.Method, method));
         }
 
-        private static bool IsStreamingResultType(Type? type)
-            => type != null && (typeof(JsonStreamResult).IsAssignableFrom(type) || type == typeof(ServerSentEventStream)
-                || IsGenericTaskType(type, out var item) && (typeof(JsonStreamResult).IsAssignableFrom(item) || item == typeof(ServerSentEventStream)));
+        private static bool IsStreamingResultType(Type? type) =>
+            type != null
+                && (typeof(JsonStreamResult).IsAssignableFrom(type)
+                    || type == typeof(ServerSentEventStream)
+                    || IsGenericTaskType(type, out var item)
+                        && (typeof(JsonStreamResult).IsAssignableFrom(item) || item == typeof(ServerSentEventStream)));
 
         private static Task ReleaseStreamingController(IHttpContext context, WebApiController controller)
         {
             if (controller is IDisposable disposable) disposable.Dispose();
+
             return Task.CompletedTask;
         }
 
@@ -981,8 +1461,9 @@ namespace EmbedIO.WebApi
         private static RouteHandlerCallback CreateBoundHandler<TController>(
             WebApiRouteInvoker<TController> invoker,
             ResponseSerializerCallback serializer,
-            Func<TController> factory, bool useControllerPreprocessing)
-            where TController : WebApiController
+            Func<TController> factory,
+            bool useControllerPreprocessing
+        ) where TController : WebApiController
         {
             invoker = Validate.NotNull(nameof(invoker), invoker);
             var disposable = typeof(IDisposable).IsAssignableFrom(typeof(TController));
@@ -992,11 +1473,14 @@ namespace EmbedIO.WebApi
                 controller.HttpContext = context;
                 controller.Route = route;
                 Task work;
+
                 try
                 {
                     if (useControllerPreprocessing) controller.PreProcessRequest();
+
                     work = await invoker(controller, context, route, serializer).ConfigureAwait(false);
                 }
+
                 finally
                 {
                     if (disposable)
@@ -1013,33 +1497,49 @@ namespace EmbedIO.WebApi
             WebApiRouteInvoker<TController> invoker,
             ResponseSerializerCallback serializer,
             Func<IHttpContext, TController?> factory,
-            Func<IHttpContext, TController, Task> release, bool useControllerPreprocessing, OutputCacheRegistration? caching = null)
-            where TController : WebApiController
+            Func<IHttpContext, TController, Task> release,
+            bool useControllerPreprocessing,
+            OutputCacheRegistration? caching = null
+        ) where TController : WebApiController
         {
             invoker = Validate.NotNull(nameof(invoker), invoker);
+
             if (caching != null)
-                return CreateCachedControllerHandler(typeof(TController), context => factory(context),
+                return CreateCachedControllerHandler(
+                    typeof(TController),
+                    context => factory(context),
                     (context, controller) => release(context, (TController)controller),
                     async (controller, context, route) =>
                     {
                         var typed = (TController)controller;
+
                         if (useControllerPreprocessing) typed.PreProcessRequest();
+
                         var work = await invoker(typed, context, route, serializer).ConfigureAwait(false);
                         await work.ConfigureAwait(false);
-                    }, null, caching);
+                    },
+                    null,
+                    caching
+                );
+
             return async (context, route) =>
             {
                 var controller = factory(context)
-                    ?? throw new InvalidOperationException($"The factory for {typeof(TController).FullName} returned null.");
+                    ?? throw new InvalidOperationException(
+                        $"The factory for {typeof(TController).FullName} returned null."
+                    );
 
                 try
                 {
                     controller.HttpContext = context;
                     controller.Route = route;
+
                     if (useControllerPreprocessing) controller.PreProcessRequest();
+
                     var work = await invoker(controller, context, route, serializer).ConfigureAwait(false);
                     await work.ConfigureAwait(false);
                 }
+
                 finally
                 {
                     await release(context, controller).ConfigureAwait(false);
