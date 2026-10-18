@@ -197,3 +197,14 @@ one canceled waiter, credential/no-cache bypass and storage bounds. The
 snapshot and must reject it. This campaign uses the in-process HTTP pipeline;
 real transport replay is covered separately by cache regression tests. It does
 not claim distributed-cache consistency or network fault injection.
+
+
+The `idempotency` scenario runs three in-process hosts/coordinators against one
+bounded atomic store. A separate business ledger checks exact results, payload
+conflicts, caller isolation and at-most-one execution during retention, including
+mandatory overlapping owners/waiters, cancellation and uncertain outcomes. Filling
+the pool must reject new keys without evicting prior results. The
+`--idempotency-selftest` negative oracle injects a foreign result and must reject
+it. The retained `state-corpus/idempotency.json` trace replays these transitions;
+actual HTTP wire protocols have separate regression tests. See the
+[finite write idempotency guide](idempotency.md) for ownership and durability limits.

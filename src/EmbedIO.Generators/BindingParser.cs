@@ -167,6 +167,7 @@ namespace EmbedIO.Generators
                 var before = ReadBeforeHandler(controller, method);
                 if (!before.Valid) { failed = true; continue; }
                 var outputCache = ReadOutputCache(controller, method);
+                var idempotency = ReadIdempotency(controller, method);
                 var operationName = "__EmbedIO_" + propertyName + "_Operation" + Literals.Int(invokerCount);
                 var invokerName = "__EmbedIO_" + propertyName + "_Invoker" + Literals.Int(invokerCount++);
                 var invoker = GenerateInvoker(controller, method, routeAttributes, jsonContext, invokerName, operationName, location, before.Code, before.Awaits, outputCache != null);
@@ -183,7 +184,9 @@ namespace EmbedIO.Generators
                     routes.Add("new global::EmbedIO.WebApi.WebApiRouteBinding<" + controllerName + ">((global::EmbedIO.HttpVerbs)("
                         + Literals.Int(route.Verb) + "), " + Literals.String(route.Route) + ", " + (route.IsBaseRoute ? "true" : "false")
                         + ", " + handlerId + ", " + invokerName + (_types.WebApiOperation is null ? string.Empty : ", " + operationName)
-                        + (outputCache != null
+                        + (idempotency != null
+                            ? ", " + operationName + ".Authorization, " + (before.Code is null ? "true" : "false") + ", " + (browser.Code ?? "null") + ", " + (outputCache == null ? "null" : Literals.String(outputCache)) + ", " + Literals.String(idempotency)
+                            : outputCache != null
                             ? ", " + operationName + ".Authorization, " + (before.Code is null ? "true" : "false") + ", " + (browser.Code ?? "null") + ", " + Literals.String(outputCache)
                             : browser.Code is null
                                 ? (before.Code is null ? string.Empty : ", " + operationName + ".Authorization, false")

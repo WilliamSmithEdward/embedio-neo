@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-18
+
+### Added
+
+- Opt-in idempotency for finite write endpoints through `IdempotencyCoordinator`,
+  with trusted caller scoping,
+  payload/representation fingerprints, shared-store duplicate coordination,
+  bounded fail-closed in-memory claims and an optional atomic durable-store
+  contract. Reflection/generated controller attributes and fluent handlers record
+  finite results before delivery and retain uncertain outcomes instead of
+  automatically executing again. Existing unconfigured routes remain unchanged.
+  Includes concurrency fuzzing, wire/compatibility regressions and durability
+  guidance. See [finite write idempotency](docs/guides/idempotency.md).
+
 ## [2.10.0] - 2026-10-17
 
 ### Added

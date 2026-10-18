@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net472</TargetFramework>
     <OutputType>Exe</OutputType>
@@ -9,6 +9,7 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Shared/IdempotencySmoke.cs" Link="Shared/IdempotencySmoke.cs" />
     <Compile Include="../Shared/OutputCacheSmoke.cs" Link="Shared/OutputCacheSmoke.cs" />
     <Compile Include="../Shared/RequestAbortSmoke.cs" Link="Shared/RequestAbortSmoke.cs" />
     <Reference Include="System.Net.Http" />

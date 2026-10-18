@@ -47,6 +47,40 @@ length bypass caching; an explicit zero Content-Length permits reuse. See the
 [output-caching guide](docs/guides/output-caching.md) for exclusions, ownership,
 key dimensions, limits, fuzzing and real-loopback latency measurement.
 
+### Write idempotency (2.11.0+)
+
+`EmbedIO.Idempotency.IdempotencyCoordinator` and immutable `IdempotencyPolicy` protect
+explicit finite write routes through `Protect`, `ExecuteAsync`, or named
+`[Idempotency("policy")]` / `ConfigureIdempotency` controller declarations.
+Method attributes override classes; null disables inheritance. Both reflection
+and generated bindings work. Configure before registering controllers.
+
+Always resolve a stable trusted caller/tenant/issuer scope after authentication;
+never trust a client-supplied identity header, display name or idempotency key.
+Keep partitions and caller-scope rules stable through the retry window; changing
+the namespace resets lookup protection and requires deliberate reconciliation.
+Every protected request requires one bounded `Idempotency-Key`. Retry the same
+logical operation with identical transferred bytes and declared representation
+headers. A mismatched fingerprint is 409. Authorization/browser guards execute
+on every retry; activation, hooks, binding, action and cleanup execute only for
+the owner. Put per-request checks in guards, not owner-only hooks.
+
+The finite response is staged and recorded before network delivery. Uncertain
+handler/storage outcomes stay blocked instead of automatically executing again.
+Capacity exhaustion is 503, not early eviction. Active claims never expire;
+terminal records expire lazily after retention. Defaults bound participants,
+request/response bytes, metadata and store reservations. Streaming, sessions,
+cookie changes and completion callbacks are unsupported inside staged work.
+Await all cleanup. Unconfigured routes retain their existing behavior.
+
+The default `MemoryIdempotencyStore` is process-local; expiry, restart or store
+replacement removes protection. Optional `IIdempotencyStore` implementations must
+provide atomic acquisition and owner-token-fenced completion/failure. Durable
+claims alone do not transact business effects. Reconcile uncertain operations;
+do not blindly choose another key or wait for expiry. See the
+[idempotency guide](docs/guides/idempotency.md) for the precise store contract,
+limits, failure matrix, concurrency fuzzing and cross-target support.
+
 ## 1. What you are building on
 
 | Item | Value |
@@ -54,7 +88,7 @@ key dimensions, limits, fuzzing and real-loopback latency measurement.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.10.0, the v2 engine. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current version | 2.11.0, the v2 engine. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x

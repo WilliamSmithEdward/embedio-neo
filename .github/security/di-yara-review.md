@@ -561,3 +561,35 @@ builds. Fresh exact-head full scans and every other gate remain required before
 merge/publication. Other findings, errors and stale acceptances remain fatal.
 Raw packages, pin checks, complete rule, CodeView paths, printed-match scans and
 alert receipts are retained under ignored `TestResults/release-2.10.0/yara-review`.
+
+
+## 2.11.0 idempotency release revalidation
+
+The [release PR scan](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/39109784808)
+rejected the two 2.11.0 assembly paths and stale 2.10.0 acceptances. Its exact
+`scanned-nupkg` identifies integration source
+`7b1eab5af6431ae86b0515d9eacfbdb65f7d0dc9` (head
+`0f16deb56835830cf9a4be98462a83bd32285b42`). Both pinned archives and extracted
+contents for YARA-X 1.21.0 / YARA Forge 20261011 were verified; the complete God
+Mode rule was reread. Full-rule scans with printed strings in a read-only,
+network-disabled container match only `Injection.pdb` in each compiler-generated
+CodeView symbol path. Independent RSDS/CodeView inspection places each match
+inside that path. No other rule/string matches either assembly. DI source and
+scanner pins are unchanged from released 2.10.0; ClamAV reports zero matches.
+
+| Scanned CI artifact | SHA-256 | Match offset |
+| --- | --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.11.0.nupkg` | `38b08a505f64ce74b9d276cae09e8f3dc432771cdee164acec5908538f8d8ead` | n/a |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `c2b9b8808dc672f9c7777c4652dbd98afe6f40ad4c3343844afca07d4cc6ef2c` | `0x6c88` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `0faebf8b795690489fcf90e341ea21c13b75b56632b4de2409907ba83b2fb907` | `0x7573` |
+
+Only the two exact package-version paths move to 2.11.0. The rule and
+source/evidence-file boundaries remain unchanged. Paginated queries of open,
+fixed and dismissed GitHub alerts expose no matching YARA alert. The existing
+owner-approved unavailable-alert exception for this same reviewed symbol-filename
+finding is retained; no dismissal is claimed. These hashes identify this artifact,
+not future builds. Fresh exact-head full scans, review of final package bytes and
+every other merge/publication gate remain required. Other findings, scanner errors
+and stale entries remain fatal. Raw packages, pins, complete rule, CodeView paths,
+printed-match scans and alert receipts are under ignored
+`TestResults/release-2.11.0/yara-review`.

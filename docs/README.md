@@ -7,7 +7,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Getting started
 
-- [Opt-in output caching (in development)](guides/output-caching.md)
+- [Finite write idempotency (2.11.0+)](guides/idempotency.md)
+- [Opt-in output caching](guides/output-caching.md)
 
 - [Your first JSON endpoint](guides/getting-started/README.md): install, run, and get JSON.
 - [Serve HTML and files](guides/getting-started/files.md): serve a folder and combine it with an API.
