@@ -8,6 +8,8 @@ using EmbedIO.Utilities;
 
 if (FsCheckProperties.Run(args)) return;
 
+if (await HttpResultsFuzz.SelfTestAsync(args)) return;
+
 if (await SecurityHeadersFuzz.SelfTestAsync(args)) return;
 
 if (await BrowserProtectionFuzz.SelfTestAsync(args)) return;
@@ -61,6 +63,7 @@ if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateM
     ["tus-uploads"] = TusUploadFuzz.RunAsync,
     ["browser-protection"] = BrowserProtectionFuzz.RunAsync,
     ["security-headers"] = SecurityHeadersFuzz.RunAsync,
+    ["typed-results"] = HttpResultsFuzz.RunAsync,
     ["request-validation"] = RequestValidationFuzz.RunAsync,
     ["controller-parity"] = ControllerParityFuzz.RunAsync,
     ["permanent-bans"] = PermanentBanFuzz.RunAsync,

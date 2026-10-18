@@ -179,3 +179,8 @@ no-store/validator handling and rejected control text. Run
 See [security-header policies](security-headers.md) and their
 [adversarial audit](../project/security-headers-audit.md). This scenario is also
 included in the shared-resource CI campaign.
+
+The `typed-results` scenario uses three gated clients and independently checks
+status/body/actor identity, named Locations, finite cache hits, file bypass, nonce
+binding and rejected path boundaries. Run `--typed-results-selftest` to confirm
+that a deliberately wrong actor payload is rejected.

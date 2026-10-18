@@ -46,16 +46,29 @@ namespace EmbedIO.WebApi
         public static T? ConvertRouteValue<T>(string? value, TypeConverter? converter)
         {
             bool invalidValue;
+
             try
             {
-                if (StringConversion.TryConvert(typeof(T), value, converter, RequestFieldBinding.ConverterOrThrow, out var result, out invalidValue))
+                if (StringConversion.TryConvert(
+                    typeof(T),
+                    value,
+                    converter,
+                    RequestFieldBinding.ConverterOrThrow,
+                    out var result,
+                    out invalidValue
+                ))
                     return (T?)result;
             }
-            catch (Exception exception) when (!string.IsNullOrEmpty(value)
+
+            catch (Exception exception) when (
+                !string.IsNullOrEmpty(value)
                 && exception.GetType() == typeof(Exception)
                 && converter is BaseNumberConverter
-                && (exception.InnerException is ArgumentException || exception.InnerException is FormatException
-                    || exception.InnerException is OverflowException || exception.InnerException is IndexOutOfRangeException))
+                    && (exception.InnerException is ArgumentException
+                        || exception.InnerException is FormatException
+                        || exception.InnerException is OverflowException
+                        || exception.InnerException is IndexOutOfRangeException)
+            )
             {
                 // BaseNumberConverter wraps parsing failures in a plain Exception, which the
                 // reflection binder translates at the route boundary; see FromString.ConvertTo.
@@ -63,6 +76,7 @@ namespace EmbedIO.WebApi
             }
 
             if (invalidValue) throw HttpException.BadRequest("Invalid route parameter value.");
+
             throw new FormatException($"Cannot convert '{value}' to {typeof(T).FullName}.");
         }
 
@@ -71,16 +85,34 @@ namespace EmbedIO.WebApi
         /// <param name="fieldName">The field name.</param>
         /// <param name="badRequestIfMissing">The attribute's <see cref="QueryFieldAttribute.BadRequestIfMissing"/>.</param>
         /// <returns>The field's last value, or <see langword="null"/>.</returns>
-        public static string? QueryFieldString(WebApiController controller, string fieldName, bool badRequestIfMissing)
-            => RequestFieldBinding.GetString(QueryData(controller), fieldName, badRequestIfMissing, RequestFieldBinding.Query);
+        public static string? QueryFieldString(
+            WebApiController controller,
+            string fieldName,
+            bool badRequestIfMissing
+        ) =>
+            RequestFieldBinding.GetString(
+                QueryData(controller),
+                fieldName,
+                badRequestIfMissing,
+                RequestFieldBinding.Query
+            );
 
         /// <summary>Binds a <see cref="QueryFieldAttribute"/> parameter of type <see cref="string"/> array.</summary>
         /// <param name="controller">The controller.</param>
         /// <param name="fieldName">The field name.</param>
         /// <param name="badRequestIfMissing">The attribute's <see cref="QueryFieldAttribute.BadRequestIfMissing"/>.</param>
         /// <returns>The field's values.</returns>
-        public static string[] QueryFieldStrings(WebApiController controller, string fieldName, bool badRequestIfMissing)
-            => RequestFieldBinding.GetStrings(QueryData(controller), fieldName, badRequestIfMissing, RequestFieldBinding.Query);
+        public static string[] QueryFieldStrings(
+            WebApiController controller,
+            string fieldName,
+            bool badRequestIfMissing
+        ) =>
+            RequestFieldBinding.GetStrings(
+                QueryData(controller),
+                fieldName,
+                badRequestIfMissing,
+                RequestFieldBinding.Query
+            );
 
         /// <summary>Binds a <see cref="QueryFieldAttribute"/> parameter of a converted type.</summary>
         /// <typeparam name="T">The parameter's type.</typeparam>
@@ -90,8 +122,21 @@ namespace EmbedIO.WebApi
         /// <param name="parameterName">The parameter's name.</param>
         /// <param name="converter">The type converter, or <see langword="null"/> for strings and enumerations.</param>
         /// <returns>The converted last value, or the default value if the field is absent.</returns>
-        public static T? QueryField<T>(WebApiController controller, string fieldName, bool badRequestIfMissing, string parameterName, TypeConverter? converter)
-            => RequestFieldBinding.Get<T>(QueryData(controller), fieldName, badRequestIfMissing, RequestFieldBinding.Query, parameterName, converter);
+        public static T? QueryField<T>(
+            WebApiController controller,
+            string fieldName,
+            bool badRequestIfMissing,
+            string parameterName,
+            TypeConverter? converter
+        ) =>
+            RequestFieldBinding.Get<T>(
+                QueryData(controller),
+                fieldName,
+                badRequestIfMissing,
+                RequestFieldBinding.Query,
+                parameterName,
+                converter
+            );
 
         /// <summary>Binds a <see cref="QueryFieldAttribute"/> parameter of a converted array type.</summary>
         /// <typeparam name="TElement">The array's element type.</typeparam>
@@ -100,24 +145,53 @@ namespace EmbedIO.WebApi
         /// <param name="badRequestIfMissing">The attribute's <see cref="QueryFieldAttribute.BadRequestIfMissing"/>.</param>
         /// <param name="converter">The type converter, or <see langword="null"/> for strings and enumerations.</param>
         /// <returns>The converted values.</returns>
-        public static TElement?[] QueryFieldArray<TElement>(WebApiController controller, string fieldName, bool badRequestIfMissing, TypeConverter? converter)
-            => RequestFieldBinding.GetArray<TElement>(QueryData(controller), fieldName, badRequestIfMissing, RequestFieldBinding.Query, converter);
+        public static TElement?[] QueryFieldArray<TElement>(
+            WebApiController controller,
+            string fieldName,
+            bool badRequestIfMissing,
+            TypeConverter? converter
+        ) =>
+            RequestFieldBinding.GetArray<TElement>(
+                QueryData(controller),
+                fieldName,
+                badRequestIfMissing,
+                RequestFieldBinding.Query,
+                converter
+            );
 
         /// <summary>Binds a <see cref="FormFieldAttribute"/> parameter of type <see cref="string"/>.</summary>
         /// <param name="controller">The controller.</param>
         /// <param name="fieldName">The field name.</param>
         /// <param name="badRequestIfMissing">The attribute's <see cref="FormFieldAttribute.BadRequestIfMissing"/>.</param>
         /// <returns>A task whose result is the field's last value, or <see langword="null"/>.</returns>
-        public static async Task<string?> FormFieldStringAsync(WebApiController controller, string fieldName, bool badRequestIfMissing)
-            => RequestFieldBinding.GetString(await FormDataAsync(controller).ConfigureAwait(false), fieldName, badRequestIfMissing, RequestFieldBinding.Form);
+        public static async Task<string?> FormFieldStringAsync(
+            WebApiController controller,
+            string fieldName,
+            bool badRequestIfMissing
+        ) =>
+            RequestFieldBinding.GetString(
+                await FormDataAsync(controller).ConfigureAwait(false),
+                fieldName,
+                badRequestIfMissing,
+                RequestFieldBinding.Form
+            );
 
         /// <summary>Binds a <see cref="FormFieldAttribute"/> parameter of type <see cref="string"/> array.</summary>
         /// <param name="controller">The controller.</param>
         /// <param name="fieldName">The field name.</param>
         /// <param name="badRequestIfMissing">The attribute's <see cref="FormFieldAttribute.BadRequestIfMissing"/>.</param>
         /// <returns>A task whose result is the field's values.</returns>
-        public static async Task<string[]> FormFieldStringsAsync(WebApiController controller, string fieldName, bool badRequestIfMissing)
-            => RequestFieldBinding.GetStrings(await FormDataAsync(controller).ConfigureAwait(false), fieldName, badRequestIfMissing, RequestFieldBinding.Form);
+        public static async Task<string[]> FormFieldStringsAsync(
+            WebApiController controller,
+            string fieldName,
+            bool badRequestIfMissing
+        ) =>
+            RequestFieldBinding.GetStrings(
+                await FormDataAsync(controller).ConfigureAwait(false),
+                fieldName,
+                badRequestIfMissing,
+                RequestFieldBinding.Form
+            );
 
         /// <summary>Binds a <see cref="FormFieldAttribute"/> parameter of a converted type.</summary>
         /// <typeparam name="T">The parameter's type.</typeparam>
@@ -127,8 +201,21 @@ namespace EmbedIO.WebApi
         /// <param name="parameterName">The parameter's name.</param>
         /// <param name="converter">The type converter, or <see langword="null"/> for strings and enumerations.</param>
         /// <returns>A task whose result is the converted last value, or the default value if the field is absent.</returns>
-        public static async Task<T?> FormFieldAsync<T>(WebApiController controller, string fieldName, bool badRequestIfMissing, string parameterName, TypeConverter? converter)
-            => RequestFieldBinding.Get<T>(await FormDataAsync(controller).ConfigureAwait(false), fieldName, badRequestIfMissing, RequestFieldBinding.Form, parameterName, converter);
+        public static async Task<T?> FormFieldAsync<T>(
+            WebApiController controller,
+            string fieldName,
+            bool badRequestIfMissing,
+            string parameterName,
+            TypeConverter? converter
+        ) =>
+            RequestFieldBinding.Get<T>(
+                await FormDataAsync(controller).ConfigureAwait(false),
+                fieldName,
+                badRequestIfMissing,
+                RequestFieldBinding.Form,
+                parameterName,
+                converter
+            );
 
         /// <summary>Binds a <see cref="FormFieldAttribute"/> parameter of a converted array type.</summary>
         /// <typeparam name="TElement">The array's element type.</typeparam>
@@ -137,8 +224,19 @@ namespace EmbedIO.WebApi
         /// <param name="badRequestIfMissing">The attribute's <see cref="FormFieldAttribute.BadRequestIfMissing"/>.</param>
         /// <param name="converter">The type converter, or <see langword="null"/> for strings and enumerations.</param>
         /// <returns>A task whose result is the converted values.</returns>
-        public static async Task<TElement?[]> FormFieldArrayAsync<TElement>(WebApiController controller, string fieldName, bool badRequestIfMissing, TypeConverter? converter)
-            => RequestFieldBinding.GetArray<TElement>(await FormDataAsync(controller).ConfigureAwait(false), fieldName, badRequestIfMissing, RequestFieldBinding.Form, converter);
+        public static async Task<TElement?[]> FormFieldArrayAsync<TElement>(
+            WebApiController controller,
+            string fieldName,
+            bool badRequestIfMissing,
+            TypeConverter? converter
+        ) =>
+            RequestFieldBinding.GetArray<TElement>(
+                await FormDataAsync(controller).ConfigureAwait(false),
+                fieldName,
+                badRequestIfMissing,
+                RequestFieldBinding.Form,
+                converter
+            );
 
         /// <summary>
         /// Binds a <see cref="JsonDataAttribute"/> parameter with EmbedIO's default JSON options,
@@ -154,14 +252,17 @@ namespace EmbedIO.WebApi
         public static async Task<T?> JsonDataAsync<T>(WebApiController controller, string parameterName)
         {
             var body = await ReadBodyAsync(controller).ConfigureAwait(false);
+
             if (!ReflectionSerialization.IsSupported)
                 throw ReflectionSerialization.Disabled();
 
             object? result;
+
             try
             {
-                result = Json.Deserialize(body, typeof(T));
+                result = Json.Deserialize<T>(body);
             }
+
             catch (JsonException)
             {
                 throw HttpException.BadRequest($"Expected request body to be deserializable to {typeof(T).FullName}.");
@@ -184,10 +285,12 @@ namespace EmbedIO.WebApi
         {
             context = context ?? throw new ArgumentNullException(nameof(context));
             var body = await ReadBodyAsync(controller).ConfigureAwait(false);
+
             try
             {
                 return Json.DeserializeWith<T>(body, context.Options);
             }
+
             catch (JsonException)
             {
                 throw HttpException.BadRequest($"Expected request body to be deserializable to {typeof(T).FullName}.");
@@ -203,8 +306,8 @@ namespace EmbedIO.WebApi
         /// <param name="value">The value returned by the attribute.</param>
         /// <returns>The value, cast to <typeparamref name="T"/>.</returns>
         /// <exception cref="InvalidCastException">The value is not a <typeparamref name="T"/>.</exception>
-        public static T? CastRequestData<T>(string parameterName, object? value)
-            => RequestFieldBinding.CastResult<T>(parameterName, value);
+        public static T? CastRequestData<T>(string parameterName, object? value) =>
+            RequestFieldBinding.CastResult<T>(parameterName, value);
 
         /// <summary>
         /// Serializes the result of a controller method that returns <see cref="Task{TResult}"/>.
@@ -214,10 +317,17 @@ namespace EmbedIO.WebApi
         /// <param name="context">The HTTP context.</param>
         /// <param name="task">The task returned by the controller method.</param>
         /// <returns>A task representing the serialization.</returns>
-        public static async Task SerializeResultAsync<TResult>(ResponseSerializerCallback serializer, IHttpContext context, Task<TResult> task)
+        public static async Task SerializeResultAsync<TResult>(
+            ResponseSerializerCallback serializer,
+            IHttpContext context,
+            Task<TResult> task
+        )
         {
             serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
-            await serializer(context, await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false)).ConfigureAwait(false);
+            await serializer(
+                context,
+                await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false)
+            ).ConfigureAwait(false);
         }
 
         /// <summary>Executes an opted-in action after its per-request preprocessing. Supports generated code.</summary>
@@ -225,24 +335,51 @@ namespace EmbedIO.WebApi
         /// <param name="context">The current request.</param>
         /// <param name="invoke">Binds arguments, invokes and completely serializes the action.</param>
         /// <returns>The response lifetime.</returns>
-        public static async Task ExecuteOutputCachedAsync(WebApiController controller, IHttpContext context, Func<IHttpContext, Task> invoke)
+        public static async Task ExecuteOutputCachedAsync(
+            WebApiController controller,
+            IHttpContext context,
+            Func<IHttpContext, Task> invoke
+        )
         {
-            if (controller == null) throw new ArgumentNullException(nameof(controller));
-            if (context == null) throw new ArgumentNullException(nameof(context));
-            if (invoke == null) throw new ArgumentNullException(nameof(invoke));
+            controller = global::EmbedIO.Utilities.Validate.NotNull(nameof(controller), controller);
+
+            context = global::EmbedIO.Utilities.Validate.NotNull(nameof(context), context);
+
+            invoke = global::EmbedIO.Utilities.Validate.NotNull(nameof(invoke), invoke);
+
             var caching = controller.OutputCaching;
-            if (caching == null || controller.OutputCacheDisabled) { await invoke(context).ConfigureAwait(false); return; }
-            var completion = controller.OutputCacheCompletion;
-            await caching.Cache.ExecuteAsync(context, caching.Policy, async capture =>
+
+            if (caching == null || controller.OutputCacheDisabled)
             {
-                controller.UseCapturedContext(capture);
-                try
+                await invoke(context).ConfigureAwait(false);
+                return;
+            }
+
+            var completion = controller.OutputCacheCompletion;
+            await caching.Cache
+                .ExecuteAsync(context, caching.Policy, async capture =>
                 {
-                    try { await invoke(capture).ConfigureAwait(false); }
-                    finally { if (completion != null) await completion().ConfigureAwait(false); }
-                }
-                finally { controller.UseCapturedContext(context); }
-            }).ConfigureAwait(false);
+                    controller.UseCapturedContext(capture);
+
+                    try
+                    {
+                        try
+                        {
+                            await invoke(capture).ConfigureAwait(false);
+                        }
+
+                        finally
+                        {
+                            if (completion != null) await completion().ConfigureAwait(false);
+                        }
+                    }
+
+                    finally
+                    {
+                        controller.UseCapturedContext(context);
+                    }
+                })
+                .ConfigureAwait(false);
         }
 
         /// <summary>Awaits an explicit SSE controller result and its complete subscription lifetime.</summary>
@@ -251,9 +388,11 @@ namespace EmbedIO.WebApi
         /// <returns>The complete response lifetime.</returns>
         public static async Task WriteEventStreamResultAsync(IHttpContext context, Task<ServerSentEventStream> task)
         {
-            var result = await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false);
-            if (result == null) throw new InvalidOperationException("A streaming controller returned null.");
-            await result.WriteAsync(context).ConfigureAwait(false);
+            var result = await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("A streaming controller returned null.");
+            await result
+                .WriteAsync(context)
+                .ConfigureAwait(false);
         }
 
         /// <summary>Awaits an explicitly streamed controller result and its complete response lifetime.</summary>
@@ -261,23 +400,61 @@ namespace EmbedIO.WebApi
         /// <param name="context">The response context.</param>
         /// <param name="task">The controller result.</param>
         /// <returns>The response lifetime.</returns>
-        public static async Task WriteStreamResultAsync<TResult>(IHttpContext context, Task<TResult> task) where TResult : JsonStreamResult
+        public static async Task WriteStreamResultAsync<TResult>(IHttpContext context, Task<TResult> task)
+            where TResult : JsonStreamResult
         {
-            var result = await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false);
-            if (result == null) throw new InvalidOperationException("A streaming controller returned null.");
-            await result.WriteAsync(context).ConfigureAwait(false);
+            var result = await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("A streaming controller returned null.");
+            await result
+                .WriteAsync(context)
+                .ConfigureAwait(false);
         }
 
-        private static System.Collections.Specialized.NameValueCollection QueryData(WebApiController controller)
-            => (controller ?? throw new ArgumentNullException(nameof(controller))).HttpContext.GetRequestQueryData();
+        /// <summary>Executes an explicit response using the module serializer. Supports generated bindings.</summary>
+        public static Task ExecuteHttpResultAsync(
+            ResponseSerializerCallback serializer,
+            IHttpContext context,
+            HttpResult? result
+        ) =>
+            (result ?? throw new InvalidOperationException("A typed-result controller returned null.")).ExecuteAsync(
+                context,
+                serializer
+            );
 
-        private static Task<System.Collections.Specialized.NameValueCollection> FormDataAsync(WebApiController controller)
-            => (controller ?? throw new ArgumentNullException(nameof(controller))).HttpContext.GetRequestFormDataAsync();
+        /// <summary>Awaits and executes a typed response, preserving the controller lifetime.</summary>
+        public static async Task AwaitHttpResultAsync<TResult>(
+            ResponseSerializerCallback serializer,
+            IHttpContext context,
+            Task<TResult> task
+        ) where TResult : HttpResult? =>
+            await ExecuteHttpResultAsync(
+                serializer,
+                context,
+                await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false)
+            ).ConfigureAwait(false);
+
+        /// <summary>Awaits an explicit ValueTask response exactly once.</summary>
+        public static async Task AwaitValueHttpResultAsync<TResult>(
+            ResponseSerializerCallback serializer,
+            IHttpContext context,
+            ValueTask<TResult> task
+        ) where TResult : HttpResult? =>
+            await ExecuteHttpResultAsync(serializer, context, await task.ConfigureAwait(false)).ConfigureAwait(false);
+
+        private static System.Collections.Specialized.NameValueCollection QueryData(WebApiController controller) =>
+            (controller ?? throw new ArgumentNullException(nameof(controller))).HttpContext.GetRequestQueryData();
+
+        private static Task<System.Collections.Specialized.NameValueCollection> FormDataAsync(
+            WebApiController controller
+        ) => (controller ?? throw new ArgumentNullException(nameof(controller))).HttpContext.GetRequestFormDataAsync();
 
         private static async Task<string> ReadBodyAsync(WebApiController controller)
         {
-            using var reader = (controller ?? throw new ArgumentNullException(nameof(controller))).HttpContext.OpenRequestText();
-            return await reader.ReadToEndAsync().ConfigureAwait(false);
+            using var reader = (controller
+                ?? throw new ArgumentNullException(nameof(controller))).HttpContext.OpenRequestText();
+            return await reader
+                .ReadToEndAsync()
+                .ConfigureAwait(false);
         }
     }
 }

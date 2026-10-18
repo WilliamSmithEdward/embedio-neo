@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in typed HTTP controller results with synchronous/Task/ValueTask execution,
+  two/three typed alternatives and generated OpenAPI responses. Includes named
+  root-relative CreatedAt URLs, Problem Details, text/redirect/file/stream helpers,
+  explicit source ownership and testing inspection. Existing ordinary-controller
+  serialization, APIs, targets and dependency groups are preserved. See
+  [typed results](docs/guides/typed-results.md).
+
 ## [2.13.0] - 2026-10-18
 
 ### Added

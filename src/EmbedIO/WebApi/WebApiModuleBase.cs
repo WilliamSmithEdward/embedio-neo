@@ -507,7 +507,7 @@ namespace EmbedIO.WebApi
                 );
             }
 
-            if (contextFactory == null && IsStreamingResultType(method.ReturnType))
+            if (contextFactory == null && IsAwaitedHttpResultType(method.ReturnType))
             {
                 var streamingFactory = Expression
                     .Lambda<Func<WebApiController>>(Expression.Convert(factoryExpression, typeof(WebApiController)))
@@ -772,6 +772,10 @@ namespace EmbedIO.WebApi
                 // Convert void to Task by evaluating Task.CompletedTask
                 return Expression.Block(typeof(Task), callMethod, Expression.Constant(Task.CompletedTask));
             }
+
+            var explicitResult = WrapHttpResult(callMethod, methodReturnType, contextInLambda);
+
+            if (explicitResult != null) return explicitResult;
 
             if (methodReturnType == typeof(ServerSentEventStream))
                 return Expression.Call(
@@ -1265,7 +1269,7 @@ namespace EmbedIO.WebApi
         ) where TController : WebApiController =>
             RegisterBinding(
                 binding,
-                route => IsStreamingResultType(route.Operation?.ResultType) || route.OutputCachePolicy != null
+                route => IsAwaitedHttpResultType(route.Operation?.ResultType) || route.OutputCachePolicy != null
                     ? CreateBoundHandler(
                         route.CreateInvoker(),
                         Serializer,
@@ -1445,8 +1449,12 @@ namespace EmbedIO.WebApi
             type != null
                 && (typeof(JsonStreamResult).IsAssignableFrom(type)
                     || type == typeof(ServerSentEventStream)
+                    || type == typeof(FileHttpResult)
+                    || type == typeof(StreamHttpResult)
                     || IsGenericTaskType(type, out var item)
-                        && (typeof(JsonStreamResult).IsAssignableFrom(item) || item == typeof(ServerSentEventStream)));
+                        && (typeof(JsonStreamResult).IsAssignableFrom(item) || item == typeof(ServerSentEventStream))
+                    || ExplicitHttpResultType(type) == typeof(FileHttpResult)
+                    || ExplicitHttpResultType(type) == typeof(StreamHttpResult));
 
         private static Task ReleaseStreamingController(IHttpContext context, WebApiController controller)
         {
