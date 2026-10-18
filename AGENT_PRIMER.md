@@ -57,6 +57,8 @@ and generated bindings work. Configure before registering controllers.
 
 Always resolve a stable trusted caller/tenant/issuer scope after authentication;
 never trust a client-supplied identity header, display name or idempotency key.
+Keep partitions and caller-scope rules stable through the retry window; changing
+the namespace resets lookup protection and requires deliberate reconciliation.
 Every protected request requires one bounded `Idempotency-Key`. Retry the same
 logical operation with identical transferred bytes and declared representation
 headers. A mismatched fingerprint is 409. Authorization/browser guards execute

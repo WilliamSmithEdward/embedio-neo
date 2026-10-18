@@ -60,9 +60,14 @@ Apply `[Idempotency("commands")]` to a controller or a finite write method.
 A method declaration overrides its class; `[Idempotency(null)]` explicitly opts a
 method out. `ConfigureIdempotency` snapshots the policy dictionary. Unknown
 policies, read routes, streaming result types and combined output-cache policies
-fail registration rather than silently bypassing protection. Declare a policy
-revision when application behavior changes, and retain shared stable partitions
-across hosts that serve the same logical operation space.
+fail registration rather than silently bypassing protection. Keep partitions and
+caller scopes stable across deployments throughout the retry/retention window.
+Changing a partition, caller-scope scheme, authority or raw target starts a
+different lookup namespace and removes the old record's protection for that
+request. If changed business semantics require a new namespace, reconcile
+outstanding operations and route their retries to the old namespace deliberately;
+do not automatically increment partitions with each application version. Hosts
+serving the same operation space must compute the same keys and fingerprints.
 
 Both reflection registration and generated bindings support these attributes.
 AOT consumers use the usual `[GeneratedControllerBinding]` declarations. Existing
