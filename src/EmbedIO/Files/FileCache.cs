@@ -5,8 +5,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using EmbedIO.Internal;
 using EmbedIO.Diagnostics;
+using EmbedIO.Internal;
 
 namespace EmbedIO.Files
 {
@@ -24,12 +24,9 @@ namespace EmbedIO.Files
         /// The default value for the <see cref="MaxFileSizeKb"/> property.
         /// </summary>
         public const int DefaultMaxFileSizeKb = 200;
-
         private static readonly Stopwatch TimeBase = Stopwatch.StartNew();
-
         private static readonly object DefaultSyncRoot = new();
         private static FileCache? _defaultInstance;
-
         private readonly ConcurrentDictionary<string, Section> _sections = new(StringComparer.Ordinal);
         private int _sectionCount; // Protected by the _sections lock; avoids locking every dictionary bucket.
         private int _maxSizeKb = DefaultMaxSizeKb;
@@ -43,6 +40,7 @@ namespace EmbedIO.Files
             lock (_sections)
             {
                 if (_disposed) return;
+
                 _disposed = true;
                 _cleaner?.Dispose();
                 _cleaner = null;
@@ -105,6 +103,7 @@ namespace EmbedIO.Files
             lock (_sections)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(FileCache));
+
                 var section = new Section();
                 (_sections as IDictionary<string, Section>).Add(name, section);
 
@@ -148,12 +147,14 @@ namespace EmbedIO.Files
             var removedSize = 0L;
             var totalSizeKb = initialSizeKb;
             var threshold = 973L * maxSizeKb / 1024L; // About 95% of maximum allowed size
+
             while (totalSizeKb > threshold)
             {
                 if (cancellationToken.IsCancellationRequested)
                     return;
 
                 var section = GetSectionWithLeastRecentItem();
+
                 if (section == null)
                     return;
 
@@ -165,20 +166,21 @@ namespace EmbedIO.Files
                 totalSizeKb = ComputeTotalSize() / 1024L;
             }
 
-            $"Purge completed in {timeKeeper.ElapsedTime}ms: removed {removedCount} items ({removedSize / 1024L}kb). Total size is now {totalSizeKb}kb."
-                .Debug(nameof(FileCache));
+            $"Purge completed in {timeKeeper.ElapsedTime}ms: removed {removedCount} items ({removedSize / 1024L}kb). Total size is now {totalSizeKb}kb.".Debug(
+                nameof(FileCache)
+            );
         }
 
         // Enumerate key / value pairs because the Keys and Values property
         // of ConcurrentDictionary<,> have snapshot semantics,
         // while GetEnumerator enumerates without locking.
-        private long ComputeTotalSize()
-            => _sections.Sum(pair => pair.Value.GetTotalSize());
+        private long ComputeTotalSize() => _sections.Sum(pair => pair.Value.GetTotalSize());
 
         private Section? GetSectionWithLeastRecentItem()
         {
             Section? result = null;
             var earliestTime = long.MaxValue;
+
             foreach (var pair in _sections)
             {
                 var section = pair.Value;

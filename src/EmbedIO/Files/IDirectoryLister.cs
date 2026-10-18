@@ -30,6 +30,7 @@ namespace EmbedIO.Files
             string absolutePath,
             IEnumerable<MappedResourceInfo> entries,
             Stream stream,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken
+        );
     }
 }

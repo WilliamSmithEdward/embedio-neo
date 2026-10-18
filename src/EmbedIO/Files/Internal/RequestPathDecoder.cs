@@ -25,24 +25,30 @@ namespace EmbedIO.Files.Internal
         internal static bool TryDecodeSegments(string requestPath, out string decoded)
         {
             decoded = string.Empty;
+
             if (requestPath == null) return false;
+
             if (requestPath.Length == 0) return true;
 
             // Most paths carry no escapes, so they need no splitting or rejoining.
             if (StringOperations.IndexOfOrdinal(requestPath, '%') < 0)
             {
                 if (ContainsRefusedCharacter(requestPath)) return false;
+
                 decoded = requestPath;
                 return true;
             }
 
             var segments = requestPath.Split('/');
+
             for (var index = 0; index < segments.Length; index++)
             {
                 var segment = segments[index];
+
                 if (StringOperations.IndexOfOrdinal(segment, '%') < 0)
                 {
                     if (ContainsRefusedCharacter(segment)) return false;
+
                     continue;
                 }
 
@@ -52,12 +58,14 @@ namespace EmbedIO.Files.Internal
                 {
                     segment = Uri.UnescapeDataString(segment);
                 }
+
                 catch (UriFormatException)
                 {
                     return false;
                 }
 
                 if (!IsSingleSegment(segment)) return false;
+
                 segments[index] = segment;
             }
 
@@ -67,12 +75,12 @@ namespace EmbedIO.Files.Internal
 
         // A decoded segment must still be one segment: never a separator of either flavour,
         // never a dot segment that would climb the tree, and never a control character.
-        private static bool IsSingleSegment(string segment)
-            => StringOperations.IndexOfOrdinal(segment, '/') < 0
-            && StringOperations.IndexOfOrdinal(segment, '\\') < 0
-            && !string.Equals(segment, ".", StringComparison.Ordinal)
-            && !string.Equals(segment, "..", StringComparison.Ordinal)
-            && !ContainsRefusedCharacter(segment);
+        private static bool IsSingleSegment(string segment) =>
+            StringOperations.IndexOfOrdinal(segment, '/') < 0
+                && StringOperations.IndexOfOrdinal(segment, '\\') < 0
+                && !string.Equals(segment, ".", StringComparison.Ordinal)
+                && !string.Equals(segment, "..", StringComparison.Ordinal)
+                && !ContainsRefusedCharacter(segment);
 
         private static bool ContainsRefusedCharacter(string value)
         {

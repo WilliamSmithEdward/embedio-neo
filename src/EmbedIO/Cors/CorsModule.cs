@@ -28,24 +28,30 @@ namespace EmbedIO.Cors
         string baseRoute,
         string origins = CorsModule.All,
         string headers = CorsModule.All,
-        string methods = CorsModule.All) : WebModuleBase(baseRoute)
+        string methods = CorsModule.All
+    ) : WebModuleBase(baseRoute)
     {
         /// <summary>
         /// A string meaning "All" in CORS headers.
         /// </summary>
         public const string All = "*";
-
         private readonly string _origins = origins ?? throw new ArgumentNullException(nameof(origins));
         private readonly string _headers = headers ?? throw new ArgumentNullException(nameof(headers));
         private readonly string _methods = methods ?? throw new ArgumentNullException(nameof(methods));
         private readonly string[] _validOrigins =
-                [.. origins.ToUpperInvariant()
-                    .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim())];
+        [
+            ..origins
+                .ToUpperInvariant()
+                .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+        ];
         private readonly string[] _validMethods =
-                [.. methods.ToUpperInvariant()
-                    .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim())];
+        [
+            ..methods
+                .ToUpperInvariant()
+                .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+        ];
 
         /// <inheritdoc />
         public override bool IsFinalHandler => false;
@@ -54,6 +60,7 @@ namespace EmbedIO.Cors
         protected override Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             var isOptions = context.Request.HttpVerb == HttpVerbs.Options;
 
             // If we allow all we don't need to filter
@@ -81,7 +88,10 @@ namespace EmbedIO.Cors
 
             if (_origins == All || _validOrigins.Contains(currentOrigin?.ToUpperInvariant()))
             {
-                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowOrigin, _origins == All ? All : currentOrigin);
+                context.Response.Headers.Set(
+                    HttpHeaderNames.AccessControlAllowOrigin,
+                    _origins == All ? All : currentOrigin
+                );
 
                 if (isOptions)
                 {
@@ -96,17 +106,23 @@ namespace EmbedIO.Cors
         private void ValidateHttpOptions(IHttpContext context)
         {
             var requestHeadersHeader = context.Request.Headers[HttpHeaderNames.AccessControlRequestHeaders];
+
             if (!string.IsNullOrWhiteSpace(requestHeadersHeader))
             {
                 // A restricted configuration advertises only its allowed header names.
-                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowHeaders, _headers == All ? requestHeadersHeader : _headers);
+                context.Response.Headers.Set(
+                    HttpHeaderNames.AccessControlAllowHeaders,
+                    _headers == All ? requestHeadersHeader : _headers
+                );
             }
 
             var requestMethodHeader = context.Request.Headers[HttpHeaderNames.AccessControlRequestMethod];
+
             if (string.IsNullOrWhiteSpace(requestMethodHeader))
                 return;
 
-            var currentMethods = requestMethodHeader.ToUpperInvariant()
+            var currentMethods = requestMethodHeader
+                .ToUpperInvariant()
                 .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim());
 
