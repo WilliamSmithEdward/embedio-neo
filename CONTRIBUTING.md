@@ -34,6 +34,10 @@ and partial-file naming conventions.
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
+The full regression suite has a 12-minute scheduling budget on Linux/macOS and
+an 8-minute budget on Windows. These host-wide deadlines do not replace individual
+test assertions or the minimum discovered-test count.
+
 CI requires the Mac Catalyst smoke job and the Windows, Mac Catalyst and Android
 MAUI HTTPS platform jobs to succeed on every code change. The Android lifecycle
 smoke runs on pushes to `main` and manual dispatches only. The iOS HTTPS job
