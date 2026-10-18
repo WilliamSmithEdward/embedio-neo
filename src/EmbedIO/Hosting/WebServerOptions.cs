@@ -7,8 +7,8 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
-using EmbedIO.Utilities;
 using EmbedIO.Diagnostics;
+using EmbedIO.Utilities;
 
 namespace EmbedIO
 {
@@ -18,25 +18,15 @@ namespace EmbedIO
     public sealed class WebServerOptions : WebServerOptionsBase
     {
         private const string NetShLogSource = "NetSh";
-
         private readonly List<string> _urlPrefixes = [];
-
         private HttpListenerMode _mode = HttpListenerMode.EmbedIO;
-
         private X509Certificate2? _certificate;
-
         private Net.ServerCertificateSource? _certificateSource;
-
         private Net.ServerTlsPolicy? _tlsPolicy;
-
         private string? _certificateThumbprint;
-
         private bool _autoLoadCertificate;
-
         private bool _autoRegisterCertificate;
-
         private StoreName _storeName = StoreName.My;
-
         private StoreLocation _storeLocation = StoreLocation.LocalMachine;
 
         /// <summary>
@@ -138,7 +128,9 @@ namespace EmbedIO
                 // strip any non-hexadecimal values and make uppercase
                 _certificateThumbprint = value == null
                     ? null
-                    : Regex.Replace(value, @"[^\da-fA-F]", string.Empty).ToUpper(CultureInfo.InvariantCulture);
+                    : Regex
+                        .Replace(value, @"[^\da-fA-F]", string.Empty)
+                        .ToUpper(CultureInfo.InvariantCulture);
             }
         }
 
@@ -155,8 +147,11 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                    throw new PlatformNotSupportedException("AutoLoadCertificate functionality is only available under Windows.");
+                    throw new PlatformNotSupportedException(
+                        "AutoLoadCertificate functionality is only available under Windows."
+                    );
 
                 _autoLoadCertificate = value;
             }
@@ -176,8 +171,11 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value && !RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                    throw new PlatformNotSupportedException("AutoRegisterCertificate functionality is only available under Windows.");
+                    throw new PlatformNotSupportedException(
+                        "AutoRegisterCertificate functionality is only available under Windows."
+                    );
 
                 _autoRegisterCertificate = value;
             }
@@ -219,11 +217,17 @@ namespace EmbedIO
         protected override void OnBeforeLockConfiguration()
         {
             // Checked on the fields: the Certificate getter loads or registers certificates.
-            if (_certificateSource != null
-                && (_certificate != null || _certificateThumbprint != null || _autoLoadCertificate || _autoRegisterCertificate))
+            if (
+                _certificateSource != null
+                && (_certificate != null
+                    || _certificateThumbprint != null
+                    || _autoLoadCertificate
+                    || _autoRegisterCertificate)
+            )
             {
                 throw new InvalidOperationException(
-                    "Configure either CertificateSource or Certificate, CertificateThumbprint, AutoLoadCertificate and AutoRegisterCertificate, not both.");
+                    "Configure either CertificateSource or Certificate, CertificateThumbprint, AutoLoadCertificate and AutoRegisterCertificate, not both."
+                );
             }
 
             _tlsPolicy?.Lock();
@@ -255,7 +259,9 @@ namespace EmbedIO
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+
                 _maximumConnections = value;
             }
         }
@@ -308,21 +314,27 @@ namespace EmbedIO
             }
         }
 
-        internal bool HasConnectionLimits => _maximumConnections.HasValue || _requestHeadersTimeout.HasValue || _keepAliveTimeout.HasValue;
+        internal bool HasConnectionLimits =>
+            _maximumConnections.HasValue || _requestHeadersTimeout.HasValue || _keepAliveTimeout.HasValue;
 
         // The listener-level policy; the shared default when no limit is configured.
-        internal Net.Internal.TcpConnectionPolicy CreateConnectionPolicy() => HasConnectionLimits
-            ? new Net.Internal.TcpConnectionPolicy(_maximumConnections,
-                _requestHeadersTimeout.HasValue ? (int)_requestHeadersTimeout.Value.TotalMilliseconds
-                    : Net.Internal.TcpConnectionPolicy.DefaultHeaderTimeoutMilliseconds,
-                _keepAliveTimeout.HasValue ? (int)_keepAliveTimeout.Value.TotalMilliseconds : null)
-            : Net.Internal.TcpConnectionPolicy.Default;
+        internal Net.Internal.TcpConnectionPolicy CreateConnectionPolicy() =>
+            HasConnectionLimits
+                ? new Net.Internal.TcpConnectionPolicy(
+                    _maximumConnections,
+                    _requestHeadersTimeout.HasValue
+                        ? (int)_requestHeadersTimeout.Value.TotalMilliseconds
+                        : Net.Internal.TcpConnectionPolicy.DefaultHeaderTimeoutMilliseconds,
+                    _keepAliveTimeout.HasValue ? (int)_keepAliveTimeout.Value.TotalMilliseconds : null
+                )
+                : Net.Internal.TcpConnectionPolicy.Default;
 
         private static TimeSpan? ValidateTimeout(TimeSpan? value)
         {
             // Whole milliseconds from 1 to int.MaxValue: the range a timer deadline accepts.
             if (value.HasValue && (value.Value.TotalMilliseconds < 1 || value.Value.TotalMilliseconds > int.MaxValue))
                 throw new ArgumentOutOfRangeException(nameof(value));
+
             return value;
         }
 
@@ -342,6 +354,7 @@ namespace EmbedIO
             EnsureConfigurationNotLocked();
 
             urlPrefix = Validate.NotNullOrEmpty(nameof(urlPrefix), urlPrefix);
+
             if (_urlPrefixes.Contains(urlPrefix))
                 throw new ArgumentException("URL prefix is already registered.", nameof(urlPrefix));
 
@@ -349,8 +362,8 @@ namespace EmbedIO
         }
 
         /// <inheritdoc cref="AddUrlPrefix(string)"/>
-        public void AddUrlPrefix(Uri urlPrefix)
-            => AddUrlPrefix(Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString);
+        public void AddUrlPrefix(Uri urlPrefix) =>
+            AddUrlPrefix(Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString);
 
         private X509Certificate2? LoadCertificate()
         {
@@ -379,7 +392,9 @@ namespace EmbedIO
                 var line = e.Data.Trim();
 
                 if (line.StartsWith("Certificate Hash") && line.IndexOf(":", StringComparison.Ordinal) > -1)
-                    thumbprint = line.Split(':')[1].Trim();
+                    thumbprint = line
+                        .Split(':')[1]
+                        .Trim();
             };
 
             if (!netsh.Start())
@@ -389,9 +404,7 @@ namespace EmbedIO
             netsh.BeginErrorReadLine();
             netsh.WaitForExit();
 
-            return netsh.ExitCode == 0 && !string.IsNullOrEmpty(thumbprint)
-                ? GetCertificate(thumbprint)
-                : null;
+            return netsh.ExitCode == 0 && !string.IsNullOrEmpty(thumbprint) ? GetCertificate(thumbprint) : null;
         }
 
         private X509Certificate2? GetCertificate(string? thumbprint = null)
@@ -400,20 +413,27 @@ namespace EmbedIO
             store.Open(OpenFlags.ReadOnly);
             var signingCert = store.Certificates.Find(
                 X509FindType.FindByThumbprint,
-                thumbprint ?? _certificateThumbprint ?? throw new InvalidOperationException("The certificate thumbprint has not been configured."),
-                false);
+                thumbprint
+                    ?? _certificateThumbprint
+                    ?? throw new InvalidOperationException("The certificate thumbprint has not been configured."),
+                false
+            );
             return signingCert.Count == 0 ? null : signingCert[0];
         }
 
         private bool AddCertificateToStore()
         {
             using var store = new X509Store(StoreName, StoreLocation);
+
             try
             {
                 store.Open(OpenFlags.ReadWrite);
-                store.Add(_certificate ?? throw new InvalidOperationException("The certificate has not been configured."));
+                store.Add(
+                    _certificate ?? throw new InvalidOperationException("The certificate has not been configured.")
+                );
                 return true;
             }
+
             catch (Exception error) when (error is System.Security.Cryptography.CryptographicException or System.Security.SecurityException or UnauthorizedAccessException or InvalidOperationException)
             {
                 return false;
@@ -431,10 +451,14 @@ namespace EmbedIO
             if (GetCertificate(_certificate.Thumbprint) == null && !AddCertificateToStore())
             {
                 throw new InvalidOperationException(
-                    "The provided certificate cannot be added to the default store, add it manually");
+                    "The provided certificate cannot be added to the default store, add it manually"
+                );
             }
 
-            using var netsh = GetNetsh("add", $"certhash={_certificate.Thumbprint} appid={{adaa04bb-8b63-4073-a12f-d6f8c0b4383f}}");
+            using var netsh = GetNetsh(
+                "add",
+                $"certhash={_certificate.Thumbprint} appid={{adaa04bb-8b63-4073-a12f-d6f8c0b4383f}}"
+            );
 
             var sb = new StringBuilder();
 
@@ -463,10 +487,13 @@ namespace EmbedIO
         {
             var port = 443;
 
-            foreach (var url in UrlPrefixes.Where(x =>
-                x.StartsWith("https:", StringComparison.OrdinalIgnoreCase)))
+            foreach (var url in UrlPrefixes.Where(x => x.StartsWith("https:", StringComparison.OrdinalIgnoreCase)))
             {
-                var match = Regex.Match(url, @"^https://(?:\[[^\]]+\]|[^/:]+):(\d+)(?:/|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                var match = Regex.Match(
+                    url,
+                    @"^https://(?:\[[^\]]+\]|[^/:]+):(\d+)(?:/|$)",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+                );
 
                 if (match.Success && int.TryParse(match.Groups[1].Value, out port))
                     break;
@@ -484,8 +511,8 @@ namespace EmbedIO
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
                 UseShellExecute = false,
-                Arguments = $"http {verb} sslcert ipport=0.0.0.0:{GetSslPort()} {options}",
-            },
+                Arguments = $"http {verb} sslcert ipport=0.0.0.0:{GetSslPort()} {options}"
+            }
         };
     }
 }

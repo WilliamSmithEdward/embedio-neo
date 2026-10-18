@@ -25,7 +25,6 @@ namespace EmbedIO.Forwarding
     public sealed class ForwardedHeadersModule : WebModuleBase
     {
         private const int MaxHeaderLength = 8192;
-
         private readonly ForwardedHeaderSources _sources;
         private readonly List<ClientNetwork> _trustedProxies = [];
         private readonly List<(string Host, string? Port)> _allowedHosts = [];
@@ -40,11 +39,13 @@ namespace EmbedIO.Forwarding
         /// <exception cref="ArgumentNullException"><paramref name="baseRoute"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="sources"/> is <see cref="ForwardedHeaderSources.None"/>
         /// or contains undefined values.</exception>
-        public ForwardedHeadersModule(string baseRoute, ForwardedHeaderSources sources)
-            : base(baseRoute)
+        public ForwardedHeadersModule(string baseRoute, ForwardedHeaderSources sources) : base(baseRoute)
         {
-            const ForwardedHeaderSources all = ForwardedHeaderSources.Forwarded | ForwardedHeaderSources.XForwardedFor
-                | ForwardedHeaderSources.XForwardedProto | ForwardedHeaderSources.XForwardedHost;
+            const ForwardedHeaderSources all = ForwardedHeaderSources.Forwarded
+                | ForwardedHeaderSources.XForwardedFor
+                | ForwardedHeaderSources.XForwardedProto
+                | ForwardedHeaderSources.XForwardedHost;
+
             if (sources == ForwardedHeaderSources.None || (sources & ~all) != 0)
                 throw new ArgumentException("Choose the forwarding headers your proxies set.", nameof(sources));
 
@@ -69,6 +70,7 @@ namespace EmbedIO.Forwarding
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 1 || value > 16)
                     throw new ArgumentOutOfRangeException(nameof(value), value, "Between 1 and 16 hops.");
 
@@ -90,7 +92,9 @@ namespace EmbedIO.Forwarding
             if (networks == null)
                 throw new ArgumentNullException(nameof(networks));
 
-            var parsed = networks.Select(ClientNetwork.Parse).ToArray();
+            var parsed = networks
+                .Select(ClientNetwork.Parse)
+                .ToArray();
             EnsureConfigurationNotLocked();
             _trustedProxies.AddRange(parsed);
             return this;
@@ -111,13 +115,13 @@ namespace EmbedIO.Forwarding
             if (hosts == null)
                 throw new ArgumentNullException(nameof(hosts));
 
-            var parsed = hosts.Select(host =>
-            {
-                var authority = host == null ? null : ForwardedHeaderParser.Authority(host);
-                return authority == null
-                    ? throw new ArgumentException($"'{host}' is not a host with an optional port.", nameof(hosts))
-                    : SplitAuthority(authority);
-            }).ToArray();
+            var parsed = hosts
+                .Select(host =>
+                {
+                    var authority = host == null ? null : ForwardedHeaderParser.Authority(host);
+                    return authority == null ? throw new ArgumentException($"'{host}' is not a host with an optional port.", nameof(hosts)) : SplitAuthority(authority);
+                })
+                .ToArray();
             EnsureConfigurationNotLocked();
             _allowedHosts.AddRange(parsed);
             return this;
@@ -147,7 +151,9 @@ namespace EmbedIO.Forwarding
         private static (string Host, string? Port) SplitAuthority(string authority)
         {
             var colon = authority.LastIndexOf(':');
-            return colon > authority.LastIndexOf(']') ? (authority.Substring(0, colon), authority.Substring(colon + 1)) : (authority, null);
+            return colon > authority.LastIndexOf(']')
+                ? (authority.Substring(0, colon), authority.Substring(colon + 1))
+                : (authority, null);
         }
 
         private bool IsTrusted(IPAddress address) => _trustedProxies.Any(network => network.Contains(address));
@@ -170,10 +176,12 @@ namespace EmbedIO.Forwarding
         private ForwardedRequest Resolve(IHttpContext context)
         {
             var physical = ForwardedRequest.Physical(context, ForwardedOutcome.UntrustedPeer);
+
             if (!IsTrusted(physical.ClientAddress))
                 return physical;
 
             var headers = ReadHeaders(context);
+
             if (headers.IsEmpty)
                 return Unchanged(physical, ForwardedOutcome.NoHeaders);
 
@@ -185,15 +193,25 @@ namespace EmbedIO.Forwarding
             return hops == null ? Unchanged(physical, ForwardedOutcome.Malformed) : ApplyHops(physical, hops);
         }
 
-        private static ForwardedRequest Unchanged(ForwardedRequest physical, ForwardedOutcome outcome)
-            => new(outcome, physical.ClientAddress, physical.Scheme, null, 0, false, physical.PhysicalRemoteEndPoint, physical.PhysicalIsSecure);
+        private static ForwardedRequest Unchanged(ForwardedRequest physical, ForwardedOutcome outcome) =>
+            new(
+                outcome,
+                physical.ClientAddress,
+                physical.Scheme,
+                null,
+                0,
+                false,
+                physical.PhysicalRemoteEndPoint,
+                physical.PhysicalIsSecure
+            );
 
-        private ForwardedHeaders ReadHeaders(IHttpContext context)
-            => new(
+        private ForwardedHeaders ReadHeaders(IHttpContext context) =>
+            new(
                 Header(context, ForwardedHeaderSources.Forwarded, "Forwarded"),
                 Header(context, ForwardedHeaderSources.XForwardedFor, "X-Forwarded-For"),
                 Header(context, ForwardedHeaderSources.XForwardedProto, "X-Forwarded-Proto"),
-                Header(context, ForwardedHeaderSources.XForwardedHost, "X-Forwarded-Host"));
+                Header(context, ForwardedHeaderSources.XForwardedHost, "X-Forwarded-Host")
+            );
 
         // Walk from the nearest proxy outward. Each hop says who sent the request to the proxy
         // that recorded it, and how; a further hop is trusted only if that sender is a trusted proxy.
@@ -204,9 +222,11 @@ namespace EmbedIO.Forwarding
             string? host = null;
             var hostRejected = false;
             var applied = 0;
+
             for (var i = hops.Count - 1; i >= 0 && applied < _forwardLimit; i--)
             {
                 var hop = hops[i];
+
                 if (hop.Proto != null)
                     scheme = hop.Proto;
 
@@ -217,10 +237,12 @@ namespace EmbedIO.Forwarding
                 }
 
                 applied++;
+
                 if (hop.Client == null)
                     break;
 
                 client = hop.Client;
+
                 if (!IsTrusted(client))
                     break;
             }
@@ -233,7 +255,8 @@ namespace EmbedIO.Forwarding
                 applied,
                 hostRejected,
                 physical.PhysicalRemoteEndPoint,
-                physical.PhysicalIsSecure);
+                physical.PhysicalIsSecure
+            );
         }
 
         // The selected headers' values, each joined from its lines; null when absent or not selected.
@@ -253,15 +276,13 @@ namespace EmbedIO.Forwarding
             }
 
             internal bool IsEmpty => _forwarded == null && !HasLegacy;
-
             internal bool IsConflicting => _forwarded != null && HasLegacy;
-
-            internal int Length => (_forwarded?.Length ?? 0) + (_for?.Length ?? 0) + (_proto?.Length ?? 0) + (_host?.Length ?? 0);
-
+            internal int Length =>
+                (_forwarded?.Length ?? 0) + (_for?.Length ?? 0) + (_proto?.Length ?? 0) + (_host?.Length ?? 0);
             private bool HasLegacy => _for != null || _proto != null || _host != null;
 
-            internal List<ForwardedHop>? Parse()
-                => _forwarded != null
+            internal List<ForwardedHop>? Parse() =>
+                _forwarded != null
                     ? ForwardedHeaderParser.ParseForwarded(_forwarded)
                     : ForwardedHeaderParser.ParseXForwarded(_for, _proto, _host);
         }

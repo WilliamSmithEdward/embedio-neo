@@ -22,6 +22,7 @@ namespace EmbedIO
             where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.MaximumDecompressedRequestBodyBytes = value;
             return @this;
         }
@@ -41,6 +42,7 @@ namespace EmbedIO
             where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.MaximumRequestBodyBytes = value;
             return @this;
         }
@@ -57,10 +59,14 @@ namespace EmbedIO
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="maximum"/> is less than one,
         /// or <paramref name="queueLimit"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
-        public static TOptions WithMaximumConcurrentRequests<TOptions>(this TOptions @this, int? maximum, int queueLimit = 0)
-            where TOptions : WebServerOptionsBase
+        public static TOptions WithMaximumConcurrentRequests<TOptions>(
+            this TOptions @this,
+            int? maximum,
+            int queueLimit = 0
+        ) where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.MaximumConcurrentRequests = maximum;
             @this.RequestQueueLimit = queueLimit;
             return @this;
@@ -80,6 +86,7 @@ namespace EmbedIO
             where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RequestTimeout = value;
             return @this;
         }
@@ -97,10 +104,14 @@ namespace EmbedIO
         /// <paramref name="configure"/> is null.</exception>
         /// <exception cref="ArgumentException">The base route is invalid or already has a policy.</exception>
         /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
-        public static TOptions WithRouteRequestLimits<TOptions>(this TOptions @this, string baseRoute, Action<RequestLimitPolicy> configure)
-            where TOptions : WebServerOptionsBase
+        public static TOptions WithRouteRequestLimits<TOptions>(
+            this TOptions @this,
+            string baseRoute,
+            Action<RequestLimitPolicy> configure
+        ) where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             _ = @this.AddRouteRequestLimits(baseRoute, configure);
             return @this;
         }
@@ -119,6 +130,7 @@ namespace EmbedIO
             where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.EnableTelemetry = true;
             @this.TelemetryServerName = serverName;
             return @this;
@@ -138,6 +150,7 @@ namespace EmbedIO
             where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RequestBodyReadTimeout = value;
             return @this;
         }
@@ -156,6 +169,7 @@ namespace EmbedIO
             where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.MinimumRequestBodyDataRate = value;
             return @this;
         }
@@ -173,10 +187,14 @@ namespace EmbedIO
         /// <exception cref="ArgumentOutOfRangeException">The rate is not positive, or the grace
         /// period is one second or less or too large.</exception>
         /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
-        public static TOptions WithMinimumRequestBodyDataRate<TOptions>(this TOptions @this, double bytesPerSecond, TimeSpan gracePeriod)
-            where TOptions : WebServerOptionsBase
+        public static TOptions WithMinimumRequestBodyDataRate<TOptions>(
+            this TOptions @this,
+            double bytesPerSecond,
+            TimeSpan gracePeriod
+        ) where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.MinimumRequestBodyDataRate = new MinimumDataRate(bytesPerSecond, gracePeriod);
             return @this;
         }
@@ -197,10 +215,14 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">A limit is less than one.</exception>
         /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
-        public static TOptions WithRequestHeaderLimits<TOptions>(this TOptions @this, int? maximumBytes, int? maximumCount = null)
-            where TOptions : WebServerOptionsBase
+        public static TOptions WithRequestHeaderLimits<TOptions>(
+            this TOptions @this,
+            int? maximumBytes,
+            int? maximumCount = null
+        ) where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.MaximumRequestHeaderBytes = maximumBytes;
             @this.MaximumRequestHeaderCount = maximumCount;
             return @this;
@@ -222,6 +244,7 @@ namespace EmbedIO
             where TOptions : WebServerOptionsBase
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.SupportCompressedRequests = value;
             return @this;
         }

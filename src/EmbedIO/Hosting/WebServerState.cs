@@ -31,6 +31,6 @@
         /// <summary>
         /// The web server has been stopped.
         /// </summary>
-        Stopped,
+        Stopped
     }
 }
