@@ -16,20 +16,18 @@ namespace EmbedIO.Actions
     /// <param name="handler">The callback used to handle requests.</param>
     /// <exception cref="ArgumentNullException"><paramref name="handler"/> is <see langword="null"/>.</exception>
     /// <seealso cref="WebModuleBase(string)"/>
-    public class ActionModule(string baseRoute, HttpVerbs verb, RequestHandlerCallback handler) : WebModuleBase(baseRoute)
+    public class ActionModule(string baseRoute, HttpVerbs verb, RequestHandlerCallback handler) : WebModuleBase(
+        baseRoute
+    )
     {
         private readonly HttpVerbs _verb = verb;
-
         private readonly RequestHandlerCallback _handler = Validate.NotNull(nameof(handler), handler);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ActionModule"/> class.
         /// </summary>
         /// <param name="handler">The handler.</param>
-        public ActionModule(RequestHandlerCallback handler)
-            : this("/", HttpVerbs.Any, handler)
-        {
-        }
+        public ActionModule(RequestHandlerCallback handler) : this("/", HttpVerbs.Any, handler) { }
 
         /// <inheritdoc />
         public override bool IsFinalHandler => false;
@@ -38,6 +36,7 @@ namespace EmbedIO.Actions
         protected override async Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             if (_verb != HttpVerbs.Any && context.Request.HttpVerb != _verb)
                 return;
 

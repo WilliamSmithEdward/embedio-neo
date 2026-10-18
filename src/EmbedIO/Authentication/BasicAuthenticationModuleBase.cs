@@ -21,8 +21,7 @@ namespace EmbedIO.Authentication
         /// the <see cref="Realm"/> property will be set equal to
         /// <see cref="IWebModule.BaseRoute">BaseRoute</see>.</para>
         /// </remarks>
-        protected BasicAuthenticationModuleBase(string baseRoute, string? realm)
-            : base(baseRoute)
+        protected BasicAuthenticationModuleBase(string baseRoute, string? realm) : base(baseRoute)
         {
             Realm = string.IsNullOrEmpty(realm) ? BaseRoute : realm ?? BaseRoute;
 
@@ -41,25 +40,34 @@ namespace EmbedIO.Authentication
 
         // Escapes the two characters a quoted-string cannot carry literally. A realm is
         // ordinarily a plain label, so the common case allocates nothing.
-        private static string QuoteRealm(string realm)
-            => EmbedIO.Internal.StringOperations.IndexOfOrdinal(realm, '"') < 0
+        private static string QuoteRealm(string realm) =>
+            EmbedIO.Internal.StringOperations.IndexOfOrdinal(realm, '"') < 0
                 && EmbedIO.Internal.StringOperations.IndexOfOrdinal(realm, '\\') < 0
                 ? realm
                 : EmbedIO.Internal.StringOperations.ReplaceOrdinal(
-                    EmbedIO.Internal.StringOperations.ReplaceOrdinal(realm, "\\", "\\\\"), "\"", "\\\"");
+                    EmbedIO.Internal.StringOperations.ReplaceOrdinal(realm, "\\", "\\\\"),
+                    "\"",
+                    "\\\""
+                );
 
         /// <inheritdoc />
         protected sealed override async Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             async Task<bool> IsAuthenticatedAsync()
             {
                 try
                 {
                     var (userName, password) = GetCredentials(context.Request);
-                    return await VerifyCredentialsAsync(context.RequestedPath, userName, password, context.CancellationToken)
-                        .ConfigureAwait(false);
+                    return await VerifyCredentialsAsync(
+                        context.RequestedPath,
+                        userName,
+                        password,
+                        context.CancellationToken
+                    ).ConfigureAwait(false);
                 }
+
                 catch (FormatException)
                 {
                     // Credentials were not formatted correctly.
@@ -83,7 +91,12 @@ namespace EmbedIO.Authentication
         /// <param name="cancellationToken">A <see cref="CancellationToken" /> use to cancel the operation.</param>
         /// <returns>A <see cref="Task{TResult}"/> whose result will be <see langword="true" /> if the given credentials
         /// are valid, <see langword="false" /> if they are not.</returns>
-        protected abstract Task<bool> VerifyCredentialsAsync(string path, string userName, string password, CancellationToken cancellationToken);
+        protected abstract Task<bool> VerifyCredentialsAsync(
+            string path,
+            string userName,
+            string password,
+            CancellationToken cancellationToken
+        );
 
         private static (string UserName, string Password) GetCredentials(IHttpRequest request)
         {
@@ -96,10 +109,18 @@ namespace EmbedIO.Authentication
                 return default;
 
             string credentials;
+
             try
             {
-                credentials = WebServer.DefaultEncoding.GetString(Convert.FromBase64String(authHeader.Substring(6).Trim()));
+                credentials = WebServer.DefaultEncoding.GetString(
+                    Convert.FromBase64String(
+                        authHeader
+                            .Substring(6)
+                            .Trim()
+                    )
+                );
             }
+
             catch (FormatException)
             {
                 return default;
