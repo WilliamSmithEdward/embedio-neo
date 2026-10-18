@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Typed HTTP results
+      href: guides/typed-results.md
     - name: Response security headers (unreleased)
       href: guides/security-headers.md
     - name: Resumable uploads using tus (2.12.0+)
@@ -406,3 +408,6 @@
 
 - name: Security-header policy audit
   href: project/security-headers-audit.md
+
+- name: Typed HTTP results review
+  href: project/typed-results-audit.md

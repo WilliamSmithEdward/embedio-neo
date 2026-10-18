@@ -47,6 +47,18 @@ private readonly object {member} = new();"""
             self.assertTrue(violations(source.replace(member, '_other'), csharp=True, filename=path))
             self.assertTrue(violations(source, csharp=True, filename='src/Other.cs'))
 
+    def test_stacked_compatibility_attributes_remain_member_and_diagnostic_specific(self):
+        path = 'src/EmbedIO/Routing/NamedRoutes.cs'
+        source = '\n'.join((
+            '[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0057:Use range operator", Justification = "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.")]',
+            '[System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1865:Use char overload", Justification = "The shared implementation targets netstandard2.0, which has no string.EndsWith(char).")]',
+            'public string GetPath(string name, IReadOnlyDictionary<string, object?>? values = null) => name;',
+        ))
+        self.assertFalse(violations(source, csharp=True, filename=path))
+        self.assertTrue(violations(source.replace('GetPath(', 'Other('), csharp=True, filename=path))
+        self.assertTrue(violations(source, csharp=True, filename='src/Other.cs'))
+        self.assertTrue(violations(source.replace('CA1865:Use char overload', 'CA1031:Do not catch general exception types'), csharp=True, filename=path))
+
     def test_rejects_diagnostic_and_build_opt_outs(self):
         for source in (
             '#pragma warning disable CS8602',

@@ -117,6 +117,34 @@ COMPATIBILITY_SUPPRESSIONS = (
     ("src/EmbedIO/Security/SecurityHeadersPolicy.cs", "Usage", "CA2249:Use string.Contains",
      "The shared implementation targets netstandard2.0, which has no string.Contains overload with StringComparison.",
      r"private\s+static\s+void\s+ValidateCsp\(string\?\s+value\)"),
+    ('src/EmbedIO/Http/Results/HttpResults.Files.cs', 'Maintainability', 'CA1513:Use ObjectDisposedException throw helper',
+     'The shared implementation targets netstandard2.0, which has no ObjectDisposedException.ThrowIf.',
+     r"internal\s+override\s+async\s+Task\s+WriteAsync\(IHttpContext\s+context,\s*ResponseSerializerCallback\s+serializer\)"),
+    ("src/EmbedIO/OpenApi/OpenApiDocumentBuilder.cs", "Style", "IDE0057:Use range operator",
+     "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.",
+     r"private\s+static\s+bool\s+IsJson\(string\s+contentType\)"),
+    ("src/EmbedIO/OpenApi/OpenApiDocumentBuilder.cs", "Style", "IDE0057:Use range operator",
+     "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.",
+     r"private\s+static\s+string\s+SchemaName\(Type\s+type\)"),
+    ("src/EmbedIO/OpenApi/OpenApiDocumentBuilder.cs", "Style", "IDE0057:Use range operator",
+     "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.",
+     r"private\s+static\s+JsonNode\?\s+RebaseReferences\(JsonNode\?\s+node,\s*string\s+root\)"),
+    ("src/EmbedIO/OpenApi/OpenApiDocumentBuilder.cs", "Style", "IDE0057:Use range operator",
+     "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.",
+     r"private\s+static\s+\(string\s+Path,\s*List<\(string\s+Name,\s*bool\s+Optional\)>\s+Parameters\)\s+PathTemplate\(string\s+route\)"),
+    ("src/EmbedIO/OpenApi/OpenApiDocumentBuilder.cs", "Style", "IDE0057:Use range operator",
+     "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.",
+     r"private\s+static\s+string\s+TrimSuffix\(string\s+value,\s*string\s+suffix\)"),
+    ("src/EmbedIO/Routing/NamedRoutes.cs", "Style", "IDE0057:Use range operator",
+     "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.",
+     r"public\s+string\s+GetPath\(string\s+name,\s*IReadOnlyDictionary<string,\s*object\?>\?\s+values\s*=\s*null\)"),
+
+    ("src/EmbedIO/Routing/NamedRoutes.cs", "Performance", "CA1865:Use char overload",
+     "The shared implementation targets netstandard2.0, which has no string.EndsWith(char).",
+     r"public\s+string\s+GetPath\(string\s+name,\s*IReadOnlyDictionary<string,\s*object\?>\?\s+values\s*=\s*null\)"),
+    ("src/EmbedIO/OpenApi/OpenApiDocumentBuilder.cs", "Performance", "CA1865:Use char overload",
+     "The shared implementation targets netstandard2.0, which has no string.EndsWith(char).",
+     r"private\s+static\s+\(string\s+Path,\s*List<\(string\s+Name,\s*bool\s+Optional\)>\s+Parameters\)\s+PathTemplate\(string\s+route\)"),
 )
 COMPATIBILITY_ATTRIBUTE = re.compile(
     r'\[System\.Diagnostics\.CodeAnalysis\.SuppressMessage\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,'
@@ -127,9 +155,14 @@ def compatible_attribute_lines(text, filename):
     """Permit only the exact informational compatibility attributes above."""
     allowed = set()
     for match in COMPATIBILITY_ATTRIBUTE.finditer(text):
+        # Stacked attributes must each independently pass the same exact allowlist.
+        # Inspect their shared following member regardless of formatter whitespace.
+        following = text[match.end():].lstrip()
+        while adjacent := COMPATIBILITY_ATTRIBUTE.match(following):
+            following = following[adjacent.end():].lstrip()
         for path, category, diagnostic, reason, member in COMPATIBILITY_SUPPRESSIONS:
             if (filename == path and match.groups() == (category, diagnostic, reason)
-                    and re.match(r"\s*" + member, text[match.end():])):
+                    and re.match(r"\s*" + member, following)):
                 allowed.update(range(text.count("\n", 0, match.start()) + 1,
                                      text.count("\n", 0, match.end()) + 2))
     return allowed

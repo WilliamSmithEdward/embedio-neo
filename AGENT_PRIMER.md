@@ -28,6 +28,29 @@ Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.
 
+### Typed HTTP results (unreleased)
+
+The feature branch adds root-namespace `HttpResult<T>`, concrete result types and
+`HttpResults` factories. These APIs are not in NuGet 2.13.0. Only explicit declared
+result types opt in; ordinary objects and existing disposal timing are preserved.
+Use `HttpResults.Ok(book)` / `NotFound<Book>()` for the common typed base, or
+`HttpResult<OkResult<Book>, NotFoundResult<Book>>` (two or three distinct alternatives)
+for precise generated OpenAPI metadata. Broad/dynamic results have a default
+response fallback; no success status is invented. Payloads honor the module
+serializer; supply source-generated options/JsonTypeInfo for AOT. Task and ValueTask
+results await execution once and retain controllers until completion.
+
+`NamedRoutes.FromController(baseRoute, binding)` names routes using OperationId
+or ControllerName.MethodName; duplicate aliases need explicit names/templates.
+`CreatedAt` generates escaped root-relative Locations with invariant values and
+never trusts request Host/forwarding headers. File paths are trusted application
+input. Stream results transfer ownership unless leaveOpen, execute once and must
+be disposed if abandoned. Files/streams reuse range/conditional handling, bypass
+cache publication and reject idempotent recording; finite results support both.
+Security policies and nonce no-store/replay restrictions remain authoritative.
+See [typed results](docs/guides/typed-results.md) for helpers, limits, lifecycle,
+request-abort/producer cancellation, OpenAPI and testing contracts.
+
 ### Response security headers (2.13.0+)
 
 Version 2.13.0 adds opt-in `EmbedIO.Security.SecurityHeadersPolicy`,

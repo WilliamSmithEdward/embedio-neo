@@ -26,7 +26,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Browser request protection](guides/browser-request-protection.md): opt-in host/origin protection (2.7.0+) with allow-lists, session-bound anti-forgery tokens, controller exemptions and WebSocket origin checks.
 - [Bearer authentication and authorization](guides/bearer-authentication.md): asynchronous validation, controller roles and policies, optional JWT validation and identity-isolation campaigns.
 - [Multi-connection state-machine fuzzing](guides/multi-connection-fuzzing.md): deterministic actor traces, replay, invariant-preserving shrinking and bounded cleanup.
-- [Response security headers](guides/security-headers.md): unreleased opt-in profiles, controller overrides, CSP nonces, TLS-only HSTS and cache/adapter contracts.
+- [Typed HTTP results](guides/typed-results.md): unreleased typed controller responses, named Locations, files/streams, OpenAPI alternatives and test inspection.
+- [Response security headers](guides/security-headers.md): 2.13.0+ opt-in profiles, controller overrides, CSP nonces, TLS-only HSTS and cache/adapter contracts.
 - [Resumable uploads using tus](guides/resumable-uploads.md): 2.12.0+; authenticated bounded disk sessions, checksums, fixed expiry and restart recovery.
 - [Streaming multipart uploads](guides/streaming-multipart.md): bounded streaming, controller binding, complete-request validation and staged file cleanup.
 - [WebSocket handshake status](guides/websocket-handshake-status.md): exact endpoints, module order, and HTTP/1 versus extended CONNECT.
@@ -271,3 +272,5 @@ points for existing links.
 
 - [Coverage-guided URL fuzzing](guides/coverage-guided-fuzzing.md): instrumented parser campaigns, seed replay and crash artifacts.
 - [Production source maintenance audit](project/source-maintenance-audit.md): complete 434-file implementation review, reproduced defects and compatibility-preserving cleanup.
+
+- [Typed HTTP results review](project/typed-results-audit.md) — trust boundaries, compatibility and validation scope.

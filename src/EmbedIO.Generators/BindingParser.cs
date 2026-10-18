@@ -723,6 +723,16 @@ namespace EmbedIO.Generators
             }
 
             var returnType = method.ReturnType;
+            var httpResult = HttpResultReturnType(returnType);
+
+            if (httpResult != null)
+            {
+                var asyncResult = !SymbolEqualityComparer.Default.Equals(returnType, httpResult);
+                var name = !asyncResult
+                    ? "ExecuteHttpResultAsync"
+                    : IsValueTask(returnType) ? "AwaitValueHttpResultAsync" : "AwaitHttpResultAsync";
+                return (null, Services + "." + name + "(__serializer, __context, " + call + ")");
+            }
 
             if (method.ReturnsVoid)
                 return (call, TaskType + ".CompletedTask");
@@ -1686,6 +1696,7 @@ namespace EmbedIO.Generators
                 .Where(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, _types.OpenApiResponse))
                 .Select(AttributeExpression)
                 .Where(e => e is not null)
+                .Concat(HttpResultResponses(method, attributes))
                 .ToArray();
             var ignored = attributes.Any(
                 a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, _types.OpenApiIgnore)
@@ -1805,6 +1816,10 @@ namespace EmbedIO.Generators
         // The type the module's serializer receives, or null when the method returns no value.
         private string ResultTypeOf(IMethodSymbol method)
         {
+            var httpResult = HttpResultReturnType(method.ReturnType);
+
+            if (httpResult != null) return TypeOf(httpResult);
+
             if (method.ReturnsVoid || SymbolEqualityComparer.Default.Equals(method.ReturnType, _types.Task))
                 return "null";
 
