@@ -400,7 +400,7 @@ namespace EmbedIO.WebApi
         private RouteHandlerCallback CompileHandler(
             Expression factoryExpression, MethodInfo method, RouteMatcher matcher,
             Func<IHttpContext, WebApiController?>? contextFactory,
-            Func<IHttpContext, WebApiController, Task>? release, BeforeHandlerPlan? before)
+            Func<IHttpContext, WebApiController, Task>? release, BeforeHandlerPlan? before, OutputCacheRegistration? caching)
         {
             // Lambda parameters
             var contextInLambda = Expression.Parameter(typeof(IHttpContext), "context");
@@ -413,6 +413,18 @@ namespace EmbedIO.WebApi
             // Build the handler method call, then wrap its result in a Task that serializes it when needed.
             var handlerArguments = BindHandlerArguments(method, controllerType, matcher, controller, routeInLambda);
             var callMethod = WrapHandlerResult(Expression.Call(controller, method, handlerArguments), method.ReturnType, contextInLambda);
+
+            if (caching != null && !IsStreamingResultType(method.ReturnType))
+            {
+                var action = Expression.Lambda<Func<IHttpContext, Task>>(callMethod, contextInLambda);
+                callMethod = Expression.Call(typeof(ControllerBindingServices), nameof(ControllerBindingServices.ExecuteOutputCachedAsync),
+                    null, Expression.Convert(controller, typeof(WebApiController)), contextInLambda, action);
+                var ownedFactory = contextFactory == null
+                    ? Expression.Lambda<Func<WebApiController>>(Expression.Convert(factoryExpression, typeof(WebApiController))).Compile() : null;
+                return CompileActivatedHandler(controllerType, controller, callMethod, contextInLambda, routeInLambda,
+                    contextFactory ?? (_ => (ownedFactory ?? throw new InvalidOperationException())()),
+                    release ?? ReleaseStreamingController, before, caching);
+            }
 
             if (contextFactory == null && IsStreamingResultType(method.ReturnType))
             {
@@ -618,7 +630,7 @@ namespace EmbedIO.WebApi
             Type controllerType, ParameterExpression controller, Expression callMethod,
             ParameterExpression contextInLambda, ParameterExpression routeInLambda,
             Func<IHttpContext, WebApiController?> contextFactory,
-            Func<IHttpContext, WebApiController, Task>? release, BeforeHandlerPlan? before)
+            Func<IHttpContext, WebApiController, Task>? release, BeforeHandlerPlan? before, OutputCacheRegistration? caching = null)
         {
             var instance = Expression.Parameter(typeof(WebApiController), "instance");
             var invoke = Expression.Lambda<Func<WebApiController, IHttpContext, RouteMatch, Task>>(
@@ -641,12 +653,14 @@ namespace EmbedIO.WebApi
 
                     created.HttpContext = context;
                     created.Route = route;
+                    created.OutputCaching = caching;
                     if (before != null) await before.ExecuteAsync(created, context.CancellationToken).ConfigureAwait(false);
                     await invoke(created, context, route).ConfigureAwait(false);
                 }
                 finally
                 {
-                    await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false);
+                    try { await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false); }
+                    finally { if (caching != null) created.OutputCaching = null; }
                 }
             };
         }
@@ -746,6 +760,7 @@ namespace EmbedIO.WebApi
             var authorization = methods.Where(method => method.GetCustomAttributes().OfType<RouteAttribute>().Any())
                 .ToDictionary(method => method, method => ReadAuthorization(controllerType, method));
             var beforeHandlers = authorization.Keys.ToDictionary(method => method, method => ReadBeforeHandler(controllerType, method));
+            var outputCaching = authorization.Keys.ToDictionary(method => method, method => ResolveOutputCache(ReadOutputCache(controllerType, method)));
             var browserProtection = authorization.Keys.ToDictionary(method => method, method => ReadBrowserProtection(controllerType, method));
             foreach (var mode in browserProtection.Values) ValidateBrowserProtection(mode);
             foreach (var metadata in authorization.Values)
@@ -767,11 +782,11 @@ namespace EmbedIO.WebApi
                         var staged = pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.");
                         if (!AcceptCaseInsensitiveDeclaration(attribute.Verb, matcher, method, controllerType, staged.Select(p => (p.Verb, p.Matcher, p.Method))))
                             continue;
-                        staged.Add((attribute.Verb, matcher, method, WrapAuthorization(WrapBrowserProtection(CompileHandler(factoryExpression, method, matcher, contextFactory, release, beforeHandlers[method]), browserProtection[method]), authorization[method])));
+                        staged.Add((attribute.Verb, matcher, method, WrapAuthorization(WrapBrowserProtection(CompileHandler(factoryExpression, method, matcher, contextFactory, release, beforeHandlers[method], outputCaching[method]), browserProtection[method]), authorization[method])));
                     }
                     else
                     {
-                        AddHandler(attribute.Verb, attribute.Matcher, WrapAuthorization(WrapBrowserProtection(CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release, beforeHandlers[method]), browserProtection[method]), authorization[method]));
+                        AddHandler(attribute.Verb, attribute.Matcher, WrapAuthorization(WrapBrowserProtection(CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release, beforeHandlers[method], outputCaching[method]), browserProtection[method]), authorization[method]));
                     }
                     handlerCount++;
                 }
@@ -861,13 +876,13 @@ namespace EmbedIO.WebApi
         {
             Validate.NotNull(nameof(factory), factory);
             Validate.NotNull(nameof(release), release);
-            RegisterBinding(binding, route => CreateBoundHandler(route.CreateInvoker(), Serializer, factory, release, route.UseControllerPreprocessing));
+            RegisterBinding(binding, route => CreateBoundHandler(route.CreateInvoker(), Serializer, factory, release, route.UseControllerPreprocessing, IsStreamingResultType(route.Operation?.ResultType) ? null : ResolveOutputCache(route.OutputCachePolicy)));
         }
 
         private void RegisterBinding<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
             where TController : WebApiController
-            => RegisterBinding(binding, route => IsStreamingResultType(route.Operation?.ResultType)
-                ? CreateBoundHandler(route.CreateInvoker(), Serializer, _ => factory(), ReleaseStreamingController, route.UseControllerPreprocessing)
+            => RegisterBinding(binding, route => IsStreamingResultType(route.Operation?.ResultType) || route.OutputCachePolicy != null
+                ? CreateBoundHandler(route.CreateInvoker(), Serializer, _ => factory(), ReleaseStreamingController, route.UseControllerPreprocessing, IsStreamingResultType(route.Operation?.ResultType) ? null : ResolveOutputCache(route.OutputCachePolicy))
                 : CreateBoundHandler(route.CreateInvoker(), Serializer, factory, route.UseControllerPreprocessing));
 
         private void RegisterBinding<TController>(
@@ -890,6 +905,7 @@ namespace EmbedIO.WebApi
                 matchers[i] = RouteMatcher.Parse(routes[i].Route, routes[i].IsBaseRoute);
                 if (routes[i].Authorization is { } metadata) _authorization.Validate(metadata);
                 ValidateBrowserProtection(routes[i].BrowserProtection);
+                ResolveOutputCache(routes[i].OutputCachePolicy);
             }
 
             if (!_caseInsensitiveRoutes)
@@ -990,7 +1006,7 @@ namespace EmbedIO.WebApi
             WebApiRouteInvoker<TController> invoker,
             ResponseSerializerCallback serializer,
             Func<IHttpContext, TController?> factory,
-            Func<IHttpContext, TController, Task> release, bool useControllerPreprocessing)
+            Func<IHttpContext, TController, Task> release, bool useControllerPreprocessing, OutputCacheRegistration? caching = null)
             where TController : WebApiController
         {
             invoker = Validate.NotNull(nameof(invoker), invoker);
@@ -1003,13 +1019,15 @@ namespace EmbedIO.WebApi
                 {
                     controller.HttpContext = context;
                     controller.Route = route;
+                    controller.OutputCaching = caching;
                     if (useControllerPreprocessing) controller.PreProcessRequest();
                     var work = await invoker(controller, context, route, serializer).ConfigureAwait(false);
                     await work.ConfigureAwait(false);
                 }
                 finally
                 {
-                    await release(context, controller).ConfigureAwait(false);
+                    try { await release(context, controller).ConfigureAwait(false); }
+                    finally { if (caching != null) controller.OutputCaching = null; }
                 }
             };
         }

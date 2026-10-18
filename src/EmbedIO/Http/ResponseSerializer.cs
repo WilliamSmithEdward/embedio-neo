@@ -87,6 +87,11 @@ namespace EmbedIO
                 else
                 {
                     var responseString = data is string stringData ? stringData : data.ToString() ?? string.Empty;
+                    if (context is Caching.OutputCacheCapture capture)
+                    {
+                        await WriteCapturedTextAsync(capture, responseString, bufferResponse, preferCompression).ConfigureAwait(false);
+                        return;
+                    }
 #if NET10_0_OR_GREATER
                     await using var text = context.OpenResponseText(context.Response.ContentEncoding, bufferResponse, preferCompression);
 #else
@@ -95,5 +100,25 @@ namespace EmbedIO
                     await text.WriteAsync(responseString).ConfigureAwait(false);
                 }
             };
+
+        private static async Task WriteCapturedTextAsync(Caching.OutputCacheCapture capture, string text, bool buffered, bool preferCompression)
+        {
+            var writer = capture.OpenResponseText(capture.Response.ContentEncoding, buffered, preferCompression);
+            try { await writer.WriteAsync(text).ConfigureAwait(false); }
+            finally
+            {
+                // A finite serializer's completion flush is different from an application streaming flush.
+                capture.CompletingText = true;
+                try
+                {
+#if NET10_0_OR_GREATER
+                    await writer.DisposeAsync().ConfigureAwait(false);
+#else
+                    writer.Dispose();
+#endif
+                }
+                finally { capture.CompletingText = false; }
+            }
+        }
     }
 }

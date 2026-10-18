@@ -20,8 +20,11 @@ CI uses the SDK's C# parser in `tools/EmbedIO.AnalyzerGuard` to reject every
 null-forgiving expression, including interpolation and inactive preprocessor branches.
 Logical negation and exclamation marks in literal text are permitted. The separate
 Python guard rejects compiler/analyzer directives and build configuration opt-outs,
-except the owner-approved IDE0130 setting in the root `.editorconfig`: implementation
-folders do not have to mirror namespaces.
+except the owner-approved IDE0130 setting in the root `.editorconfig` and the two
+exact CA2213 ownership suppressions enumerated in the guard for output-cache
+capture. The capture borrows its transport and parent; disposing those references
+would close the response or discard recording prematurely. Implementation folders
+do not have to mirror namespaces.
 
 ## Development
 
@@ -75,7 +78,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7054
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7128
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -89,7 +92,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 7054 executed/reported test cases to catch accidental discovery loss; update
+least 7128 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is eight minutes on Windows and ordinary Linux pull requests,
 and twelve minutes on macOS and instrumented Linux main pushes. Linux coverage

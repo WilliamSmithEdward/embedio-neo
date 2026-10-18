@@ -13,6 +13,7 @@ namespace EmbedIO.Internal
     {
         internal static bool IsCommitted(IHttpContext context) => context switch
         {
+            Caching.OutputCacheCapture capture => IsCommitted(capture.Inner),
             HttpListenerContext http1 => http1.HttpListenerResponse.HeadersSent,
             MultiplexedContext multiplexed => multiplexed.ResponseHeadersSent,
             _ => false,
@@ -22,6 +23,8 @@ namespace EmbedIO.Internal
         {
             switch (context)
             {
+                case Caching.OutputCacheCapture capture:
+                    return AbortAsync(capture.Inner, cause);
                 case HttpListenerContext http1:
                     http1.HttpListenerResponse.Abort();
                     return Task.CompletedTask;

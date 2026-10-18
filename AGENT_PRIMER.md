@@ -28,6 +28,23 @@ Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.
 
+### Output caching (under development; not NuGet 2.9.0)
+
+`OutputCache` in `EmbedIO.Caching` is explicitly opt-in through a fluent wrapper
+or `[OutputCache("policy")]` plus `ConfigureOutputCaching`. Generated bindings
+support the same policies. Authorization and hooks run on every hit; argument
+binding, action execution and serialization do not. Uncached defaults and legacy
+controller disposal timing remain unchanged. Opted-in actions use awaited
+controller release after serialization. Explicit no-store, credentials, cookies,
+streams, conditions, ranges, failures and canceled/oversize fills bypass storage.
+Always declare all representation-selecting request headers. Data remains a
+snapshot until TTL or explicit tag invalidation after a successful data commit;
+invalidation fences older in-flight fills but is not transactional consistency.
+Storage and capture concurrency are bounded. HTTP/3 GETs with unknown body
+length bypass caching; an explicit zero Content-Length permits reuse. See the
+[output-caching guide](docs/guides/output-caching.md) for exclusions, ownership,
+key dimensions, limits, fuzzing and real-loopback latency measurement.
+
 ## 1. What you are building on
 
 | Item | Value |

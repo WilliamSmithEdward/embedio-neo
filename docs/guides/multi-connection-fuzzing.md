@@ -186,3 +186,14 @@ usable with retained tokens. Isolated replays passed even before the correction,
 historical failure inputs, not deterministic reproductions. The
 15-second case deadline and all cancellation and ownership assertions remain
 unchanged.
+
+## Output-cache model (in development)
+
+The `output-cache` scenario tracks public snapshots across three independent
+owners using a separate ledger. It covers mutation without invalidation, tag
+invalidation and clear, overlapping requests, invalidation during a paused fill,
+one canceled waiter, credential/no-cache bypass and storage bounds. The
+`--output-cache-selftest` negative oracle deliberately supplies a wrong owner
+snapshot and must reject it. This campaign uses the in-process HTTP pipeline;
+real transport replay is covered separately by cache regression tests. It does
+not claim distributed-cache consistency or network fault injection.

@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Opt-in output caching (in development)
+      href: guides/output-caching.md
     - name: Health checks and readiness
       href: guides/health-checks.md
     - name: Bearer authentication and authorization

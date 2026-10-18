@@ -166,9 +166,10 @@ namespace EmbedIO.Generators
                 if (!browser.Valid) { failed = true; continue; }
                 var before = ReadBeforeHandler(controller, method);
                 if (!before.Valid) { failed = true; continue; }
+                var outputCache = ReadOutputCache(controller, method);
                 var operationName = "__EmbedIO_" + propertyName + "_Operation" + Literals.Int(invokerCount);
                 var invokerName = "__EmbedIO_" + propertyName + "_Invoker" + Literals.Int(invokerCount++);
-                var invoker = GenerateInvoker(controller, method, routeAttributes, jsonContext, invokerName, operationName, location, before.Code, before.Awaits);
+                var invoker = GenerateInvoker(controller, method, routeAttributes, jsonContext, invokerName, operationName, location, before.Code, before.Awaits, outputCache != null);
                 if (invoker is null)
                 {
                     failed = true;
@@ -182,9 +183,11 @@ namespace EmbedIO.Generators
                     routes.Add("new global::EmbedIO.WebApi.WebApiRouteBinding<" + controllerName + ">((global::EmbedIO.HttpVerbs)("
                         + Literals.Int(route.Verb) + "), " + Literals.String(route.Route) + ", " + (route.IsBaseRoute ? "true" : "false")
                         + ", " + handlerId + ", " + invokerName + (_types.WebApiOperation is null ? string.Empty : ", " + operationName)
-                        + (browser.Code is null
-                            ? (before.Code is null ? string.Empty : ", " + operationName + ".Authorization, false")
-                            : ", " + operationName + ".Authorization, " + (before.Code is null ? "true" : "false") + ", " + browser.Code) + ")");
+                        + (outputCache != null
+                            ? ", " + operationName + ".Authorization, " + (before.Code is null ? "true" : "false") + ", " + (browser.Code ?? "null") + ", " + Literals.String(outputCache)
+                            : browser.Code is null
+                                ? (before.Code is null ? string.Empty : ", " + operationName + ".Authorization, false")
+                                : ", " + operationName + ".Authorization, " + (before.Code is null ? "true" : "false") + ", " + browser.Code) + ")");
                 }
             }
 
@@ -337,7 +340,7 @@ namespace EmbedIO.Generators
             return new RouteInfo(verb, route, isBaseRoute);
         }
 
-        private string? GenerateInvoker(INamedTypeSymbol controller, IMethodSymbol method, List<RouteInfo> routes, INamedTypeSymbol? jsonContext, string invokerName, string operationName, Location? fallback, string? preprocessing, bool preprocessingAwaits)
+        private string? GenerateInvoker(INamedTypeSymbol controller, IMethodSymbol method, List<RouteInfo> routes, INamedTypeSymbol? jsonContext, string invokerName, string operationName, Location? fallback, string? preprocessing, bool preprocessingAwaits, bool outputCaching)
         {
             var methodLocation = method.Locations.FirstOrDefault(l => l.IsInSource) ?? fallback;
             var setup = new StringBuilder();
@@ -345,7 +348,7 @@ namespace EmbedIO.Generators
             var arguments = new List<string>();
             var metadata = new List<string>();
             var awaits = preprocessingAwaits;
-            if (preprocessing != null) body.Append(preprocessing);
+            if (preprocessing != null && !outputCaching) body.Append(preprocessing);
             var failed = false;
             var routeParameters = RouteParameterNames(routes);
 
@@ -380,6 +383,22 @@ namespace EmbedIO.Generators
             {
                 _fields.Append("        private static readonly global::EmbedIO.WebApi.WebApiOperation ").Append(operationName)
                     .Append(" = ").Append(OperationExpression(controller, method, metadata)).Append(";\n\n");
+            }
+
+            if (outputCaching)
+            {
+                // Keep generated literals intact: the hook's context local is in a sibling
+                // scope to the capture lambda, which can use the normal binding identifier.
+                var task = new StringBuilder(Services + ".ExecuteOutputCachedAsync(__controller, __originalContext, async __context =>\n                {\n")
+                    .Append(body);
+                if (work.Value.Statement != null) task.Append("                    ").Append(work.Value.Statement).Append(";\n");
+                task.Append("                    await ").Append(work.Value.Task).Append(".ConfigureAwait(false);\n                })");
+                var hooks = preprocessing == null ? string.Empty
+                    : "                {\n                    var __context = __originalContext;\n" + preprocessing + "                }\n";
+                return "        private static global::EmbedIO.WebApi.WebApiRouteInvoker<" + Literals.TypeName(controller) + "> " + invokerName + "()\n        {\n"
+                    + setup + "            return " + (preprocessingAwaits ? "async " : string.Empty) + "(__controller, __originalContext, __route, __serializer) =>\n            {\n"
+                    + hooks + "                return " + (preprocessingAwaits ? task.ToString() : "global::System.Threading.Tasks.Task.FromResult<" + TaskType + ">(" + task + ")")
+                    + ";\n            };\n        }\n\n";
             }
 
             var invoker = new StringBuilder();

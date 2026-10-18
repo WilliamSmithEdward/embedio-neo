@@ -6,6 +6,7 @@ namespaces or assemblies: existing `EmbedIO`, `EmbedIO.Internal` and
 
 | Folder | Responsibility |
 | --- | --- |
+| `src/EmbedIO/Caching` | Opt-in public output-cache policies, bounded storage and response capture. |
 | `src/EmbedIO/Health` | Optional lifecycle/dependency health checks, readiness waits and health endpoint module. |
 | `src/EmbedIO/Hosting` | Server lifecycle, listeners, options and server extension methods. |
 | `src/EmbedIO/Http` | Public request/response contracts, helpers, headers, MIME types and HTTP policies. |

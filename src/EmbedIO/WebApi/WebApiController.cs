@@ -16,6 +16,31 @@ namespace EmbedIO.WebApi
 
         private IHttpContext? _httpContext;
         private RouteMatch? _route;
+        // Cache state lives only on explicitly opted-in requests. Ordinary controller
+        // instances retain their original size, and unused lazy Items stays unallocated.
+        private static readonly object OutputCacheKey = new object();
+        private sealed class OutputCacheState
+        {
+            internal readonly OutputCacheRegistration Registration;
+            internal bool Disabled;
+            internal OutputCacheState(OutputCacheRegistration registration) => Registration = registration;
+        }
+        private OutputCacheState? CacheState => _httpContext == null || _httpContext is ILazyItems { HasItems: false }
+            ? null : _httpContext.Items.TryGetValue(OutputCacheKey, out var value) ? value as OutputCacheState : null;
+        internal OutputCacheRegistration? OutputCaching
+        {
+            get => CacheState?.Registration;
+            set
+            {
+                if (value != null) HttpContext.Items[OutputCacheKey] = new OutputCacheState(value);
+                else if (CacheState != null) HttpContext.Items.Remove(OutputCacheKey);
+            }
+        }
+        internal bool OutputCacheDisabled
+        {
+            get => CacheState?.Disabled == true;
+            set { if (CacheState is { } state) state.Disabled = value; }
+        }
 
         /// <summary>
         /// <para>Gets the HTTP context.</para>
@@ -26,6 +51,8 @@ namespace EmbedIO.WebApi
             get => _httpContext ?? throw new System.InvalidOperationException("The controller has not been initialized for a request.");
             internal set => _httpContext = value;
         }
+
+        internal void UseCapturedContext(IHttpContext context) => _httpContext = context;
 
         /// <summary>
         /// <para>Gets the resolved route.</para>
@@ -61,7 +88,7 @@ namespace EmbedIO.WebApi
         /// <summary>
         /// Gets the session proxy associated with the HTTP context.
         /// </summary>
-        public ISessionProxy Session => HttpContext.Session;
+        public ISessionProxy Session { get { OutputCacheDisabled = true; return HttpContext.Session; } }
 
         /// <summary>
         /// <para>This method is meant to be called internally by EmbedIO.</para>
@@ -76,6 +103,9 @@ namespace EmbedIO.WebApi
         /// <para>The default behavior is to set response headers
         /// in order to prevent caching of the response.</para>
         /// </summary>
-        protected virtual void OnBeforeHandler() => HttpContext.Response.DisableCaching();
+        protected virtual void OnBeforeHandler()
+        {
+            if (OutputCaching == null) HttpContext.Response.DisableCaching();
+        }
     }
 }

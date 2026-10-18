@@ -32,7 +32,13 @@ def violations(text, csharp=False, filename=None):
         (number, line.strip())
         for number, line in enumerate(text.splitlines(), 1)
         if any(pattern.search(line) for pattern in PATTERNS)
-        # Owner-approved folder/namespace convention; no other diagnostic is exempt.
+        # Owner-authorized ownership suppressions: capture release must not close its borrowed transport.
+        and not (filename == "src/EmbedIO/Caching/OutputCacheCapture.cs"
+                 and line.strip() in {
+                     '[System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "The handler owns transport completion; capture disposal releases only the recording buffer via ReleaseCapture.")]',
+                     '[System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed parent reference; disposing it here would discard the buffer before cache publication.")]',
+                 })
+        # Owner-approved folder/namespace convention.
         and not (filename == ".editorconfig"
                  and line.strip() == "dotnet_diagnostic.IDE0130.severity = none")
     ]

@@ -67,10 +67,13 @@ public static class Program
                 .WithModule(new BrowserRequestProtectionModule("/browser", protection))
                 .WithModule(new ActionModule("/browser", HttpVerbs.Post, context => context.SendStringAsync("accepted", "text/plain", WebServer.Utf8NoBomEncoding)))
                 .WithWebApi("/api", m => m.WithController<Controller>());
+            var outputCaching = EmbedIO.PlatformTests.OutputCacheSmoke.Configure(server);
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             var running = server.RunAsync(stop.Token);
             try
             {
+                await EmbedIO.PlatformTests.OutputCacheSmoke.RunAsync(url, outputCaching);
+                _checks += 5;
                 foreach (var test in cases)
                 {
                     using var response = await client.GetAsync(url + "api/" + test.Path);

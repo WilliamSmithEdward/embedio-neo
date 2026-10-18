@@ -142,7 +142,26 @@ namespace EmbedIO.WebApi
         public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
             Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
             bool useControllerPreprocessing, Security.BrowserProtectionMode? browserProtection)
+            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, useControllerPreprocessing, browserProtection, null)
         {
+        }
+
+        /// <summary>Creates a route binding with opt-in named output caching.</summary>
+        /// <param name="verb">The HTTP verb.</param>
+        /// <param name="route">The route template.</param>
+        /// <param name="isBaseRoute">Whether this is a base route.</param>
+        /// <param name="handlerId">The method identity.</param>
+        /// <param name="createInvoker">The invoker factory.</param>
+        /// <param name="operation">Optional OpenAPI metadata.</param>
+        /// <param name="authorization">Optional authorization metadata.</param>
+        /// <param name="useControllerPreprocessing">Whether the runtime invokes controller preprocessing.</param>
+        /// <param name="browserProtection">Optional browser policy.</param>
+        /// <param name="outputCachePolicy">Optional named output cache policy.</param>
+        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing, Security.BrowserProtectionMode? browserProtection, string? outputCachePolicy)
+        {
+            OutputCachePolicy = outputCachePolicy;
             if (browserProtection.HasValue && browserProtection != Security.BrowserProtectionMode.RequireToken
                 && browserProtection != Security.BrowserProtectionMode.IgnoreToken) throw new ArgumentOutOfRangeException(nameof(browserProtection));
             BrowserProtection = browserProtection;
@@ -157,6 +176,9 @@ namespace EmbedIO.WebApi
             Operation = operation;
             Authorization = authorization;
         }
+
+        /// <summary>Gets the explicitly selected output-cache policy, or null.</summary>
+        public string? OutputCachePolicy { get; }
 
         /// <summary>Gets whether the runtime calls the legacy controller hook before the invoker.</summary>
         public bool UseControllerPreprocessing { get; }

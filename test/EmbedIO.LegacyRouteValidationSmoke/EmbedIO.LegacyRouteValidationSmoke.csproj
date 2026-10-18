@@ -9,6 +9,7 @@
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Shared/OutputCacheSmoke.cs" Link="Shared/OutputCacheSmoke.cs" />
     <Compile Include="../Shared/RequestAbortSmoke.cs" Link="Shared/RequestAbortSmoke.cs" />
     <Reference Include="System.Net.Http" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
