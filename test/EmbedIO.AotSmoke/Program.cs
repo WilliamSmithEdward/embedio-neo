@@ -100,6 +100,7 @@ internal static class Program
                     }
                 }));
             var outputCaching = EmbedIO.PlatformTests.OutputCacheSmoke.Configure(server);
+            var idempotency = EmbedIO.PlatformTests.IdempotencySmoke.Configure(server);
             EmbedIO.PlatformTests.RequestAbortSmoke.Configure(server);
             using var health = HealthChecks.Create(server);
             server.WithStaticFolder("/", root, false);
@@ -118,6 +119,8 @@ internal static class Program
             await BrowserChecks.RunAsync(client, url, checks);
             await HealthChecks.RunAsync(client, url, checks, health);
             await EmbedIO.PlatformTests.OutputCacheSmoke.RunAsync(url, outputCaching);
+            await EmbedIO.PlatformTests.IdempotencySmoke.RunAsync(url, idempotency);
+            checks["idempotency"] = "generated finite write replay, payload isolation and unconfigured no-store behavior";
             checks["output_caching"] = "generated async hooks, query binding, cache hits, invalidation and uncached defaults";
             await EmbedIO.PlatformTests.RequestAbortSmoke.RunAsync(client, url);
             checks["request_abort"] = "generated token binding, real HTTP/1 client cancellation and healthy successor";

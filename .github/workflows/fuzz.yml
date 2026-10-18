@@ -128,6 +128,9 @@ jobs:
         shell: bash
         run: dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --request-abort-selftest 2>&1 | tee TestResults/fuzz/request-abort-selftest.log
 
+      - name: Reject injected idempotency result corruption
+        shell: bash
+        run: dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --idempotency-selftest 2>&1 | tee TestResults/fuzz/idempotency-selftest.log
       - name: Reject injected output-cache corruption
         shell: bash
         run: dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --output-cache-selftest 2>&1 | tee TestResults/fuzz/output-cache-selftest.log
@@ -137,7 +140,7 @@ jobs:
           set -euo pipefail
           seed=$((GITHUB_RUN_ID % 2147483647))
           if (( seed == 0 )); then seed=1; fi
-          for scenario in websocket-budget rate-limits routes tunnels sessions auth-state auth-jwt controller-parity request-validation json-streaming event-hub browser-protection health-readiness request-abort output-cache multipart-lifetime forwarded-policy cors-policy conditional-ranges; do
+          for scenario in websocket-budget rate-limits routes tunnels sessions auth-state auth-jwt controller-parity request-validation json-streaming event-hub browser-protection health-readiness request-abort output-cache idempotency multipart-lifetime forwarded-policy cors-policy conditional-ranges; do
             dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines "$seed" "$MODEL_CASES" "$scenario" 2>&1 | tee "TestResults/fuzz/$scenario.log"
           done
       - name: Exercise real HTTP/1 and HTTP/2 connections

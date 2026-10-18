@@ -160,7 +160,27 @@ namespace EmbedIO.WebApi
         public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
             Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
             bool useControllerPreprocessing, Security.BrowserProtectionMode? browserProtection, string? outputCachePolicy)
+            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, useControllerPreprocessing, browserProtection, outputCachePolicy, null)
         {
+        }
+
+        /// <summary>Creates a route with optional output-cache and finite write-idempotency declarations.</summary>
+        /// <param name="verb">HTTP verb.</param>
+        /// <param name="route">Route template.</param>
+        /// <param name="isBaseRoute">Whether the route is a base route.</param>
+        /// <param name="handlerId">Method identity.</param>
+        /// <param name="createInvoker">Invoker factory.</param>
+        /// <param name="operation">Operation metadata.</param>
+        /// <param name="authorization">Authorization declaration.</param>
+        /// <param name="useControllerPreprocessing">Whether runtime preprocessing is required.</param>
+        /// <param name="browserProtection">Browser protection declaration.</param>
+        /// <param name="outputCachePolicy">Output-cache policy.</param>
+        /// <param name="idempotencyPolicy">Finite write-idempotency policy.</param>
+        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing, Security.BrowserProtectionMode? browserProtection, string? outputCachePolicy, string? idempotencyPolicy)
+        {
+            IdempotencyPolicy = idempotencyPolicy;
             OutputCachePolicy = outputCachePolicy;
             if (browserProtection.HasValue && browserProtection != Security.BrowserProtectionMode.RequireToken
                 && browserProtection != Security.BrowserProtectionMode.IgnoreToken) throw new ArgumentOutOfRangeException(nameof(browserProtection));
@@ -179,6 +199,9 @@ namespace EmbedIO.WebApi
 
         /// <summary>Gets the explicitly selected output-cache policy, or null.</summary>
         public string? OutputCachePolicy { get; }
+
+        /// <summary>Gets the explicitly selected idempotency policy, or null.</summary>
+        public string? IdempotencyPolicy { get; }
 
         /// <summary>Gets whether the runtime calls the legacy controller hook before the invoker.</summary>
         public bool UseControllerPreprocessing { get; }

@@ -764,6 +764,10 @@ namespace EmbedIO.WebApi
             var beforeHandlers = authorization.Keys.ToDictionary(method => method, method => ReadBeforeHandler(controllerType, method));
             var outputCaching = authorization.Keys.ToDictionary(method => method, method => ResolveOutputCache(ReadOutputCache(controllerType, method)));
             var browserProtection = authorization.Keys.ToDictionary(method => method, method => ReadBrowserProtection(controllerType, method));
+            var idempotency = authorization.Keys.ToDictionary(method => method, method => ReadIdempotency(controllerType, method));
+            foreach (var method in authorization.Keys)
+                foreach (var route in method.GetCustomAttributes<RouteAttribute>())
+                    ResolveIdempotency(idempotency[method], route.Verb, method.ReturnType, ReadOutputCache(controllerType, method));
             foreach (var mode in browserProtection.Values) ValidateBrowserProtection(mode);
             foreach (var metadata in authorization.Values)
                 if (metadata != null) _authorization.Validate(metadata);
@@ -784,11 +788,11 @@ namespace EmbedIO.WebApi
                         var staged = pending ?? throw new InvalidOperationException("Case-insensitive declarations have not been initialized.");
                         if (!AcceptCaseInsensitiveDeclaration(attribute.Verb, matcher, method, controllerType, staged.Select(p => (p.Verb, p.Matcher, p.Method))))
                             continue;
-                        staged.Add((attribute.Verb, matcher, method, WrapAuthorization(WrapBrowserProtection(CompileHandler(factoryExpression, method, matcher, contextFactory, release, beforeHandlers[method], outputCaching[method]), browserProtection[method]), authorization[method])));
+                        staged.Add((attribute.Verb, matcher, method, WrapAuthorization(WrapBrowserProtection(WrapIdempotency(CompileHandler(factoryExpression, method, matcher, contextFactory, release, beforeHandlers[method], outputCaching[method]), ResolveIdempotency(idempotency[method], attribute.Verb, method.ReturnType, ReadOutputCache(controllerType, method))), browserProtection[method]), authorization[method])));
                     }
                     else
                     {
-                        AddHandler(attribute.Verb, attribute.Matcher, WrapAuthorization(WrapBrowserProtection(CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release, beforeHandlers[method], outputCaching[method]), browserProtection[method]), authorization[method]));
+                        AddHandler(attribute.Verb, attribute.Matcher, WrapAuthorization(WrapBrowserProtection(WrapIdempotency(CompileHandler(factoryExpression, method, attribute.Matcher, contextFactory, release, beforeHandlers[method], outputCaching[method]), ResolveIdempotency(idempotency[method], attribute.Verb, method.ReturnType, ReadOutputCache(controllerType, method))), browserProtection[method]), authorization[method]));
                     }
                     handlerCount++;
                 }
@@ -908,12 +912,13 @@ namespace EmbedIO.WebApi
                 if (routes[i].Authorization is { } metadata) _authorization.Validate(metadata);
                 ValidateBrowserProtection(routes[i].BrowserProtection);
                 ResolveOutputCache(routes[i].OutputCachePolicy);
+                ResolveIdempotency(routes[i].IdempotencyPolicy, routes[i].Verb, routes[i].Operation?.ResultType, routes[i].OutputCachePolicy);
             }
 
             if (!_caseInsensitiveRoutes)
             {
                 for (var i = 0; i < routes.Count; i++)
-                    AddHandler(routes[i].Verb, matchers[i], WrapAuthorization(WrapBrowserProtection(createHandler(routes[i]), routes[i].BrowserProtection), routes[i].Authorization));
+                    AddHandler(routes[i].Verb, matchers[i], WrapAuthorization(WrapBrowserProtection(WrapIdempotency(createHandler(routes[i]), ResolveIdempotency(routes[i].IdempotencyPolicy, routes[i].Verb, routes[i].Operation?.ResultType, routes[i].OutputCachePolicy)), routes[i].BrowserProtection), routes[i].Authorization));
             }
             else
             {
@@ -925,7 +930,7 @@ namespace EmbedIO.WebApi
                     if (!AcceptCaseInsensitiveDeclaration(route.Verb, matcher, route.HandlerId, controllerType, pending.Select(p => (p.Verb, p.Matcher, p.Method))))
                         continue;
 
-                    pending.Add((route.Verb, matcher, route.HandlerId, WrapAuthorization(WrapBrowserProtection(createHandler(route), route.BrowserProtection), route.Authorization)));
+                    pending.Add((route.Verb, matcher, route.HandlerId, WrapAuthorization(WrapBrowserProtection(WrapIdempotency(createHandler(route), ResolveIdempotency(route.IdempotencyPolicy, route.Verb, route.Operation?.ResultType, route.OutputCachePolicy)), route.BrowserProtection), route.Authorization)));
                 }
 
                 foreach (var entry in pending)

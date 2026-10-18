@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <!-- Test-only Native AOT host, outside the ordinary solution and packages. Published with
        PublishAot; warnings are errors, so any trim or AOT warning reachable from it fails. -->
   <PropertyGroup>
@@ -14,6 +14,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Shared/IdempotencySmoke.cs" Link="Shared/IdempotencySmoke.cs" />
     <Compile Include="../Shared/OutputCacheSmoke.cs" Link="Shared/OutputCacheSmoke.cs" />
     <Compile Include="../Shared/RequestAbortSmoke.cs" Link="Shared/RequestAbortSmoke.cs" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />

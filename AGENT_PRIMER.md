@@ -47,6 +47,38 @@ length bypass caching; an explicit zero Content-Length permits reuse. See the
 [output-caching guide](docs/guides/output-caching.md) for exclusions, ownership,
 key dimensions, limits, fuzzing and real-loopback latency measurement.
 
+### Write idempotency (under development; not NuGet 2.10.0)
+
+`EmbedIO.Idempotency.Idempotency` and immutable `IdempotencyPolicy` protect
+explicit finite write routes through `Protect`, `ExecuteAsync`, or named
+`[Idempotency("policy")]` / `ConfigureIdempotency` controller declarations.
+Method attributes override classes; null disables inheritance. Both reflection
+and generated bindings work. Configure before registering controllers.
+
+Always resolve a stable trusted caller/tenant/issuer scope after authentication;
+never trust a client-supplied identity header, display name or idempotency key.
+Every protected request requires one bounded `Idempotency-Key`. Retry the same
+logical operation with identical transferred bytes and declared representation
+headers. A mismatched fingerprint is 409. Authorization/browser guards execute
+on every retry; activation, hooks, binding, action and cleanup execute only for
+the owner. Put per-request checks in guards, not owner-only hooks.
+
+The finite response is staged and recorded before network delivery. Uncertain
+handler/storage outcomes stay blocked instead of automatically executing again.
+Capacity exhaustion is 503, not early eviction. Active claims never expire;
+terminal records expire lazily after retention. Defaults bound participants,
+request/response bytes, metadata and store reservations. Streaming, sessions,
+cookie changes and completion callbacks are unsupported inside staged work.
+Await all cleanup. Unconfigured routes retain their existing behavior.
+
+The default `MemoryIdempotencyStore` is process-local; expiry, restart or store
+replacement removes protection. Optional `IIdempotencyStore` implementations must
+provide atomic acquisition and owner-token-fenced completion/failure. Durable
+claims alone do not transact business effects. Reconcile uncertain operations;
+do not blindly choose another key or wait for expiry. See the
+[idempotency guide](docs/guides/idempotency.md) for the precise store contract,
+limits, failure matrix, concurrency fuzzing and cross-target support.
+
 ## 1. What you are building on
 
 | Item | Value |
