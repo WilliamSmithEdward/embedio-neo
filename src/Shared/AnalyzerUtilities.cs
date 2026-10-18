@@ -22,40 +22,14 @@ namespace EmbedIO.Internal
 
     internal static class StringOperations
     {
-        internal static string Slice(string text, int start)
-        {
-#if NETSTANDARD2_0 || NETFRAMEWORK
-            return text.Substring(start);
-#else
-            return text[start..];
-#endif
-        }
-
-        internal static string Slice(string text, int start, int length)
-        {
-#if NETSTANDARD2_0 || NETFRAMEWORK
-            return text.Substring(start, length);
-#else
-            return text[start..(start + length)];
-#endif
-        }
-
         internal static int IndexOfOrdinal(string text, char value)
         {
-#if NETSTANDARD2_0 || NETFRAMEWORK
             return text.IndexOf(value);
-#else
-            return text.IndexOf(value, StringComparison.Ordinal);
-#endif
         }
 
         internal static string ReplaceOrdinal(string text, string oldValue, string? newValue)
         {
-#if NETSTANDARD2_0 || NETFRAMEWORK
             return text.Replace(oldValue, newValue);
-#else
-            return text.Replace(oldValue, newValue, StringComparison.Ordinal);
-#endif
         }
 
         // Lowercases only A-Z, independent of culture; returns the same instance when nothing changes.

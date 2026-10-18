@@ -134,3 +134,17 @@ dotnet_diagnostic.IDE0055.severity = warning
 [src/EmbedIO/Files/ZipFileProvider.cs]
 # Preserve ZipArchive.GetEntry's entryName exception parameter for compatibility.
 dotnet_diagnostic.CA2208.severity = none
+
+[src/Shared/AnalyzerUtilities.cs]
+# Owner-approved: these IndexOf(char) and Replace overloads are ordinal on every target.
+dotnet_diagnostic.CA1307.severity = none
+
+[src/EmbedIO/Http/ServerSentEventWriter.cs]
+# Owner-approved: preserve the simple three-character search rather than rewrite for style.
+dotnet_diagnostic.CA1870.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.IDE0300.severity = none
+
+[src/EmbedIO/Http/HttpExceptionHandler.cs]
+# Owner-approved: the no-op handler must retain its public callback parameters.
+dotnet_diagnostic.IDE0060.severity = none

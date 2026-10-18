@@ -104,18 +104,14 @@ namespace EmbedIO.Files
         {
             lock (_sections)
             {
-                if (!_disposed)
-                {
-                    var section = new Section();
-                    (_sections as IDictionary<string, Section>).Add(name, section);
+                if (_disposed) throw new ObjectDisposedException(nameof(FileCache));
+                var section = new Section();
+                (_sections as IDictionary<string, Section>).Add(name, section);
 
-                    if (++_sectionCount == 1)
-                        _cleaner = new PeriodicTask(TimeSpan.FromMinutes(1), CheckMaxSize);
+                if (++_sectionCount == 1)
+                    _cleaner = new PeriodicTask(TimeSpan.FromMinutes(1), CheckMaxSize);
 
-                    return section;
-                }
-
-                throw new ObjectDisposedException(nameof(FileCache));
+                return section;
             }
         }
 
