@@ -166,8 +166,8 @@ whitespace, namespace style, and `var` preferences remain configured. StyleCop's
 Hungarian-prefix, member-layout, and XML-comment wording checks are intentionally
 not reproduced. This is not a claim of identical analyzer coverage.
 
-Use **PrettyCSharp 1.1.2** for C# source changes (owner preference, 2026-10-18).
-Install that exact development-tool version with `python -m pip install prettycsharp==1.1.2`,
+Use **PrettyCSharp 1.1.5** for C# source changes (owner preference, 2026-10-18).
+Install that exact development-tool version with `python -m pip install prettycsharp==1.1.5`,
 or use an existing verified installation. A version update should be deliberate.
 It reads the repository's EditorConfig, including block namespaces and UTF-8 BOMs.
 Format and check only changed C# files; repository-wide formatting belongs to an
@@ -180,6 +180,12 @@ dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes --include 
 dotnet format style EmbedIO.sln --no-restore --severity info --verify-no-changes --include path/to/Changed.cs
 dotnet format analyzers EmbedIO.sln --no-restore --severity info --verify-no-changes --include path/to/Changed.cs
 ```
+
+Compiler SARIF (`ErrorLog`) captures informational diagnostics that a normal
+build summary does not print. Use an absolute report path under this checkout's
+ignored `TestResults`, with a separate report for each project/framework. Inspect
+all severities for changed files, including non-fixable analyzer messages; a zero
+warning count or formatting pass alone does not establish zero messages.
 
 Run the applicable project checks too for changed files outside the solution.
 Resolve errors, warnings and informational messages in changed source on every
