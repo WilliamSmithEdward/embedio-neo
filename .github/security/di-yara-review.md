@@ -593,3 +593,34 @@ every other merge/publication gate remain required. Other findings, scanner erro
 and stale entries remain fatal. Raw packages, pins, complete rule, CodeView paths,
 printed-match scans and alert receipts are under ignored
 `TestResults/release-2.11.0/yara-review`.
+
+
+## 2.12.0 resumable-upload release revalidation
+
+Both pinned YARA-X 1.21.0 / YARA Forge 20261011 archives and extracted contents
+were verified, and the complete God Mode rule was reread. Full-rule scans with
+printed strings in a read-only, network-disabled container matched only
+`Injection.pdb` inside each compiler-generated RSDS/CodeView symbol path.
+No other rule matched either assembly. DI source and scanner pins are unchanged
+from released 2.11.0.
+
+| Reviewed local precommit candidate | SHA-256 | Match offset |
+| --- | --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.12.0.nupkg` | `df7a90abb7dafecbd7975951d64a7099cc1647799482aba2431282555ae318c0` | n/a |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `2482c4b9a46e90087492f50ac00c47c81871fc36e54db48834d3676e01e808a6` | `0x6ca2` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `e2dbe0c5b8bc989fc212bd1f88f7fc821df06de6de16745d6730a2db09cbf836` | `0x758d` |
+
+Only the two exact version-qualified package assembly paths move to 2.12.0.
+Paginated queries of open, fixed and dismissed GitHub code-scanning alerts
+expose no matching YARA alert. On 2026-10-18 William explicitly approved both
+proposed 2.12.0 paths and the unavailable-alert waiver: “Approve both paths and
+the unavailable-alert waiver.” This waiver applies only to this reviewed rule
+on these two paths; no alert dismissal is claimed. Existing source/evidence-file
+acceptances are unchanged. Every other finding, scanner error and stale
+acceptance remains fatal.
+
+These hashes identify the reviewed local candidate, not future CI or release
+builds. Exact-head full scans, final CI package byte review and every other
+merge/publication gate remain required. Raw packages, verified pins, complete
+rule, CodeView paths, printed-match scans, alert receipts and the approved
+proposal are retained under ignored `TestResults/release-2.12.0/yara-review`.
