@@ -1,5 +1,7 @@
-﻿using System.Security.Principal;
+﻿using System;
+using System.Security.Principal;
 using System.Threading;
+using System.Threading.Tasks;
 using EmbedIO.Routing;
 using EmbedIO.Sessions;
 
@@ -23,6 +25,7 @@ namespace EmbedIO.WebApi
         {
             internal readonly OutputCacheRegistration Registration;
             internal bool Disabled;
+            internal Func<Task>? Completion;
             internal OutputCacheState(OutputCacheRegistration registration) => Registration = registration;
         }
         private OutputCacheState? CacheState => _httpContext == null || _httpContext is ILazyItems { HasItems: false }
@@ -40,6 +43,19 @@ namespace EmbedIO.WebApi
         {
             get => CacheState?.Disabled == true;
             set { if (CacheState is { } state) state.Disabled = value; }
+        }
+
+        internal Func<Task>? OutputCacheCompletion => CacheState?.Completion;
+        internal Func<Task> ConfigureOutputCacheRelease(Func<IHttpContext, WebApiController, Task> release, IHttpContext context)
+        {
+            var state = CacheState ?? throw new InvalidOperationException("No output-cache invocation is configured.");
+            Task? finished = null;
+            // The async wrapper retains synchronous callback faults in the same task,
+            // so outer cleanup can await completion without invoking release twice.
+            Func<Task> once = () => finished ??= ReleaseAsync();
+            state.Completion = once;
+            return once;
+            async Task ReleaseAsync() => await release(context, this).ConfigureAwait(false);
         }
 
         /// <summary>

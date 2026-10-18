@@ -232,10 +232,15 @@ namespace EmbedIO.WebApi
             if (invoke == null) throw new ArgumentNullException(nameof(invoke));
             var caching = controller.OutputCaching;
             if (caching == null || controller.OutputCacheDisabled) { await invoke(context).ConfigureAwait(false); return; }
+            var completion = controller.OutputCacheCompletion;
             await caching.Cache.ExecuteAsync(context, caching.Policy, async capture =>
             {
                 controller.UseCapturedContext(capture);
-                try { await invoke(capture).ConfigureAwait(false); }
+                try
+                {
+                    try { await invoke(capture).ConfigureAwait(false); }
+                    finally { if (completion != null) await completion().ConfigureAwait(false); }
+                }
                 finally { controller.UseCapturedContext(context); }
             }).ConfigureAwait(false);
         }

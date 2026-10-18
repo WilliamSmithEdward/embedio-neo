@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Threading.Tasks;
+using EmbedIO.Routing;
 using EmbedIO.Caching;
 
 namespace EmbedIO.WebApi
@@ -27,6 +29,37 @@ namespace EmbedIO.WebApi
             }
             _outputCache = cache; _outputCachePolicies = snapshot;
         }
+
+        // Chosen at registration time: uncached invokers keep their original state machines.
+        private static RouteHandlerCallback CreateCachedControllerHandler(Type controllerType,
+            Func<IHttpContext, WebApiController?> factory, Func<IHttpContext, WebApiController, Task> release,
+            Func<WebApiController, IHttpContext, RouteMatch, Task> invoke, BeforeHandlerPlan? before,
+            OutputCacheRegistration caching)
+            => async (context, route) =>
+            {
+                var controller = factory(context) ?? throw new InvalidOperationException($"The factory for {controllerType.FullName} returned null.");
+                Func<Task>? complete = null;
+                try
+                {
+                    if (!controllerType.IsInstanceOfType(controller))
+                        throw new InvalidOperationException($"The factory for {controllerType.FullName} returned {controller.GetType().FullName}.");
+                    controller.HttpContext = context;
+                    controller.Route = route;
+                    controller.OutputCaching = caching;
+                    complete = controller.ConfigureOutputCacheRelease(release, context);
+                    if (before != null) await before.ExecuteAsync(controller, context.CancellationToken).ConfigureAwait(false);
+                    await invoke(controller, context, route).ConfigureAwait(false);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (complete != null) await complete().ConfigureAwait(false);
+                        else await release(context, controller).ConfigureAwait(false);
+                    }
+                    finally { controller.OutputCaching = null; }
+                }
+            };
 
         private OutputCacheRegistration? ResolveOutputCache(string? policy)
         {

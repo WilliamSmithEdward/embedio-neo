@@ -223,6 +223,61 @@ namespace EmbedIO.Tests
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(5)); }
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task ControllerReleaseFailureCannotPublishAndReleaseRunsOnlyOnce(bool generated)
+        {
+            var cache = new OutputCache(); var state = new CachedControllerState(); var releases = 0;
+            var module = new WebApiModule("/api", (context, data) => Write(context, data as string ?? string.Empty));
+            module.ConfigureOutputCaching(cache, new Dictionary<string, OutputCachePolicy> { ["public"] = Policy() });
+            Task Release(CachedController controller)
+            {
+                controller.Dispose();
+                if (++releases == 1) throw new InvalidOperationException("release failed");
+                return Task.CompletedTask;
+            }
+            if (generated) module.RegisterControllerWithContext(OutputCacheBindings.CachedController, _ => new CachedController(state), (_, controller) => Release(controller));
+            else module.RegisterControllerWithContext(typeof(CachedController), _ => new CachedController(state), (_, controller) => Release((CachedController)controller));
+            await TestWebServer.UseAsync(server => server.WithModule(module), async client =>
+            {
+                using var failed = await client.GetAsync("/api/value");
+                Assert.That(failed.StatusCode, Is.EqualTo(HttpStatusCode.InternalServerError));
+                Assert.That(cache.Count, Is.Zero); Assert.That(releases, Is.EqualTo(1));
+                Assert.That(await Read(client, "/api/value"), Is.EqualTo("value-2"));
+                Assert.That(await Read(client, "/api/value"), Is.EqualTo("value-2"));
+                Assert.That(releases, Is.EqualTo(3)); Assert.That(state.Releases, Is.EqualTo(3)); Assert.That(state.Calls, Is.EqualTo(2));
+            });
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task WaitersCannotObserveAnEntryBeforeControllerReleaseCompletes(bool generated)
+        {
+            var cache = new OutputCache(); var state = new CachedControllerState(); var entered = Signal(); var allowRelease = Signal(); var releases = 0;
+            var module = new WebApiModule("/api", (context, data) => Write(context, data as string ?? string.Empty));
+            module.ConfigureOutputCaching(cache, new Dictionary<string, OutputCachePolicy> { ["public"] = Policy() });
+            async Task Release(CachedController controller)
+            {
+                if (Interlocked.Increment(ref releases) == 1) { entered.TrySetResult(); await allowRelease.Task; }
+                controller.Dispose();
+            }
+            if (generated) module.RegisterControllerWithContext(OutputCacheBindings.CachedController, _ => new CachedController(state), (_, controller) => Release(controller));
+            else module.RegisterControllerWithContext(typeof(CachedController), _ => new CachedController(state), (_, controller) => Release((CachedController)controller));
+            await TestWebServer.UseAsync(server => server.WithModule(module), async client =>
+            {
+                var first = Read(client, "/api/value"); Task<string>? waiter = null;
+                try
+                {
+                    await entered.Task.WaitAsync(TimeSpan.FromSeconds(5)); waiter = Read(client, "/api/value");
+                    Assert.That(cache.Count, Is.Zero); Assert.That(state.Calls, Is.EqualTo(1)); Assert.That(waiter.IsCompleted, Is.False);
+                }
+                finally { allowRelease.TrySetResult(); }
+                Assert.That(await first.WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo("value-1"));
+                Assert.That(await (waiter ?? throw new AssertionException("Missing waiter.")).WaitAsync(TimeSpan.FromSeconds(5)), Is.EqualTo("value-1"));
+                Assert.That(releases, Is.EqualTo(2)); Assert.That(state.Releases, Is.EqualTo(2)); Assert.That(cache.Count, Is.EqualTo(1));
+            });
+        }
+
         [Test]
         public void PolicyValidationRejectsMalformedOrUnboundedMetadata()
         {

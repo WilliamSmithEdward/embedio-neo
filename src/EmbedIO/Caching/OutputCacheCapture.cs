@@ -190,6 +190,11 @@ namespace EmbedIO.Caching
                 else { await _inner.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false); _inner.Dispose(); }
                 _owner.Snapshot(); Record(buffer, offset, count);
             }
+#if NET10_0_OR_GREATER
+            // Await the transport's completion and any final write failure, as an
+            // unwrapped response stream does. The recording buffer stays alive until Complete.
+            public override ValueTask DisposeAsync() => _inner.DisposeAsync();
+#endif
             protected override void Dispose(bool disposing) { if (disposing) _inner.Dispose(); base.Dispose(disposing); }
         }
     }

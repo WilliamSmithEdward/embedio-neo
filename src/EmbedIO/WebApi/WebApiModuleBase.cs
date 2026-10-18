@@ -640,6 +640,10 @@ namespace EmbedIO.WebApi
                     callMethod),
                 instance, contextInLambda, routeInLambda).Compile();
 
+            if (caching != null)
+                return CreateCachedControllerHandler(controllerType, contextFactory,
+                    release ?? throw new InvalidOperationException("No controller release callback is configured."), invoke, before, caching);
+
             return async (context, route) =>
             {
                 var created = contextFactory(context);
@@ -653,14 +657,12 @@ namespace EmbedIO.WebApi
 
                     created.HttpContext = context;
                     created.Route = route;
-                    created.OutputCaching = caching;
                     if (before != null) await before.ExecuteAsync(created, context.CancellationToken).ConfigureAwait(false);
                     await invoke(created, context, route).ConfigureAwait(false);
                 }
                 finally
                 {
-                    try { await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false); }
-                    finally { if (caching != null) created.OutputCaching = null; }
+                    await (release ?? throw new InvalidOperationException("No controller release callback is configured."))(context, created).ConfigureAwait(false);
                 }
             };
         }
@@ -1010,6 +1012,16 @@ namespace EmbedIO.WebApi
             where TController : WebApiController
         {
             invoker = Validate.NotNull(nameof(invoker), invoker);
+            if (caching != null)
+                return CreateCachedControllerHandler(typeof(TController), context => factory(context),
+                    (context, controller) => release(context, (TController)controller),
+                    async (controller, context, route) =>
+                    {
+                        var typed = (TController)controller;
+                        if (useControllerPreprocessing) typed.PreProcessRequest();
+                        var work = await invoker(typed, context, route, serializer).ConfigureAwait(false);
+                        await work.ConfigureAwait(false);
+                    }, null, caching);
             return async (context, route) =>
             {
                 var controller = factory(context)
@@ -1019,15 +1031,13 @@ namespace EmbedIO.WebApi
                 {
                     controller.HttpContext = context;
                     controller.Route = route;
-                    controller.OutputCaching = caching;
                     if (useControllerPreprocessing) controller.PreProcessRequest();
                     var work = await invoker(controller, context, route, serializer).ConfigureAwait(false);
                     await work.ConfigureAwait(false);
                 }
                 finally
                 {
-                    try { await release(context, controller).ConfigureAwait(false); }
-                    finally { if (caching != null) controller.OutputCaching = null; }
+                    await release(context, controller).ConfigureAwait(false);
                 }
             };
         }

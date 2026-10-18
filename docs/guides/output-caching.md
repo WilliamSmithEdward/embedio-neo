@@ -55,7 +55,8 @@ where they always run. Controller session access bypasses caching.
 
 An opted-in finite action owns its controller until the action and serializer
 finish, including cancellation and failure. Disposal/release is awaited after
-that work and also occurs on a hit. This is the new cache path's lifetime;
+that work and before publication, and also occurs on a hit. A release failure
+publishes nothing, and a failed release is never invoked a second time. This is the new cache path's lifetime;
 uncached legacy controller disposal timing remains unchanged.
 
 ## Fluent handlers
