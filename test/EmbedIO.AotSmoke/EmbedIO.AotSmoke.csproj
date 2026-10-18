@@ -14,6 +14,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Shared/OutputCacheSmoke.cs" Link="Shared/OutputCacheSmoke.cs" />
     <Compile Include="../Shared/RequestAbortSmoke.cs" Link="Shared/RequestAbortSmoke.cs" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
     <ProjectReference Include="../../src/EmbedIO.Jwt/EmbedIO.Jwt.csproj" />

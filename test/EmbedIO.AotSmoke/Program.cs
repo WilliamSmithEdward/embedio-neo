@@ -99,6 +99,7 @@ internal static class Program
                         await stream.FlushAsync(context.CancellationToken);
                     }
                 }));
+            var outputCaching = EmbedIO.PlatformTests.OutputCacheSmoke.Configure(server);
             EmbedIO.PlatformTests.RequestAbortSmoke.Configure(server);
             using var health = HealthChecks.Create(server);
             server.WithStaticFolder("/", root, false);
@@ -116,6 +117,8 @@ internal static class Program
             await EventHubChecks.RunAsync(client, url, checks, eventHub);
             await BrowserChecks.RunAsync(client, url, checks);
             await HealthChecks.RunAsync(client, url, checks, health);
+            await EmbedIO.PlatformTests.OutputCacheSmoke.RunAsync(url, outputCaching);
+            checks["output_caching"] = "generated async hooks, query binding, cache hits, invalidation and uncached defaults";
             await EmbedIO.PlatformTests.RequestAbortSmoke.RunAsync(client, url);
             checks["request_abort"] = "generated token binding, real HTTP/1 client cancellation and healthy successor";
             var first = await client.GetStringAsync(url + "api/items/7");

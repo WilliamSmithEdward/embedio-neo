@@ -20,6 +20,7 @@ namespace EmbedIO
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
+            if (@this is Caching.OutputCacheCapture capture) capture.Disabled = true;
             if (!@this.Items.TryGetValue(CompletionKey, out var value))
             {
                 value = new Stack<Func<Task>>();

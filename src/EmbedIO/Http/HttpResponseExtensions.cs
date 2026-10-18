@@ -44,6 +44,7 @@ namespace EmbedIO
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
             if (cookie == null) throw new ArgumentNullException(nameof(cookie));
+            if (@this is Caching.OutputCacheCapture.CaptureResponse capture) { capture.DisableCapture(); @this = capture.Inner; }
             CookieSameSiteStore.ValidateMode(sameSite, nameof(sameSite));
             CookieSameSiteStore.ValidateCookie(cookie, sameSite);
             if (@this is not (EmbedIO.Net.Internal.HttpListenerResponse or EmbedIO.Net.Internal.MultiplexedResponse))

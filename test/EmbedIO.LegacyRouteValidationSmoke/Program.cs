@@ -67,10 +67,13 @@ public static class Program
                 .WithModule(new BrowserRequestProtectionModule("/browser", protection))
                 .WithModule(new ActionModule("/browser", HttpVerbs.Post, context => context.SendStringAsync("accepted", "text/plain", WebServer.Utf8NoBomEncoding)))
                 .WithWebApi("/api", m => m.WithController<Controller>());
+            var outputCaching = EmbedIO.PlatformTests.OutputCacheSmoke.Configure(server);
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             var running = server.RunAsync(stop.Token);
             try
             {
+                await EmbedIO.PlatformTests.OutputCacheSmoke.RunAsync(url, outputCaching);
+                _checks += 5;
                 foreach (var test in cases)
                 {
                     using var response = await client.GetAsync(url + "api/" + test.Path);
@@ -125,7 +128,7 @@ public static class Program
             if (item == null || item.Id != id || item.Data != "after" || await subscriber.ReadAsync() != null) throw new InvalidOperationException("Legacy SSE replay mismatch.");
             _checks++;
         }
-        if (_checks != 33) throw new InvalidOperationException("Legacy route and health check count changed.");
+        if (_checks != 38) throw new InvalidOperationException("Legacy route and health check count changed.");
     }
 
     public enum Choice { One = 1 }

@@ -532,3 +532,32 @@ dismissal is claimed. Exact-head full CI scans and review of the final CI packag
 bytes remain required before merge/publication. Other findings, scanner errors
 and stale entries remain fatal. Source, pins, CodeView paths, printed-match scans
 and alert receipts are under ignored `TestResults/request-abort/yara-review`.
+
+
+## 2.10.0 output-cache release revalidation
+
+The release PR scan [39100390041](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/39100390041)
+rejected the two new package-version paths and the stale 2.9.0 entries. The exact
+`scanned-nupkg` artifact identifies PR merge source
+`b5adb0d668f349b8cdc7493d6d4bbe4681bf09c4` (head `eba91ae7b0acc985b0efabc30f4021abd9834808`).
+Both pinned YARA-X 1.21.0 / YARA Forge 20261011 archives and extracted contents
+were verified; the complete God Mode rule was reread. Full-rule scans in a
+read-only, network-disabled container with printed strings matched only
+`Injection.pdb` in each compiler CodeView path. No other rule or string matched
+either assembly. DI source and scanner pins are unchanged from 2.9.0.
+
+| Scanned CI artifact | SHA-256 | Match offset |
+| --- | --- | --- |
+| `EmbedIO-Neo.DependencyInjection.2.10.0.nupkg` | `a5a40b2af0aa1526efbfb0cef9f087c0e0974e07a36141c2a7e10e4934716458` | n/a |
+| `lib/net10.0/EmbedIO.DependencyInjection.dll` | `2697707f4584cda4892d7565e37ecfb410538f6c12ff37e65751635b77d08c0b` | `0x6c88` |
+| `lib/netstandard2.0/EmbedIO.DependencyInjection.dll` | `1180ede215a36ddb394f79c249890e2ffaba4d7295c313aab448c5b376b9d449` | `0x7573` |
+
+Only the two exact package-version assembly paths move to 2.10.0. The rule and
+source/evidence-file boundaries remain unchanged. Paginated queries of open,
+fixed and dismissed GitHub code-scanning alerts found no matching YARA alert;
+the existing owner-approved unavailable-alert exception is retained and no
+dismissal is claimed. These hashes describe the reviewed CI artifact, not future
+builds. Fresh exact-head full scans and every other gate remain required before
+merge/publication. Other findings, errors and stale acceptances remain fatal.
+Raw packages, pin checks, complete rule, CodeView paths, printed-match scans and
+alert receipts are retained under ignored `TestResults/release-2.10.0/yara-review`.

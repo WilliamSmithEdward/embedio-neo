@@ -220,6 +220,31 @@ namespace EmbedIO.WebApi
             await serializer(context, await (task ?? throw new ArgumentNullException(nameof(task))).ConfigureAwait(false)).ConfigureAwait(false);
         }
 
+        /// <summary>Executes an opted-in action after its per-request preprocessing. Supports generated code.</summary>
+        /// <param name="controller">The activated controller.</param>
+        /// <param name="context">The current request.</param>
+        /// <param name="invoke">Binds arguments, invokes and completely serializes the action.</param>
+        /// <returns>The response lifetime.</returns>
+        public static async Task ExecuteOutputCachedAsync(WebApiController controller, IHttpContext context, Func<IHttpContext, Task> invoke)
+        {
+            if (controller == null) throw new ArgumentNullException(nameof(controller));
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            if (invoke == null) throw new ArgumentNullException(nameof(invoke));
+            var caching = controller.OutputCaching;
+            if (caching == null || controller.OutputCacheDisabled) { await invoke(context).ConfigureAwait(false); return; }
+            var completion = controller.OutputCacheCompletion;
+            await caching.Cache.ExecuteAsync(context, caching.Policy, async capture =>
+            {
+                controller.UseCapturedContext(capture);
+                try
+                {
+                    try { await invoke(capture).ConfigureAwait(false); }
+                    finally { if (completion != null) await completion().ConfigureAwait(false); }
+                }
+                finally { controller.UseCapturedContext(context); }
+            }).ConfigureAwait(false);
+        }
+
         /// <summary>Awaits an explicit SSE controller result and its complete subscription lifetime.</summary>
         /// <param name="context">The response context.</param>
         /// <param name="task">The controller result.</param>

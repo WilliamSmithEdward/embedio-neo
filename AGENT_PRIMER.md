@@ -28,6 +28,25 @@ Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.
 
+### Output caching (2.10.0+)
+
+`OutputCache` in `EmbedIO.Caching` is explicitly opt-in through a fluent wrapper
+or `[OutputCache("policy")]` plus `ConfigureOutputCaching`. Generated bindings
+support the same policies. Authorization and hooks run on every hit; argument
+binding, action execution and serialization do not. Uncached defaults and legacy
+controller disposal timing remain unchanged. Opted-in actions use awaited
+controller release after serialization and before cache publication; release
+faults publish nothing and cleanup runs once. Sensitive bypasses retain the base
+client no-store behavior, and hits preserve current supported Vary fields. Explicit no-store, credentials, cookies,
+streams, conditions, ranges, failures and canceled/oversize fills bypass storage.
+Always declare all representation-selecting request headers. Data remains a
+snapshot until TTL or explicit tag invalidation after a successful data commit;
+invalidation fences older in-flight fills but is not transactional consistency.
+Storage and capture concurrency are bounded. HTTP/3 GETs with unknown body
+length bypass caching; an explicit zero Content-Length permits reuse. See the
+[output-caching guide](docs/guides/output-caching.md) for exclusions, ownership,
+key dimensions, limits, fuzzing and real-loopback latency measurement.
+
 ## 1. What you are building on
 
 | Item | Value |
@@ -35,7 +54,7 @@ necessarily deterministic reproductions.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.9.0, the v2 engine. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current version | 2.10.0, the v2 engine. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
