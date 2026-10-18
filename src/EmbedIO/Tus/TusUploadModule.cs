@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Utilities;
 
 namespace EmbedIO.Tus
 {
@@ -11,22 +12,31 @@ namespace EmbedIO.Tus
     /// <remarks>Register authentication, authorization, browser protection and CORS before this module.
     /// The module borrows its store. No routes or storage are installed unless explicitly configured.
     /// Creates protected tus endpoints at a dedicated base route.</remarks>
-    /// <param name="baseRoute">Upload collection path, for example /uploads/.</param>
-    /// <param name="store">Application-owned disk store, shared by modules using the same directory.</param>
-    /// <param name="ownerSelector">Application authorization and stable owner selection on every request.
-    /// Receives the effective method, including tus method override. Return null to deny. Include tenant and issuer when subjects are not globally unique.
-    /// The request must also have an authenticated principal.</param>
-    public sealed class TusUploadModule(
-        string baseRoute,
-        DiskTusUploadStore store,
-        Func<IHttpContext, string, string?> ownerSelector
-    ) : WebModuleBase(baseRoute)
+    public sealed class TusUploadModule : WebModuleBase
     {
-        private readonly DiskTusUploadStore _store = store ?? throw new ArgumentNullException(nameof(store));
-        private readonly Func<IHttpContext, string, string?> _ownerSelector = ownerSelector
-            ?? throw new ArgumentNullException(nameof(ownerSelector));
+        private readonly DiskTusUploadStore _store;
+        private readonly Func<IHttpContext, string, string?> _ownerSelector;
         private Func<IHttpContext, TusUpload, Task>? _onCompleted;
         private int _active;
+
+        /// <summary>Creates protected tus endpoints at a dedicated base route.</summary>
+        /// <param name="baseRoute">Upload collection path, for example /uploads/.</param>
+        /// <param name="store">Application-owned disk store, shared by modules using the same directory.</param>
+        /// <param name="ownerSelector">Application authorization and stable owner selection on every request.
+        /// Receives the effective method, including tus method override. Return null to deny. Include tenant and issuer when subjects are not globally unique.
+        /// The request must also have an authenticated principal.</param>
+        public TusUploadModule(
+            string baseRoute,
+            DiskTusUploadStore store,
+            Func<IHttpContext, string, string?> ownerSelector
+        ) : base(baseRoute)
+        {
+            store = Validate.NotNull(nameof(store), store);
+            ownerSelector = Validate.NotNull(nameof(ownerSelector), ownerSelector);
+
+            _store = store;
+            _ownerSelector = ownerSelector;
+        }
 
         /// <inheritdoc />
         public override bool IsFinalHandler => true;

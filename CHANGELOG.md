@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-10-18
+
 ### Added
 
 - Opt-in tus 1.0 resumable uploads with authenticated owner/effective-method

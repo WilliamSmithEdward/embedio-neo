@@ -7,7 +7,8 @@ and the new tests, fuzz harness, compatibility fixtures and workflow changes.
 The review started at `ee3a305b0a518fadabb964969819304c63dad80f`.
 This is a source review with owned local adversarial tests, not an independent
 penetration test or a guarantee that the implementation has no vulnerabilities.
-The feature and correction remain unreleased.
+The feature and correction are included in the 2.12.0 release source; NuGet
+2.11.0 does not contain them.
 
 ## Confirmed finding: method override bypassed token checks
 
@@ -80,6 +81,15 @@ were not independently audited.
 - Compatibility-only informational suppressions are exact member/field scoped.
   Compiler probes against actual .NET Standard 2.0 references confirm ranges and
   System.Threading.Lock are unavailable; no error or warning is suppressed.
+
+## Scanner compatibility
+
+Pinned Semgrep 1.180.0 rejected the primary-constructor syntax introduced during
+informational-diagnostic cleanup, leaving incomplete coverage and correctly
+failing the security gate. The module now uses an ordinary constructor and the
+existing cross-target argument validation helper. Its API and validation remain
+intact. No parser warning, security finding or scanner rule is suppressed.
+Fresh exact-head scans remain required before merging and publishing.
 
 ## Deployment assumptions that remain necessary
 

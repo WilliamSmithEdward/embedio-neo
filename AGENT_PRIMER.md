@@ -47,10 +47,10 @@ length bypass caching; an explicit zero Content-Length permits reuse. See the
 [output-caching guide](docs/guides/output-caching.md) for exclusions, ownership,
 key dimensions, limits, fuzzing and real-loopback latency measurement.
 
-### Resumable uploads (pending next release)
+### Resumable uploads (2.12.0+)
 
 `EmbedIO.Tus.TusUploadModule` and application-owned `DiskTusUploadStore` add opt-in
-tus 1.0 creation/HEAD/PATCH/DELETE endpoints. They are not in NuGet 2.11.0.
+tus 1.0 creation/HEAD/PATCH/DELETE endpoints in 2.12.0+. NuGet 2.11.0 lacks these APIs.
 Install authentication/security middleware before the module and require a stable
 trusted tenant/issuer/subject owner selector on every request. Its second argument
 is the effective method, including `X-HTTP-Method-Override`; authorize that method.
@@ -83,11 +83,11 @@ validate privately and publish using application rules. Client metadata never
 names a store path. Both targets retain existing APIs/defaults/dependencies;
 unconfigured requests do not enter this feature. See the
 [resumable upload guide](docs/guides/resumable-uploads.md) for protocol, security,
-client limits, recovery and fuzz replay. Pending browser protection also checks
+client limits, recovery and fuzz replay. In 2.12.0+, browser protection also checks
 method overrides before exempting safe verbs or WebSocket handshakes from CSRF
 tokens; a safe override cannot exempt a physical unsafe method. See the
-[adversarial audit](docs/project/tus-security-audit.md). This correction is not
-in NuGet 2.11.0.
+[adversarial audit](docs/project/tus-security-audit.md). This correction requires
+2.12.0+.
 
 ### Write idempotency (2.11.0+)
 
@@ -130,7 +130,7 @@ limits, failure matrix, concurrency fuzzing and cross-target support.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current version | 2.11.0, the v2 engine. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current source version | 2.12.0, the v2 engine. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x

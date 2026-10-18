@@ -1,6 +1,6 @@
 # Resumable uploads using tus
 
-Pending the next release; unavailable in NuGet 2.11.0.
+Requires **EmbedIO-Neo 2.12.0 or later**. NuGet 2.11.0 does not contain these APIs.
 
 `EmbedIO.Tus.TusUploadModule` implements the [tus 1.0 protocol](https://tus.io/protocols/resumable-upload)
 with creation, expiration, termination and checksum extensions. Clients create an
@@ -105,7 +105,7 @@ Place authentication, authorization, forwarding trust, rate limiting and browser
 protection before the upload module. Controller `[Authorize]` attributes govern
 controllers, not this module; enforce upload permission in the selector or earlier
 middleware. Do not rely solely on the physical HTTP verb for authorization:
-tus supports `X-HTTP-Method-Override`. The pending browser-protection correction
+tus supports `X-HTTP-Method-Override`. Browser protection in 2.12.0+
 checks overrides too: safe physical verbs and WebSocket upgrade headers cannot
 exempt an unsafe override from the token requirement. Mount controllers at separate paths; their
 existing bindings, hooks, caching and idempotency behavior need no changes. Do not
