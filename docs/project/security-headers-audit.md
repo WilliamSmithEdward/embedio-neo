@@ -55,7 +55,12 @@ in published 2.12.0. Fixture compilation/setup corrections are not security find
 
 The expanded Windows run passed 49 focused cases with no skips, including HTTP/3.
 The expanded gated campaign passed 1,000 traces (three actors, 48 generated steps),
-and the negative oracle rejected its injected mismatch. Final full-suite, formatting,
+and the negative oracle rejected its injected mismatch. The rebuilt Windows suite passed 7,316 cases with 21 expected skips (7,337 total).
+All 50 new regression identities passed on Windows, Linux and macOS, with no
+previous-release cases missing. macOS retained one existing raw MsQuic
+AddressAlreadyInUse failure under the unchanged, owner-approved runtime quarantine;
+that runtime defect is not claimed fixed. Normal and quarantine paths now share
+the same 7,337-case discovery floor. Final formatting,
 analyzer, compatibility, AOT and CI results are recorded in the PR; no pending or
 configured check should be described as passed. Local logs stay under ignored
 `TestResults/security-headers`.
