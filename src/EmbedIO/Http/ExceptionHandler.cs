@@ -52,6 +52,7 @@ namespace EmbedIO
         public static Task EmptyResponse(IHttpContext context, Exception exception)
         {
             if (context is null) throw new System.NullReferenceException();
+
             context.Response.SetEmptyResponse((int)HttpStatusCode.InternalServerError);
             return Task.CompletedTask;
         }
@@ -82,7 +83,9 @@ namespace EmbedIO
         public static Task EmptyResponseWithHeaders(IHttpContext context, Exception exception)
         {
             if (context is null) throw new System.NullReferenceException();
+
             if (exception is null) throw new System.NullReferenceException();
+
             context.Response.SetEmptyResponse((int)HttpStatusCode.InternalServerError);
             context.Response.Headers[ExceptionTypeHeaderName] = Uri.EscapeDataString(exception.GetType().Name);
             context.Response.Headers[ExceptionMessageHeaderName] = Uri.EscapeDataString(exception.Message);
@@ -98,37 +101,38 @@ namespace EmbedIO
         /// <param name="context">An <see cref="IHttpContext" /> interface representing the context of the request.</param>
         /// <param name="exception">The unhandled exception.</param>
         /// <returns>A <see cref="Task" /> representing the ongoing operation.</returns>
-        public static Task HtmlResponse(IHttpContext context, Exception exception)
-            => context.SendStandardHtmlAsync(
-                (int)HttpStatusCode.InternalServerError,
-                text =>
+        public static Task HtmlResponse(IHttpContext context, Exception exception) =>
+            context.SendStandardHtmlAsync((int)HttpStatusCode.InternalServerError, text =>
+            {
+                text.Write("<p>The server has encountered an error and was not able to process your request.</p>");
+                text.Write("<p>Please contact the server administrator");
+
+                if (!string.IsNullOrEmpty(ContactInformation))
+                    text.Write(" ({0})", HttpUtility.HtmlEncode(ContactInformation));
+
+                text.Write(", informing them of the time this error occurred and the action(s) you performed that resulted in this error.</p>");
+                text.Write("<p>The following information may help them in finding out what happened and restoring full functionality.</p>");
+                text.Write("<p><strong>Exception type:</strong> {0}<p><strong>Message:</strong> {1}", HttpUtility.HtmlEncode(exception.GetType().FullName ?? "<unknown>"), HttpUtility.HtmlEncode(exception.Message));
+
+                if (IncludeStackTraces)
                 {
-                    text.Write("<p>The server has encountered an error and was not able to process your request.</p>");
-                    text.Write("<p>Please contact the server administrator");
+                    text.Write("</p><p><strong>Stack trace:</strong></p><br><pre>{0}</pre>", HttpUtility.HtmlEncode(exception.StackTrace));
+                }
+            });
 
-                    if (!string.IsNullOrEmpty(ContactInformation))
-                        text.Write(" ({0})", HttpUtility.HtmlEncode(ContactInformation));
-
-                    text.Write(", informing them of the time this error occurred and the action(s) you performed that resulted in this error.</p>");
-                    text.Write("<p>The following information may help them in finding out what happened and restoring full functionality.</p>");
-                    text.Write(
-                        "<p><strong>Exception type:</strong> {0}<p><strong>Message:</strong> {1}",
-                        HttpUtility.HtmlEncode(exception.GetType().FullName ?? "<unknown>"),
-                        HttpUtility.HtmlEncode(exception.Message));
-
-                    if (IncludeStackTraces)
-                    {
-                        text.Write(
-                            "</p><p><strong>Stack trace:</strong></p><br><pre>{0}</pre>",
-                            HttpUtility.HtmlEncode(exception.StackTrace));
-                    }
-                });
-
-        internal static async Task Handle(string logSource, IHttpContext context, Exception exception, ExceptionHandlerCallback? handler, HttpExceptionHandlerCallback? httpHandler)
+        internal static async Task Handle(
+            string logSource,
+            IHttpContext context,
+            Exception exception,
+            ExceptionHandlerCallback? handler,
+            HttpExceptionHandlerCallback? httpHandler
+        )
         {
             if (handler == null)
             {
-                ExceptionDispatchInfo.Capture(exception).Throw();
+                ExceptionDispatchInfo
+                    .Capture(exception)
+                    .Throw();
                 return;
             }
 
@@ -138,8 +142,12 @@ namespace EmbedIO
             {
                 // The status and body already reached the client. Ending the response
                 // visibly is the only honest outcome; no handler can replace it.
-                $"[{context.Id}] The response was already committed; aborting it instead of running the exception handler.".Warn(logSource);
-                await EmbedIO.Internal.ResponseCommitment.AbortAsync(context, exception).ConfigureAwait(false);
+                $"[{context.Id}] The response was already committed; aborting it instead of running the exception handler.".Warn(
+                    logSource
+                );
+                await EmbedIO.Internal.ResponseCommitment
+                    .AbortAsync(context, exception)
+                    .ConfigureAwait(false);
                 return;
             }
 
@@ -147,25 +155,33 @@ namespace EmbedIO
             {
                 context.Response.PrepareReplacement((int)HttpStatusCode.InternalServerError);
                 context.Response.DisableCaching();
-                await handler(context, exception)
-                    .ConfigureAwait(false);
+                await handler(context, exception).ConfigureAwait(false);
             }
+
             catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
             {
                 throw;
             }
+
             catch (HttpListenerException)
             {
                 throw;
             }
-            catch (Exception httpException) when (httpException is IHttpException httpException1 && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(httpException))
+
+            catch (Exception httpException) when (
+                httpException is IHttpException httpException1
+                && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(httpException)
+            )
             {
                 if (httpHandler == null)
                     throw;
 
                 // The same path as any HTTP exception, so its status and headers (a redirect's Location) are applied.
-                await HttpExceptionHandler.Handle(logSource, context, httpException, httpHandler).ConfigureAwait(false);
+                await HttpExceptionHandler
+                    .Handle(logSource, context, httpException, httpHandler)
+                    .ConfigureAwait(false);
             }
+
             catch (Exception exception2) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception2))
             {
                 exception2.Log(logSource, $"[{context.Id}] Unhandled exception while handling exception.");

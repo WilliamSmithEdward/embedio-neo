@@ -65,11 +65,18 @@ namespace EmbedIO
             this IHttpRequest @this,
             bool preferCompression,
             out CompressionMethod compressionMethod,
-            out Action<IHttpResponse> prepareResponse)
+            out Action<IHttpResponse> prepareResponse
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             var acceptedEncodings = new QValueList(true, @this.Headers.GetValues(HttpHeaderNames.AcceptEncoding));
-            if (!acceptedEncodings.TryNegotiateContentEncoding(preferCompression, out compressionMethod, out var compressionMethodName))
+
+            if (!acceptedEncodings.TryNegotiateContentEncoding(
+                preferCompression,
+                out compressionMethod,
+                out var compressionMethodName
+            ))
             {
                 prepareResponse = r => throw HttpException.NotAcceptable(HttpHeaderNames.AcceptEncoding);
                 return false;
@@ -78,8 +85,10 @@ namespace EmbedIO
             prepareResponse = r =>
             {
                 r.Headers.Add(HttpHeaderNames.Vary, HttpHeaderNames.AcceptEncoding);
+
                 if (compressionMethodName == CompressionMethodNames.None)
                     r.Headers.Remove(HttpHeaderNames.ContentEncoding);
+
                 else
                     r.Headers.Set(HttpHeaderNames.ContentEncoding, compressionMethodName);
             };
@@ -112,7 +121,9 @@ namespace EmbedIO
         public static bool CheckIfNoneMatch(this IHttpRequest @this, string entityTag, out bool headerExists)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             var values = @this.Headers.GetValues(HttpHeaderNames.IfNoneMatch);
+
             if (values == null)
             {
                 headerExists = false;
@@ -121,9 +132,12 @@ namespace EmbedIO
 
             headerExists = true;
             var index = 0;
-            if (entityTag == null
+
+            if (
+                entityTag == null
                 || !ReadEntityTag(entityTag, ref index, out var weak, out var start, out var length)
-                || index != entityTag.Length)
+                || index != entityTag.Length
+            )
                 return false;
 
             foreach (var value in values)
@@ -135,9 +149,8 @@ namespace EmbedIO
                     if (MatchesEntityTags(value, entityTag, weak, start, length, false, true))
                         return true;
                 }
-                catch (HttpException)
-                {
-                }
+
+                catch (HttpException) { }
             }
 
             return false;
@@ -164,10 +177,16 @@ namespace EmbedIO
         /// <returns><see langword="true"/> if an <c>If-Modified-Since</c> header is present in
         /// <paramref name="this"/> and its value is a date and time more recent or equal to <paramref name="lastModifiedUtc"/>;
         /// <see langword="false"/> otherwise.</returns>
-        public static bool CheckIfModifiedSince(this IHttpRequest @this, DateTime lastModifiedUtc, out bool headerExists)
+        public static bool CheckIfModifiedSince(
+            this IHttpRequest @this,
+            DateTime lastModifiedUtc,
+            out bool headerExists
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             var value = @this.Headers.Get(HttpHeaderNames.IfModifiedSince);
+
             if (value == null)
             {
                 headerExists = false;
@@ -240,9 +259,17 @@ namespace EmbedIO
         /// (or <c>304 Not Modified</c>) response for the same resource should include an <c>Accept-Ranges</c>
         /// header with the string <c>bytes</c> as value.</para>
         /// </remarks>
-        public static bool IsRangeRequest(this IHttpRequest @this, long contentLength, string entityTag, DateTime lastModifiedUtc, out long start, out long upperBound)
+        public static bool IsRangeRequest(
+            this IHttpRequest @this,
+            long contentLength,
+            string entityTag,
+            DateTime lastModifiedUtc,
+            out long start,
+            out long upperBound
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             start = 0;
             upperBound = contentLength - 1;
 
@@ -253,6 +280,7 @@ namespace EmbedIO
 
             // No Range header, no partial content.
             var rangeHeader = @this.Headers.Get(HttpHeaderNames.Range);
+
             if (rangeHeader == null)
                 return false;
 
@@ -265,7 +293,10 @@ namespace EmbedIO
             //                       including when the validator is an HTTP-date, differs from the
             //                       "earlier than or equal to" comparison used when evaluating an
             //                       If-Unmodified-Since conditional."
-            var ifRange = @this.Headers.Get(HttpHeaderNames.IfRange)?.Trim();
+            var ifRange = @this.Headers
+                .Get(HttpHeaderNames.IfRange)
+                ?.Trim();
+
             if (ifRange != null && ifRange != entityTag)
             {
                 if (!HttpDate.TryParse(ifRange, out var rangeDate))
@@ -276,8 +307,10 @@ namespace EmbedIO
             }
 
             // Ignore the Range request header if it cannot be parsed successfully.
-            if (!RangeHeaderValue.TryParse(rangeHeader, out var range)
-                || !string.Equals(range.Unit, "bytes", StringComparison.OrdinalIgnoreCase))
+            if (
+                !RangeHeaderValue.TryParse(rangeHeader, out var range)
+                || !string.Equals(range.Unit, "bytes", StringComparison.OrdinalIgnoreCase)
+            )
                 return false;
 
             // EmbedIO does not support multipart/byteranges responses (yet),
@@ -286,9 +319,11 @@ namespace EmbedIO
                 return false;
 
             var firstRange = range.Ranges.First();
+
             if (!firstRange.From.HasValue)
             {
                 var suffixLength = firstRange.To.GetValueOrDefault();
+
                 if (suffixLength == 0)
                     throw HttpException.RangeNotSatisfiable(contentLength);
 
@@ -300,12 +335,14 @@ namespace EmbedIO
                 start = suffixLength >= contentLength ? 0 : contentLength - suffixLength;
                 upperBound = contentLength - 1;
             }
+
             else
             {
                 // RFC 9110, Section 14.1.2: a last position at or past the end selects the remainder.
                 start = firstRange.From.Value;
                 upperBound = Math.Min(firstRange.To ?? contentLength - 1, contentLength - 1);
             }
+
             if (start >= contentLength || upperBound < start)
                 throw HttpException.RangeNotSatisfiable(contentLength);
 

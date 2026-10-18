@@ -31,9 +31,21 @@ namespace EmbedIO
 
         internal MultipartOptions Snapshot()
         {
-            if (MaxTotalBytes < 0 || MaxFileBytes < 0 || MaxFieldBytes < 0 || MaxParts < 0
-                || MaxFiles < 0 || MaxFields < 0 || MaxHeaderBytes < 0 || MaxHeaders < 0)
-                throw new ArgumentOutOfRangeException(nameof(MultipartOptions), "Multipart limits must be nonnegative.");
+            if (
+                MaxTotalBytes < 0
+                || MaxFileBytes < 0
+                || MaxFieldBytes < 0
+                || MaxParts < 0
+                || MaxFiles < 0
+                || MaxFields < 0
+                || MaxHeaderBytes < 0
+                || MaxHeaders < 0
+            )
+                throw new ArgumentOutOfRangeException(
+                    nameof(MultipartOptions),
+                    "Multipart limits must be nonnegative."
+                );
+
             return (MultipartOptions)MemberwiseClone();
         }
     }

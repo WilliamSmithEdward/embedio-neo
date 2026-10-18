@@ -14,10 +14,15 @@ namespace EmbedIO
         /// <param name="headers">The section's headers.</param>
         /// <param name="cancellationToken">Write cancellation.</param>
         /// <returns>The original capability's send task.</returns>
-        public static Task SendInformationalAsync(this IHttpResponseSections @this, HttpStatusCode statusCode,
-            WebHeaderCollection headers, CancellationToken cancellationToken = default)
+        public static Task SendInformationalAsync(
+            this IHttpResponseSections @this,
+            HttpStatusCode statusCode,
+            WebHeaderCollection headers,
+            CancellationToken cancellationToken = default
+        )
         {
             if (@this is null) throw new NullReferenceException();
+
             return @this.SendInformationalAsync((int)statusCode, headers, cancellationToken);
         }
     }

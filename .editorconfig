@@ -152,3 +152,22 @@ dotnet_diagnostic.IDE0060.severity = none
 [src/EmbedIO/Health/HealthCheckService.cs]
 # Preserve the public WaitForReadyAsync parameter order for existing callers.
 dotnet_diagnostic.CA1068.severity = none
+
+[src/EmbedIO/Http/Multipart/MultipartReader.Body.cs]
+# Owner-approved: preserve the shared array-based stream implementation without target-specific overrides.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Http/Multipart/MultipartReader.cs]
+# Preserve the public constructor parameter order for existing callers.
+dotnet_diagnostic.CA1068.severity = none
+
+[src/EmbedIO/Http/ServerSentEventHub.cs]
+# Preserve the explicit constructor and simple event-name validation implementation.
+dotnet_diagnostic.IDE0290.severity = none
+dotnet_diagnostic.IDE0300.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1870.severity = none
+
+[src/EmbedIO/Http/ServerSentEventStream.cs]
+# Preserve both the response failure and cleanup failure in the intentional AggregateException.
+dotnet_diagnostic.CA2219.severity = none

@@ -6,7 +6,13 @@ namespace EmbedIO
     /// <summary>A multipart form part. Metadata is untrusted client input; filenames are never filesystem paths.</summary>
     public sealed class MultipartSection
     {
-        internal MultipartSection(string name, string? fileName, string? contentType, IReadOnlyDictionary<string, string> headers, Stream body)
+        internal MultipartSection(
+            string name,
+            string? fileName,
+            string? contentType,
+            IReadOnlyDictionary<string, string> headers,
+            Stream body
+        )
         {
             Name = name;
             FileName = fileName;

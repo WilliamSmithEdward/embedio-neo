@@ -22,10 +22,7 @@ namespace EmbedIO
         /// Initializes a new instance of the <see cref="HttpNotAcceptableException"/> class,
         /// without specifying a value for the response's <c>Vary</c> header.
         /// </summary>
-        public HttpNotAcceptableException()
-            : this(null)
-        {
-        }
+        public HttpNotAcceptableException() : this(null) { }
 
         /// <summary>
         /// Gets the value, or comma-separated list of values, to be set
@@ -41,6 +38,7 @@ namespace EmbedIO
         public override void PrepareResponse(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             if (Vary != null)
                 context.Response.Headers.Add(HttpHeaderNames.Vary, Vary);
         }

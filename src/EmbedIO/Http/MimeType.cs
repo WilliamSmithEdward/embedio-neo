@@ -54,7 +54,9 @@ namespace EmbedIO
             var semicolonPos = value.IndexOf(";", System.StringComparison.Ordinal);
             return semicolonPos < 0
                 ? value
-                : value.Substring(0, semicolonPos).TrimEnd();
+                : value
+                    .Substring(0, semicolonPos)
+                    .TrimEnd();
         }
 
         /// <summary>
@@ -74,11 +76,13 @@ namespace EmbedIO
                 return false;
 
             var slashPos = value.IndexOf("/", System.StringComparison.Ordinal);
+
             if (slashPos < 0)
                 return false;
 
             var isWildcardSubtype = false;
             var subtype = value.Substring(slashPos + 1);
+
             if (subtype == "*")
             {
                 if (!acceptMediaRange)
@@ -86,15 +90,14 @@ namespace EmbedIO
 
                 isWildcardSubtype = true;
             }
+
             else if (!Validate.IsRfc2616Token(subtype))
             {
                 return false;
             }
 
             var type = value.Substring(0, slashPos);
-            return type == "*"
-                ? acceptMediaRange && isWildcardSubtype
-                : Validate.IsRfc2616Token(type);
+            return type == "*" ? acceptMediaRange && isWildcardSubtype : Validate.IsRfc2616Token(type);
         }
 
         /// <summary>
@@ -105,8 +108,8 @@ namespace EmbedIO
         /// <exception cref="ArgumentNullException"><paramref name="mimeType"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="mimeType"/> is not a valid
         /// MIME type or media range.</exception>
-        public static (string type, string subtype) Split(string mimeType)
-            => UnsafeSplit(Validate.MimeType(nameof(mimeType), mimeType, true));
+        public static (string type, string subtype) Split(string mimeType) =>
+            UnsafeSplit(Validate.MimeType(nameof(mimeType), mimeType, true));
 
         /// <summary>
         /// Matches the specified MIME type to a media range.
@@ -126,10 +129,11 @@ namespace EmbedIO
         /// <para>- or -</para>
         /// <para><paramref name="mediaRange"/> is not a valid MIME media range.</para>
         /// </exception>
-        public static bool IsInRange(string mimeType, string mediaRange)
-            => UnsafeIsInRange(
+        public static bool IsInRange(string mimeType, string mediaRange) =>
+            UnsafeIsInRange(
                 Validate.MimeType(nameof(mimeType), mimeType, false),
-                Validate.MimeType(nameof(mediaRange), mediaRange, true));
+                Validate.MimeType(nameof(mediaRange), mediaRange, true)
+            );
 
         internal static (string type, string subtype) UnsafeSplit(string mimeType)
         {
