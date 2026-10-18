@@ -84,7 +84,7 @@ namespace EmbedIO.AotSmoke
                 var authorization = AuthorizationChecks.CreateModule();
                 using var eventHub = new ServerSentEventHub();
                 using var browserProtection = new EmbedIO.Security.BrowserRequestProtection(
-                    new EmbedIO.Security.BrowserRequestProtectionOptions(new[] { url })
+                    new EmbedIO.Security.BrowserRequestProtectionOptions([url])
                 );
 
                 using var tusUploads = new EmbedIO.PlatformTests.TusUploadSmoke.State();
@@ -250,12 +250,14 @@ namespace EmbedIO.AotSmoke
                     checks["controller_json"] = body;
                 }
 
-                using (var form = await client.PostAsync(url + "ctl/form", new FormUrlEncodedContent(new[]
-                    {
-                        new KeyValuePair<string, string>("count", "2"),
-                        new KeyValuePair<string, string>("tags", "a"),
-                        new KeyValuePair<string, string>("tags", "b")
-                    })))
+                var formFields = new[]
+                {
+                    new KeyValuePair<string, string>("count", "2"),
+                    new KeyValuePair<string, string>("tags", "a"),
+                    new KeyValuePair<string, string>("tags", "b")
+                };
+
+                using (var form = await client.PostAsync(url + "ctl/form", new FormUrlEncodedContent(formFields)))
                 {
                     var body = await form.Content.ReadAsStringAsync();
                     Require(

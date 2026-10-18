@@ -9,29 +9,24 @@ namespace EmbedIO.Tus
 {
     /// <summary>Opt-in tus 1.0 uploads with creation, expiration, termination and checksum extensions.</summary>
     /// <remarks>Register authentication, authorization, browser protection and CORS before this module.
-    /// The module borrows its store. No routes or storage are installed unless explicitly configured.</remarks>
-    public sealed class TusUploadModule : WebModuleBase
+    /// The module borrows its store. No routes or storage are installed unless explicitly configured.
+    /// Creates protected tus endpoints at a dedicated base route.</remarks>
+    /// <param name="baseRoute">Upload collection path, for example /uploads/.</param>
+    /// <param name="store">Application-owned disk store, shared by modules using the same directory.</param>
+    /// <param name="ownerSelector">Application authorization and stable owner selection on every request.
+    /// Receives the effective method, including tus method override. Return null to deny. Include tenant and issuer when subjects are not globally unique.
+    /// The request must also have an authenticated principal.</param>
+    public sealed class TusUploadModule(
+        string baseRoute,
+        DiskTusUploadStore store,
+        Func<IHttpContext, string, string?> ownerSelector
+    ) : WebModuleBase(baseRoute)
     {
-        private readonly DiskTusUploadStore _store;
-        private readonly Func<IHttpContext, string, string?> _ownerSelector;
+        private readonly DiskTusUploadStore _store = store ?? throw new ArgumentNullException(nameof(store));
+        private readonly Func<IHttpContext, string, string?> _ownerSelector = ownerSelector
+            ?? throw new ArgumentNullException(nameof(ownerSelector));
         private Func<IHttpContext, TusUpload, Task>? _onCompleted;
         private int _active;
-
-        /// <summary>Creates protected tus endpoints at a dedicated base route.</summary>
-        /// <param name="baseRoute">Upload collection path, for example /uploads/.</param>
-        /// <param name="store">Application-owned disk store, shared by modules using the same directory.</param>
-        /// <param name="ownerSelector">Application authorization and stable owner selection on every request.
-        /// Receives the effective method, including tus method override. Return null to deny. Include tenant and issuer when subjects are not globally unique.
-        /// The request must also have an authenticated principal.</param>
-        public TusUploadModule(
-            string baseRoute,
-            DiskTusUploadStore store,
-            Func<IHttpContext, string, string?> ownerSelector
-        ) : base(baseRoute)
-        {
-            _store = store ?? throw new ArgumentNullException(nameof(store));
-            _ownerSelector = ownerSelector ?? throw new ArgumentNullException(nameof(ownerSelector));
-        }
 
         /// <inheritdoc />
         public override bool IsFinalHandler => true;
@@ -50,6 +45,11 @@ namespace EmbedIO.Tus
         }
 
         /// <inheritdoc />
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Style",
+            "IDE0057:Use range operator",
+            Justification = "The shared implementation targets netstandard2.0, which has no System.Range or System.Index."
+        )]
         protected override async Task OnRequestAsync(IHttpContext context)
         {
             var token = context.CancellationToken;
@@ -180,7 +180,7 @@ namespace EmbedIO.Tus
                         if (digest.Length != (algorithm == "sha1" ? 20 : 32)) throw new HttpException(400);
                     }
 
-                    var result = await _store
+                    var (Upload, BecameComplete) = await _store
                         .PatchAsync(
                             id,
                             owner,
@@ -192,11 +192,11 @@ namespace EmbedIO.Tus
                             token
                         )
                         .ConfigureAwait(false);
-                    SetUploadHeaders(context, result.Upload);
+                    SetUploadHeaders(context, Upload);
                     context.Response.StatusCode = 204;
 
-                    if (result.BecameComplete && _onCompleted != null)
-                        await _onCompleted(context, result.Upload).ConfigureAwait(false);
+                    if (BecameComplete && _onCompleted != null)
+                        await _onCompleted(context, Upload).ConfigureAwait(false);
 
                     return;
                 }
@@ -275,6 +275,11 @@ namespace EmbedIO.Tus
             if (upload.Metadata.Length > 0) context.Response.Headers["Upload-Metadata"] = upload.Metadata;
         }
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Style",
+            "IDE0057:Use range operator",
+            Justification = "The shared implementation targets netstandard2.0, which has no System.Range or System.Index."
+        )]
         internal static void ValidateMetadata(string text)
         {
             if (text.Length == 0) return;

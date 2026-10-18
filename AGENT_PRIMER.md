@@ -83,7 +83,11 @@ validate privately and publish using application rules. Client metadata never
 names a store path. Both targets retain existing APIs/defaults/dependencies;
 unconfigured requests do not enter this feature. See the
 [resumable upload guide](docs/guides/resumable-uploads.md) for protocol, security,
-client limits, recovery and fuzz replay.
+client limits, recovery and fuzz replay. Pending browser protection also checks
+method overrides before exempting safe verbs or WebSocket handshakes from CSRF
+tokens; a safe override cannot exempt a physical unsafe method. See the
+[adversarial audit](docs/project/tus-security-audit.md). This correction is not
+in NuGet 2.11.0.
 
 ### Write idempotency (2.11.0+)
 

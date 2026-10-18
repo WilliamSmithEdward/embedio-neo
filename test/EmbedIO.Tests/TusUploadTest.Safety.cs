@@ -182,7 +182,7 @@ namespace EmbedIO.Tests
             using (var file = new BinaryWriter(File.Create(Path.Combine(directory.Path, id + ".info"))))
             {
                 file.Write(0x54555301);
-                file.Write(new byte[] { 255, 255, 255, 255, 7 });
+                file.Write([255, 255, 255, 255, 7]);
             }
 
             Assert.That(() => new DiskTusUploadStore(Options(directory.Path)), Throws.TypeOf<InvalidDataException>());

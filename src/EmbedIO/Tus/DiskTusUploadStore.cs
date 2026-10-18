@@ -14,8 +14,13 @@ namespace EmbedIO.Tus
     /// supporting atomic file replacement. Recovery covers process interruption, not arbitrary filesystem damage or power-loss guarantees.</remarks>
     public sealed partial class DiskTusUploadStore : IDisposable
     {
-        private readonly object _sync = new object();
-        private readonly Dictionary<string, Entry> _entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Style",
+            "IDE0330:Use 'System.Threading.Lock'",
+            Justification = "The shared implementation targets netstandard2.0, which has no System.Threading.Lock."
+        )]
+        private readonly object _sync = new();
+        private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
         private readonly FileStream _directoryLock;
         private long _reserved;
         private int _active;
@@ -79,10 +84,12 @@ namespace EmbedIO.Tus
             lock (_sync)
             {
                 EnsureOpen();
-                return _entries.Values
-                    .Where(e => e.Owner == hash && e.Upload.Expires > DateTimeOffset.UtcNow)
-                    .Select(e => e.Upload)
-                    .ToArray();
+                return
+                [
+                    .. _entries.Values
+                        .Where(e => e.Owner == hash && e.Upload.Expires > DateTimeOffset.UtcNow)
+                        .Select(e => e.Upload)
+                ];
             }
         }
 
@@ -308,7 +315,7 @@ namespace EmbedIO.Tus
 
                     if (hash != null)
                     {
-                        hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                        hash.TransformFinalBlock([], 0, 0);
 
                         if (
                             checksum == null

@@ -105,7 +105,9 @@ Place authentication, authorization, forwarding trust, rate limiting and browser
 protection before the upload module. Controller `[Authorize]` attributes govern
 controllers, not this module; enforce upload permission in the selector or earlier
 middleware. Do not rely solely on the physical HTTP verb for authorization:
-tus supports `X-HTTP-Method-Override`. Mount controllers at separate paths; their
+tus supports `X-HTTP-Method-Override`. The pending browser-protection correction
+checks overrides too: safe physical verbs and WebSocket upgrade headers cannot
+exempt an unsafe override from the token requirement. Mount controllers at separate paths; their
 existing bindings, hooks, caching and idempotency behavior need no changes. Do not
 wrap this streamed protocol in output caching or finite-write idempotency.
 
@@ -226,7 +228,7 @@ completion/result mapping separately where the client needs a durable receipt.
 
 ## Validation and fuzzing
 
-The 74 regression cases and shared Framework/Native AOT smoke checks cover protocol negotiation, metadata/header validation,
+The 89 regression cases and shared Framework/Native AOT smoke checks cover protocol negotiation, metadata/header validation,
 owner/effective-method authorization, global and per-owner quotas, checksums,
 cancellation/overlap, completion failures, fixed expiry, recovery faults and owned
 HTTP/1.0, HTTP/1.1, HTTP/2 and HTTP/3 transfers.
@@ -246,6 +248,12 @@ dotnet run --project test/EmbedIO.Fuzz -c Release -- --tus-recovery-selftest
 dotnet run --project test/EmbedIO.Fuzz -c Release -- --state-machines-replay test/EmbedIO.Fuzz/state-corpus/tus-uploads.json
 dotnet run --project test/EmbedIO.Fuzz -c Release -- --state-machines 1729 500 tus-uploads
 ```
+
+Every tus model trace also probes a generated safe-verb/unsafe-override pair
+through browser protection, asserting rejected requests preserve storage and a
+valid session-bound token permits the intended operation. See the
+[adversarial security audit](../project/tus-security-audit.md) for scope, findings
+and deployment assumptions.
 
 CI runs both self-tests, the retained replay and the shared-resource campaign on
 Windows and Linux. Traces, transition counts and runtime/source provenance are

@@ -36,8 +36,8 @@ namespace EmbedIO.Tests
 
         private sealed class Host : IAsyncDisposable
         {
-            internal readonly TestWebServer Server = new TestWebServer();
-            private readonly CancellationTokenSource _stop = new CancellationTokenSource();
+            internal readonly TestWebServer Server = new();
+            private readonly CancellationTokenSource _stop = new();
             private readonly Task _running;
 
             internal Host(
@@ -46,12 +46,9 @@ namespace EmbedIO.Tests
                 Func<IHttpContext, string?>? owner = null
             )
             {
-                var uploads = new TusUploadModule(
-                    "/uploads/",
-                    store,
-                    (c, _) => owner == null ? c.User.Identity?.Name : owner(c)
-                );
-                uploads.OnCompleted = complete;
+                string? SelectOwner(IHttpContext context, string _) =>
+                    owner == null ? context.User.Identity?.Name : owner(context);
+                var uploads = new TusUploadModule("/uploads/", store, SelectOwner) { OnCompleted = complete };
                 Server
                     .WithModule(Authentication())
                     .WithModule(uploads);
@@ -68,16 +65,18 @@ namespace EmbedIO.Tests
         }
 
         private static BearerAuthenticationModule Authentication() =>
-            new BearerAuthenticationModule(
+            new(
                 "/",
                 (credential, _) => Task.FromResult<ClaimsPrincipal?>(
-                    credential == "invalid"
-                        ? null
-                        : new ClaimsPrincipal(
-                            new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, credential) }, "test")
-                        )
+                    credential == "invalid" ? null : TestPrincipal(credential)
                 )
             );
+
+        private static ClaimsPrincipal TestPrincipal(string credential)
+        {
+            var claims = new[] { new Claim(ClaimTypes.Name, credential) };
+            return new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
+        }
 
         private static TusUploadOptions Options(
             string path,
@@ -87,7 +86,7 @@ namespace EmbedIO.Tests
             int patch = 64,
             TimeSpan? lifetime = null,
             int concurrent = 4
-        ) => new TusUploadOptions(path, upload, storage, count, patch, lifetime, concurrent);
+        ) => new(path, upload, storage, count, patch, lifetime, concurrent);
 
         private static HttpRequestMessage Request(
             string method,

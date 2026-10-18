@@ -398,3 +398,6 @@
 
 - name: Source layout
   href: project/source-layout.md
+
+- name: Tus upload security audit
+  href: project/tus-security-audit.md

@@ -22,10 +22,7 @@ namespace EmbedIO.PlatformTests.LegacyRouteValidation
 {
     public static class Program
     {
-        private static readonly JsonSerializerOptions ReportOptions = new JsonSerializerOptions
-        {
-            WriteIndented = true
-        };
+        private static readonly JsonSerializerOptions ReportOptions = new() { WriteIndented = true };
         private static int _checks;
 
         public static void Main()
@@ -87,7 +84,7 @@ namespace EmbedIO.PlatformTests.LegacyRouteValidation
                 listener.Stop();
                 var url = "http://127.0.0.1:" + port + "/";
                 using var stop = new CancellationTokenSource();
-                using var protection = new BrowserRequestProtection(new BrowserRequestProtectionOptions(new[] { url }));
+                using var protection = new BrowserRequestProtection(new BrowserRequestProtectionOptions([url]));
                 using var tusUploads = new EmbedIO.PlatformTests.TusUploadSmoke.State();
                 using var server = new WebServer(o => o
                     .WithUrlPrefix(url)
@@ -323,7 +320,9 @@ namespace EmbedIO.PlatformTests.LegacyRouteValidation
             public string Throws(ushort value)
             {
                 HttpContext.CancellationToken.ThrowIfCancellationRequested();
-                throw new FormatException("Application failure.");
+                throw new FormatException(
+                    "Application failure for " + value.ToString(CultureInfo.InvariantCulture) + "."
+                );
             }
         }
     }

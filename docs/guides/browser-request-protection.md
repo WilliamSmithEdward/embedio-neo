@@ -7,6 +7,13 @@ anti-forgery tokens. Existing applications retain their defaults. This is separa
 from authentication and authorization: a token proves possession of a value issued
 for the current session/identity, not permission to perform an action.
 
+Pending the next release: token exemption also requires a safe, unambiguous
+`X-HTTP-Method-Override`, when supplied. An unsafe override on GET, HEAD, OPTIONS
+or a WebSocket upgrade requires a token; a safe override never exempts a physical
+POST/PATCH/DELETE. Normal WebSocket GET/extended CONNECT handshakes still use the
+trusted-Origin rule without a token. Explicit `requireToken: false` exemptions
+remain deliberate host policy. This correction is unavailable in NuGet 2.11.0.
+
 ## A complete same-origin browser application
 
 Use EmbedIO-Neo 2.7.0 or later, target `net10.0`, and reference `EmbedIO-Neo`. Put this in

@@ -108,7 +108,7 @@ try
         }
 
         if (input.Length > 1024)
-            input = input.Substring(0, 1024);
+            input = input[..1024];
 
         foreach (var groupFlags in new[] { false, true })
         {

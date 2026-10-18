@@ -12,7 +12,7 @@ namespace EmbedIO.Tests
 {
     public sealed partial class TusUploadTest
     {
-        private static readonly string[] LockFileNames = { "store.lock" };
+        private static readonly string[] LockFileNames = ["store.lock"];
 
         [TestCase(false)]
         [TestCase(true)]
@@ -132,9 +132,9 @@ namespace EmbedIO.Tests
             }
 
             if (mode == "truncated-record")
-                File.WriteAllBytes(Path.Combine(directory.Path, id + ".info"), new byte[] { 1 });
+                File.WriteAllBytes(Path.Combine(directory.Path, id + ".info"), [1]);
 
-            if (mode == "short-data") File.WriteAllBytes(Path.Combine(directory.Path, id + ".data"), new byte[] { 1 });
+            if (mode == "short-data") File.WriteAllBytes(Path.Combine(directory.Path, id + ".data"), [1]);
 
             if (mode == "missing-data") File.Delete(Path.Combine(directory.Path, id + ".data"));
 

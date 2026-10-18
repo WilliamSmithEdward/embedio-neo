@@ -15,12 +15,8 @@ namespace EmbedIO.Tests
     {
         private sealed class PausedBody : Stream
         {
-            internal readonly TaskCompletionSource Entered = new TaskCompletionSource(
-                TaskCreationOptions.RunContinuationsAsynchronously
-            );
-            internal readonly TaskCompletionSource Release = new TaskCompletionSource(
-                TaskCreationOptions.RunContinuationsAsynchronously
-            );
+            internal readonly TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
             private bool _sent;
 
             public override bool CanRead => true;

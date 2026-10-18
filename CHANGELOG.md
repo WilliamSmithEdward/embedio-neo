@@ -12,6 +12,14 @@
   Existing multipart/controller behavior and runtime dependencies are preserved.
   See [resumable uploads](docs/guides/resumable-uploads.md).
 
+### Fixed
+
+- Browser protection now requires a CSRF token for unsafe or ambiguous
+  `X-HTTP-Method-Override` values, including safe-verb and WebSocket-upgrade
+  requests. Safe overrides cannot exempt physical unsafe verbs. Normal
+  HTTP/1-3 WebSocket handshakes and explicit host exemptions are preserved.
+  Fifteen regressions and generated tus/browser boundary probes cover the fix.
+
 ## [2.11.0] - 2026-10-18
 
 ### Added

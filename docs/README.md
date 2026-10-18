@@ -230,6 +230,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Project and contribution
 
+- [Tus upload security audit](project/tus-security-audit.md): adversarial review scope, reproduced method-override token bypass, correction and deployment assumptions.
+
 - [Generated URL, query and multipart properties](guides/property-testing.md): bounded FsCheck generation, shrinking and reproducible campaigns.
 - [Source layout](project/source-layout.md): responsibilities, partial-file naming and shared-source links.
 

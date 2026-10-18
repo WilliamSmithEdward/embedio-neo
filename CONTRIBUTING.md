@@ -1,4 +1,4 @@
-# Contributing to EmbedIO-Neo
+﻿# Contributing to EmbedIO-Neo
 
 EmbedIO-Neo is maintained by William Smith. Use the issues and pull requests at
 https://github.com/WilliamSmithEdward/embedio-neo for this fork.
@@ -83,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7272
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7287
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -97,7 +97,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 7272 executed/reported test cases to catch accidental discovery loss; update
+least 7287 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is eight minutes on Windows and ordinary Linux pull requests,
 and twelve minutes on macOS and instrumented Linux main pushes. Linux coverage
@@ -187,6 +187,11 @@ ignored `TestResults`, with a separate report for each project/framework. Inspec
 all severities for changed files, including non-fixable analyzer messages; a zero
 warning count or formatting pass alone does not establish zero messages.
 
+`dotnet format` loads the default Debug workspace. If it reports workspace-loading
+warnings after only Release builds, build the solution in Debug and repeat the
+check with diagnostic verbosity; resolve the loading problem instead of ignoring
+it. Debug and Release builds must both retain zero errors and warnings.
+
 Run the applicable project checks too for changed files outside the solution.
 Resolve errors, warnings and informational messages in changed source on every
 applicable framework. An informational message may be suppressed only when it is
@@ -195,11 +200,13 @@ narrow scope and compatibility reason, and add a matching narrow guard exception
 if needed. Errors and warnings must be corrected. Keep a single compatible
 implementation rather than adding compiler branches solely for style suggestions.
 
-The tus implementation currently has six method/constructor-scoped informational
+The tus and browser protection implementations currently have eleven method/constructor/field-scoped informational
 suppressions, authorized with this preference. CA1510/CA1512/CA1513 suggest throw
 helpers unavailable in .NET Standard 2.0; CA1835 suggests memory-based Stream
 async overloads absent from that contract; CA1850 suggests the unavailable static
-SHA256.HashData API. Each attribute documents that reason. The suppression guard
+SHA256.HashData API. IDE0330 suggests System.Threading.Lock, also absent from
+.NET Standard 2.0; IDE0057 suggests ranges requiring unavailable System.Range
+and System.Index types. Each attribute documents that reason. The suppression guard
 matches the exact file, member, diagnostic and justification, and its negative
 tests reject broader or moved exceptions. No errors or warnings are suppressed.
 

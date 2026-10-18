@@ -42,11 +42,7 @@ namespace EmbedIO.PlatformTests
                 .WithModule(
                     new BearerAuthenticationModule(
                         "/tus-smoke/",
-                        (credential, _) => Task.FromResult<ClaimsPrincipal?>(
-                            new ClaimsPrincipal(
-                                new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, credential) }, "fixture")
-                            )
-                        )
+                        (credential, _) => Task.FromResult<ClaimsPrincipal?>(FixturePrincipal(credential))
                     )
                 )
                 .WithModule(
@@ -59,6 +55,12 @@ namespace EmbedIO.PlatformTests
                         }
                     }
                 );
+
+        private static ClaimsPrincipal FixturePrincipal(string credential)
+        {
+            var claims = new[] { new Claim(ClaimTypes.Name, credential) };
+            return new ClaimsPrincipal(new ClaimsIdentity(claims, "fixture"));
+        }
 
         internal static async Task<int> RunAsync(string prefix, State state)
         {

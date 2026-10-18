@@ -48,6 +48,21 @@ COMPATIBILITY_SUPPRESSIONS = (
     ("src/EmbedIO/Tus/TusUploadModule.cs", "Performance", "CA1835:Prefer the memory-based overloads for ReadAsync and WriteAsync",
      "The shared implementation targets netstandard2.0, whose Stream API provides the byte-array async overloads.",
      r"private\s+static\s+async\s+Task\s+RequireEmptyBody\s*\("),
+    ("src/EmbedIO/Security/BrowserRequestProtection.cs", "Maintainability", "CA1513:Use ObjectDisposedException throw helper",
+     "The shared implementation targets netstandard2.0, which has no ObjectDisposedException.ThrowIf.",
+     r"private\s+void\s+EnsureOpen\s*\("),
+    ("src/EmbedIO/Security/BrowserRequestProtection.cs", "Style", "IDE0330:Use 'System.Threading.Lock'",
+     "The shared implementation targets netstandard2.0, which has no System.Threading.Lock.",
+     r"private\s+readonly\s+object\s+_sync\s*="),
+    ("src/EmbedIO/Tus/DiskTusUploadStore.cs", "Style", "IDE0330:Use 'System.Threading.Lock'",
+     "The shared implementation targets netstandard2.0, which has no System.Threading.Lock.",
+     r"private\s+readonly\s+object\s+_sync\s*="),
+    ("src/EmbedIO/Tus/TusUploadModule.cs", "Style", "IDE0057:Use range operator",
+     "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.",
+     r"protected\s+override\s+async\s+Task\s+OnRequestAsync\s*\("),
+    ("src/EmbedIO/Tus/TusUploadModule.cs", "Style", "IDE0057:Use range operator",
+     "The shared implementation targets netstandard2.0, which has no System.Range or System.Index.",
+     r"internal\s+static\s+void\s+ValidateMetadata\s*\("),
 )
 COMPATIBILITY_ATTRIBUTE = re.compile(
     r'\[System\.Diagnostics\.CodeAnalysis\.SuppressMessage\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,'

@@ -29,11 +29,7 @@ internal static partial class TusUploadFuzz
 
         try
         {
-            await RunCoreAsync(
-                new StateMachineTrace("tus-uploads", 1729, Array.Empty<StateMachineStep>()),
-                true,
-                stop.Token
-            );
+            await RunCoreAsync(new StateMachineTrace("tus-uploads", 1729, []), true, stop.Token);
         }
 
         catch (StateMachineFailure failure) when (failure.Invariant == "tus.committed-offset")
@@ -68,6 +64,7 @@ internal static partial class TusUploadFuzz
         try
         {
             world = new World(root, token);
+            await VerifyBrowserOverrideAsync(world.Store, trace, token);
             var start = await world.Create(0, 8);
             Require(start.Status == 201, "tus.creation");
             var first = new Model(
@@ -290,6 +287,12 @@ internal static partial class TusUploadFuzz
 
     private static string Owner(int value) => "tenant.test.subject." + value.ToString(CultureInfo.InvariantCulture);
 
+    private static ClaimsPrincipal FixturePrincipal(string credential)
+    {
+        var claims = new[] { new Claim(ClaimTypes.Name, credential) };
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, "fixture"));
+    }
+
     private sealed record Reply(int Status, long? Offset, string? Location);
 
     private sealed class World : IAsyncDisposable
@@ -305,10 +308,12 @@ internal static partial class TusUploadFuzz
             _token = token;
             _stop = CancellationTokenSource.CreateLinkedTokenSource(token);
             Store = new DiskTusUploadStore(new TusUploadOptions(root, 8, 64, 8, 4));
-            _hosts = Enumerable
-                .Range(0, 3)
-                .Select(_ => new TestWebServer())
-                .ToArray();
+            _hosts =
+            [
+                .. Enumerable
+                    .Range(0, 3)
+                    .Select(_ => new TestWebServer())
+            ];
 
             foreach (var host in _hosts)
             {
@@ -316,19 +321,13 @@ internal static partial class TusUploadFuzz
                     .WithModule(
                         new BearerAuthenticationModule(
                             "/",
-                            (credential, _) => Task.FromResult<ClaimsPrincipal?>(
-                                new ClaimsPrincipal(
-                                    new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, credential) }, "fixture")
-                                )
-                            )
+                            (credential, _) => Task.FromResult<ClaimsPrincipal?>(FixturePrincipal(credential))
                         )
                     )
                     .WithModule(new TusUploadModule("/uploads/", Store, (c, _) => c.User.Identity?.Name));
             }
 
-            _running = _hosts
-                .Select(h => h.RunAsync(_stop.Token))
-                .ToArray();
+            _running = Array.ConvertAll(_hosts, h => h.RunAsync(_stop.Token));
         }
 
         internal async Task<Reply> Create(int owner, int length)

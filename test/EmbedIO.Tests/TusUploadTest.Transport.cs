@@ -155,13 +155,13 @@ namespace EmbedIO.Tests
                             (credential, _) => Task.FromResult<System.Security.Claims.ClaimsPrincipal?>(
                                 new System.Security.Claims.ClaimsPrincipal(
                                     new System.Security.Claims.ClaimsIdentity(
-                                        new[]
-                                        {
+
+                                        [
                                             new System.Security.Claims.Claim(
                                                 System.Security.Claims.ClaimTypes.Name,
                                                 credential
                                             )
-                                        },
+                                        ],
                                         "fixture"
                                     )
                                 )
