@@ -7,7 +7,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Getting started
 
-- [Finite write idempotency (in development)](guides/idempotency.md)
+- [Finite write idempotency (2.11.0+)](guides/idempotency.md)
 - [Opt-in output caching](guides/output-caching.md)
 
 - [Your first JSON endpoint](guides/getting-started/README.md): install, run, and get JSON.

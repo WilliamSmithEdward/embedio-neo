@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-18
+
 ### Added
 
 - Opt-in idempotency for finite write endpoints through `IdempotencyCoordinator`,

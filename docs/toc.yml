@@ -40,7 +40,7 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
-    - name: Finite write idempotency (in development)
+    - name: Finite write idempotency (2.11.0+)
       href: guides/idempotency.md
     - name: Opt-in output caching
       href: guides/output-caching.md

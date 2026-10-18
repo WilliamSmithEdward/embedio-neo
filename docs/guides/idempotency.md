@@ -1,6 +1,6 @@
 # Opt-in idempotency for finite writes
 
-This feature is under development and is **not in NuGet 2.10.0**.
+Available in **EmbedIO-Neo 2.11.0 and later**.
 
 Idempotency coordinates retries of an explicitly protected POST, PUT, PATCH or
 DELETE operation. The client chooses one `Idempotency-Key` for one logical
