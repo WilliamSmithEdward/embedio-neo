@@ -2,6 +2,11 @@
 
 - William's preference (2026-10-16): prioritize warm steady-state and tail latency over cold-start latency when a tradeoff is necessary, while aiming to improve both. Measure cold and warm behavior separately; do not accept a meaningful warm regression solely for a cold-start gain. Windows desktop / embedded hosting remains the lead measurement environment.
 
+## C# formatting and diagnostics
+
+- William's standing preference (2026-10-18): use PrettyCSharp for C# source changes. Format and check only files changed by the task, using the pinned/reviewed tool version documented in CONTRIBUTING.md; preserve the repository's EditorConfig conventions and verify compatibility with its existing whitespace gate.
+- Resolve all errors, warnings and informational messages in changed source, on every applicable target. Informational messages may be suppressed only when specifically required by .NET Standard compatibility, with the exact diagnostic, narrow scope and compatibility reason documented. Keep any required analyzer-guard exception equally narrow. Prefer one compatible implementation over compiler branches added solely for style diagnostics.
+
 ## Primer maintenance
 
 - William's standing preference (2026-10-16): keep `AGENT_PRIMER.md` up to date as part of every relevant change. Check APIs, defaults, behavior, supported runtimes/configurations, package/version guidance, security and ownership rules, examples, pitfalls and guide links. Update the primer in the same PR when affected; release preparation must verify its version and feature availability against the actual release.

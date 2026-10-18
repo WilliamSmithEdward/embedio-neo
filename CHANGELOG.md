@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-10-18
+
+### Added
+
+- Opt-in tus 1.0 resumable uploads with authenticated owner/effective-method
+  authorization, global/per-owner storage and session quotas, bounded patches,
+  checksums, fixed expiry, cleanup and disk-backed process-restart recovery.
+  Includes awaited completion notifications with reconciliation guidance,
+  HTTP/1-3 regressions and independent state-machine/killed-process fuzz checks.
+  Existing multipart/controller behavior and runtime dependencies are preserved.
+  See [resumable uploads](docs/guides/resumable-uploads.md).
+
+### Fixed
+
+- Browser protection now requires a CSRF token for unsafe or ambiguous
+  `X-HTTP-Method-Override` values, including safe-verb and WebSocket-upgrade
+  requests. Safe overrides cannot exempt physical unsafe verbs. Normal
+  HTTP/1-3 WebSocket handshakes and explicit host exemptions are preserved.
+  Fifteen regressions and generated tus/browser boundary probes cover the fix.
+
 ## [2.11.0] - 2026-10-18
 
 ### Added

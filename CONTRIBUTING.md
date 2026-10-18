@@ -1,4 +1,4 @@
-# Contributing to EmbedIO-Neo
+﻿# Contributing to EmbedIO-Neo
 
 EmbedIO-Neo is maintained by William Smith. Use the issues and pull requests at
 https://github.com/WilliamSmithEdward/embedio-neo for this fork.
@@ -22,7 +22,8 @@ Logical negation and exclamation marks in literal text are permitted. The separa
 Python guard rejects compiler/analyzer directives and build configuration opt-outs,
 except the owner-approved IDE0130 setting in the root `.editorconfig` and the two
 exact CA2213 ownership suppressions enumerated in the guard for output-cache
-capture. The capture borrows its transport and parent; disposing those references
+capture, plus the six .NET Standard informational compatibility attributes
+documented below. The capture borrows its transport and parent; disposing those references
 would close the response or discard recording prematurely. Implementation folders
 do not have to mirror namespaces.
 
@@ -82,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7198
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7287
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -96,7 +97,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 7198 executed/reported test cases to catch accidental discovery loss; update
+least 7287 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full coverage
 suite budget is eight minutes on Windows and ordinary Linux pull requests,
 and twelve minutes on macOS and instrumented Linux main pushes. Linux coverage
@@ -165,15 +166,51 @@ whitespace, namespace style, and `var` preferences remain configured. StyleCop's
 Hungarian-prefix, member-layout, and XML-comment wording checks are intentionally
 not reproduced. This is not a claim of identical analyzer coverage.
 
-Format only the files you change, for example:
+Use **PrettyCSharp 1.1.5** for C# source changes (owner preference, 2026-10-18).
+Install that exact development-tool version with `python -m pip install prettycsharp==1.1.5`,
+or use an existing verified installation. A version update should be deliberate.
+It reads the repository's EditorConfig, including block namespaces and UTF-8 BOMs.
+Format and check only changed C# files; repository-wide formatting belongs to an
+explicit cleanup task:
 
 ```sh
-dotnet format whitespace EmbedIO.sln --no-restore --include path/to/Changed.cs
+prettycsharp format path/to/Changed.cs
+prettycsharp check path/to/Changed.cs
 dotnet format whitespace EmbedIO.sln --no-restore --verify-no-changes --include path/to/Changed.cs
+dotnet format style EmbedIO.sln --no-restore --severity info --verify-no-changes --include path/to/Changed.cs
+dotnet format analyzers EmbedIO.sln --no-restore --severity info --verify-no-changes --include path/to/Changed.cs
 ```
 
-Ordinary fixes should format only changed files; repository-wide formatting belongs
-to an explicit cleanup task. CI also checks the projects outside `EmbedIO.sln`, the MAUI
+Compiler SARIF (`ErrorLog`) captures informational diagnostics that a normal
+build summary does not print. Use an absolute report path under this checkout's
+ignored `TestResults`, with a separate report for each project/framework. Inspect
+all severities for changed files, including non-fixable analyzer messages; a zero
+warning count or formatting pass alone does not establish zero messages.
+
+`dotnet format` loads the default Debug workspace. If it reports workspace-loading
+warnings after only Release builds, build the solution in Debug and repeat the
+check with diagnostic verbosity; resolve the loading problem instead of ignoring
+it. Debug and Release builds must both retain zero errors and warnings.
+
+Run the applicable project checks too for changed files outside the solution.
+Resolve errors, warnings and informational messages in changed source on every
+applicable framework. An informational message may be suppressed only when it is
+specifically due to .NET Standard compatibility; document the exact diagnostic,
+narrow scope and compatibility reason, and add a matching narrow guard exception
+if needed. Errors and warnings must be corrected. Keep a single compatible
+implementation rather than adding compiler branches solely for style suggestions.
+
+The tus and browser protection implementations currently have eleven method/constructor/field-scoped informational
+suppressions, authorized with this preference. CA1510/CA1512/CA1513 suggest throw
+helpers unavailable in .NET Standard 2.0; CA1835 suggests memory-based Stream
+async overloads absent from that contract; CA1850 suggests the unavailable static
+SHA256.HashData API. IDE0330 suggests System.Threading.Lock, also absent from
+.NET Standard 2.0; IDE0057 suggests ranges requiring unavailable System.Range
+and System.Index types. Each attribute documents that reason. The suppression guard
+matches the exact file, member, diagnostic and justification, and its negative
+tests reject broader or moved exceptions. No errors or warnings are suppressed.
+
+CI also checks the projects outside `EmbedIO.sln`, the MAUI
 apps included, in folder mode, which loads no project and needs no restore or workload:
 
 ```sh
@@ -188,7 +225,8 @@ Builds treat compiler and analyzer warnings as errors. CI also verifies formatti
 and runs `python scripts/check_analyzer_suppressions.py`, which rejects diagnostic
 pragmas, suppression attributes, disabled rule severities, nullable-disable directives,
 warning exemptions and analyzer-off build settings. Fix the diagnostic rather than
-adding an exemption. `python scripts/analyzer_inventory.py` builds the solution and
+adding an exemption, except for the explicitly authorized .NET Standard informational
+message compatibility case above. `python scripts/analyzer_inventory.py` builds the solution and
 every project outside it with analyzers forced on and records per-project warning
 counts under the ignored `TestResults/analyzer-inventory` folder; the recorded
 baseline is in [the analyzer warning inventory](docs/project/analyzer-warning-inventory.md).

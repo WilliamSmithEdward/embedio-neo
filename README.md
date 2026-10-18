@@ -32,6 +32,7 @@ modular request pipeline.
 - Static, embedded and ZIP-backed files, including conditional requests and ranges.
 - Managed WebSockets, sessions, CORS and server-sent events.
 - Opt-in bearer authentication, controller roles and policies, with a separate JWT adapter.
+- Bounded authenticated tus uploads with checksums and process-restart recovery (2.12.0+).
 - HTTPS with an application-supplied certificate.
 - Informational responses, trailers and optional capsule/tunnel APIs.
 - Async I/O and graceful drain, with documented protocol and platform limits.
