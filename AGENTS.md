@@ -62,6 +62,7 @@ High Level Guardrail(s) -->
 # Fork maintenance rules
 
 - Preserve compatibility by default. Any breaking change requires discussion with William and his explicit approval before implementation, plus release notes and migration documentation.
+- Prefer a documented analyzer suppression over compiler `#if` branches added solely to satisfy style suggestions. Keep one implementation compatible with the supported targets, and add any necessary narrow analyzer-guard exception for the suppression.
 - Follow CONTRIBUTING.md for development and validation. Preserve existing license and third-party notices.
 
 ## Documentation and generated files

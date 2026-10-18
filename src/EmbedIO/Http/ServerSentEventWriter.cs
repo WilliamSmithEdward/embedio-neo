@@ -61,9 +61,7 @@ namespace EmbedIO
 
         private static void ValidateField(string? value, string name)
         {
-            if (value != null && (EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, '\r') >= 0
-                || EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, '\n') >= 0
-                || EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, '\0') >= 0))
+            if (value != null && value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
                 throw new ArgumentException("Event names and IDs must not contain CR, LF or NUL.", name);
         }
 
