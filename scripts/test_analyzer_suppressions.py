@@ -1,7 +1,7 @@
 """Regression checks for the repository's suppression guard."""
 import unittest
 
-from check_analyzer_suppressions import violations
+from check_analyzer_suppressions import COMPATIBILITY_SUPPRESSIONS, violations
 
 
 class SuppressionGuardTests(unittest.TestCase):
@@ -16,6 +16,24 @@ class SuppressionGuardTests(unittest.TestCase):
                        setting + '\ndotnet_diagnostic.IDE0055.severity = none'):
             with self.subTest(source=source):
                 self.assertTrue(violations(source, filename='.editorconfig'))
+
+    def test_compatibility_message_exception_requires_exact_member_and_reason(self):
+        path, category, diagnostic, reason, _ = COMPATIBILITY_SUPPRESSIONS[0]
+        source = ('[System.Diagnostics.CodeAnalysis.SuppressMessage(\n'
+                  f'    "{category}", "{diagnostic}",\n'
+                  f'    Justification = "{reason}"\n)]\n'
+                  'public TusUploadOptions(string directory) { }')
+        self.assertFalse(violations(source, csharp=True, filename=path))
+        for changed, filename in (
+            (source, 'src/Other.cs'),
+            (source.replace('TusUploadOptions(', 'OtherMember('), path),
+            (source.replace(reason, 'Convenience'), path),
+            (source.replace('CA1512', 'CA1031'), path),
+            (source + '\n#pragma warning disable CA1512', path),
+            (source.replace('public TusUploadOptions', '[SuppressMessage("Usage", "CA1001")]\npublic TusUploadOptions'), path),
+        ):
+            with self.subTest(source=changed, filename=filename):
+                self.assertTrue(violations(changed, csharp=True, filename=filename))
 
     def test_rejects_diagnostic_and_build_opt_outs(self):
         for source in (
