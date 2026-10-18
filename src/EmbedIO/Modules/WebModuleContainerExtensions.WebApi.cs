@@ -23,9 +23,11 @@ namespace EmbedIO
         /// <seealso cref="WebApiModuleExtensions"/>
         /// <seealso cref="IWebModuleContainer.Modules"/>
         /// <seealso cref="IComponentCollection{T}.Add"/>
-        public static TContainer WithWebApi<TContainer>(this TContainer? @this, string baseRoute, Action<WebApiModule>? configure)
-            where TContainer : class, IWebModuleContainer
-            => WithWebApi(@this, null, baseRoute, configure);
+        public static TContainer WithWebApi<TContainer>(
+            this TContainer? @this,
+            string baseRoute,
+            Action<WebApiModule>? configure
+        ) where TContainer : class, IWebModuleContainer => WithWebApi(@this, null, baseRoute, configure);
 
         /// <summary>
         /// Creates an instance of <see cref="WebApiModule"/> using the specified response serializer
@@ -53,9 +55,8 @@ namespace EmbedIO
             this TContainer? @this,
             string baseRoute,
             ResponseSerializerCallback serializer,
-            Action<WebApiModule>? configure)
-            where TContainer : class, IWebModuleContainer
-            => WithWebApi(@this, null, baseRoute, serializer, configure);
+            Action<WebApiModule>? configure
+        ) where TContainer : class, IWebModuleContainer => WithWebApi(@this, null, baseRoute, serializer, configure);
 
         /// <summary>
         /// Creates an instance of <see cref="WebApiModule"/> using the default response serializer
@@ -78,8 +79,8 @@ namespace EmbedIO
             this TContainer? @this,
             string? name,
             string baseRoute,
-            Action<WebApiModule>? configure)
-            where TContainer : class, IWebModuleContainer
+            Action<WebApiModule>? configure
+        ) where TContainer : class, IWebModuleContainer
         {
             configure = Validate.NotNull(nameof(configure), configure);
             var module = new WebApiModule(baseRoute);
@@ -115,8 +116,8 @@ namespace EmbedIO
             string? name,
             string baseRoute,
             ResponseSerializerCallback serializer,
-            Action<WebApiModule>? configure)
-            where TContainer : class, IWebModuleContainer
+            Action<WebApiModule>? configure
+        ) where TContainer : class, IWebModuleContainer
         {
             configure = Validate.NotNull(nameof(configure), configure);
             var module = new WebApiModule(baseRoute, serializer);

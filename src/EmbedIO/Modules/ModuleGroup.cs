@@ -20,36 +20,26 @@ namespace EmbedIO
     /// <seealso cref="WebModuleBase" />
     /// <seealso cref="IDisposable" />
     /// <seealso cref="IWebModuleContainer" />
-    public class ModuleGroup : WebModuleBase, IDisposable, IWebModuleContainer, IMimeTypeCustomizer
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="ModuleGroup" /> class.
+    /// </remarks>
+    /// <param name="baseRoute">The base route served by this module.</param>
+    /// <param name="isFinalHandler">The value to set the <see cref="IWebModule.IsFinalHandler" /> property to.
+    /// See the help for the property for more information.</param>
+    /// <seealso cref="IWebModule.BaseRoute" />
+    /// <seealso cref="IWebModule.IsFinalHandler" />
+    public class ModuleGroup(string baseRoute, bool isFinalHandler) : WebModuleBase(baseRoute), IDisposable, IWebModuleContainer, IMimeTypeCustomizer
     {
-        private readonly WebModuleCollection _modules;
-        private readonly MimeTypeCustomizer _mimeTypeCustomizer = new MimeTypeCustomizer();
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ModuleGroup" /> class.
-        /// </summary>
-        /// <param name="baseRoute">The base route served by this module.</param>
-        /// <param name="isFinalHandler">The value to set the <see cref="IWebModule.IsFinalHandler" /> property to.
-        /// See the help for the property for more information.</param>
-        /// <seealso cref="IWebModule.BaseRoute" />
-        /// <seealso cref="IWebModule.IsFinalHandler" />
-        public ModuleGroup(string baseRoute, bool isFinalHandler)
-            : base(baseRoute)
-        {
-            IsFinalHandler = isFinalHandler;
-            _modules = new WebModuleCollection(nameof(ModuleGroup));
-        }
+        private readonly WebModuleCollection _modules = new(nameof(ModuleGroup));
+        private readonly MimeTypeCustomizer _mimeTypeCustomizer = new();
 
         /// <summary>
         /// Finalizes an instance of the <see cref="ModuleGroup"/> class.
         /// </summary>
-        ~ModuleGroup()
-        {
-            Dispose(false);
-        }
+        ~ModuleGroup() => Dispose(false);
 
         /// <inheritdoc />
-        public sealed override bool IsFinalHandler { get; }
+        public sealed override bool IsFinalHandler { get; } = isFinalHandler;
 
         /// <inheritdoc />
         public IComponentCollection<IWebModule> Modules => _modules;
@@ -62,25 +52,25 @@ namespace EmbedIO
         }
 
         /// <inheritdoc />
-        public string? GetMimeType(string extension)
-            => _mimeTypeCustomizer.GetMimeType(extension);
+        public string? GetMimeType(string extension) => _mimeTypeCustomizer.GetMimeType(extension);
 
         /// <inheritdoc />
-        public bool TryDetermineCompression(string mimeType, out bool preferCompression)
-            => _mimeTypeCustomizer.TryDetermineCompression(mimeType, out preferCompression);
+        public bool TryDetermineCompression(string mimeType, out bool preferCompression) =>
+            _mimeTypeCustomizer.TryDetermineCompression(mimeType, out preferCompression);
 
         /// <inheritdoc />
-        public void AddCustomMimeType(string extension, string mimeType)
-            => _mimeTypeCustomizer.AddCustomMimeType(extension, mimeType);
+        public void AddCustomMimeType(string extension, string mimeType) =>
+            _mimeTypeCustomizer.AddCustomMimeType(extension, mimeType);
 
         /// <inheritdoc />
-        public void PreferCompression(string mimeType, bool preferCompression)
-            => _mimeTypeCustomizer.PreferCompression(mimeType, preferCompression);
+        public void PreferCompression(string mimeType, bool preferCompression) =>
+            _mimeTypeCustomizer.PreferCompression(mimeType, preferCompression);
 
         /// <inheritdoc />
         protected override Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             return _modules.DispatchRequestAsync(context);
         }
 
@@ -106,9 +96,6 @@ namespace EmbedIO
         }
 
         /// <inheritdoc />
-        protected override void OnStart(CancellationToken cancellationToken)
-        {
-            _modules.StartAll(cancellationToken);
-        }
+        protected override void OnStart(CancellationToken cancellationToken) => _modules.StartAll(cancellationToken);
     }
 }

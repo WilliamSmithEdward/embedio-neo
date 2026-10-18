@@ -33,9 +33,9 @@ namespace EmbedIO
             string baseRoute,
             string fileSystemPath,
             bool isImmutable,
-            Action<FileModule>? configure = null)
-            where TContainer : class, IWebModuleContainer
-            => WithStaticFolder(@this, null, baseRoute, fileSystemPath, isImmutable, configure);
+            Action<FileModule>? configure = null
+        ) where TContainer : class, IWebModuleContainer =>
+            WithStaticFolder(@this, null, baseRoute, fileSystemPath, isImmutable, configure);
 
         /// <summary>
         /// Creates an instance of <see cref="FileSystemProvider"/>, uses it to initialize
@@ -68,15 +68,17 @@ namespace EmbedIO
             string baseRoute,
             string fileSystemPath,
             bool isImmutable,
-            Action<FileModule>? configure = null)
-            where TContainer : class, IWebModuleContainer
+            Action<FileModule>? configure = null
+        ) where TContainer : class, IWebModuleContainer
         {
             var provider = new FileSystemProvider(fileSystemPath, isImmutable);
+
             try
             {
                 var module = new FileModule(baseRoute, provider);
                 return WithModule(@this, name, module, configure);
             }
+
             catch
             {
                 provider.Dispose();
@@ -107,9 +109,9 @@ namespace EmbedIO
             string baseRoute,
             Assembly assembly,
             string pathPrefix,
-            Action<FileModule>? configure = null)
-            where TContainer : class, IWebModuleContainer
-            => WithEmbeddedResources(@this, null, baseRoute, assembly, pathPrefix, configure);
+            Action<FileModule>? configure = null
+        ) where TContainer : class, IWebModuleContainer =>
+            WithEmbeddedResources(@this, null, baseRoute, assembly, pathPrefix, configure);
 
         /// <summary>
         /// Creates an instance of <see cref="ResourceFileProvider"/>, uses it to initialize
@@ -137,8 +139,8 @@ namespace EmbedIO
             string baseRoute,
             Assembly assembly,
             string pathPrefix,
-            Action<FileModule>? configure = null)
-            where TContainer : class, IWebModuleContainer
+            Action<FileModule>? configure = null
+        ) where TContainer : class, IWebModuleContainer
         {
             var module = new FileModule(baseRoute, new ResourceFileProvider(assembly, pathPrefix));
             return WithModule(@this, name, module, configure);
@@ -163,9 +165,8 @@ namespace EmbedIO
             this TContainer? @this,
             string baseRoute,
             string zipFilePath,
-            Action<FileModule>? configure = null)
-            where TContainer : class, IWebModuleContainer
-            => WithZipFile(@this, null, baseRoute, zipFilePath, configure);
+            Action<FileModule>? configure = null
+        ) where TContainer : class, IWebModuleContainer => WithZipFile(@this, null, baseRoute, zipFilePath, configure);
 
         /// <summary>
         /// Creates an instance of <see cref="ZipFileProvider"/> using a file-system path, uses it to initialize
@@ -189,15 +190,17 @@ namespace EmbedIO
             string? name,
             string baseRoute,
             string zipFilePath,
-            Action<FileModule>? configure = null)
-            where TContainer : class, IWebModuleContainer
+            Action<FileModule>? configure = null
+        ) where TContainer : class, IWebModuleContainer
         {
             var provider = new ZipFileProvider(zipFilePath);
+
             try
             {
                 var module = new FileModule(baseRoute, provider);
                 return WithModule(@this, name, module, configure);
             }
+
             catch
             {
                 provider.Dispose();
@@ -224,9 +227,9 @@ namespace EmbedIO
             this TContainer? @this,
             string baseRoute,
             Stream zipFileStream,
-            Action<FileModule>? configure = null)
-            where TContainer : class, IWebModuleContainer
-            => WithZipFileStream(@this, null, baseRoute, zipFileStream, configure);
+            Action<FileModule>? configure = null
+        ) where TContainer : class, IWebModuleContainer =>
+            WithZipFileStream(@this, null, baseRoute, zipFileStream, configure);
 
         /// <summary>
         /// Creates an instance of <see cref="ZipFileProvider"/> using a zip file as stream, uses it to initialize
@@ -250,15 +253,17 @@ namespace EmbedIO
             string? name,
             string baseRoute,
             Stream zipFileStream,
-            Action<FileModule>? configure = null)
-            where TContainer : class, IWebModuleContainer
+            Action<FileModule>? configure = null
+        ) where TContainer : class, IWebModuleContainer
         {
             var provider = new ZipFileProvider(zipFileStream);
+
             try
             {
                 var module = new FileModule(baseRoute, provider);
                 return WithModule(@this, name, module, configure);
             }
+
             catch
             {
                 provider.Dispose();
