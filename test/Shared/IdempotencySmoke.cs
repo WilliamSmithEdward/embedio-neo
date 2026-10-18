@@ -58,6 +58,6 @@ namespace EmbedIO.PlatformTests
         [Route(HttpVerbs.Post, "/value")]
         public async Task<string> Create() { _ = await HttpContext.GetRequestBodyAsStringAsync(); return "created-" + Interlocked.Increment(ref _state.Calls); }
         [Route(HttpVerbs.Post, "/normal"), Idempotency(null)]
-        public string Normal() => "normal-" + Interlocked.Increment(ref _state.Calls);
+        public async Task<string> Normal() { _ = await HttpContext.GetRequestBodyAsStringAsync(); return "normal-" + Interlocked.Increment(ref _state.Calls); }
     }
 }

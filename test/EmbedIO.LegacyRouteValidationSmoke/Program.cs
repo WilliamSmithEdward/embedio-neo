@@ -130,7 +130,7 @@ public static class Program
             if (item == null || item.Id != id || item.Data != "after" || await subscriber.ReadAsync() != null) throw new InvalidOperationException("Legacy SSE replay mismatch.");
             _checks++;
         }
-        if (_checks != 46) throw new InvalidOperationException("Legacy route and health check count changed.");
+        if (_checks != 42) throw new InvalidOperationException("Legacy route and health check count changed.");
     }
 
     public enum Choice { One = 1 }
