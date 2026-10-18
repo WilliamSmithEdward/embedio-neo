@@ -144,3 +144,9 @@ The raw report also retains the earlier feature samples. No earlier sample was
 removed to improve the reported result. The hosts differ in their setup of optional
 security profiles, so these are consumer scenarios rather than an isolated estimate
 of the core null-check cost.
+
+Final-head Linux run 39167323318 exposed a pre-existing SSE fixture race: HTTP/2
+EOF arrived before the handler disposed its subscription. The completion test now
+awaits an explicit handler-finally signal with a five-second bound before asserting
+zero subscribers. The original failed TRX is retained; production SSE behavior and
+the zero-slot assertion are unchanged. Replacement exact-source gates are required.

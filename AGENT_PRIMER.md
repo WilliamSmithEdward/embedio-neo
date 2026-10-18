@@ -865,3 +865,7 @@ passing run. See [property testing](docs/guides/property-testing.md) and
 | Graceful shutdown | [Draining with WebSockets](docs/guides/graceful-drain-websockets.md) |
 | Trailers and 1xx | [Response field sections](docs/guides/response-field-sections.md) |
 | Everything else | [Documentation index](docs/README.md) |
+
+SSE wire EOF can arrive before the server handler finishes disposing its subscription.
+Lifetime tests must await handler completion before asserting released subscriber slots;
+a successful server shutdown alone does not join every request continuation.
