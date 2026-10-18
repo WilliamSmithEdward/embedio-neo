@@ -12,7 +12,6 @@ namespace EmbedIO
     /// <param name="newState">The new state.</param>
     public class WebServerStateChangedEventArgs(WebServerState oldState, WebServerState newState) : EventArgs
     {
-
         /// <summary>
         /// Gets the state to which the application service changed.
         /// </summary>

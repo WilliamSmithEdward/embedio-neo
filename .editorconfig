@@ -148,3 +148,7 @@ dotnet_diagnostic.IDE0300.severity = none
 [src/EmbedIO/Http/HttpExceptionHandler.cs]
 # Owner-approved: the no-op handler must retain its public callback parameters.
 dotnet_diagnostic.IDE0060.severity = none
+
+[src/EmbedIO/Health/HealthCheckService.cs]
+# Preserve the public WaitForReadyAsync parameter order for existing callers.
+dotnet_diagnostic.CA1068.severity = none

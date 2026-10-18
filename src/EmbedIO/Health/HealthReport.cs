@@ -11,8 +11,10 @@ namespace EmbedIO.Health
             Status = status;
             Checks = new ReadOnlyDictionary<string, HealthCheckResult>(checks);
         }
+
         /// <summary>Gets the aggregate outcome, including the server lifecycle.</summary>
         public HealthStatus Status { get; }
+
         /// <summary>Gets the individual results. Lifecycle rejection can return an empty collection.</summary>
         public IReadOnlyDictionary<string, HealthCheckResult> Checks { get; }
     }
