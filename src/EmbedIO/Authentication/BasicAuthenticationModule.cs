@@ -19,20 +19,28 @@ namespace EmbedIO.Authentication
     /// the <see cref="BasicAuthenticationModuleBase.Realm">Realm</see> property will be set equal to
     /// <see cref="IWebModule.BaseRoute">BaseRoute</see>.</para>
     /// </remarks>
-    public class BasicAuthenticationModule(string baseRoute, string? realm = null) : BasicAuthenticationModuleBase(baseRoute, realm)
+    public class BasicAuthenticationModule(string baseRoute, string? realm = null) : BasicAuthenticationModuleBase(
+        baseRoute,
+        realm
+    )
     {
-
         /// <summary>
         /// Gets a dictionary of valid user names and passwords.
         /// </summary>
         /// <value>
         /// The accounts.
         /// </value>
-        public ConcurrentDictionary<string, string> Accounts { get; } = new ConcurrentDictionary<string, string>(StringComparer.InvariantCulture);
+        public ConcurrentDictionary<string, string> Accounts { get; } = new ConcurrentDictionary<string, string>(
+            StringComparer.InvariantCulture
+        );
 
         /// <inheritdoc />
-        protected override Task<bool> VerifyCredentialsAsync(string path, string userName, string password, CancellationToken cancellationToken)
-            => Task.FromResult(VerifyCredentialsInternal(userName, password));
+        protected override Task<bool> VerifyCredentialsAsync(
+            string path,
+            string userName,
+            string password,
+            CancellationToken cancellationToken
+        ) => Task.FromResult(VerifyCredentialsInternal(userName, password));
 
         // An unknown user is compared against a value of its own rather than returning early,
         // so the work does not depend on whether the account exists, and the comparison itself
@@ -40,6 +48,7 @@ namespace EmbedIO.Authentication
         private bool VerifyCredentialsInternal(string userName, string password)
         {
             if (userName == null) return false;
+
             var known = Accounts.TryGetValue(userName, out var storedPassword);
             return FixedTimeEquals(password ?? string.Empty, storedPassword ?? AbsentAccountPassword) & known;
         }
@@ -56,6 +65,7 @@ namespace EmbedIO.Authentication
         {
             var difference = left.Length ^ right.Length;
             var length = Math.Max(left.Length, right.Length);
+
             for (var index = 0; index < length; index++)
                 difference |= CharacterAt(left, index) ^ CharacterAt(right, index);
 

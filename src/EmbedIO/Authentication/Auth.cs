@@ -14,7 +14,8 @@ namespace EmbedIO.Authentication
         /// </summary>
         public static IPrincipal NoUser { get; } = new GenericPrincipal(
             new GenericIdentity(string.Empty, string.Empty),
-            null);
+            null
+        );
 
         /// <summary>
         /// Creates and returns an <see cref="IPrincipal"/> interface
@@ -23,9 +24,7 @@ namespace EmbedIO.Authentication
         /// </summary>
         /// <param name="authenticationType">The type of authentication used to identify the user.</param>
         /// <returns>An <see cref="IPrincipal"/> interface.</returns>
-        public static IPrincipal CreateUnauthenticatedPrincipal(string authenticationType)
-            => new GenericPrincipal(
-                new GenericIdentity(string.Empty, authenticationType),
-                null);
+        public static IPrincipal CreateUnauthenticatedPrincipal(string authenticationType) =>
+            new GenericPrincipal(new GenericIdentity(string.Empty, authenticationType), null);
     }
 }
