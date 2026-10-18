@@ -42,6 +42,12 @@ weaken a selected policy at final serialization, or infer TLS from client text.
    These statuses and Content-Range fail closed. The existing error replacement
    removes stale representation fields before retrying serialization.
 
+6. Repeated nonce placeholders must be bounded by their final 44-character Base64
+   expansion, not only by input-template length. A new configuration assertion failed
+   before correction. Construction now rejects expanded fields over 4,096 characters;
+   wire cases exercise a near-limit CSP on HTTP/1–3, and fuzzing independently
+   models valid/invalid expansion counts, including mandatory boundary counts 77/78.
+
 These are feature-development findings, not claims of newly discovered vulnerabilities
 in published 2.12.0. Fixture compilation/setup corrections are not security findings.
 
@@ -115,11 +121,11 @@ bodies and selected security fields were checked. Medians below are milliseconds
 | Configuration | First server response | Process launch to first complete response | Warm p50 | Warm p95 |
 |---|---:|---:|---:|---:|
 | Published 2.12.0 | 34.1684 | 117.8312 | 0.0487 | 0.1151 |
-| Feature, disabled | 33.8556 | 117.2864 | 0.0499 | 0.1161 |
-| Feature, static profile | 35.4269 | 124.0794 | 0.0504 | 0.1255 |
-| Feature, nonce profile | 35.8213 | 125.2367 | 0.0549 | 0.1832 |
+| Feature, disabled | 34.7097 | 120.3241 | 0.0464 | 0.1575 |
+| Feature, static profile | 35.2743 | 124.9985 | 0.0508 | 0.1070 |
+| Feature, nonce profile | 35.4519 | 126.3830 | 0.0616 | 0.1509 |
 
-The disabled warm p50 differs by about one microsecond in this small sample; this
+The disabled warm p50 remains close in this small sample; this
 is not evidence of a statistically significant change. Opted-in policies have a
 measurable setup/cryptographic cost. These are loopback client/server timings,
 not production throughput, cross-platform guarantees or browser timings. Cold
@@ -127,3 +133,9 @@ means a fresh process, not cleared OS/file caches. The baseline ran before the
 feature group; see [all samples, phases and binary hashes](evidence/security-headers-latency.json).
 Existing hot-path, audit, listener-queue and cold-start allocation budgets passed
 without changing thresholds. No latency gate was loosened.
+
+The feature measurements above include the final constructor expansion bound.
+The raw report also retains the earlier feature samples. No earlier sample was
+removed to improve the reported result. The hosts differ in their setup of optional
+security profiles, so these are consumer scenarios rather than an isolated estimate
+of the core null-check cost.

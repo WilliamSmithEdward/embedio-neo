@@ -8,6 +8,8 @@ namespace EmbedIO.Security
     /// <summary>An immutable, opt-in response security-header policy. Nonce templates use the literal {nonce}.</summary>
     public sealed class SecurityHeadersPolicy
     {
+        internal const int NonceBytes = 32;
+        private const int EncodedNonceCharacters = (NonceBytes + 2) / 3 * 4;
         private static readonly string[] ReferrerPolicies = [
             "no-referrer", "no-referrer-when-downgrade", "origin", "origin-when-cross-origin", "same-origin",
             "strict-origin", "strict-origin-when-cross-origin", "unsafe-url"
@@ -81,8 +83,6 @@ namespace EmbedIO.Security
             else if (hstsIncludeSubdomains || hstsPreload)
                 throw new ArgumentException("HSTS directives require an explicit lifetime.", nameof(hstsMaxAge));
 
-            if (fields.Sum(p => p.Value.Length) > 16384) throw new ArgumentException("Policy fields exceed 16 KiB.");
-
             NonceFields =
             [
                 .. fields
@@ -99,6 +99,14 @@ namespace EmbedIO.Security
                 // Static fields need no per-response template formatting.
                 .. fields.Where(p => !IsNonceField(p))
             ];
+
+            foreach (var field in NonceFields)
+                if (ExpandedLength(field) > 4096)
+                    throw new ArgumentException("Expanded nonce policy fields exceed 4096 characters.", field.Key);
+
+            if (Fields.Sum(field => field.Value.Length) + NonceFields.Sum(ExpandedLength) > 16384)
+                throw new ArgumentException("Expanded policy fields exceed 16 KiB.");
+
             UsesNonce = HasNonce(contentSecurityPolicy) || HasNonce(contentSecurityPolicyReportOnly);
             ValidateCsp(contentSecurityPolicy);
             ValidateCsp(contentSecurityPolicyReportOnly);
@@ -135,6 +143,9 @@ namespace EmbedIO.Security
                 .Find(context)
                 ?.Commit();
         }
+
+        private static int ExpandedLength(KeyValuePair<string, string[]> field) =>
+            field.Value.Sum(fragment => fragment.Length) + (field.Value.Length - 1) * EncodedNonceCharacters;
 
         private static bool IsNonceField(KeyValuePair<string, string> field) =>
             (field.Key == "Content-Security-Policy" || field.Key == "Content-Security-Policy-Report-Only")

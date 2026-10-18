@@ -35,8 +35,8 @@ The feature branch adds opt-in `EmbedIO.Security.SecurityHeadersPolicy`,
 NuGet 2.12.0. Configure server `options.SecurityHeaders` or configure copied named
 controller profiles before registration. Method attributes override inherited class
 attributes and module defaults. A selected profile replaces all seven managed fields,
-including omissions; keep host-wide HSTS consistent across profiles. Static values are
-precomputed. Existing defaults/manual headers are unchanged until explicitly selected.
+including omissions; keep host-wide HSTS consistent across profiles. Static values and rendered-size bounds are
+precomputed, including nonce expansion. Existing defaults/manual headers are unchanged until explicitly selected.
 
 Use exact CSP source `'nonce-{nonce}'` and `context.GetSecurityHeadersNonce()` for
 trusted, attribute-encoded script/style markup only. Each response has fresh 256-bit

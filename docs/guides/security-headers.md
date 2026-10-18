@@ -101,7 +101,7 @@ Installing a default-constructed profile emits `X-Content-Type-Options: nosniff`
 CSP, report-only CSP, Permissions-Policy and HSTS require explicit values.
 `frameOptions` accepts `DENY`, `SAMEORIGIN` or null; coordinate this with CSP
 `frame-ancestors`. Referrer values use the standard policy tokens. Each supplied
-field is limited to 4,096 visible ASCII characters, and combined fields to 16 KiB.
+field is limited to 4,096 visible ASCII characters after nonce expansion, and combined fields to 16 KiB.
 Control characters, CR/LF, DEL, non-ASCII and blank fields are rejected at construction.
 
 HSTS requires explicit `hstsMaxAge`; it is emitted only when

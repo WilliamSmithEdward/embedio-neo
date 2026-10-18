@@ -142,7 +142,7 @@ namespace EmbedIO.Security
         {
             if (_nonce != null) return;
 
-            var bytes = new byte[32];
+            var bytes = new byte[SecurityHeadersPolicy.NonceBytes];
             using var random = RandomNumberGenerator.Create();
             random.GetBytes(bytes);
             _nonce = Convert.ToBase64String(bytes);

@@ -47,6 +47,12 @@ namespace EmbedIO.Tests
         public void ConfigurationBoundsAndHstsPreloadAreExplicit()
         {
             Assert.That(() => new SecurityHeadersPolicy(new string('x', 4097)), Throws.ArgumentException);
+            Assert.That(
+                () => new SecurityHeadersPolicy(
+                    "script-src " + string.Concat(Enumerable.Repeat("'nonce-{nonce}' ", 100))
+                ),
+                Throws.ArgumentException
+            );
             Assert.That(() => new SecurityHeadersPolicy(referrerPolicy: "unknown"), Throws.ArgumentException);
             Assert.That(
                 () => new SecurityHeadersPolicy(frameOptions: "ALLOW-FROM https://example.com"),

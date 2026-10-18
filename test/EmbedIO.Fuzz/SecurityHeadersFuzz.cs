@@ -92,6 +92,8 @@ internal static class SecurityHeadersFuzz
 
         try
         {
+            CheckExpansion(77);
+            CheckExpansion(78);
             await Batch("/nonce");
             await Batch("/static");
             Require(cache.Count == 1, "security-headers.static-cache-stored");
@@ -101,7 +103,7 @@ internal static class SecurityHeadersFuzz
             {
                 token.ThrowIfCancellationRequested();
 
-                switch ((uint)step.Command % 5)
+                switch ((uint)step.Command % 6)
                 {
                     case 0:
                         await Batch("/nonce");
@@ -123,7 +125,7 @@ internal static class SecurityHeadersFuzz
                         trace.Cover("security-headers.report-only");
                         break;
 
-                    default:
+                    case 4:
                         var rejected = false;
 
                         try
@@ -139,6 +141,10 @@ internal static class SecurityHeadersFuzz
                         Require(rejected, "security-headers.controls-rejected");
                         trace.Cover("security-headers.controls-rejected");
                         break;
+
+                    default:
+                        CheckExpansion(1 + (step.Value & 127));
+                        break;
                 }
             }
         }
@@ -149,6 +155,27 @@ internal static class SecurityHeadersFuzz
 
             stop.Cancel();
             await running;
+        }
+
+        void CheckExpansion(int repeats)
+        {
+            var accepted = true;
+
+            try
+            {
+                _ = new SecurityHeadersPolicy(
+                    "script-src " + string.Concat(Enumerable.Repeat("'nonce-{nonce}' ", repeats))
+                );
+            }
+
+            catch (ArgumentException)
+            {
+                accepted = false;
+            }
+
+            // Independent wire-size model: prefix 11, quoted 44-character nonce source plus space 53.
+            Require(accepted == (11 + 53 * repeats <= 4096), "security-headers.expanded-bound");
+            trace.Cover("security-headers.expanded-bound");
         }
 
         async Task Batch(string path)

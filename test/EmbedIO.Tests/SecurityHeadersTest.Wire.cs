@@ -102,7 +102,10 @@ namespace EmbedIO.Tests
             {
                 var path = context.Request.Url.AbsolutePath;
 
-                if (path.StartsWith("/nonce", StringComparison.Ordinal))
+                if (path == "/nonce/bounded")
+                    new SecurityHeadersPolicy("script-src " + string.Concat(Enumerable.Repeat("'nonce-{nonce}' ", 77))).Apply(context);
+
+                else if (path.StartsWith("/nonce", StringComparison.Ordinal))
                     SecurityHeadersFixtures
                         .NoncePolicy()
                         .Apply(context);
@@ -162,7 +165,8 @@ namespace EmbedIO.Tests
 
             foreach (var path in new[]
             {
-                "nonce", "nonce", "static", "error", "nonce/304", "nonce/206", "nonce/range-header", "nonce/empty"
+                "nonce", "nonce", "nonce/bounded", "static", "error", "nonce/304", "nonce/206", "nonce/range-header",
+                "nonce/empty"
             })
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, prefix + path)
@@ -196,13 +200,14 @@ namespace EmbedIO.Tests
                         Assert.That(SecurityHeadersFixtures.Header(response, "ETag"), Is.Empty);
                     }
 
-                    if (path == "nonce")
+                    if (path is "nonce" or "nonce/bounded")
                     {
                         var body = await response.Content.ReadAsStringAsync(token);
 
                         using (Assert.EnterMultipleScope())
                         {
                             Assert.That(Convert.FromBase64String(body), Has.Length.EqualTo(32));
+                            Assert.That(csp.Length, Is.LessThanOrEqualTo(4096));
                             Assert.That(body, Is.Not.EqualTo(previous));
                         }
 
