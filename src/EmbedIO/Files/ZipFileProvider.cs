@@ -1,9 +1,9 @@
-﻿using EmbedIO.Utilities;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Threading;
+using EmbedIO.Utilities;
 
 namespace EmbedIO.Files
 {
@@ -23,12 +23,18 @@ namespace EmbedIO.Files
         /// <param name="zipFilePath">The path of the immutable ZIP archive, opened read-only with shared read access.</param>
         public ZipFileProvider(string zipFilePath)
         {
-            var stream = new FileStream(Validate.LocalPath(nameof(zipFilePath), zipFilePath, true),
-                FileMode.Open, FileAccess.Read, FileShare.Read);
+            var stream = new FileStream(
+                Validate.LocalPath(nameof(zipFilePath), zipFilePath, true),
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read
+            );
+
             try
             {
                 _zipArchive = new ZipArchive(stream, ZipArchiveMode.Read);
             }
+
             catch
             {
                 // This constructor owns the handle even if archive validation fails.
@@ -43,18 +49,13 @@ namespace EmbedIO.Files
         /// <param name="stream">The stream that contains the archive.</param>
         /// <param name="leaveOpen"><see langword="true"/> to leave the stream open after the web server
         /// is disposed; otherwise, <see langword="false"/>.</param>
-        public ZipFileProvider(Stream stream, bool leaveOpen = false)
-        {
+        public ZipFileProvider(Stream stream, bool leaveOpen = false) =>
             _zipArchive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen);
-        }
 
         /// <summary>
         /// Finalizes an instance of the <see cref="ZipFileProvider"/> class.
         /// </summary>
-        ~ZipFileProvider()
-        {
-            Dispose(false);
-        }
+        ~ZipFileProvider() => Dispose(false);
 
         /// <inheritdoc />
         public event Action<string>? ResourceChanged
@@ -74,15 +75,15 @@ namespace EmbedIO.Files
         }
 
         /// <inheritdoc />
-        public void Start(CancellationToken cancellationToken)
-        {
-        }
+        public void Start(CancellationToken cancellationToken) { }
 
         /// <inheritdoc />
         public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
         {
             if (mimeTypeProvider is null) throw new System.NullReferenceException();
+
             if (requestPath is null) throw new System.NullReferenceException();
+
             if (requestPath.Length == 1)
                 return null;
 
@@ -95,10 +96,13 @@ namespace EmbedIO.Files
             string name;
             DateTime lastWriteTime;
             long length;
+
             using (var scope = _readGate.EnterArchive())
             {
                 var entry = _zipArchive.GetEntry(requestPath.Substring(1));
+
                 if (entry == null) return null;
+
                 fullName = entry.FullName;
                 name = entry.Name;
                 // Resource validators compare in UTC; the entry's local clock time would skew them.
@@ -107,24 +111,41 @@ namespace EmbedIO.Files
             }
 
             // Application MIME callbacks run outside archive synchronization.
-            return MappedResourceInfo.ForFile(fullName, name, lastWriteTime, length,
-                mimeTypeProvider.GetMimeType(Path.GetExtension(name)));
+            return MappedResourceInfo.ForFile(
+                fullName,
+                name,
+                lastWriteTime,
+                length,
+                mimeTypeProvider.GetMimeType(Path.GetExtension(name))
+            );
         }
 
         /// <inheritdoc />
         public Stream OpenFile(string path)
         {
             if (path == null) throw new ArgumentNullException("entryName");
+
             using var scope = _readGate.EnterArchive();
-            var stream = _zipArchive.GetEntry(path)?.Open()
+            var stream = _zipArchive
+                .GetEntry(path)
+                ?.Open()
                 ?? throw new FileNotFoundException($"\"{path}\" cannot be found in Zip archive.");
-            try { return new ZipArchiveReadStream(stream, _readGate); }
-            catch { stream.Dispose(); throw; }
+
+            try
+            {
+                return new ZipArchiveReadStream(stream, _readGate);
+            }
+
+            catch
+            {
+                stream.Dispose();
+                throw;
+            }
         }
 
         /// <inheritdoc />
-        public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider)
-            => [];
+        public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider) =>
+            [];
 
         /// <summary>
         /// Releases unmanaged and - optionally - managed resources.
@@ -139,8 +160,16 @@ namespace EmbedIO.Files
             // Read-mode archive disposal closes its backing streams without changing cursors.
             // Do not wait for an active read: closing an owned stream may unblock it.
             // Stream/operation references defer disposal of the synchronization gate.
-            try { _readGate.StopArchiveOperations(); _zipArchive.Dispose(); }
-            finally { _readGate.Dispose(); }
+            try
+            {
+                _readGate.StopArchiveOperations();
+                _zipArchive.Dispose();
+            }
+
+            finally
+            {
+                _readGate.Dispose();
+            }
         }
     }
 }

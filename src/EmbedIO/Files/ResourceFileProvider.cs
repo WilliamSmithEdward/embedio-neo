@@ -44,26 +44,29 @@ namespace EmbedIO.Files
         public bool IsImmutable => true;
 
         /// <inheritdoc />
-        public void Start(CancellationToken cancellationToken)
-        {
-        }
+        public void Start(CancellationToken cancellationToken) { }
 
         /// <inheritdoc />
         public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
         {
             if (requestPath is null) throw new System.NullReferenceException();
+
             if (mimeTypeProvider is null) throw new System.NullReferenceException();
+
             var resourceName = PathPrefix + requestPath.Replace('/', '.');
 
             long size;
+
             try
             {
                 using var stream = Assembly.GetManifestResourceStream(resourceName);
+
                 if (stream == null || stream == Stream.Null)
                     return null;
 
                 size = stream.Length;
             }
+
             catch (FileNotFoundException)
             {
                 return null;
@@ -77,14 +80,15 @@ namespace EmbedIO.Files
                 name,
                 _fileTime,
                 size,
-                mimeTypeProvider.GetMimeType(Path.GetExtension(name)));
+                mimeTypeProvider.GetMimeType(Path.GetExtension(name))
+            );
         }
 
         /// <inheritdoc />
         public Stream? OpenFile(string path) => Assembly.GetManifestResourceStream(path);
 
         /// <inheritdoc />
-        public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider)
-            => [];
+        public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider) =>
+            [];
     }
 }

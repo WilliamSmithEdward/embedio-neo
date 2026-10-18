@@ -17,6 +17,7 @@ namespace EmbedIO.Configuration
             lock (_configurationLock)
             {
                 if (_configurationLocked) return;
+
                 OnBeforeLockConfiguration();
                 _configurationLocked = true;
             }
