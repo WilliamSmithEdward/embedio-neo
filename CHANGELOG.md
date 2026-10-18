@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-17
+
+### Added
+
+- Opt-in bounded output caching for finite public GET/HEAD responses, with named
+  controller policies, generated bindings, fluent handlers, expiry and tag
+  invalidation. Authorization and before-handler hooks execute on every hit;
+  uncached routes retain their existing invocation and cleanup behavior.
+  Credentials, cookies, conditional/range requests, explicit no-store, streams,
+  failed/canceled output and oversized fills bypass storage. Controller cleanup
+  finishes before publication; invalidation fences older in-flight fills.
+  Includes 83 regression cases, Native AOT/.NET Framework smoke coverage,
+  multi-owner state-machine fuzzing and real-loopback latency tooling.
+  Cached data remains a snapshot until expiry or explicit invalidation; declare
+  representation-selecting headers and invalidate after successful mutations.
+  Existing APIs, defaults, targets and runtime dependency groups are preserved.
+  See [output caching](docs/guides/output-caching.md).
+
 ## [2.9.0] - 2026-10-17
 
 ### Added

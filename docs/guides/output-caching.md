@@ -1,6 +1,6 @@
 # Opt-in output caching
 
-This feature is under development and is **not in NuGet 2.9.0**.
+Output caching requires **EmbedIO-Neo 2.10.0+**.
 
 `EmbedIO.Caching.OutputCache` reuses the completed bytes of explicitly public,
 finite GET and HEAD responses. A hit skips action argument binding, action
