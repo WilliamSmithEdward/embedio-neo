@@ -8,16 +8,12 @@ namespace EmbedIO.Internal
     public sealed class TimeKeeper
     {
         private static readonly Stopwatch Stopwatch = Stopwatch.StartNew();
-
         private readonly long _start;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TimeKeeper"/> class.
         /// </summary>
-        public TimeKeeper()
-        {
-            _start = Stopwatch.ElapsedMilliseconds;
-        }
+        public TimeKeeper() => _start = Stopwatch.ElapsedMilliseconds;
 
         /// <summary>
         /// Gets the elapsed time since the class was initialized.

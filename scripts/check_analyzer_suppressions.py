@@ -68,6 +68,7 @@ def main():
         for number, text in violations(path.read_text(encoding="utf-8-sig"), csharp=path.suffix == ".cs", filename=name):
             # Owner-approved namespace and compatibility policies, limited to the root configuration.
             if name == ".editorconfig" and text in {
+                "dotnet_diagnostic.CA1822.severity = none",
                 "dotnet_diagnostic.CA2219.severity = none",
                 "dotnet_diagnostic.IDE0290.severity = none",
                 "dotnet_diagnostic.CA1844.severity = none",

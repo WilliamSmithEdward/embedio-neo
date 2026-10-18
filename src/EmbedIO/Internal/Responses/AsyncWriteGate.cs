@@ -17,11 +17,13 @@ namespace EmbedIO.Internal
         internal Scope Enter()
         {
             if (!TryAddReference()) throw new ObjectDisposedException(nameof(AsyncWriteGate));
+
             try
             {
                 _semaphore.Wait();
                 return new Scope(this);
             }
+
             catch
             {
                 ReleaseReference();
@@ -33,16 +35,21 @@ namespace EmbedIO.Internal
         {
             // Retirement is reported through the returned task, as an asynchronous entry always has.
             if (!TryAddReference())
-                return new ValueTask<Scope>(Task.FromException<Scope>(new ObjectDisposedException(nameof(AsyncWriteGate))));
+                return new ValueTask<Scope>(
+                    Task.FromException<Scope>(new ObjectDisposedException(nameof(AsyncWriteGate)))
+                );
+
             try
             {
-                if (!token.IsCancellationRequested && _semaphore.Wait(0)) return new ValueTask<Scope>(new Scope(this));
+                if (!token.IsCancellationRequested && _semaphore.Wait(0, CancellationToken.None)) return new ValueTask<Scope>(new Scope(this));
             }
+
             catch
             {
                 ReleaseReference();
                 throw;
             }
+
             return WaitAsync(token);
         }
 
@@ -50,9 +57,12 @@ namespace EmbedIO.Internal
         {
             try
             {
-                await _semaphore.WaitAsync(token).ConfigureAwait(false);
+                await _semaphore
+                    .WaitAsync(token)
+                    .ConfigureAwait(false);
                 return new Scope(this);
             }
+
             catch
             {
                 ReleaseReference();
@@ -63,14 +73,18 @@ namespace EmbedIO.Internal
         public void Dispose()
         {
             var state = Volatile.Read(ref _state);
+
             while (state >= 0)
             {
                 var observed = Interlocked.CompareExchange(ref _state, state | Retired, state);
+
                 if (observed == state)
                 {
                     if (state == 0) _semaphore.Dispose();
+
                     return;
                 }
+
                 state = observed;
             }
         }
@@ -84,12 +98,16 @@ namespace EmbedIO.Internal
         private bool TryAddReference()
         {
             var state = Volatile.Read(ref _state);
+
             while (state >= 0)
             {
                 var observed = Interlocked.CompareExchange(ref _state, state + 1, state);
+
                 if (observed == state) return true;
+
                 state = observed;
             }
+
             return false;
         }
 
@@ -102,7 +120,9 @@ namespace EmbedIO.Internal
         internal readonly struct Scope : IDisposable
         {
             private readonly AsyncWriteGate _gate;
+
             internal Scope(AsyncWriteGate gate) => _gate = gate;
+
             public void Dispose() => _gate.Release();
         }
     }

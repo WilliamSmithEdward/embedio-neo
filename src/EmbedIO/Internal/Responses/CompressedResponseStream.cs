@@ -45,7 +45,7 @@ namespace EmbedIO.Internal
 #endif
                 CompressionMethod.Gzip => new GZipStream(_sink, CompressionMode.Compress, leaveOpen: true),
                 CompressionMethod.Deflate => new DeflateStream(_sink, CompressionMode.Compress, leaveOpen: true),
-                _ => throw new ArgumentOutOfRangeException(nameof(method)),
+                _ => throw new ArgumentOutOfRangeException(nameof(method))
             };
         }
 
@@ -61,6 +61,7 @@ namespace EmbedIO.Internal
                 case CompressionMethod.Gzip:
                 case CompressionMethod.Deflate:
                     return new CompressedResponseStream(output, method);
+
                 default:
                     return output;
             }
@@ -70,31 +71,55 @@ namespace EmbedIO.Internal
         public override bool CanSeek => false;
         public override bool CanWrite => !_disposed && _compressor.CanWrite;
         public override long Length => throw new NotSupportedException();
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
         public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
         public override void SetLength(long value) => throw new NotSupportedException();
+
         public override void Flush() => _compressor.Flush();
-        public override Task FlushAsync(CancellationToken cancellationToken) => _compressor.FlushAsync(cancellationToken);
+
+        public override Task FlushAsync(CancellationToken cancellationToken) =>
+            _compressor.FlushAsync(cancellationToken);
+
         public override void Write(byte[] buffer, int offset, int count) => _compressor.Write(buffer, offset, count);
-        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-            => _compressor.WriteAsync(buffer, offset, count, cancellationToken);
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            _compressor.WriteAsync(buffer, offset, count, cancellationToken);
+
         public override void WriteByte(byte value) => _compressor.WriteByte(value);
 #if NET10_0_OR_GREATER
         public override void Write(ReadOnlySpan<byte> buffer) => _compressor.Write(buffer);
-        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
-            => _compressor.WriteAsync(buffer, cancellationToken);
+
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default
+        ) => _compressor.WriteAsync(buffer, cancellationToken);
 
         public override async ValueTask DisposeAsync()
         {
             if (_disposed) return;
+
             _disposed = true;
+
             try
             {
                 _sink.BeginEnding();
-                await _compressor.DisposeAsync().ConfigureAwait(false);
-                await _sink.CompleteEndingAsync().ConfigureAwait(false);
+                await _compressor
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+                await _sink
+                    .CompleteEndingAsync()
+                    .ConfigureAwait(false);
             }
+
             finally
             {
                 _sink.Dispose();
@@ -102,20 +127,22 @@ namespace EmbedIO.Internal
             }
         }
 #endif
-
         // The compressor's final block is captured by the sink and written with the body's
         // ending; the output is disposed whether or not that write succeeds, as it was when
         // the compressor owned it.
         protected override void Dispose(bool disposing)
         {
             if (!disposing || _disposed) return;
+
             _disposed = true;
+
             try
             {
                 _sink.BeginEnding();
                 _compressor.Dispose();
                 _sink.CompleteEnding();
             }
+
             finally
             {
                 _sink.Dispose();
@@ -131,18 +158,29 @@ namespace EmbedIO.Internal
             private byte[]? _captured;
             private int _capturedLength;
 
-            internal Sink(Stream output) { _output = new BorrowedResource<Stream>(output); }
+            internal Sink(Stream output) => _output = new BorrowedResource<Stream>(output);
 
             public override bool CanRead => false;
             public override bool CanSeek => false;
             public override bool CanWrite => true;
             public override long Length => throw new NotSupportedException();
-            public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+
             public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
             public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
             public override void SetLength(long value) => throw new NotSupportedException();
+
             public override void Flush() => _output.Value.Flush();
-            public override Task FlushAsync(CancellationToken cancellationToken) => _output.Value.FlushAsync(cancellationToken);
+
+            public override Task FlushAsync(CancellationToken cancellationToken) =>
+                _output.Value.FlushAsync(cancellationToken);
 
             public override void Write(byte[] buffer, int offset, int count)
             {
@@ -151,7 +189,9 @@ namespace EmbedIO.Internal
                     _output.Value.Write(buffer, offset, count);
                     return;
                 }
+
                 if (count == 0) return;
+
                 ForwardCaptured();
                 Capture(buffer, offset, count);
             }
@@ -159,18 +199,31 @@ namespace EmbedIO.Internal
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
                 if (!_ending) return _output.Value.WriteAsync(buffer, offset, count, cancellationToken);
+
                 if (cancellationToken.IsCancellationRequested) return Task.FromCanceled(cancellationToken);
+
                 if (count == 0) return Task.CompletedTask;
+
                 if (_capturedLength != 0) return ForwardThenCaptureAsync(buffer, offset, count, cancellationToken);
+
                 Capture(buffer, offset, count);
                 return Task.CompletedTask;
             }
 
             // A further write during the ending: the one held so far leaves as an ordinary
             // write (its own chunk), and this one is held instead.
-            private async Task ForwardThenCaptureAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            private async Task ForwardThenCaptureAsync(
+                byte[] buffer,
+                int offset,
+                int count,
+                CancellationToken cancellationToken
+            )
             {
-                if (_captured is { } held) await _output.Value.WriteAsync(held, 0, _capturedLength, cancellationToken).ConfigureAwait(false);
+                if (_captured is { } held)
+                    await _output.Value
+                        .WriteAsync(held, 0, _capturedLength, cancellationToken)
+                        .ConfigureAwait(false);
+
                 ClearCaptured();
                 Capture(buffer, offset, count);
             }
@@ -178,6 +231,7 @@ namespace EmbedIO.Internal
             private void ForwardCaptured()
             {
                 if (_capturedLength == 0 || _captured is not { } held) return;
+
                 _output.Value.Write(held, 0, _capturedLength);
                 ClearCaptured();
             }
@@ -185,9 +239,9 @@ namespace EmbedIO.Internal
             private void ClearCaptured()
             {
                 if (_captured != null) Array.Clear(_captured, 0, _capturedLength);
+
                 _capturedLength = 0;
             }
-
 #if NET10_0_OR_GREATER
             public override void Write(ReadOnlySpan<byte> buffer)
             {
@@ -196,29 +250,41 @@ namespace EmbedIO.Internal
                     _output.Value.Write(buffer);
                     return;
                 }
+
                 if (buffer.IsEmpty) return;
+
                 ForwardCaptured();
                 Capture(buffer);
             }
 
-            public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+            public override ValueTask WriteAsync(
+                ReadOnlyMemory<byte> buffer,
+                CancellationToken cancellationToken = default
+            )
             {
                 if (!_ending) return _output.Value.WriteAsync(buffer, cancellationToken);
+
                 if (cancellationToken.IsCancellationRequested) return ValueTask.FromCanceled(cancellationToken);
+
                 if (buffer.IsEmpty) return default;
+
                 if (_capturedLength != 0) return new ValueTask(ForwardThenCaptureAsync(buffer, cancellationToken));
+
                 Capture(buffer.Span);
                 return default;
             }
 
             private async Task ForwardThenCaptureAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken)
             {
-                if (_captured is { } held) await _output.Value.WriteAsync(held, 0, _capturedLength, cancellationToken).ConfigureAwait(false);
+                if (_captured is { } held)
+                    await _output.Value
+                        .WriteAsync(held, 0, _capturedLength, cancellationToken)
+                        .ConfigureAwait(false);
+
                 ClearCaptured();
                 Capture(buffer.Span);
             }
 #endif
-
             internal void BeginEnding() => _ending = true;
 
             // Hands the captured final block to the output with the body's ending, or as an
@@ -226,47 +292,63 @@ namespace EmbedIO.Internal
             internal void CompleteEnding()
             {
                 if (_captured == null || _capturedLength == 0) return;
+
                 if (_output.Value is IEndingBodyOutput ending) ending.WriteEnding(_captured, 0, _capturedLength);
+
                 else _output.Value.Write(_captured, 0, _capturedLength);
+
                 Release();
             }
 
             internal async Task CompleteEndingAsync()
             {
                 if (_captured == null || _capturedLength == 0) return;
-                if (_output.Value is IEndingBodyOutput ending) await ending.WriteEndingAsync(_captured, 0, _capturedLength, CancellationToken.None).ConfigureAwait(false);
-                else await _output.Value.WriteAsync(_captured, 0, _capturedLength, CancellationToken.None).ConfigureAwait(false);
+
+                if (_output.Value is IEndingBodyOutput ending)
+                    await ending
+                        .WriteEndingAsync(_captured, 0, _capturedLength, CancellationToken.None)
+                        .ConfigureAwait(false);
+
+                else
+                    await _output.Value
+                        .WriteAsync(_captured, 0, _capturedLength, CancellationToken.None)
+                        .ConfigureAwait(false);
+
                 Release();
             }
 
             private void Capture(byte[] buffer, int offset, int count)
             {
                 if (count == 0) return;
+
                 var target = Reserve(count);
                 Buffer.BlockCopy(buffer, offset, target, _capturedLength, count);
                 _capturedLength += count;
             }
-
 #if NET10_0_OR_GREATER
             private void Capture(ReadOnlySpan<byte> bytes)
             {
                 if (bytes.IsEmpty) return;
+
                 var target = Reserve(bytes.Length);
                 bytes.CopyTo(target.AsSpan(_capturedLength));
                 _capturedLength += bytes.Length;
             }
 #endif
-
             private byte[] Reserve(int count)
             {
                 var needed = checked(_capturedLength + count);
+
                 if (_captured != null && _captured.Length >= needed) return _captured;
+
                 var grown = ArrayPool<byte>.Shared.Rent(Math.Max(needed, _captured == null ? 0 : _captured.Length * 2));
+
                 if (_captured != null)
                 {
                     Buffer.BlockCopy(_captured, 0, grown, 0, _capturedLength);
                     Release(_captured, _capturedLength);
                 }
+
                 _captured = grown;
                 return grown;
             }
@@ -274,6 +356,7 @@ namespace EmbedIO.Internal
             private void Release()
             {
                 if (_captured == null) return;
+
                 Release(_captured, _capturedLength);
                 _captured = null;
                 _capturedLength = 0;
@@ -289,6 +372,7 @@ namespace EmbedIO.Internal
             protected override void Dispose(bool disposing)
             {
                 if (disposing) Release();
+
                 base.Dispose(disposing);
             }
         }

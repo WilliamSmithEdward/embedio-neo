@@ -15,15 +15,25 @@ namespace EmbedIO.Internal
             TState state,
             Func<TState, Type, TypeConverter> getConverter,
             out object? result,
-            out bool invalidValue)
+            out bool invalidValue
+        )
         {
             result = null;
             invalidValue = false;
             var underlying = Nullable.GetUnderlyingType(type);
+
             if (underlying != null && string.IsNullOrEmpty(value)) return true;
+
             if (value == null) return false;
+
             type = underlying ?? type;
-            if (type == typeof(string)) { result = value; return true; }
+
+            if (type == typeof(string))
+            {
+                result = value;
+                return true;
+            }
+
             try
             {
                 if (type.IsEnum)
@@ -31,19 +41,28 @@ namespace EmbedIO.Internal
                     invalidValue = !string.IsNullOrEmpty(value);
                     result = Enum.Parse(type, value, true);
                 }
+
                 else
                 {
                     var converter = getConverter(state, type);
+
                     if (!converter.CanConvertFrom(typeof(string))) return false;
+
                     invalidValue = !string.IsNullOrEmpty(value);
                     result = converter.ConvertFrom(null, CultureInfo.InvariantCulture, value);
                 }
+
                 invalidValue = false;
                 return true;
             }
-            catch (Exception exception) when (exception is ArgumentException || exception is FormatException || exception is OverflowException || exception is NotSupportedException)
+
+            catch (Exception exception) when (exception is ArgumentException
+                || exception is FormatException
+                || exception is OverflowException
+                || exception is NotSupportedException)
             {
                 if (exception is NotSupportedException) invalidValue = false;
+
                 return false;
             }
         }

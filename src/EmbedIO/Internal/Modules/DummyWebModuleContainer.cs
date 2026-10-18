@@ -7,17 +7,13 @@ namespace EmbedIO.Internal
     {
         public static readonly IWebModuleContainer Instance = new DummyWebModuleContainer();
 
-        private DummyWebModuleContainer()
-        {
-        }
+        private DummyWebModuleContainer() { }
 
         public IComponentCollection<IWebModule> Modules => throw UnexpectedCall();
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
-        private EmbedIOInternalErrorException UnexpectedCall([CallerMemberName] string member = "")
-            => SelfCheck.Failure($"Unexpected call to {nameof(DummyWebModuleContainer)}.{member}.");
+        private EmbedIOInternalErrorException UnexpectedCall([CallerMemberName] string member = "") =>
+            SelfCheck.Failure($"Unexpected call to {nameof(DummyWebModuleContainer)}.{member}.");
     }
 }

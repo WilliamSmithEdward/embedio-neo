@@ -171,3 +171,28 @@ dotnet_diagnostic.CA1870.severity = none
 [src/EmbedIO/Http/ServerSentEventStream.cs]
 # Preserve both the response failure and cleanup failure in the intentional AggregateException.
 dotnet_diagnostic.CA2219.severity = none
+
+[src/EmbedIO/Idempotency/IdempotencyPolicy.cs]
+# Preserve the explicit attribute constructor rather than restructure for a style suggestion.
+dotnet_diagnostic.IDE0290.severity = none
+
+[src/EmbedIO/Internal/Compression/CompressionStream.cs]
+# Owner-approved: retain shared array-based stream overrides without target-specific branches.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Internal/Diagnostics/ServerTelemetry.cs]
+# The .NET Standard fallback intentionally matches the instance API and parameters of active telemetry.
+dotnet_diagnostic.CA1822.severity = none
+dotnet_diagnostic.IDE0060.severity = none
+
+[src/EmbedIO/Internal/RequestBodies/ReadTimeoutStream.cs]
+# The throw guards continuation state inside a task callback; it does not execute as a finally throw.
+dotnet_diagnostic.CA2219.severity = none
+
+[src/EmbedIO/Internal/Responses/BufferingResponseStream.cs]
+# Owner-approved: retain shared array-based stream overrides without target-specific branches.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Internal/Responses/JsonSequenceWriter.cs]
+# Preserve intentional aggregation of operation failures with producer/stream cleanup failures.
+dotnet_diagnostic.CA2219.severity = none
