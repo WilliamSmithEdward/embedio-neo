@@ -19,6 +19,7 @@ namespace EmbedIO.Internal
                     _target = new DeflateStream(target, CompressionMode.Compress, true);
                     _leaveOpen = false;
                     break;
+
                 case CompressionMethod.Brotli:
 #if NET10_0_OR_GREATER
                     _target = new BrotliStream(target, CompressionMode.Compress, true);
@@ -27,10 +28,12 @@ namespace EmbedIO.Internal
 #else
                     throw new NotSupportedException("Brotli compression requires the .NET 10 asset.");
 #endif
+
                 case CompressionMethod.Gzip:
                     _target = new GZipStream(target, CompressionMode.Compress, true);
                     _leaveOpen = false;
                     break;
+
                 default:
                     _target = target;
                     _leaveOpen = true;
@@ -41,13 +44,9 @@ namespace EmbedIO.Internal
         }
 
         public long UncompressedLength { get; private set; }
-
         public override bool CanRead => false;
-
         public override bool CanSeek => false;
-
         public override bool CanWrite => true;
-
         public override long Length => throw SeekingNotSupported();
 
         public override long Position
@@ -64,15 +63,25 @@ namespace EmbedIO.Internal
 
         public override int ReadByte() => throw ReadingNotSupported();
 
-        public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
-            => throw ReadingNotSupported();
+        public override IAsyncResult BeginRead(
+            byte[] buffer,
+            int offset,
+            int count,
+            AsyncCallback? callback,
+            object? state
+        ) => throw ReadingNotSupported();
 
         public override int EndRead(IAsyncResult asyncResult) => throw ReadingNotSupported();
 
-        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => throw ReadingNotSupported();
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken
+        ) => throw ReadingNotSupported();
 
-        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
-            => throw ReadingNotSupported();
+        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) =>
+            throw ReadingNotSupported();
 
         public override long Seek(long offset, SeekOrigin origin) => throw SeekingNotSupported();
 
@@ -90,8 +99,14 @@ namespace EmbedIO.Internal
             UncompressedLength++;
         }
 
-        public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
-            => _target.BeginWrite(
+        public override IAsyncResult BeginWrite(
+            byte[] buffer,
+            int offset,
+            int count,
+            AsyncCallback? callback,
+            object? state
+        ) =>
+            _target.BeginWrite(
                 buffer,
                 offset,
                 count,
@@ -100,16 +115,16 @@ namespace EmbedIO.Internal
                     UncompressedLength += count;
                     callback?.Invoke(ar);
                 },
-                state);
+                state
+            );
 
-        public override void EndWrite(IAsyncResult asyncResult)
-        {
-            _target.EndWrite(asyncResult);
-        }
+        public override void EndWrite(IAsyncResult asyncResult) => _target.EndWrite(asyncResult);
 
         public override async Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
-            await _target.WriteAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
+            await _target
+                .WriteAsync(buffer, offset, count, cancellationToken)
+                .ConfigureAwait(false);
             UncompressedLength += count;
         }
 
@@ -123,8 +138,10 @@ namespace EmbedIO.Internal
             base.Dispose(disposing);
         }
 
-        private static Exception ReadingNotSupported() => new NotSupportedException("This stream does not support reading.");
+        private static NotSupportedException ReadingNotSupported() =>
+            new("This stream does not support reading.");
 
-        private static Exception SeekingNotSupported() => new NotSupportedException("This stream does not support seeking.");
+        private static NotSupportedException SeekingNotSupported() =>
+            new("This stream does not support seeking.");
     }
 }

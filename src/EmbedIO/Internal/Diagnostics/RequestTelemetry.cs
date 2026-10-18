@@ -13,14 +13,16 @@
     {
         internal string? Route { get; set; }
 
-        internal static RequestTelemetry? Of(IHttpContext context)
-            => context is ITelemetryContext owner ? owner.Telemetry : null;
+        internal static RequestTelemetry? Of(IHttpContext context) =>
+            context is ITelemetryContext owner ? owner.Telemetry : null;
 
         // Joins a base route ("/api/") and a route relative to it ("/items/{id}").
         internal static string Combine(string? prefix, string route)
         {
             if (prefix == null || prefix.Length == 0 || prefix == "/") return route;
+
             if (route == "/") return prefix;
+
             return prefix[prefix.Length - 1] == '/' ? prefix.Substring(0, prefix.Length - 1) + route : prefix + route;
         }
     }

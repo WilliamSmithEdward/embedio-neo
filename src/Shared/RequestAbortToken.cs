@@ -18,7 +18,7 @@ namespace EmbedIO.Internal
         private bool _completed;
         private bool _callbacksDone;
         private bool _disposed;
-        internal RequestAbortToken(CancellationToken parent, Action<Exception> report)
+        internal RequestAbortToken(Action<Exception> report, CancellationToken parent)
         {
             _report = report;
             Token = _source.Token;

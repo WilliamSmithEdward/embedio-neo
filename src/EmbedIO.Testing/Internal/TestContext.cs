@@ -45,8 +45,8 @@ namespace EmbedIO.Testing.Internal
             {
                 if (_requestAbort != null) return _requestAbort.Token;
                 if (_closed) throw new InvalidOperationException("The HTTP context has already closed.");
-                _requestAbort = new RequestAbortToken(CancellationToken, static error =>
-                    Log.Source.TraceEvent(System.Diagnostics.TraceEventType.Error, 0, "HTTP context: request-abort callback failed: {0}", error));
+                _requestAbort = new RequestAbortToken(static error =>
+                    Log.Source.TraceEvent(System.Diagnostics.TraceEventType.Error, 0, "HTTP context: request-abort callback failed: {0}", error), CancellationToken);
                 return _requestAbort.Token;
             }
         }
