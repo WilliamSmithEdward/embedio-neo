@@ -16,7 +16,7 @@ namespace EmbedIO.PlatformTests
         internal static State Configure(WebServer server)
         {
             var state = new State(); var module = new WebApiModule("/idempotency", ResponseSerializer.None(false));
-            module.ConfigureIdempotency(new Idempotency.Idempotency(), new Dictionary<string, IdempotencyPolicy>
+            module.ConfigureIdempotency(new IdempotencyCoordinator(), new Dictionary<string, IdempotencyPolicy>
             { ["writes"] = new IdempotencyPolicy("smoke", _ => "single-loopback-fixture", TimeSpan.FromMinutes(1)) });
 #if NETFRAMEWORK
             module.RegisterController(() => new IdempotentSmokeController(state));

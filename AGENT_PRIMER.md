@@ -49,7 +49,7 @@ key dimensions, limits, fuzzing and real-loopback latency measurement.
 
 ### Write idempotency (under development; not NuGet 2.10.0)
 
-`EmbedIO.Idempotency.Idempotency` and immutable `IdempotencyPolicy` protect
+`EmbedIO.Idempotency.IdempotencyCoordinator` and immutable `IdempotencyPolicy` protect
 explicit finite write routes through `Protect`, `ExecuteAsync`, or named
 `[Idempotency("policy")]` / `ConfigureIdempotency` controller declarations.
 Method attributes override classes; null disables inheritance. Both reflection

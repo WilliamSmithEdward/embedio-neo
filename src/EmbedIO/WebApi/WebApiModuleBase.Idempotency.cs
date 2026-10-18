@@ -8,12 +8,12 @@ namespace EmbedIO.WebApi
 {
     public abstract partial class WebApiModuleBase
     {
-        private Idempotency.Idempotency? _idempotency;
+        private IdempotencyCoordinator? _idempotency;
         private Dictionary<string, IdempotencyPolicy>? _idempotencyPolicies;
         /// <summary>Configures finite write idempotency before controller registration. Security guards execute before replay.</summary>
         /// <param name="coordinator">Shared coordinator/store.</param>
         /// <param name="policies">Named immutable policies, copied during configuration.</param>
-        public void ConfigureIdempotency(Idempotency.Idempotency coordinator, IDictionary<string, IdempotencyPolicy> policies)
+        public void ConfigureIdempotency(IdempotencyCoordinator coordinator, IDictionary<string, IdempotencyPolicy> policies)
         {
             EnsureConfigurationNotLocked();
             if (ControllerCount != 0) throw new InvalidOperationException("Configure idempotency before registering controllers.");
@@ -30,7 +30,7 @@ namespace EmbedIO.WebApi
         private IdempotencyPolicy? ResolveIdempotency(string? policy, HttpVerbs verb, Type? resultType, string? outputCache)
         {
             if (policy == null) return null;
-            if (!Idempotency.Idempotency.WriteVerb(verb) || resultType != null && IsStreamingResultType(resultType) || outputCache != null)
+            if (!IdempotencyCoordinator.WriteVerb(verb) || resultType != null && IsStreamingResultType(resultType) || outputCache != null)
                 throw new InvalidOperationException("Idempotency requires finite write routes without output caching.");
             if (_idempotency == null || _idempotencyPolicies == null || !_idempotencyPolicies.TryGetValue(policy, out var selected))
                 throw new InvalidOperationException("Unknown or unconfigured idempotency policy: " + policy);

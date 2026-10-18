@@ -11,7 +11,7 @@ using EmbedIO.Routing;
 namespace EmbedIO.Idempotency
 {
     /// <summary>Coordinates explicitly opted-in finite writes and records results before delivery.</summary>
-    public sealed class Idempotency
+    public sealed class IdempotencyCoordinator
     {
         private readonly IIdempotencyStore _store;
         private readonly int _maxConcurrentRequests;
@@ -19,7 +19,7 @@ namespace EmbedIO.Idempotency
         /// <summary>Creates a coordinator. Share its store across every owner serving the same key space.</summary>
         /// <param name="store">Atomic persistence, or a bounded process-local store by default.</param>
         /// <param name="maxConcurrentRequests">Maximum simultaneous participants, including bounded-body readers and waiters.</param>
-        public Idempotency(IIdempotencyStore? store = null, int maxConcurrentRequests = 32)
+        public IdempotencyCoordinator(IIdempotencyStore? store = null, int maxConcurrentRequests = 32)
         {
             if (maxConcurrentRequests < 1) throw new ArgumentOutOfRangeException(nameof(maxConcurrentRequests));
             _store = store ?? new MemoryIdempotencyStore(); _maxConcurrentRequests = maxConcurrentRequests;

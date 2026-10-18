@@ -42,7 +42,7 @@ namespace EmbedIO.Idempotency
                 throw new InvalidOperationException("Staged response length does not match its declared length.");
             if (Response.ContentType?.StartsWith("text/event-stream", StringComparison.OrdinalIgnoreCase) == true)
                 throw new InvalidOperationException("Streaming responses cannot be recorded.");
-            if (!Idempotency.VaryCovered(Response, policy)) throw new InvalidOperationException("Response Vary requires undeclared request headers.");
+            if (!IdempotencyCoordinator.VaryCovered(Response, policy)) throw new InvalidOperationException("Response Vary requires undeclared request headers.");
             var headers = new List<KeyValuePair<string, string>>();
             foreach (var name in _response.Headers.AllKeys)
             {

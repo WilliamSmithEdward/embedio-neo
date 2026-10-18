@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using EmbedIO.Health;
 using EmbedIO.Idempotency;
 using NUnit.Framework;
-using Coordinator = EmbedIO.Idempotency.Idempotency;
+using Coordinator = EmbedIO.Idempotency.IdempotencyCoordinator;
 
 namespace EmbedIO.Tests
 {

@@ -4,7 +4,8 @@
 
 ### Added
 
-- Opt-in idempotency for finite write endpoints, with trusted caller scoping,
+- Opt-in idempotency for finite write endpoints through `IdempotencyCoordinator`,
+  with trusted caller scoping,
   payload/representation fingerprints, shared-store duplicate coordination,
   bounded fail-closed in-memory claims and an optional atomic durable-store
   contract. Reflection/generated controller attributes and fluent handlers record

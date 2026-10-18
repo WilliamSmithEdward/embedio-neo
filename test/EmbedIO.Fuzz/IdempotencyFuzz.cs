@@ -13,7 +13,7 @@ using EmbedIO;
 using EmbedIO.Actions;
 using EmbedIO.Idempotency;
 using EmbedIO.Testing;
-using Coordinator = EmbedIO.Idempotency.Idempotency;
+using Coordinator = EmbedIO.Idempotency.IdempotencyCoordinator;
 
 // Three hosts coordinate through one atomic store. The oracle is an independent business ledger,
 // never a reflection of store internals; externally visible effects are counted separately.

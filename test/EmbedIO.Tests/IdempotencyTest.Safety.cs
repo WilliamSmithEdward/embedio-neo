@@ -11,7 +11,7 @@ using EmbedIO.Routing;
 using EmbedIO.Testing;
 using EmbedIO.WebApi;
 using NUnit.Framework;
-using Coordinator = EmbedIO.Idempotency.Idempotency;
+using Coordinator = EmbedIO.Idempotency.IdempotencyCoordinator;
 
 namespace EmbedIO.Tests
 {

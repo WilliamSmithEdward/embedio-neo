@@ -31,7 +31,7 @@ using EmbedIO;
 using EmbedIO.Idempotency;
 using EmbedIO.WebApi;
 
-var idempotency = new EmbedIO.Idempotency.Idempotency();
+var idempotency = new IdempotencyCoordinator();
 var api = new WebApiModule("/api");
 api.ConfigureIdempotency(idempotency, new Dictionary<string, IdempotencyPolicy>
 {
