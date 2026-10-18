@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -9,6 +10,7 @@ using System.Text.Json.Schema;
 using System.Text.Json.Serialization.Metadata;
 using EmbedIO.Authentication;
 using EmbedIO.Authorization;
+using EmbedIO.Problems;
 using EmbedIO.Routing;
 using EmbedIO.Utilities;
 using EmbedIO.WebApi;
@@ -839,6 +841,20 @@ namespace EmbedIO.OpenApi
 
                 if (type == null)
                     return media;
+
+                if (
+                    typeof(ErrorHttpResult).IsAssignableFrom(type)
+                    && MediaTypeHeaderValue.TryParse(contentType, out var problemMedia)
+                    && string.Equals(
+                        problemMedia.MediaType,
+                        ProblemDetailsHandler.MediaType,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                {
+                    media["schema"] = HttpResultMetadata.ProblemSchema(type);
+                    return media;
+                }
 
                 if (IsJson(contentType))
                 {

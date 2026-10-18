@@ -514,7 +514,7 @@ namespace EmbedIO.Tests
     [GeneratedControllerBinding(typeof(ResultController))]
     internal static partial class ResultBindings { }
 
-    public sealed class ResultController : WebApiController, IDisposable
+    public sealed partial class ResultController : WebApiController, IDisposable
     {
         public int Disposed;
 

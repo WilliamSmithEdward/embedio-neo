@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Typed errors and validation
+      href: guides/typed-error-results.md
     - name: Typed HTTP results
       href: guides/typed-results.md
     - name: Response security headers (unreleased)

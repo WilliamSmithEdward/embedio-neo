@@ -1,6 +1,6 @@
 # Typed HTTP results (unreleased)
 
-These APIs are on the feature branch and are **not in NuGet 2.13.0**. They require
+The initial APIs are merged on main but are **not in NuGet 2.13.0**. They require
 no new core dependency. Existing object/string/Task controller returns keep their
 serializer and disposal behavior. Only a declared `HttpResult` type (including
 its subclasses and supported Task/ValueTask wrappers) opts into this execution path.
@@ -194,3 +194,6 @@ results. Use TestWebServer for execution tests and real listeners for transport
 framing. The typed-results state-machine campaign exercises three gated clients,
 cache admission, actor/body isolation, empty/error statuses, named URLs, nonce
 binding and rejected path boundaries; its self-test injects a wrong actor payload.
+
+See [typed errors and validation](typed-error-results.md) for fixed-status problem
+results, bounded field errors, DataAnnotations conversion and error inspection.

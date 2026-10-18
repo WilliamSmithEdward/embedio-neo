@@ -3,11 +3,11 @@ using System.Linq;
 
 namespace EmbedIO
 {
-    internal static class HttpResultMetadata
+    internal static partial class HttpResultMetadata
     {
         internal static bool HasDynamicStatus(Type type)
         {
-            if (type == typeof(NoContentResult)) return false;
+            if (type == typeof(NoContentResult) || FixedProblemStatus(type) != 0) return false;
 
             if (!type.IsGenericType) return true;
 

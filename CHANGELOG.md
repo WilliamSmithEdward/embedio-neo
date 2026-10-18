@@ -4,6 +4,10 @@
 
 ### Added
 
+- Typed fixed-status Problem Details and bounded validation results, DataAnnotations
+  conversion, reflection-free generated OpenAPI schemas and error inspection helpers.
+  See [typed errors and validation](docs/guides/typed-error-results.md).
+
 - Opt-in typed HTTP controller results with synchronous/Task/ValueTask execution,
   two/three typed alternatives and generated OpenAPI responses. Includes named
   root-relative CreatedAt URLs, Problem Details, text/redirect/file/stream helpers,

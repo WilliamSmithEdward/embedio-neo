@@ -35,16 +35,35 @@ namespace EmbedIO.Generators
                     .Select(a => System.Convert.ToInt32(a.ConstructorArguments[0].Value, CultureInfo.InvariantCulture))
             );
 
-            foreach (var (Status, Type) in ResultResponses(HttpResultReturnType(method.ReturnType)))
-                if (declared.Add(Status))
-                    yield return "new global::EmbedIO.OpenApi.OpenApiResponseAttribute("
-                        + Status.ToString(CultureInfo.InvariantCulture)
-                        + ") { Type = "
-                        + (Type == null ? "null" : TypeOf(Type))
-                        + " }";
+            foreach (var responses in ResultResponses(HttpResultReturnType(method.ReturnType)).GroupBy(
+                response => response.Status
+            ))
+            {
+                if (!declared.Add(responses.Key)) continue;
+
+                var selected = responses.First();
+
+                // A general problem permits validation extensions too. Do not narrow a shared status
+                // to a validation-only body when another alternative can send a general problem.
+                foreach (var candidate in responses)
+                    if (candidate.Problem && (!selected.Problem || selected.Type?.Name == "ValidationProblemResult"))
+                        selected = candidate;
+
+                yield return "new global::EmbedIO.OpenApi.OpenApiResponseAttribute("
+                    + selected.Status.ToString(CultureInfo.InvariantCulture)
+                    + ") { Type = "
+                    + (selected.Type == null ? "null" : TypeOf(selected.Type))
+                    + (selected.Problem ? ", ContentType = \"application/problem+json\"" : string.Empty)
+                    + " }";
+            }
         }
 
-        private static IEnumerable<(int Status, ITypeSymbol? Type)> ResultResponses(ITypeSymbol? type)
+        private static bool IsProblemResult(ITypeSymbol? type) =>
+            type is INamedTypeSymbol named
+                && named.ContainingNamespace.ToDisplayString() == "EmbedIO"
+                && named.Name is "BadRequestProblemResult" or "NotFoundProblemResult" or "ConflictProblemResult" or "ValidationProblemResult";
+
+        private static IEnumerable<(int Status, ITypeSymbol? Type, bool Problem)> ResultResponses(ITypeSymbol? type)
         {
             if (type is not INamedTypeSymbol named || named.ContainingNamespace.ToDisplayString() != "EmbedIO")
                 yield break;
@@ -65,6 +84,10 @@ namespace EmbedIO.Generators
                 "AcceptedResult" => 202,
                 "NotFoundResult" => 404,
                 "BadRequestResult" => 400,
+                "BadRequestProblemResult" => 400,
+                "ValidationProblemResult" => 400,
+                "NotFoundProblemResult" => 404,
+                "ConflictProblemResult" => 409,
                 "ConflictResult" => 409,
                 "NoContentResult" => 204,
                 _ => 0
@@ -73,7 +96,10 @@ namespace EmbedIO.Generators
             if (status != 0)
                 yield return (
                     status,
-                    named.TypeArguments.Length == 1 && status is >= 200 and < 300 ? named.TypeArguments[0] : null
+                    IsProblemResult(named)
+                        ? named
+                        : named.TypeArguments.Length == 1 && status is >= 200 and < 300 ? named.TypeArguments[0] : null,
+                    IsProblemResult(named)
                 );
         }
     }

@@ -235,19 +235,19 @@ namespace EmbedIO
     /// <summary>An explicit RFC 9457 error response, copied at construction and again per execution.</summary>
     public sealed class ProblemHttpResult : HttpResult
     {
-        private readonly ProblemDetails _problem;
+        private readonly ProblemResultBody _body;
 
         internal ProblemHttpResult(ProblemDetails problem)
             : base(
                 (problem ?? throw new ArgumentNullException(nameof(problem))).Status,
                 ProblemDetailsHandler.MediaType
-            ) => _problem = problem.Copy();
+            ) => _body = new(problem);
 
         /// <summary>Gets a copy of the problem so callers cannot change future executions.</summary>
-        public ProblemDetails Problem => _problem.Copy();
+        public ProblemDetails Problem => _body.Problem;
 
         internal override Task WriteAsync(IHttpContext context, ResponseSerializerCallback serializer) =>
-            context.SendProblemAsync(_problem);
+            _body.WriteAsync(context);
     }
 
     /// <summary>A redirect with an explicit validated Location.</summary>

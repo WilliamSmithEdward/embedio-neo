@@ -170,7 +170,7 @@ jobs:
         shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7404'
+          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7451'
           # Owner-approved macOS coverage allowance; case deadlines and discovery stay enforced.
           EMBEDIO_REGRESSION_TIMEOUT: "${{ (matrix.os == 'macos-15' || (matrix.os == 'ubuntu-24.04' && github.event_name == 'push')) && '12m' || '8m' }}"
         run: |
@@ -234,12 +234,13 @@ jobs:
           set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/openapi-venv"
           "$RUNNER_TEMP/openapi-venv/bin/python" -m pip --isolated install --require-hashes --only-binary=:all: -r .github/requirements/openapi.txt
-          # Issue139_OpenApi and Issue139_OpenApiSecurity write these during the test run above.
+          # OpenAPI and typed-result regressions write these during the full test run above.
           "$RUNNER_TEMP/openapi-venv/bin/openapi-spec-validator" \
             test/EmbedIO.Tests/bin/Release/net10.0/openapi/people.json \
             test/EmbedIO.Tests/bin/Release/net10.0/openapi/values.json \
             test/EmbedIO.Tests/bin/Release/net10.0/openapi/security.json \
-            test/EmbedIO.Tests/bin/Release/net10.0/openapi/declared.json
+            test/EmbedIO.Tests/bin/Release/net10.0/openapi/declared.json \
+            test/EmbedIO.Tests/bin/Release/net10.0/openapi/typed-errors.json
       - name: Verify independent QPACK codecs and feedback
         if: runner.os == 'Linux'
         shell: bash
