@@ -21,3 +21,4 @@ EMBEDIO013 | EmbedIO.WebApi | Error | DiagnosticDescriptors
 EMBEDIO014 | EmbedIO.WebApi | Error | Invalid before-handler hook
 EMBEDIO015 | EmbedIO.WebApi | Error | Unsupported request validation
 EMBEDIO016 | EmbedIO.WebApi | Error | Invalid browser protection mode
+EMBEDIO017 | EmbedIO.WebApi | Error | Invalid security-header policy name

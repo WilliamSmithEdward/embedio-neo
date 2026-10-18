@@ -28,6 +28,28 @@ Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.
 
+### Response security headers (unreleased)
+
+The feature branch adds opt-in `EmbedIO.Security.SecurityHeadersPolicy`,
+`SecurityHeadersModule` and `[SecurityHeaders("name")]`. These APIs are not in
+NuGet 2.12.0. Configure server `options.SecurityHeaders` or configure copied named
+controller profiles before registration. Method attributes override inherited class
+attributes and module defaults. A selected profile replaces all seven managed fields,
+including omissions; keep host-wide HSTS consistent across profiles. Static values are
+precomputed. Existing defaults/manual headers are unchanged until explicitly selected.
+
+Use exact CSP source `'nonce-{nonce}'` and `context.GetSecurityHeadersNonce()` for
+trusted, attribute-encoded script/style markup only. Each response has fresh 256-bit
+randomness. Nonce profiles force no-store, remove validators, bypass existing output
+cache entries and reject partial/304 representations and idempotent recording.
+Select policies before cache wrappers; selecting inside a skipped cached handler
+cannot affect a hit. External caches must honor no-store. HSTS requires explicit
+lifetime and actual TLS; forwarded text/simulated test URLs do not establish TLS.
+First-party listeners and TestWebServer prepare final headers automatically; external
+adapters must call `SecurityHeadersPolicy.PrepareResponse` immediately before copying
+headers to their transport. See [security headers](docs/guides/security-headers.md)
+and the [scoped adversarial audit](docs/project/security-headers-audit.md).
+
 ### Output caching (2.10.0+)
 
 `OutputCache` in `EmbedIO.Caching` is explicitly opt-in through a fluent wrapper

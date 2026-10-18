@@ -2,8 +2,8 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading.Tasks;
-using EmbedIO.Routing;
 using EmbedIO.Authorization;
+using EmbedIO.Routing;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.WebApi
@@ -18,8 +18,7 @@ namespace EmbedIO.WebApi
     /// so it works in trimmed and Native AOT applications.</para>
     /// </summary>
     /// <typeparam name="TController">The controller type.</typeparam>
-    public sealed class WebApiControllerBinding<TController>
-        where TController : WebApiController
+    public sealed class WebApiControllerBinding<TController> where TController : WebApiController
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="WebApiControllerBinding{TController}"/> class.
@@ -32,6 +31,7 @@ namespace EmbedIO.WebApi
         {
             routes = Validate.NotNull(nameof(routes), routes);
             var copy = new WebApiRouteBinding<TController>[routes.Length];
+
             for (var i = 0; i < routes.Length; i++)
                 copy[i] = routes[i] ?? throw new ArgumentNullException(nameof(routes), "A route binding is null.");
 
@@ -50,8 +50,7 @@ namespace EmbedIO.WebApi
     /// </summary>
     /// <typeparam name="TController">The controller type.</typeparam>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public sealed class WebApiRouteBinding<TController>
-        where TController : WebApiController
+    public sealed class WebApiRouteBinding<TController> where TController : WebApiController
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="WebApiRouteBinding{TController}"/> class.
@@ -69,10 +68,9 @@ namespace EmbedIO.WebApi
             string route,
             bool isBaseRoute,
             string handlerId,
-            Func<WebApiRouteInvoker<TController>> createInvoker)
-            : this(verb, route, isBaseRoute, handlerId, createInvoker, null)
-        {
-        }
+            Func<WebApiRouteInvoker<TController>> createInvoker
+        ) : this(verb, route, isBaseRoute, handlerId, createInvoker, null)
+        { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebApiRouteBinding{TController}"/> class,
@@ -93,10 +91,9 @@ namespace EmbedIO.WebApi
             bool isBaseRoute,
             string handlerId,
             Func<WebApiRouteInvoker<TController>> createInvoker,
-            WebApiOperation? operation)
-            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, operation?.Authorization)
-        {
-        }
+            WebApiOperation? operation
+        ) : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, operation?.Authorization)
+        { }
 
         /// <summary>Creates a generated route binding with immutable authorization metadata.</summary>
         /// <param name="verb">The HTTP verb.</param>
@@ -106,11 +103,16 @@ namespace EmbedIO.WebApi
         /// <param name="createInvoker">The invoker factory.</param>
         /// <param name="operation">Optional OpenAPI metadata.</param>
         /// <param name="authorization">Optional authorization metadata.</param>
-        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
-            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization)
-            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, true)
-        {
-        }
+        public WebApiRouteBinding(
+            HttpVerbs verb,
+            string route,
+            bool isBaseRoute,
+            string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker,
+            WebApiOperation? operation,
+            AuthorizationMetadata? authorization
+        ) : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, true)
+        { }
 
         /// <summary>Creates a route binding with explicit controller preprocessing ownership.</summary>
         /// <param name="verb">The HTTP verb.</param>
@@ -122,12 +124,28 @@ namespace EmbedIO.WebApi
         /// <param name="authorization">Optional authorization metadata.</param>
         /// <param name="useControllerPreprocessing">Whether the runtime calls the legacy controller hook.
         /// False means the generated invoker owns all preprocessing.</param>
-        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
-            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
-            bool useControllerPreprocessing)
-            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, useControllerPreprocessing, null)
-        {
-        }
+        public WebApiRouteBinding(
+            HttpVerbs verb,
+            string route,
+            bool isBaseRoute,
+            string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker,
+            WebApiOperation? operation,
+            AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing
+        )
+            : this(
+                verb,
+                route,
+                isBaseRoute,
+                handlerId,
+                createInvoker,
+                operation,
+                authorization,
+                useControllerPreprocessing,
+                null
+            )
+        { }
 
         /// <summary>Creates a route binding with explicit browser token policy metadata.</summary>
         /// <param name="verb">The HTTP verb.</param>
@@ -139,12 +157,30 @@ namespace EmbedIO.WebApi
         /// <param name="authorization">Optional authorization metadata.</param>
         /// <param name="useControllerPreprocessing">Whether the runtime invokes controller preprocessing.</param>
         /// <param name="browserProtection">Optional per-action token requirement; null uses the configured default.</param>
-        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
-            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
-            bool useControllerPreprocessing, Security.BrowserProtectionMode? browserProtection)
-            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, useControllerPreprocessing, browserProtection, null)
-        {
-        }
+        public WebApiRouteBinding(
+            HttpVerbs verb,
+            string route,
+            bool isBaseRoute,
+            string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker,
+            WebApiOperation? operation,
+            AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing,
+            Security.BrowserProtectionMode? browserProtection
+        )
+            : this(
+                verb,
+                route,
+                isBaseRoute,
+                handlerId,
+                createInvoker,
+                operation,
+                authorization,
+                useControllerPreprocessing,
+                browserProtection,
+                null
+            )
+        { }
 
         /// <summary>Creates a route binding with opt-in named output caching.</summary>
         /// <param name="verb">The HTTP verb.</param>
@@ -157,12 +193,32 @@ namespace EmbedIO.WebApi
         /// <param name="useControllerPreprocessing">Whether the runtime invokes controller preprocessing.</param>
         /// <param name="browserProtection">Optional browser policy.</param>
         /// <param name="outputCachePolicy">Optional named output cache policy.</param>
-        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
-            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
-            bool useControllerPreprocessing, Security.BrowserProtectionMode? browserProtection, string? outputCachePolicy)
-            : this(verb, route, isBaseRoute, handlerId, createInvoker, operation, authorization, useControllerPreprocessing, browserProtection, outputCachePolicy, null)
-        {
-        }
+        public WebApiRouteBinding(
+            HttpVerbs verb,
+            string route,
+            bool isBaseRoute,
+            string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker,
+            WebApiOperation? operation,
+            AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing,
+            Security.BrowserProtectionMode? browserProtection,
+            string? outputCachePolicy
+        )
+            : this(
+                verb,
+                route,
+                isBaseRoute,
+                handlerId,
+                createInvoker,
+                operation,
+                authorization,
+                useControllerPreprocessing,
+                browserProtection,
+                outputCachePolicy,
+                null
+            )
+        { }
 
         /// <summary>Creates a route with optional output-cache and finite write-idempotency declarations.</summary>
         /// <param name="verb">HTTP verb.</param>
@@ -176,18 +232,84 @@ namespace EmbedIO.WebApi
         /// <param name="browserProtection">Browser protection declaration.</param>
         /// <param name="outputCachePolicy">Output-cache policy.</param>
         /// <param name="idempotencyPolicy">Finite write-idempotency policy.</param>
-        public WebApiRouteBinding(HttpVerbs verb, string route, bool isBaseRoute, string handlerId,
-            Func<WebApiRouteInvoker<TController>> createInvoker, WebApiOperation? operation, AuthorizationMetadata? authorization,
-            bool useControllerPreprocessing, Security.BrowserProtectionMode? browserProtection, string? outputCachePolicy, string? idempotencyPolicy)
+        public WebApiRouteBinding(
+            HttpVerbs verb,
+            string route,
+            bool isBaseRoute,
+            string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker,
+            WebApiOperation? operation,
+            AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing,
+            Security.BrowserProtectionMode? browserProtection,
+            string? outputCachePolicy,
+            string? idempotencyPolicy
+        )
+            : this(
+                verb,
+                route,
+                isBaseRoute,
+                handlerId,
+                createInvoker,
+                operation,
+                authorization,
+                useControllerPreprocessing,
+                browserProtection,
+                outputCachePolicy,
+                idempotencyPolicy,
+                null
+            )
+        { }
+
+        /// <summary>Creates a route with an explicit named security-header policy, preserving all previous constructor signatures.</summary>
+        /// <param name="verb">HTTP verb.</param>
+        /// <param name="route">Route template.</param>
+        /// <param name="isBaseRoute">Whether this is a base route.</param>
+        /// <param name="handlerId">Method identity.</param>
+        /// <param name="createInvoker">Invoker factory.</param>
+        /// <param name="operation">Operation metadata.</param>
+        /// <param name="authorization">Authorization metadata.</param>
+        /// <param name="useControllerPreprocessing">Runtime preprocessing selection.</param>
+        /// <param name="browserProtection">Browser protection selection.</param>
+        /// <param name="outputCachePolicy">Output-cache selection.</param>
+        /// <param name="idempotencyPolicy">Idempotency selection.</param>
+        /// <param name="securityHeadersPolicy">Security-header selection; null inherits the module/server policy.</param>
+        public WebApiRouteBinding(
+            HttpVerbs verb,
+            string route,
+            bool isBaseRoute,
+            string handlerId,
+            Func<WebApiRouteInvoker<TController>> createInvoker,
+            WebApiOperation? operation,
+            AuthorizationMetadata? authorization,
+            bool useControllerPreprocessing,
+            Security.BrowserProtectionMode? browserProtection,
+            string? outputCachePolicy,
+            string? idempotencyPolicy,
+            string? securityHeadersPolicy
+        )
         {
+            if (securityHeadersPolicy != null) _ = new Security.SecurityHeadersAttribute(securityHeadersPolicy);
+
+            SecurityHeadersPolicy = securityHeadersPolicy;
             IdempotencyPolicy = idempotencyPolicy;
             OutputCachePolicy = outputCachePolicy;
-            if (browserProtection.HasValue && browserProtection != Security.BrowserProtectionMode.RequireToken
-                && browserProtection != Security.BrowserProtectionMode.IgnoreToken) throw new ArgumentOutOfRangeException(nameof(browserProtection));
+
+            if (
+                browserProtection.HasValue
+                && browserProtection != Security.BrowserProtectionMode.RequireToken
+                && browserProtection != Security.BrowserProtectionMode.IgnoreToken
+            ) throw new ArgumentOutOfRangeException(nameof(browserProtection));
+
             BrowserProtection = browserProtection;
             UseControllerPreprocessing = useControllerPreprocessing;
+
             if (operation != null && !ReferenceEquals(operation.Authorization, authorization))
-                throw new ArgumentException("Route and operation must share the same authorization metadata.", nameof(authorization));
+                throw new ArgumentException(
+                    "Route and operation must share the same authorization metadata.",
+                    nameof(authorization)
+                );
+
             Verb = verb;
             Route = Validate.NotNull(nameof(route), route);
             IsBaseRoute = isBaseRoute;
@@ -196,6 +318,9 @@ namespace EmbedIO.WebApi
             Operation = operation;
             Authorization = authorization;
         }
+
+        /// <summary>Gets the named security-header selection, or null to inherit.</summary>
+        public string? SecurityHeadersPolicy { get; }
 
         /// <summary>Gets the explicitly selected output-cache policy, or null.</summary>
         public string? OutputCachePolicy { get; }
@@ -247,6 +372,6 @@ namespace EmbedIO.WebApi
         TController controller,
         IHttpContext context,
         RouteMatch route,
-        ResponseSerializerCallback serializer)
-        where TController : WebApiController;
+        ResponseSerializerCallback serializer
+    ) where TController : WebApiController;
 }

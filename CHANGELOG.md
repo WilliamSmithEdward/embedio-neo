@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in immutable response security-header policies with server/module defaults,
+  inherited controller/action overrides, generated bindings and cache-safe 256-bit
+  CSP nonces. Explicit HSTS requires actual TLS. Includes adversarial integration
+  regressions, multi-client fuzzing and [deployment guidance](docs/guides/security-headers.md).
+  Existing defaults, APIs, targets and runtime dependencies are preserved.
+
 ## [2.12.0] - 2026-10-18
 
 ### Added
