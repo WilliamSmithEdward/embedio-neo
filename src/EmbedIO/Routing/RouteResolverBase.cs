@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using EmbedIO.Configuration;
 using EmbedIO.Internal;
 using EmbedIO.Utilities;
-using EmbedIO.Configuration;
 
 namespace EmbedIO.Routing
 {
@@ -14,27 +14,21 @@ namespace EmbedIO.Routing
     /// <typeparam name="TData">The type of the data used to select a suitable handler
     /// for the context.</typeparam>
     /// <seealso cref="ConfiguredObject" />
-    public abstract class RouteResolverBase<TData> : ConfiguredObject
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="RouteResolverBase{TData}"/> class.
+    /// </remarks>
+    /// <param name="matcher">The <see cref="RouteMatcher"/> to match URL paths against.</param>
+    /// <exception cref="ArgumentNullException">
+    /// <para><paramref name="matcher"/> is <see langword="null"/>.</para>
+    /// </exception>
+    public abstract class RouteResolverBase<TData>(RouteMatcher matcher) : ConfiguredObject
     {
-        private readonly List<(TData data, RouteHandlerCallback handler)> _dataHandlerPairs
-            = new List<(TData data, RouteHandlerCallback handler)>();
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RouteResolverBase{TData}"/> class.
-        /// </summary>
-        /// <param name="matcher">The <see cref="RouteMatcher"/> to match URL paths against.</param>
-        /// <exception cref="ArgumentNullException">
-        /// <para><paramref name="matcher"/> is <see langword="null"/>.</para>
-        /// </exception>
-        protected RouteResolverBase(RouteMatcher matcher)
-        {
-            Matcher = Validate.NotNull(nameof(matcher), matcher);
-        }
+        private readonly List<(TData data, RouteHandlerCallback handler)> _dataHandlerPairs = [];
 
         /// <summary>
         /// Gets the <see cref="RouteMatcher"/> used to match routes.
         /// </summary>
-        public RouteMatcher Matcher { get; }
+        public RouteMatcher Matcher { get; } = Validate.NotNull(nameof(matcher), matcher);
 
         /// <summary>
         /// Gets the route this resolver matches URL paths against.
@@ -90,10 +84,10 @@ namespace EmbedIO.Routing
 
             handler = Validate.NotNull(nameof(handler), handler);
             _dataHandlerPairs.Add((data, (ctx, route) =>
-            {
-                handler(ctx, route);
-                return Task.CompletedTask;
-            }
+                {
+                    handler(ctx, route);
+                    return Task.CompletedTask;
+                }
             ));
         }
 
@@ -118,9 +112,11 @@ namespace EmbedIO.Routing
         public async Task<RouteResolutionResult> ResolveAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             LockConfiguration();
 
             var match = Matcher.Match(context.RequestedPath);
+
             if (match == null)
                 return RouteResolutionResult.RouteNotMatched;
 
@@ -128,21 +124,25 @@ namespace EmbedIO.Routing
             var result = RouteResolutionResult.NoHandlerSelected;
             var telemetry = Internal.RequestTelemetry.Of(context);
             var moduleRoute = telemetry?.Route;
+
             foreach (var (data, handler) in _dataHandlerPairs)
             {
                 if (!MatchContextData(contextData, data))
                     continue;
 
-                if (telemetry != null) telemetry.Route = Internal.RequestTelemetry.Combine(moduleRoute, Route);
+                telemetry?.Route = Internal.RequestTelemetry.Combine(moduleRoute, Route);
+
                 try
                 {
                     await handler(context, match).ConfigureAwait(false);
                     return RouteResolutionResult.Success;
                 }
+
                 catch (RequestHandlerPassThroughException)
                 {
                     result = RouteResolutionResult.NoHandlerSuccessful;
-                    if (telemetry != null) telemetry.Route = moduleRoute;
+
+                    telemetry?.Route = moduleRoute;
                 }
             }
 

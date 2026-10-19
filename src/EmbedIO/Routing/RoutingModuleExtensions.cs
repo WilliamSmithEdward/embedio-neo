@@ -1,5 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System;
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EmbedIO.Routing
 {
@@ -22,6 +22,7 @@ namespace EmbedIO.Routing
         public static RoutingModule WithHandlersFrom(this RoutingModule @this, object target)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AddFrom(target);
             return @this;
         }

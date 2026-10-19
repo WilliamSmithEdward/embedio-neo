@@ -235,3 +235,7 @@ dotnet_diagnostic.CA1845.severity = none
 # Preserve the explicit validating constructor; span-based Concat is unavailable on .NET Standard 2.0.
 dotnet_diagnostic.IDE0290.severity = none
 dotnet_diagnostic.CA1845.severity = none
+
+[src/EmbedIO/Routing/RouteMatcher.cs]
+# Span-based string.Concat is unavailable on .NET Standard 2.0; retain the shared implementation.
+dotnet_diagnostic.CA1845.severity = none

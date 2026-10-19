@@ -30,6 +30,6 @@
         /// <summary>
         /// The route has been resolved.
         /// </summary>
-        Success,
+        Success
     }
 }
