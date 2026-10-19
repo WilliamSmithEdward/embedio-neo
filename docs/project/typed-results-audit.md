@@ -1,4 +1,4 @@
-# Typed HTTP results review (unreleased)
+# Typed HTTP results review (2.14.0)
 
 This opt-in surface adds explicit controller responses and named Location generation.
 It does not change the return handling of ordinary object/string/Task actions,
