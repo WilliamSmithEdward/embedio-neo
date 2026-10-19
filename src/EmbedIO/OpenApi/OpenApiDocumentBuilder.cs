@@ -135,10 +135,10 @@ namespace EmbedIO.OpenApi
                 name.Length == 0
                 || name.Any(
                     c =>
-                        !(c is >= 'a' and <= 'z' || c is >= 'A' and <= 'Z' || c is >= '0' and <= '9'
-                            || c == '.'
-                            || c == '-'
-                            || c == '_')
+                        !(c is >= 'a'
+                            and <= 'z' || c is >= 'A'
+                            and <= 'Z' || c is >= '0'
+                            and <= '9' || c == '.' || c == '-' || c == '_')
                 )
             )
                 throw new ArgumentException(
@@ -991,6 +991,77 @@ namespace EmbedIO.OpenApi
                 {
                     switch (parameter.Source)
                     {
+                        case WebApiParameterSource.QueryObjectField:
+                            canFailBinding = true;
+                            goto case WebApiParameterSource.Query;
+
+                        case WebApiParameterSource.Header:
+                        case WebApiParameterSource.Cookie:
+                            var location = parameter.Source == WebApiParameterSource.Header ? "header" : "cookie";
+
+                            if (parameter.Type.IsArray)
+                            {
+                                Problems.Add(
+                                    where
+                                        + ": repeated raw header/cookie fields have no faithful OpenAPI array serialization; ignore this operation or declare its wire contract explicitly."
+                                );
+                                break;
+                            }
+
+                            if (
+                                location == "header"
+                                && (string.Equals(parameter.FieldName, "Accept", StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(
+                                        parameter.FieldName,
+                                        "Content-Type",
+                                        StringComparison.OrdinalIgnoreCase
+                                    )
+                                    || string.Equals(
+                                        parameter.FieldName,
+                                        "Authorization",
+                                        StringComparison.OrdinalIgnoreCase
+                                    ))
+                            )
+                                Problems.Add(
+                                    where
+                                        + ": OpenAPI cannot describe this reserved header parameter; declare security or media types instead."
+                                );
+
+                            else if (
+                                parameters
+                                    .OfType<JsonObject>()
+                                    .Any(
+                                        p => p["in"]?.GetValue<string>() == location
+                                            && string.Equals(
+                                                p["name"]?.GetValue<string>(),
+                                                parameter.FieldName,
+                                                location == "header"
+                                                    ? StringComparison.OrdinalIgnoreCase
+                                                    : StringComparison.Ordinal
+                                            )
+                                    )
+                            )
+                                Problems.Add(where + ": duplicate request field parameter.");
+
+                            else
+                                parameters.Add(
+                                    (JsonNode)new JsonObject
+                                    {
+                                        ["name"] = parameter.FieldName,
+                                        ["in"] = location,
+                                        ["required"] = parameter.IsRequired,
+                                        ["schema"] = ValidatedSchema(
+                                            ValueSchema(parameter.Type, parameter.EnumNames),
+                                            parameter
+                                        ),
+                                        ["style"] = location == "header" ? "simple" : "form",
+                                        ["explode"] = true
+                                    }
+                                );
+
+                            canFailBinding = true;
+                            break;
+
                         case WebApiParameterSource.Query:
                             AddQueryParameter(
                                 parameters,
@@ -1029,6 +1100,10 @@ namespace EmbedIO.OpenApi
                                 where
                             );
                             break;
+
+                        case WebApiParameterSource.FormObjectField:
+                            canFailBinding = true;
+                            goto case WebApiParameterSource.Form;
 
                         case WebApiParameterSource.Form:
                             formProperties ??= [];
@@ -1340,6 +1415,15 @@ namespace EmbedIO.OpenApi
                         where
                     );
 
+                if (
+                    operation.Parameters.Any(p => p.Source == WebApiParameterSource.FormObjectField)
+                    && !responses.ContainsKey("415")
+                )
+                    responses["415"] = new JsonObject
+                    {
+                        ["description"] = "The request must use application/x-www-form-urlencoded."
+                    };
+
                 if (canFailBinding && !responses.ContainsKey("400"))
                     responses["400"] = new JsonObject
                     {
@@ -1524,7 +1608,12 @@ namespace EmbedIO.OpenApi
 
                 foreach (var character in name)
                     key.Append(
-                        character is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9') or '.' or '-' or '_'
+                        character is (>= 'a' and <= 'z')
+                            or (>= 'A' and <= 'Z')
+                            or (>= '0' and <= '9')
+                            or '.'
+                            or '-'
+                            or '_'
                             ? character
                             : '_'
                     );

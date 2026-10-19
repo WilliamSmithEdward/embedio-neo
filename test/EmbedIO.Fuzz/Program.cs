@@ -10,6 +10,8 @@ if (FsCheckProperties.Run(args)) return;
 
 if (await HttpResultsFuzz.SelfTestAsync(args)) return;
 
+if (await RequestBindingFuzz.SelfTestAsync(args)) return;
+
 if (await SecurityHeadersFuzz.SelfTestAsync(args)) return;
 
 if (await BrowserProtectionFuzz.SelfTestAsync(args)) return;
@@ -36,7 +38,7 @@ if (await StateMachineSelfTest.RunAsync(args)) return;
 
 if (await ResponsePipelineFuzz.SelfTestAsync(args)) return;
 
-if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateMachineTrace, CancellationToken, Task>>
+var stateMachines = new Dictionary<string, Func<StateMachineTrace, CancellationToken, Task>>
 {
     ["websocket-budget"] = SharedBudgetFuzz.RunAsync,
     ["rate-limits"] = SharedRateLimitFuzz.RunAsync,
@@ -65,6 +67,7 @@ if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateM
     ["security-headers"] = SecurityHeadersFuzz.RunAsync,
     ["typed-results"] = HttpResultsFuzz.RunAsync,
     ["request-validation"] = RequestValidationFuzz.RunAsync,
+    ["request-binding"] = RequestBindingFuzz.RunAsync,
     ["controller-parity"] = ControllerParityFuzz.RunAsync,
     ["permanent-bans"] = PermanentBanFuzz.RunAsync,
     ["response-http1"] = ResponsePipelineFuzz.Http1Async,
@@ -73,7 +76,9 @@ if (await StateMachineCampaign.RunAsync(args, new Dictionary<string, Func<StateM
     ["http1-connections"] = ConnectionIsolationFuzz.Http1Async,
     ["http2-connections"] = ConnectionIsolationFuzz.Http2Async,
     ["http3-connections"] = ConnectionIsolationFuzz.Http3Async
-})) return;
+};
+
+if (await StateMachineCampaign.RunAsync(args, stateMachines)) return;
 
 if (
     HpackInterop.Run(args)

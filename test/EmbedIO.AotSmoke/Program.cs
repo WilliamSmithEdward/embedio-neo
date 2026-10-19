@@ -35,7 +35,17 @@ namespace EmbedIO.AotSmoke
                 await RunAsync(checks, started, jitComparison);
             }
 
-            catch (Exception error) when (error is InvalidOperationException or HttpRequestException or IOException or TimeoutException or OperationCanceledException or JsonException or HttpListenerException or System.Net.WebSockets.WebSocketException or System.Security.Authentication.AuthenticationException)
+            catch (Exception error) when (
+                error is InvalidOperationException
+                    or HttpRequestException
+                    or IOException
+                    or TimeoutException
+                    or OperationCanceledException
+                    or JsonException
+                    or HttpListenerException
+                    or System.Net.WebSockets.WebSocketException
+                    or System.Security.Authentication.AuthenticationException
+            )
             {
                 failure = error.ToString();
             }
@@ -96,6 +106,7 @@ namespace EmbedIO.AotSmoke
                     .WithModule(SecurityHeaderChecks.CreateModule())
                     .WithModule(HttpResultChecks.CreateModule())
                     .WithModule(HttpErrorChecks.CreateModule())
+                    .WithModule(RequestBindingChecks.CreateModule())
                     .WithModule(BrowserChecks.CreateModule(browserProtection))
                     .WithModule(AuthorizationChecks.CreateBearer())
                     .WithModule(authorization)
@@ -164,6 +175,7 @@ namespace EmbedIO.AotSmoke
                 await SecurityHeaderChecks.RunAsync(client, url, checks);
                 await HttpResultChecks.RunAsync(client, url, checks);
                 await HttpErrorChecks.RunAsync(client, url, checks);
+                await RequestBindingChecks.RunAsync(client, url, checks);
                 await HealthChecks.RunAsync(client, url, checks, health);
                 await EmbedIO.PlatformTests.OutputCacheSmoke.RunAsync(url, outputCaching);
                 await EmbedIO.PlatformTests.IdempotencySmoke.RunAsync(url, idempotency);

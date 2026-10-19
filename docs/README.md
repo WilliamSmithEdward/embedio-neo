@@ -26,8 +26,9 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Browser request protection](guides/browser-request-protection.md): opt-in host/origin protection (2.7.0+) with allow-lists, session-bound anti-forgery tokens, controller exemptions and WebSocket origin checks.
 - [Bearer authentication and authorization](guides/bearer-authentication.md): asynchronous validation, controller roles and policies, optional JWT validation and identity-isolation campaigns.
 - [Multi-connection state-machine fuzzing](guides/multi-connection-fuzzing.md): deterministic actor traces, replay, invariant-preserving shrinking and bounded cleanup.
-- [Typed errors and validation](guides/typed-error-results.md): unreleased fixed-status problems, bounded validation maps, DataAnnotations conversion and reflection-free OpenAPI.
-- [Typed HTTP results](guides/typed-results.md): unreleased typed controller responses, named Locations, files/streams, OpenAPI alternatives and test inspection.
+- [Typed request binding](guides/typed-request-binding.md): 2.15.0+ flat query/form DTOs, bounded strict decoding, explicit header/cookie/route fields and custom IDs.
+- [Typed errors and validation](guides/typed-error-results.md): 2.14.0+ fixed-status problems, bounded validation maps, DataAnnotations conversion and reflection-free OpenAPI.
+- [Typed HTTP results](guides/typed-results.md): 2.14.0+ typed controller responses, named Locations, files/streams, OpenAPI alternatives and test inspection.
 - [Response security headers](guides/security-headers.md): 2.13.0+ opt-in profiles, controller overrides, CSP nonces, TLS-only HSTS and cache/adapter contracts.
 - [Resumable uploads using tus](guides/resumable-uploads.md): 2.12.0+; authenticated bounded disk sessions, checksums, fixed expiry and restart recovery.
 - [Streaming multipart uploads](guides/streaming-multipart.md): bounded streaming, controller binding, complete-request validation and staged file cleanup.
