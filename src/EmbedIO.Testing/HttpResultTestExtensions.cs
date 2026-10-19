@@ -3,7 +3,7 @@
 namespace EmbedIO.Testing
 {
     /// <summary>Inspects explicit controller results without executing an HTTP response or requiring a test framework.</summary>
-    public static class HttpResultTestExtensions
+    public static partial class HttpResultTestExtensions
     {
         /// <summary>Gets the selected typed payload, throwing when the selected result is empty or has another payload type.</summary>
         public static T? GetPayload<T>(this HttpResult result)

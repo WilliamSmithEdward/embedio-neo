@@ -184,3 +184,7 @@ The `typed-results` scenario uses three gated clients and independently checks
 status/body/actor identity, named Locations, finite cache hits, file bypass, nonce
 binding and rejected path boundaries. Run `--typed-results-selftest` to confirm
 that a deliberately wrong actor payload is rejected.
+
+Typed-result campaigns also cover fixed-status problems, copied dictionary and
+DataAnnotations fields, escaped Unicode messages and validation input limits. A
+second negative oracle must reject a deliberately incorrect validation field.

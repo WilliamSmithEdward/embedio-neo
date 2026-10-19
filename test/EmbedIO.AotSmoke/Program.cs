@@ -95,6 +95,7 @@ namespace EmbedIO.AotSmoke
                     .WithSessionManager(new EmbedIO.Sessions.LocalSessionManager())
                     .WithModule(SecurityHeaderChecks.CreateModule())
                     .WithModule(HttpResultChecks.CreateModule())
+                    .WithModule(HttpErrorChecks.CreateModule())
                     .WithModule(BrowserChecks.CreateModule(browserProtection))
                     .WithModule(AuthorizationChecks.CreateBearer())
                     .WithModule(authorization)
@@ -162,6 +163,7 @@ namespace EmbedIO.AotSmoke
                 await BrowserChecks.RunAsync(client, url, checks);
                 await SecurityHeaderChecks.RunAsync(client, url, checks);
                 await HttpResultChecks.RunAsync(client, url, checks);
+                await HttpErrorChecks.RunAsync(client, url, checks);
                 await HealthChecks.RunAsync(client, url, checks, health);
                 await EmbedIO.PlatformTests.OutputCacheSmoke.RunAsync(url, outputCaching);
                 await EmbedIO.PlatformTests.IdempotencySmoke.RunAsync(url, idempotency);
