@@ -59,7 +59,7 @@ public sealed class SearchInput
 }
 public readonly record struct BookId(int Value)
 {
-    public static bool TryParse(string text, IFormatProvider provider, out BookId result)
+    public static bool TryParse(string? text, IFormatProvider? provider, out BookId result)
     {
         result = default;
         if (text is null || !text.StartsWith("book-", StringComparison.Ordinal)
@@ -115,7 +115,8 @@ may identify the offending source name. Invalid values are not echoed in binding
 BCL string conversions use invariant culture and cached converters. Custom types
 may expose a public static `bool TryParse(string, IFormatProvider, out T)` or
 `bool TryParse(string, out T)` when no supported string converter exists. The
-provider overload receives invariant culture and takes precedence. Return false
+provider overload receives invariant culture and takes precedence. Nullable
+reference annotations on string/provider parameters are supported. Return false
 for invalid input; successful reference-type parsers must return a non-null value.
 Format, overflow and argument exceptions become safe binding errors; other parser
 or property-setter exceptions remain application failures. Parsers and setters

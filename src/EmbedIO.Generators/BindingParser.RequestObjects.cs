@@ -428,7 +428,11 @@ namespace EmbedIO.Generators
 
                     if (
                         (args.Length == 2
-                            || args.Length == 3 && args[1].Type.ToDisplayString() == "System.IFormatProvider")
+                            || args.Length == 3
+                                && SymbolEqualityComparer.Default.Equals(
+                                    args[1].Type,
+                                    _compilation.GetTypeByMetadataName("System.IFormatProvider")
+                                ))
                         && args[0].Type.SpecialType == SpecialType.System_String
                         && args[args.Length - 1].RefKind == RefKind.Out
                         && SymbolEqualityComparer.Default.Equals(args[args.Length - 1].Type, type)

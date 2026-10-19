@@ -122,12 +122,13 @@ namespace EmbedIO.AotSmoke
 
     internal readonly record struct RequestSmokeId(int Value)
     {
-        public static bool TryParse(string value, IFormatProvider provider, out RequestSmokeId result)
+        public static bool TryParse(string? value, IFormatProvider? provider, out RequestSmokeId result)
         {
             result = default;
 
             if (
-                !value.StartsWith("book-", StringComparison.Ordinal)
+                value == null
+                || !value.StartsWith("book-", StringComparison.Ordinal)
                 || !int.TryParse(value.AsSpan(5), NumberStyles.None, provider, out var parsed)
             ) return false;
 

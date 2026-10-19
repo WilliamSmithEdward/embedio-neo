@@ -276,7 +276,7 @@ namespace EmbedIO.Tests
 
     public readonly record struct BindingBookId(int Value)
     {
-        public static bool TryParse(string text, IFormatProvider provider, out BindingBookId result)
+        public static bool TryParse(string? text, IFormatProvider? provider, out BindingBookId result)
         {
             result = default;
 

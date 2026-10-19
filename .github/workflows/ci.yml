@@ -170,7 +170,7 @@ jobs:
         shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7529'
+          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7530'
           # Owner-approved macOS coverage allowance; case deadlines and discovery stay enforced.
           EMBEDIO_REGRESSION_TIMEOUT: "${{ (matrix.os == 'macos-15' || (matrix.os == 'ubuntu-24.04' && github.event_name == 'push')) && '12m' || '8m' }}"
         run: |

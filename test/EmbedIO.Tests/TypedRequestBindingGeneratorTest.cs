@@ -51,6 +51,23 @@ namespace EmbedIO.Tests
             );
         }
 
+        [Test]
+        public void NullableProviderTryParseSignaturesCompile()
+        {
+            var result = Generate(
+                "[HeaderField] M value",
+                "\n#nullable enable\npublic readonly struct M {public static bool TryParse(string? value, IFormatProvider? provider, out M result){result=default;return true;}}"
+            );
+            using var assertions = Assert.EnterMultipleScope();
+            Assert.That(result.Diagnostics, Is.Empty);
+            Assert.That(
+                result.Output
+                    .GetDiagnostics()
+                    .Where(d => d.Severity == DiagnosticSeverity.Error),
+                Is.Empty
+            );
+        }
+
         private static (
             System.Collections.Immutable.ImmutableArray<Diagnostic> Diagnostics,
             Compilation Output

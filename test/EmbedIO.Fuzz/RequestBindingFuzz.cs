@@ -372,12 +372,13 @@ internal sealed class BindingFuzzRequired
 
 internal readonly record struct BindingFuzzId(int Value)
 {
-    public static bool TryParse(string value, IFormatProvider provider, out BindingFuzzId result)
+    public static bool TryParse(string? value, IFormatProvider? provider, out BindingFuzzId result)
     {
         result = default;
 
         if (
-            !value.StartsWith("book-", StringComparison.Ordinal)
+            value == null
+            || !value.StartsWith("book-", StringComparison.Ordinal)
             || !int.TryParse(value.AsSpan(5), NumberStyles.None, provider, out var parsed)
         ) return false;
 
