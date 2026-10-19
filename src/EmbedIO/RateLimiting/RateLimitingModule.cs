@@ -18,24 +18,18 @@ namespace EmbedIO.RateLimiting
     /// how long to wait, a <c>Retry-After</c> header.</para>
     /// <para>The module does not own the limiter: dispose it after the server stops.</para>
     /// </summary>
-    public sealed class RateLimitingModule : WebModuleBase
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="RateLimitingModule"/> class.
+    /// </remarks>
+    /// <param name="baseRoute">The base route of the requests to limit.</param>
+    /// <param name="limiter">The limiter, for example from <see cref="PartitionedRateLimiter.Create{TResource, TPartitionKey}"/>
+    /// with a key from <see cref="ClientKey(IHttpContext)"/> or an authenticated identity.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="baseRoute"/> or <paramref name="limiter"/> is <see langword="null"/>.</exception>
+    public sealed class RateLimitingModule(string baseRoute, PartitionedRateLimiter<IHttpContext> limiter) : WebModuleBase(baseRoute)
     {
-        private readonly PartitionedRateLimiter<IHttpContext> _limiter;
+        private readonly PartitionedRateLimiter<IHttpContext> _limiter = Validate.NotNull(nameof(limiter), limiter);
         private int _rejectionStatusCode = 429;
         private Func<IHttpContext, RateLimitLease, Task>? _onRejected;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RateLimitingModule"/> class.
-        /// </summary>
-        /// <param name="baseRoute">The base route of the requests to limit.</param>
-        /// <param name="limiter">The limiter, for example from <see cref="PartitionedRateLimiter.Create{TResource, TPartitionKey}"/>
-        /// with a key from <see cref="ClientKey(IHttpContext)"/> or an authenticated identity.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="baseRoute"/> or <paramref name="limiter"/> is <see langword="null"/>.</exception>
-        public RateLimitingModule(string baseRoute, PartitionedRateLimiter<IHttpContext> limiter)
-            : base(baseRoute)
-        {
-            _limiter = Validate.NotNull(nameof(limiter), limiter);
-        }
 
         /// <inheritdoc />
         public override bool IsFinalHandler => false;
@@ -51,8 +45,13 @@ namespace EmbedIO.RateLimiting
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < 400 || value > 599)
-                    throw new ArgumentOutOfRangeException(nameof(value), value, "A rejection is a client or server error status, 400 to 599.");
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value),
+                        value,
+                        "A rejection is a client or server error status, 400 to 599."
+                    );
 
                 _rejectionStatusCode = value;
             }
@@ -86,8 +85,8 @@ namespace EmbedIO.RateLimiting
         /// <param name="context">The request's context.</param>
         /// <returns>The key.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
-        public static string ClientKey(IHttpContext context)
-            => ClientKey(Validate.NotNull(nameof(context), context).RemoteEndPoint.Address);
+        public static string ClientKey(IHttpContext context) =>
+            ClientKey(Validate.NotNull(nameof(context), context).RemoteEndPoint.Address);
 
         /// <summary>
         /// A partition key for a client address obtained some other way, such as from trusted
@@ -99,6 +98,7 @@ namespace EmbedIO.RateLimiting
         public static string ClientKey(IPAddress address)
         {
             address = Validate.NotNull(nameof(address), address);
+
             if (address.IsIPv4MappedToIPv6)
                 address = address.MapToIPv4();
 
@@ -117,18 +117,23 @@ namespace EmbedIO.RateLimiting
 
             // A queued request waits for a permit; the server's shutdown or the client's
             // disconnection cancels the wait.
-            var lease = await _limiter.AcquireAsync(context, 1, context.CancellationToken).ConfigureAwait(false);
+            var lease = await _limiter
+                .AcquireAsync(context, 1, context.CancellationToken)
+                .ConfigureAwait(false);
+
             if (lease.IsAcquired)
             {
                 try
                 {
                     context.OnClose(_ => lease.Dispose());
                 }
+
                 catch
                 {
                     lease.Dispose();
                     throw;
                 }
+
                 return;
             }
 
@@ -137,13 +142,13 @@ namespace EmbedIO.RateLimiting
                 if (lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
                 {
                     var seconds = Math.Max(0, (long)Math.Ceiling(retryAfter.TotalSeconds));
-                    context.Response.Headers.Set(HttpHeaderNames.RetryAfter, seconds.ToString(CultureInfo.InvariantCulture));
+                    context.Response.Headers.Set(
+                        HttpHeaderNames.RetryAfter,
+                        seconds.ToString(CultureInfo.InvariantCulture)
+                    );
                 }
 
-                var onRejected = _onRejected;
-                if (onRejected == null)
-                    throw new HttpException(_rejectionStatusCode);
-
+                var onRejected = _onRejected ?? throw new HttpException(_rejectionStatusCode);
                 context.Response.StatusCode = _rejectionStatusCode;
                 await onRejected(context, lease).ConfigureAwait(false);
                 context.SetHandled();

@@ -64,7 +64,6 @@ namespace EmbedIO.Problems
     {
         /// <summary>The problem details media type.</summary>
         public const string MediaType = "application/problem+json";
-
         private const string UnexpectedError = "An unexpected error occurred.";
 
         /// <summary>
@@ -82,10 +81,12 @@ namespace EmbedIO.Problems
             {
                 if (context == null)
                     throw new ArgumentNullException(nameof(context));
+
                 if (httpException == null)
                     throw new ArgumentNullException(nameof(httpException));
 
                 var status = httpException.StatusCode;
+
                 if (status < 400 || status > 599)
                     return Task.CompletedTask;
 
@@ -94,7 +95,10 @@ namespace EmbedIO.Problems
 
                 var problem = httpException.DataObject is ProblemDetails carried && carried.Status == status
                     ? carried.Copy()
-                    : new ProblemDetails(status) { Detail = settings.IncludeHttpExceptionMessages ? httpException.Message : null };
+                    : new ProblemDetails(status)
+                    {
+                        Detail = settings.IncludeHttpExceptionMessages ? httpException.Message : null
+                    };
                 return SendAsync(context, problem, settings.Customize);
             };
         }
@@ -112,20 +116,25 @@ namespace EmbedIO.Problems
             {
                 if (context == null)
                     throw new ArgumentNullException(nameof(context));
+
                 if (exception == null)
                     throw new ArgumentNullException(nameof(exception));
 
                 if (settings.HtmlExceptionHandler != null && !PrefersJson(context))
                     return settings.HtmlExceptionHandler(context, exception);
 
-                var problem = new ProblemDetails(500) { Detail = settings.IncludeExceptionDetails ? exception.Message : UnexpectedError };
+                var problem = new ProblemDetails(500)
+                {
+                    Detail = settings.IncludeExceptionDetails ? exception.Message : UnexpectedError
+                };
+
                 if (settings.IncludeExceptionDetails)
                 {
                     problem.WithExtension("exception", new JsonObject
                     {
                         ["type"] = exception.GetType().FullName,
                         ["message"] = exception.Message,
-                        ["stackTrace"] = exception.StackTrace,
+                        ["stackTrace"] = exception.StackTrace
                     });
                 }
 
@@ -143,8 +152,10 @@ namespace EmbedIO.Problems
         /// <returns>The web server.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidOperationException">The web server has already started.</exception>
-        public static TWebServer WithProblemDetails<TWebServer>(this TWebServer @this, ProblemDetailsOptions? options = null)
-            where TWebServer : IWebServer
+        public static TWebServer WithProblemDetails<TWebServer>(
+            this TWebServer @this,
+            ProblemDetailsOptions? options = null
+        ) where TWebServer : IWebServer
         {
             if (@this == null)
                 throw new ArgumentNullException(nameof(@this));
@@ -163,12 +174,23 @@ namespace EmbedIO.Problems
         /// <param name="problem">The problem.</param>
         /// <returns>A task completing when the response has been written.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="problem"/> is <see langword="null"/>.</exception>
-        public static Task SendProblemAsync(this IHttpContext context, ProblemDetails problem)
-            => SendAsync(Validate.NotNull(nameof(context), context), Validate.NotNull(nameof(problem), problem).Copy(), null);
+        public static Task SendProblemAsync(this IHttpContext context, ProblemDetails problem) =>
+            SendAsync(
+                Validate.NotNull(nameof(context), context),
+                Validate
+                    .NotNull(nameof(problem), problem)
+                    .Copy(),
+                null
+            );
 
-        private static async Task SendAsync(IHttpContext context, ProblemDetails problem, Action<IHttpContext, ProblemDetails>? customize)
+        private static async Task SendAsync(
+            IHttpContext context,
+            ProblemDetails problem,
+            Action<IHttpContext, ProblemDetails>? customize
+        )
         {
             customize?.Invoke(context, problem);
+
             if (!problem.Extensions.ContainsKey("requestId"))
                 problem.WithExtension("requestId", context.Id);
 
@@ -178,20 +200,25 @@ namespace EmbedIO.Problems
             response.ContentType = MediaType;
             response.ContentLength64 = body.Length;
             using var stream = response.OutputStream;
-            await stream.WriteAsync(body, 0, body.Length, context.CancellationToken).ConfigureAwait(false);
+            await stream
+                .WriteAsync(body, 0, body.Length, context.CancellationToken)
+                .ConfigureAwait(false);
         }
 
         // JSON unless the client asks for HTML more strongly than for any JSON media range.
         private static bool PrefersJson(IHttpContext context)
         {
             var values = context.Request.Headers.GetValues(HttpHeaderNames.Accept);
+
             if (values == null || values.Length == 0)
                 return true;
 
             int json = 0, html = 0;
+
             foreach (var entry in new QValueList(false, values).QValues)
             {
                 var weight = entry.Value.Weight;
+
                 switch (entry.Key.ToUpperInvariant())
                 {
                     case "APPLICATION/PROBLEM+JSON":

@@ -18,8 +18,10 @@ namespace EmbedIO.Problems
     public sealed class ProblemDetails
     {
         // Members RFC 9457 defines; an extension cannot take their names.
-        private static readonly HashSet<string> Reserved = new(StringComparer.Ordinal) { "type", "title", "status", "detail", "instance" };
-
+        private static readonly HashSet<string> Reserved = new(StringComparer.Ordinal)
+        {
+            "type", "title", "status", "detail", "instance"
+        };
         private readonly Dictionary<string, JsonNode?> _extensions = new(StringComparer.Ordinal);
 
         /// <summary>
@@ -30,7 +32,11 @@ namespace EmbedIO.Problems
         public ProblemDetails(int status)
         {
             if (status < 400 || status > 599)
-                throw new ArgumentOutOfRangeException(nameof(status), status, "A problem has a client or server error status, 400 to 599.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(status),
+                    status,
+                    "A problem has a client or server error status, 400 to 599."
+                );
 
             Status = status;
         }
@@ -77,10 +83,16 @@ namespace EmbedIO.Problems
         public ProblemDetails WithExtension(string name, JsonNode? value)
         {
             name = Validate.NotNullOrEmpty(nameof(name), name);
+
             if (Reserved.Contains(name))
-                throw new ArgumentException($"'{name}' is a member RFC 9457 defines; set its property instead.", nameof(name));
+                throw new ArgumentException(
+                    $"'{name}' is a member RFC 9457 defines; set its property instead.",
+                    nameof(name)
+                );
+
             if (_extensions.ContainsKey(name))
                 throw new ArgumentException($"The extension '{name}' is already added.", nameof(name));
+
             if (value?.Parent != null)
                 throw new ArgumentException("The value already belongs to another JSON document.", nameof(value));
 
@@ -94,27 +106,34 @@ namespace EmbedIO.Problems
         public string ToJson(bool indented = false)
         {
             using var stream = new MemoryStream();
+
             using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = indented }))
             {
                 writer.WriteStartObject();
+
                 if (Type != null)
                     writer.WriteString("type", Type);
 
                 var title = Title ?? (Type == null ? ReasonPhrase(Status) : null);
+
                 if (title != null)
                     writer.WriteString("title", title);
 
                 writer.WriteNumber("status", Status);
+
                 if (Detail != null)
                     writer.WriteString("detail", Detail);
+
                 if (Instance != null)
                     writer.WriteString("instance", Instance);
 
                 foreach (var extension in _extensions)
                 {
                     writer.WritePropertyName(extension.Key);
+
                     if (extension.Value == null)
                         writer.WriteNullValue();
+
                     else
                         extension.Value.WriteTo(writer);
                 }
@@ -128,7 +147,14 @@ namespace EmbedIO.Problems
         // A copy with its own extension values, so handlers never change a problem that is thrown repeatedly.
         internal ProblemDetails Copy()
         {
-            var copy = new ProblemDetails(Status) { Type = Type, Title = Title, Detail = Detail, Instance = Instance };
+            var copy = new ProblemDetails(Status)
+            {
+                Type = Type,
+                Title = Title,
+                Detail = Detail,
+                Instance = Instance
+            };
+
             foreach (var extension in _extensions)
                 copy._extensions.Add(extension.Key, extension.Value?.DeepClone());
 
@@ -147,20 +173,14 @@ namespace EmbedIO.Problems
     /// <see cref="ProblemDetailsHandler"/>. Other HTTP exception handlers see an ordinary
     /// <see cref="HttpException"/> whose <see cref="HttpException.DataObject"/> is the problem.
     /// </summary>
-    public class ProblemDetailsException : HttpException
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="ProblemDetailsException"/> class.
+    /// </remarks>
+    /// <param name="problem">The problem to send.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="problem"/> is <see langword="null"/>.</exception>
+    public class ProblemDetailsException(ProblemDetails problem) : HttpException(Validate.NotNull(nameof(problem), problem).Status, problem.Detail ?? problem.Title, problem)
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ProblemDetailsException"/> class.
-        /// </summary>
-        /// <param name="problem">The problem to send.</param>
-        /// <exception cref="ArgumentNullException"><paramref name="problem"/> is <see langword="null"/>.</exception>
-        public ProblemDetailsException(ProblemDetails problem)
-            : base(Validate.NotNull(nameof(problem), problem).Status, problem.Detail ?? problem.Title, problem)
-        {
-            Problem = problem;
-        }
-
         /// <summary>Gets the problem to send.</summary>
-        public ProblemDetails Problem { get; }
+        public ProblemDetails Problem { get; } = problem;
     }
 }
