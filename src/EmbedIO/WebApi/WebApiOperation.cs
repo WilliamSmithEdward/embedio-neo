@@ -12,26 +12,7 @@ namespace EmbedIO.WebApi
     /// parameter is bound, what the method returns, and the OpenAPI attributes applied to it.
     /// <see cref="OpenApiDocumentBuilder"/> reads it to describe the method's routes.
     /// </summary>
-    /// <remarks>Creates generated operation metadata including authorization requirements.</remarks>
-    /// <param name="controllerName">The controller name.</param>
-    /// <param name="methodName">The method name.</param>
-    /// <param name="resultType">The serialized result type.</param>
-    /// <param name="parameters">Parameter metadata.</param>
-    /// <param name="operation">Optional operation attribute.</param>
-    /// <param name="responses">Response attributes.</param>
-    /// <param name="ignored">Whether OpenAPI ignores the operation.</param>
-    /// <param name="authorization">Optional authorization metadata.</param>
-    [method: EditorBrowsable(EditorBrowsableState.Never)]
-    public sealed class WebApiOperation(
-        string controllerName,
-        string methodName,
-        Type? resultType,
-        WebApiOperationParameter[] parameters,
-        OpenApiOperationAttribute? operation,
-        OpenApiResponseAttribute[] responses,
-        bool ignored,
-        AuthorizationMetadata? authorization
-    )
+    public sealed class WebApiOperation
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="WebApiOperation"/> class.
@@ -57,60 +38,103 @@ namespace EmbedIO.WebApi
         ) : this(controllerName, methodName, resultType, parameters, operation, responses, ignored, null)
         { }
 
+        /// <summary>Creates generated operation metadata including authorization requirements.</summary>
+        /// <param name="controllerName">The controller name.</param>
+        /// <param name="methodName">The method name.</param>
+        /// <param name="resultType">The serialized result type.</param>
+        /// <param name="parameters">Parameter metadata.</param>
+        /// <param name="operation">Optional operation attribute.</param>
+        /// <param name="responses">Response attributes.</param>
+        /// <param name="ignored">Whether OpenAPI ignores the operation.</param>
+        /// <param name="authorization">Optional authorization metadata.</param>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public WebApiOperation(
+            string controllerName,
+            string methodName,
+            Type? resultType,
+            WebApiOperationParameter[] parameters,
+            OpenApiOperationAttribute? operation,
+            OpenApiResponseAttribute[] responses,
+            bool ignored,
+            AuthorizationMetadata? authorization
+        )
+        {
+            controllerName = Validate.NotNull(nameof(controllerName), controllerName);
+            methodName = Validate.NotNull(nameof(methodName), methodName);
+            parameters = Validate.NotNull(nameof(parameters), parameters);
+            responses = Validate.NotNull(nameof(responses), responses);
+            ControllerName = controllerName;
+            MethodName = methodName;
+            ResultType = resultType;
+            Parameters = parameters;
+            Operation = operation;
+            Responses = responses;
+            Ignored = ignored;
+            Authorization = authorization;
+        }
+
         /// <summary>Gets effective controller and method authorization metadata.</summary>
-        public AuthorizationMetadata? Authorization { get; } = authorization;
+        public AuthorizationMetadata? Authorization { get; }
 
         /// <summary>Gets the controller type's name.</summary>
-        public string ControllerName { get; } = Validate.NotNull(nameof(controllerName), controllerName);
+        public string ControllerName { get; }
 
         /// <summary>Gets the method's name.</summary>
-        public string MethodName { get; } = Validate.NotNull(nameof(methodName), methodName);
+        public string MethodName { get; }
 
         /// <summary>Gets the type of the serialized result, or <see langword="null"/> if the method returns no value.</summary>
-        public Type? ResultType { get; } = resultType;
+        public Type? ResultType { get; }
 
         /// <summary>Gets the method's parameters, in declaration order.</summary>
-        public IReadOnlyList<WebApiOperationParameter> Parameters { get; } = Validate.NotNull(
-            nameof(parameters),
-            parameters
-        );
+        public IReadOnlyList<WebApiOperationParameter> Parameters { get; }
 
         /// <summary>Gets the method's <see cref="OpenApiOperationAttribute"/>, if any.</summary>
-        public OpenApiOperationAttribute? Operation { get; } = operation;
+        public OpenApiOperationAttribute? Operation { get; }
 
         /// <summary>Gets the method's <see cref="OpenApiResponseAttribute"/>s.</summary>
-        public IReadOnlyList<OpenApiResponseAttribute> Responses { get; } = Validate.NotNull(
-            nameof(responses),
-            responses
-        );
+        public IReadOnlyList<OpenApiResponseAttribute> Responses { get; }
 
         /// <summary>Gets a value indicating whether the method is excluded from OpenAPI documents.</summary>
-        public bool Ignored { get; } = ignored;
+        public bool Ignored { get; }
     }
 
     /// <summary>Describes how one controller method parameter is bound.</summary>
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="WebApiOperationParameter"/> class.
-    /// This constructor supports generated code and is not intended to be called directly.
-    /// </remarks>
-    /// <param name="name">The parameter's name.</param>
-    /// <param name="fieldName">The name of the query or form field, or of the route parameter.</param>
-    /// <param name="source">Where the value comes from.</param>
-    /// <param name="type">The parameter's type.</param>
-    /// <param name="isRequired"><see langword="true"/> if a request without the value is rejected.</param>
-    /// <param name="enumNames">The names of the enumeration the value converts to, if any.</param>
-    /// <param name="customAttribute">The request-data attribute's type name, for <see cref="WebApiParameterSource.Custom"/>.</param>
-    [method: EditorBrowsable(EditorBrowsableState.Never)]
-    public sealed class WebApiOperationParameter(
-        string name,
-        string fieldName,
-        WebApiParameterSource source,
-        Type type,
-        bool isRequired,
-        string[]? enumNames,
-        string? customAttribute
-    )
+    public sealed class WebApiOperationParameter
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WebApiOperationParameter"/> class.
+        /// This constructor supports generated code and is not intended to be called directly.
+        /// </summary>
+        /// <param name="name">The parameter's name.</param>
+        /// <param name="fieldName">The name of the query or form field, or of the route parameter.</param>
+        /// <param name="source">Where the value comes from.</param>
+        /// <param name="type">The parameter's type.</param>
+        /// <param name="isRequired"><see langword="true"/> if a request without the value is rejected.</param>
+        /// <param name="enumNames">The names of the enumeration the value converts to, if any.</param>
+        /// <param name="customAttribute">The request-data attribute's type name, for <see cref="WebApiParameterSource.Custom"/>.</param>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public WebApiOperationParameter(
+            string name,
+            string fieldName,
+            WebApiParameterSource source,
+            Type type,
+            bool isRequired,
+            string[]? enumNames,
+            string? customAttribute
+        )
+        {
+            name = Validate.NotNull(nameof(name), name);
+            fieldName = Validate.NotNull(nameof(fieldName), fieldName);
+            type = Validate.NotNull(nameof(type), type);
+            Name = name;
+            FieldName = fieldName;
+            Source = source;
+            Type = type;
+            IsRequired = isRequired;
+            EnumNames = enumNames ?? [];
+            CustomAttribute = customAttribute;
+        }
+
         /// <summary>Creates parameter metadata including explicitly enabled validation.</summary>
         /// <param name="name">Parameter name.</param>
         /// <param name="fieldName">Bound field name.</param>
@@ -136,25 +160,25 @@ namespace EmbedIO.WebApi
         public RequestValidationParameter? Validation { get; }
 
         /// <summary>Gets the parameter's name.</summary>
-        public string Name { get; } = Validate.NotNull(nameof(name), name);
+        public string Name { get; }
 
         /// <summary>Gets the name of the query or form field, or of the route parameter.</summary>
-        public string FieldName { get; } = Validate.NotNull(nameof(fieldName), fieldName);
+        public string FieldName { get; }
 
         /// <summary>Gets where the value comes from.</summary>
-        public WebApiParameterSource Source { get; } = source;
+        public WebApiParameterSource Source { get; }
 
         /// <summary>Gets the parameter's type.</summary>
-        public Type Type { get; } = Validate.NotNull(nameof(type), type);
+        public Type Type { get; }
 
         /// <summary>Gets a value indicating whether a request without the value is rejected.</summary>
-        public bool IsRequired { get; } = isRequired;
+        public bool IsRequired { get; }
 
         /// <summary>Gets the names of the enumeration the value converts to, or an empty list.</summary>
-        public IReadOnlyList<string> EnumNames { get; } = enumNames ?? [];
+        public IReadOnlyList<string> EnumNames { get; }
 
         /// <summary>Gets the request-data attribute's type name, for <see cref="WebApiParameterSource.Custom"/>.</summary>
-        public string? CustomAttribute { get; } = customAttribute;
+        public string? CustomAttribute { get; }
     }
 
     /// <summary>Where a controller method parameter's value comes from.</summary>
