@@ -177,7 +177,11 @@ namespace EmbedIO.Net.Internal
                     first = ReleaseResources(true, input, static () => { });
                 }
 
-                catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+                catch (Exception error) when (
+                    error is OutOfMemoryException
+                        or StackOverflowException
+                        or AccessViolationException
+                )
                 {
                     Capture(error);
                 }
@@ -192,21 +196,30 @@ namespace EmbedIO.Net.Internal
                     await pendingWrite.ConfigureAwait(false);
                 }
 
-                catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException or OperationCanceledException)
+                catch (Exception error) when (
+                    error is IOException
+                        or SocketException
+                        or ObjectDisposedException
+                        or OperationCanceledException
+                )
                 {
                     try
                     {
                         error.Log("Idle TLS shutdown interrupted by transport retirement");
                     }
 
-                    catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(
-                        diagnosticError
-                    ))
+                    catch (Exception diagnosticError) when (
+                        EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError)
+                    )
                     { }
                 }
             }
 
-            catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+            catch (Exception error) when (
+                error is OutOfMemoryException
+                    or StackOverflowException
+                    or AccessViolationException
+            )
             {
                 Capture(error);
             }
@@ -223,7 +236,11 @@ namespace EmbedIO.Net.Internal
                     detachProtocol();
                 }
 
-                catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
+                catch (Exception error) when (
+                    error is OutOfMemoryException
+                        or StackOverflowException
+                        or AccessViolationException
+                )
                 {
                     Capture(error);
                 }

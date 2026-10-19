@@ -24,7 +24,8 @@ namespace EmbedIO.Net.Internal.Http2
     {
         // RFC 7541 Appendix A. Copyright (c) 2015 IETF Trust and the persons
         // identified as the document authors; see the code-components LICENSE notice.
-        internal static readonly HpackField[] Entries = [
+        internal static readonly HpackField[] Entries =
+        [
             new(":authority", ""),
             new(":method", "GET"),
             new(":method", "POST"),

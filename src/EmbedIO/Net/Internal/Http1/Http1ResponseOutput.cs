@@ -17,14 +17,16 @@ namespace EmbedIO.Net.Internal
         private const int BatchedBodyBound = 65536;
         private const int FirstSegmentPrefix = 16384;
         private static readonly byte[] CrLf = [13, 10];
-        private static readonly byte[] EndOfChunks = [
+        private static readonly byte[] EndOfChunks =
+        [
             (byte)'0',
             13,
             10,
             13,
             10
         ];
-        private static readonly byte[] CrLfEndOfChunks = [
+        private static readonly byte[] CrLfEndOfChunks =
+        [
             13,
             10,
             (byte)'0',

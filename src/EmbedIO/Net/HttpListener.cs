@@ -21,11 +21,7 @@ namespace EmbedIO.Net
         /// <returns>A listener that borrows <paramref name="certificateSource"/> and its certificates.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="certificateSource"/> is <see langword="null"/>.</exception>
         public static HttpListener CreateWithCertificateSource(ServerCertificateSource certificateSource) =>
-            new(
-                null,
-                certificateSource ?? throw new ArgumentNullException(nameof(certificateSource)),
-                null
-            );
+            new(null, certificateSource ?? throw new ArgumentNullException(nameof(certificateSource)), null);
 
         /// <summary>Initializes a listener whose TLS handshakes use the current certificate of <paramref name="certificateSource"/>
         /// and the settings of <paramref name="tlsPolicy"/>.</summary>

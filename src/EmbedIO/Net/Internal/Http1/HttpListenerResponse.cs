@@ -385,7 +385,13 @@ namespace EmbedIO.Net.Internal
 
             if (_chunks) Headers.Add(HttpHeaderNames.TransferEncoding, "chunked");
 
-            var persistent = _status is not 400 and not 408 and not 411 and not 413 and not 414 and not 500 and not 503
+            var persistent = _status is not 400
+                and not 408
+                and not 411
+                and not 413
+                and not 414
+                and not 500
+                and not 503
                 && !_transport.IsDraining
                 && KeepAlive;
 

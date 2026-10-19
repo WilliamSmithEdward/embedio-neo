@@ -254,7 +254,8 @@ namespace EmbedIO.Net.Internal.Http3
                 await feedback
                     .WriteAsync((byte[])[3], startup.Token)
                     .ConfigureAwait(false);
-                background = [
+                background =
+                [
                     WriteEncoderAsync(),
                     WriteFeedbackAsync(feedback),
                     WatchCriticalOutputAsync(control),
@@ -450,8 +451,18 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     _draining = true;
                     cutoff = _highestRequestId + 4;
-                    unprocessed = [.. _requests.Where(item => !_admitted.Contains(item.Key)).Select(item => item.Value.Stream)];
-                    accepted = [.. _workers.Where(item => (item.Key & 3) == 0).Select(item => item.Value)];
+                    unprocessed =
+                    [
+                        .. _requests
+                            .Where(item => !_admitted.Contains(item.Key))
+                            .Select(item => item.Value.Stream)
+                    ];
+                    accepted =
+                    [
+                        .. _workers
+                            .Where(item => (item.Key & 3) == 0)
+                            .Select(item => item.Value)
+                    ];
                 }
 
                 foreach (var request in unprocessed) AbortStream(request, 0x10b);
@@ -482,7 +493,9 @@ namespace EmbedIO.Net.Internal.Http3
 
             catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
 
-            catch (QuicException error) when (error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted))
+            catch (QuicException error) when (
+                error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted)
+            )
             {
                 CancelRequests(_stop);
             } // Connection closure is not a critical-stream reset.

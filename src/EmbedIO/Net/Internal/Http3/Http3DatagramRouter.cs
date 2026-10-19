@@ -14,7 +14,7 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly object _gate = new();
         private readonly Http3DatagramTransport _transport;
-        private readonly Dictionary<long, Http3DatagramChannel> _channels = new();
+        private readonly Dictionary<long, Http3DatagramChannel> _channels = [];
         private readonly int _maximumBytes;
         private readonly int _maximumPackets;
         private int _queuedBytes;
@@ -114,9 +114,11 @@ namespace EmbedIO.Net.Internal.Http3
             CancellationToken token
         )
         {
-            while (await channel.Queue.Reader
-                .WaitToReadAsync(token)
-                .ConfigureAwait(false))
+            while (
+                await channel.Queue.Reader
+                    .WaitToReadAsync(token)
+                    .ConfigureAwait(false)
+            )
             {
                 lock (_gate)
                 {

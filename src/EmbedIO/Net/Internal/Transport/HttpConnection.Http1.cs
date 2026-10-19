@@ -53,9 +53,11 @@ namespace EmbedIO.Net.Internal
                 // would hold the connection and its admission slot with no timer at all.
                 if (!_context.HttpListenerRequest.IsBodyConsumed) ArmDrainDeadline();
 
-                if (!await _context.HttpListenerRequest
-                    .FlushInputAsync()
-                    .ConfigureAwait(false))
+                if (
+                    !await _context.HttpListenerRequest
+                        .FlushInputAsync()
+                        .ConfigureAwait(false)
+                )
                 {
                     CloseTransport(true);
                     return;

@@ -398,9 +398,11 @@ namespace EmbedIO.Net.Internal.Http3
 
             var reader = _received.Reader;
 
-            while (await reader
-                .WaitToReadAsync(token)
-                .ConfigureAwait(false))
+            while (
+                await reader
+                    .WaitToReadAsync(token)
+                    .ConfigureAwait(false)
+            )
             {
                 if (reader.TryRead(out var datagram))
                 {

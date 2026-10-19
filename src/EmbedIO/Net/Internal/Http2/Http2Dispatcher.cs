@@ -81,9 +81,11 @@ namespace EmbedIO.Net.Internal.Http2
 
                         if (frame == null) break;
 
-                        if (await _connection
-                            .ProcessControlAsync(frame, _stop.Token)
-                            .ConfigureAwait(false)) continue;
+                        if (
+                            await _connection
+                                .ProcessControlAsync(frame, _stop.Token)
+                                .ConfigureAwait(false)
+                        ) continue;
 
                         if (frame.Type == 8 && frame.StreamId == 0)
                         {

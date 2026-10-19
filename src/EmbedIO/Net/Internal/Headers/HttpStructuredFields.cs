@@ -211,7 +211,23 @@ namespace EmbedIO.Net.Internal
                 while (
                     Alpha(Current)
                     || Digit(Current)
-                    || Current is '!' or '#' or '$' or '%' or '&' or '\'' or '*' or '+' or '-' or '.' or '^' or '_' or '`' or '|' or '~' or ':' or '/'
+                    || Current is '!'
+                        or '#'
+                        or '$'
+                        or '%'
+                        or '&'
+                        or '\''
+                        or '*'
+                        or '+'
+                        or '-'
+                        or '.'
+                        or '^'
+                        or '_'
+                        or '`'
+                        or '|'
+                        or '~'
+                        or ':'
+                        or '/'
                 );
 
                 return true;

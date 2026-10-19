@@ -262,9 +262,7 @@ namespace EmbedIO.Net.Internal.Http2
         }
 
         public Task CompleteAsync(CancellationToken token) =>
-            _headersSent
-                ? WriteAsync([], 0, 0, true, token)
-                : RespondAsync([], token);
+            _headersSent ? WriteAsync([], 0, 0, true, token) : RespondAsync([], token);
 
         // Holds the response gate.
         private async Task WriteCoreAsync(byte[] bytes, int offset, int count, bool endStream, CancellationToken token)
@@ -306,9 +304,11 @@ namespace EmbedIO.Net.Internal.Http2
 
                 if (reserved == 0) reserved = await ReserveAsync(Math.Min(16384, count), token).ConfigureAwait(false);
 
-                if (!await _connection
-                    .SendDataAsync(Id, null, bytes, offset, reserved, endStream && count == reserved, token, _token)
-                    .ConfigureAwait(false))
+                if (
+                    !await _connection
+                        .SendDataAsync(Id, null, bytes, offset, reserved, endStream && count == reserved, token, _token)
+                        .ConfigureAwait(false)
+                )
                     continue;
 
                 count -= reserved;

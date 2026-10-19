@@ -6,7 +6,8 @@ namespace EmbedIO.Net.Internal.Http3
     {
         // RFC 9204 Appendix A. Copyright (c) 2022 IETF Trust and the persons
         // identified as the document authors; see the LICENSE code-components notice.
-        internal static readonly HpackField[] Entries = [
+        internal static readonly HpackField[] Entries =
+        [
             new(":authority", ""),
             new(":path", "/"),
             new("age", "0"),

@@ -48,10 +48,7 @@ namespace EmbedIO.Net.Internal
             var options = new SslServerAuthenticationOptions
             {
                 EnabledSslProtocols = GetProtocols(policy),
-                ApplicationProtocols =
-                [
-                    SslApplicationProtocol.Http2, SslApplicationProtocol.Http11
-                ]
+                ApplicationProtocols = [SslApplicationProtocol.Http2, SslApplicationProtocol.Http11]
             };
 
             // The runtime refuses both a certificate and a selection callback.
