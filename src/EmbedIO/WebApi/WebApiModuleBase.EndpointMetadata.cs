@@ -55,7 +55,7 @@ namespace EmbedIO.WebApi
 
                 var source = WebApiParameterSource.RouteOrDefault;
                 var fieldName = name;
-                var required = !parameter.HasDefaultValue;
+                var isRequired = !parameter.HasDefaultValue;
                 string? custom = null;
 
                 if (
@@ -66,7 +66,7 @@ namespace EmbedIO.WebApi
                 {
                     source = WebApiParameterSource.Header;
                     fieldName = header.Name ?? name;
-                    required = header.Required;
+                    isRequired = header.Required;
                 }
 
                 else if (
@@ -77,7 +77,7 @@ namespace EmbedIO.WebApi
                 {
                     source = WebApiParameterSource.Cookie;
                     fieldName = cookie.Name ?? name;
-                    required = cookie.Required;
+                    isRequired = cookie.Required;
                 }
 
                 else if (
@@ -87,7 +87,7 @@ namespace EmbedIO.WebApi
                 )
                 {
                     fieldName = route.Name ?? name;
-                    required = route.Required;
+                    isRequired = route.Required;
                 }
 
                 else if (
@@ -98,7 +98,7 @@ namespace EmbedIO.WebApi
                 {
                     source = WebApiParameterSource.Query;
                     fieldName = query.FieldName ?? name;
-                    required = query.BadRequestIfMissing;
+                    isRequired = query.BadRequestIfMissing;
                 }
 
                 else if (
@@ -109,19 +109,19 @@ namespace EmbedIO.WebApi
                 {
                     source = WebApiParameterSource.Form;
                     fieldName = form.FieldName ?? name;
-                    required = form.BadRequestIfMissing;
+                    isRequired = form.BadRequestIfMissing;
                 }
 
                 else if (attributes.Any(a => a is JsonDataAttribute))
                 {
                     source = WebApiParameterSource.JsonBody;
-                    required = true;
+                    isRequired = true;
                 }
 
                 else if (attributes.Any(a => a is MultipartFormAttribute))
                 {
                     source = WebApiParameterSource.Multipart;
-                    required = true;
+                    isRequired = true;
                 }
 
                 else if (attributes.Any(a => a is QueryDataAttribute)) source = WebApiParameterSource.QueryCollection;
@@ -144,10 +144,10 @@ namespace EmbedIO.WebApi
                 {
                     source = WebApiParameterSource.Custom;
                     custom = "Explicit request-data attribute";
-                    required = false;
+                    isRequired = false;
                 }
 
-                Add(name, fieldName, source, type, required, validation, custom);
+                Add(name, fieldName, source, type, isRequired, validation, custom);
             }
 
             var result = method.ReturnType;
@@ -179,7 +179,7 @@ namespace EmbedIO.WebApi
                 string fieldName,
                 WebApiParameterSource source,
                 Type type,
-                bool required,
+                bool isRequired,
                 RequestValidationParameter? validation,
                 string? custom = null
             )
@@ -192,7 +192,7 @@ namespace EmbedIO.WebApi
                         fieldName,
                         source,
                         type,
-                        required,
+                        isRequired,
                         scalar.IsEnum ? Enum.GetNames(scalar) : null,
                         custom,
                         validation
