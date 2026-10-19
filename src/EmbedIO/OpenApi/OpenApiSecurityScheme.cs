@@ -19,7 +19,7 @@ namespace EmbedIO.OpenApi
         Path,
 
         /// <summary>A cookie.</summary>
-        Cookie,
+        Cookie
     }
 
     /// <summary>
@@ -42,8 +42,15 @@ namespace EmbedIO.OpenApi
         /// <summary>HTTP Basic authentication, as <see cref="Authentication.BasicAuthenticationModule"/> performs it.</summary>
         /// <param name="description">An optional description; CommonMark is allowed.</param>
         /// <returns>The scheme.</returns>
-        public static OpenApiSecurityScheme Basic(string? description = null)
-            => new(new JsonObject { ["type"] = "http", ["scheme"] = "basic" }, description);
+        public static OpenApiSecurityScheme Basic(string? description = null) =>
+            new(
+                new JsonObject
+                {
+                    ["type"] = "http",
+                    ["scheme"] = "basic"
+                },
+                description
+            );
 
         /// <summary>HTTP Bearer authentication: a token in the <c>Authorization</c> header.</summary>
         /// <param name="bearerFormat">An optional hint at the token's format, such as <c>JWT</c>.</param>
@@ -51,7 +58,12 @@ namespace EmbedIO.OpenApi
         /// <returns>The scheme.</returns>
         public static OpenApiSecurityScheme Bearer(string? bearerFormat = null, string? description = null)
         {
-            var definition = new JsonObject { ["type"] = "http", ["scheme"] = "bearer" };
+            var definition = new JsonObject
+            {
+                ["type"] = "http",
+                ["scheme"] = "bearer"
+            };
+
             if (bearerFormat != null)
                 definition["bearerFormat"] = bearerFormat;
 
@@ -66,7 +78,11 @@ namespace EmbedIO.OpenApi
         /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, or
         /// <paramref name="location"/> is <see cref="OpenApiParameterLocation.Path"/>, which OpenAPI does not allow for a key.</exception>
-        public static OpenApiSecurityScheme ApiKey(string name, OpenApiParameterLocation location, string? description = null)
+        public static OpenApiSecurityScheme ApiKey(
+            string name,
+            OpenApiParameterLocation location,
+            string? description = null
+        )
         {
             name = Validate.NotNullOrEmpty(nameof(name), name);
             var where = location switch
@@ -74,10 +90,22 @@ namespace EmbedIO.OpenApi
                 OpenApiParameterLocation.Header => "header",
                 OpenApiParameterLocation.Query => "query",
                 OpenApiParameterLocation.Cookie => "cookie",
-                _ => throw new ArgumentException("An API key is sent in a header, the query string or a cookie.", nameof(location)),
+                _ =>
+                    throw new ArgumentException(
+                        "An API key is sent in a header, the query string or a cookie.",
+                        nameof(location)
+                    )
             };
 
-            return new(new JsonObject { ["type"] = "apiKey", ["name"] = name, ["in"] = where }, description);
+            return new(
+                new JsonObject
+                {
+                    ["type"] = "apiKey",
+                    ["name"] = name,
+                    ["in"] = where
+                },
+                description
+            );
         }
 
         internal JsonObject ToJson() => (JsonObject)_definition.DeepClone();
