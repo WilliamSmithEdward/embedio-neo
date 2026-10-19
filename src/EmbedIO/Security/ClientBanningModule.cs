@@ -16,14 +16,16 @@ namespace EmbedIO.Security
     /// </remarks>
     public sealed class ClientBanningModule : WebModuleBase, IDisposable
     {
-        private readonly object _gate = new object();
+        private readonly object _gate = new();
         private readonly Func<IHttpContext, string> _clientKeySelector;
-        private readonly Dictionary<string, ClientBanInfo> _bans = new Dictionary<string, ClientBanInfo>(StringComparer.Ordinal);
-        private readonly HashSet<string> _permanentBans = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ClientBanInfo> _bans = new(
+            StringComparer.Ordinal
+        );
+        private readonly HashSet<string> _permanentBans = new(StringComparer.Ordinal);
         private PermanentClientBanStore? _store;
-        private readonly List<ClientNetwork> _allowed = new List<ClientNetwork>();
-        private readonly List<ClientNetwork> _denied = new List<ClientNetwork>();
-        private readonly List<Func<IHttpContext, Task<bool>>> _criteria = new List<Func<IHttpContext, Task<bool>>>();
+        private readonly List<ClientNetwork> _allowed = [];
+        private readonly List<ClientNetwork> _denied = [];
+        private readonly List<Func<IHttpContext, Task<bool>>> _criteria = [];
         private DateTimeOffset _nextExpiry = DateTimeOffset.MaxValue;
         private bool _frozen;
         private bool _disposed;
@@ -37,13 +39,19 @@ namespace EmbedIO.Security
         /// At capacity, requests outside allow networks are rejected until expiration or unban frees capacity.
         /// Manual insertion of a new key returns false at capacity. No active ban is silently evicted.
         /// </remarks>
-        public ClientBanningModule(string baseRoute, Func<IHttpContext, string>? clientKeySelector,
-            TimeSpan? banDuration = null, int maximumBannedClients = 4096) : base(baseRoute)
+        public ClientBanningModule(
+            string baseRoute,
+            Func<IHttpContext, string>? clientKeySelector,
+            TimeSpan? banDuration = null,
+            int maximumBannedClients = 4096
+        ) : base(baseRoute)
         {
             _clientKeySelector = clientKeySelector ?? throw new ArgumentNullException(nameof(clientKeySelector));
             BanDuration = banDuration ?? TimeSpan.FromMinutes(30);
             ValidateDuration(BanDuration, nameof(banDuration));
+
             if (maximumBannedClients <= 0) throw new ArgumentOutOfRangeException(nameof(maximumBannedClients));
+
             MaximumBannedClients = maximumBannedClients;
         }
 
@@ -59,13 +67,28 @@ namespace EmbedIO.Security
         /// <summary>Gets a detached snapshot of unexpired bans; permanent network rules are separate.</summary>
         public IReadOnlyList<ClientBanInfo> BannedClients
         {
-            get { lock (_gate) { CheckDisposed(); Prune(DateTimeOffset.UtcNow); return _bans.Values.ToArray(); } }
+            get
+            {
+                lock (_gate)
+                {
+                    CheckDisposed();
+                    Prune(DateTimeOffset.UtcNow);
+                    return [.. _bans.Values];
+                }
+            }
         }
 
         /// <summary>Gets a detached snapshot of permanent client keys, separate from temporary bans and network rules.</summary>
         public IReadOnlyList<string> PermanentBannedClients
         {
-            get { lock (_gate) { CheckDisposed(); return _permanentBans.ToArray(); } }
+            get
+            {
+                lock (_gate)
+                {
+                    CheckDisposed();
+                    return [.. _permanentBans];
+                }
+            }
         }
 
         /// <summary>Loads and enables an application-owned permanent-ban file before startup.</summary>
@@ -79,25 +102,39 @@ namespace EmbedIO.Security
         public ClientBanningModule WithPermanentBanStore(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("A store path is required.", nameof(path));
+
             lock (_gate)
             {
                 CheckConfiguration();
+
                 if (_store != null) throw new InvalidOperationException("A permanent-ban store is already configured.");
+
                 var store = new PermanentClientBanStore(path, MaximumBannedClients);
+
                 try
                 {
                     var merged = new HashSet<string>(_permanentBans, StringComparer.Ordinal);
                     merged.UnionWith(store.Load());
                     Prune(DateTimeOffset.UtcNow);
+
                     if (merged.Count + _bans.Keys.Count(k => !merged.Contains(k)) > MaximumBannedClients)
                         throw new InvalidOperationException("Loaded bans exceed the configured client capacity.");
+
                     store.Save(merged);
                     _permanentBans.UnionWith(merged);
+
                     foreach (var key in merged) _bans.Remove(key);
+
                     _store = store;
                 }
-                catch { store.Dispose(); throw; }
+
+                catch
+                {
+                    store.Dispose();
+                    throw;
+                }
             }
+
             return this;
         }
 
@@ -107,12 +144,16 @@ namespace EmbedIO.Security
         public bool TryBanClientPermanently(string clientKey)
         {
             ValidateKey(clientKey);
+
             lock (_gate)
             {
                 CheckDisposed();
                 Prune(DateTimeOffset.UtcNow);
+
                 if (_permanentBans.Contains(clientKey)) return true;
+
                 if (!_bans.ContainsKey(clientKey) && BanCount >= MaximumBannedClients) return false;
+
                 var next = new HashSet<string>(_permanentBans, StringComparer.Ordinal) { clientKey };
                 _store?.Save(next);
                 _permanentBans.Add(clientKey);
@@ -127,10 +168,13 @@ namespace EmbedIO.Security
         public bool TryUnbanClientPermanently(string clientKey)
         {
             ValidateKey(clientKey);
+
             lock (_gate)
             {
                 CheckDisposed();
+
                 if (!_permanentBans.Contains(clientKey)) return false;
+
                 var next = new HashSet<string>(_permanentBans, StringComparer.Ordinal);
                 next.Remove(clientKey);
                 _store?.Save(next);
@@ -154,7 +198,13 @@ namespace EmbedIO.Security
         public ClientBanningModule WithCriterion(Func<IHttpContext, Task<bool>>? criterion)
         {
             if (criterion == null) throw new ArgumentNullException(nameof(criterion));
-            lock (_gate) { CheckConfiguration(); _criteria.Add(criterion); }
+
+            lock (_gate)
+            {
+                CheckConfiguration();
+                _criteria.Add(criterion);
+            }
+
             return this;
         }
 
@@ -168,16 +218,23 @@ namespace EmbedIO.Security
             ValidateDuration(duration, nameof(duration));
             var now = DateTimeOffset.UtcNow;
             var expires = now.Add(duration);
+
             lock (_gate)
             {
                 CheckDisposed();
                 Prune(now);
+
                 if (_permanentBans.Contains(clientKey)) return false;
+
                 if (_bans.TryGetValue(clientKey, out var previous))
                     expires = expires > previous.ExpiresAt ? expires : previous.ExpiresAt;
+
                 else if (BanCount >= MaximumBannedClients) return false;
+
                 _bans[clientKey] = new ClientBanInfo(clientKey, expires);
+
                 if (expires < _nextExpiry) _nextExpiry = expires;
+
                 return true;
             }
         }
@@ -188,7 +245,13 @@ namespace EmbedIO.Security
         public bool TryUnbanClient(string? clientKey)
         {
             ValidateKey(clientKey);
-            lock (_gate) { CheckDisposed(); Prune(DateTimeOffset.UtcNow); return _bans.Remove(clientKey); }
+
+            lock (_gate)
+            {
+                CheckDisposed();
+                Prune(DateTimeOffset.UtcNow);
+                return _bans.Remove(clientKey);
+            }
         }
 
         /// <inheritdoc />
@@ -200,21 +263,33 @@ namespace EmbedIO.Security
                 _store?.Dispose();
                 _store = null;
                 _permanentBans.Clear();
-                _bans.Clear(); _allowed.Clear(); _denied.Clear(); _criteria.Clear();
+                _bans.Clear();
+                _allowed.Clear();
+                _denied.Clear();
+                _criteria.Clear();
             }
         }
 
         /// <inheritdoc />
         protected override void OnStart(CancellationToken cancellationToken)
         {
-            lock (_gate) { CheckDisposed(); }
+            lock (_gate)
+            {
+                CheckDisposed();
+            }
+
             base.OnStart(cancellationToken);
         }
 
         /// <inheritdoc />
         protected override void OnBeforeLockConfiguration()
         {
-            lock (_gate) { CheckDisposed(); _frozen = true; }
+            lock (_gate)
+            {
+                CheckDisposed();
+                _frozen = true;
+            }
+
             base.OnBeforeLockConfiguration();
         }
 
@@ -223,48 +298,71 @@ namespace EmbedIO.Security
         {
             context.CancellationToken.ThrowIfCancellationRequested();
             Func<IHttpContext, Task<bool>>[] criteria;
+
             lock (_gate)
             {
                 CheckDisposed();
                 var address = context.RemoteEndPoint.Address;
+
                 if (_allowed.Any(n => n.Contains(address))) return;
+
                 if (_denied.Any(n => n.Contains(address))) throw HttpException.Forbidden();
-                criteria = _criteria.ToArray();
+
+                criteria = [.. _criteria];
             }
+
             var key = _clientKeySelector(context);
             ValidateKey(key);
             context.CancellationToken.ThrowIfCancellationRequested();
+
             lock (_gate)
             {
                 CheckDisposed();
                 Prune(DateTimeOffset.UtcNow);
-                if (_bans.ContainsKey(key) || _permanentBans.Contains(key) || BanCount >= MaximumBannedClients) throw HttpException.Forbidden();
+
+                if (_bans.ContainsKey(key) || _permanentBans.Contains(key) || BanCount >= MaximumBannedClients)
+                    throw HttpException.Forbidden();
             }
+
             foreach (var criterion in criteria)
             {
                 var ban = await criterion(context).ConfigureAwait(false);
                 context.CancellationToken.ThrowIfCancellationRequested();
+
                 if (ban)
                 {
                     TryBanClient(key, BanDuration);
                     throw HttpException.Forbidden();
                 }
             }
+
             // A ban or disposal may have completed while a callback was running.
             context.CancellationToken.ThrowIfCancellationRequested();
+
             lock (_gate)
             {
                 CheckDisposed();
                 Prune(DateTimeOffset.UtcNow);
-                if (_bans.ContainsKey(key) || _permanentBans.Contains(key) || BanCount >= MaximumBannedClients) throw HttpException.Forbidden();
+
+                if (_bans.ContainsKey(key) || _permanentBans.Contains(key) || BanCount >= MaximumBannedClients)
+                    throw HttpException.Forbidden();
             }
         }
 
         private ClientBanningModule AddNetworks(List<ClientNetwork> destination, string?[]? networks)
         {
             if (networks == null) throw new ArgumentNullException(nameof(networks));
-            var parsed = networks.Select(ClientNetwork.Parse).ToArray();
-            lock (_gate) { CheckConfiguration(); destination.AddRange(parsed); }
+
+            var parsed = networks
+                .Select(ClientNetwork.Parse)
+                .ToArray();
+
+            lock (_gate)
+            {
+                CheckConfiguration();
+                destination.AddRange(parsed);
+            }
+
             return this;
         }
 
@@ -272,6 +370,7 @@ namespace EmbedIO.Security
         {
             CheckDisposed();
             EnsureConfigurationNotLocked();
+
             if (_frozen) throw new InvalidOperationException("The configuration is locked.");
         }
 
@@ -285,8 +384,10 @@ namespace EmbedIO.Security
         internal static void ValidateKey([System.Diagnostics.CodeAnalysis.NotNull] string? key)
         {
             if (key == null) throw new ArgumentNullException(nameof(key));
+
             if (string.IsNullOrWhiteSpace(key) || key.Length > 1024)
                 throw new ArgumentException("A client key must be nonblank and at most 1024 characters.", nameof(key));
+
             for (var i = 0; i < key.Length; i++)
             {
                 if (char.IsHighSurrogate(key[i]))
@@ -294,6 +395,7 @@ namespace EmbedIO.Security
                     if (++i >= key.Length || !char.IsLowSurrogate(key[i]))
                         throw new ArgumentException("A client key must be well-formed Unicode.", nameof(key));
                 }
+
                 else if (char.IsLowSurrogate(key[i]))
                     throw new ArgumentException("A client key must be well-formed Unicode.", nameof(key));
             }
@@ -308,10 +410,13 @@ namespace EmbedIO.Security
         private void Prune(DateTimeOffset now)
         {
             if (now < _nextExpiry) return;
+
             _nextExpiry = DateTimeOffset.MaxValue;
+
             foreach (var pair in _bans.ToArray())
             {
                 if (pair.Value.ExpiresAt <= now) _bans.Remove(pair.Key);
+
                 else if (pair.Value.ExpiresAt < _nextExpiry) _nextExpiry = pair.Value.ExpiresAt;
             }
         }

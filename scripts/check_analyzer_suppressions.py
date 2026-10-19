@@ -81,7 +81,7 @@ COMPATIBILITY_SUPPRESSIONS = (
     ("src/EmbedIO/Caching/OutputCache.cs", "Maintainability", "CA1512:Use ArgumentOutOfRangeException throw helper",
      "The shared implementation targets netstandard2.0, which has no ArgumentOutOfRangeException throw helpers.",
      r"public\s+OutputCache\(\s+int\s+maxEntries\s+=\s+256,\s+long\s+maxBytes\s+=\s+16\s+\*\s+1024\s+\*\s+1024,\s+int\s+maxResponseBytes\s+=\s+256\s+\*\s+1024,\s+int\s+maxConcurrentFills\s+=\s+16,\s+int\s+maxKeyCharacters\s+=\s+8192\s+\)"),
-    ("src/EmbedIO/Hosting/WebServerBase`1.cs", "Maintainability", "CA1513:Use ObjectDisposedException throw helper",
+    ("src/EmbedIO/Hosting/WebServerBase.cs", "Maintainability", "CA1513:Use ObjectDisposedException throw helper",
      "The shared implementation targets netstandard2.0, which has no ObjectDisposedException.ThrowIf.",
      r"public\s+async\s+Task\s+RunAsync\(CancellationToken\s+cancellationToken\s+=\s+default\)"),
     ("src/EmbedIO/Hosting/WebServerOptionsBase.cs", "Maintainability", "CA1512:Use ArgumentOutOfRangeException throw helper",

@@ -18,6 +18,7 @@
             where TModule : IPBanningModule
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AddToWhitelist(value);
             return @this;
         }
@@ -33,7 +34,12 @@
         /// </returns>
         public static TModule WithRegexRules<TModule>(this TModule @this, params string[] value)
             where TModule : IPBanningModule =>
-        WithRegexRules(@this, IPBanningRegexCriterion.DefaultMaxMatchCount, IPBanningRegexCriterion.DefaultSecondsMatchingPeriod, value);
+            WithRegexRules(
+                @this,
+                IPBanningRegexCriterion.DefaultMaxMatchCount,
+                IPBanningRegexCriterion.DefaultSecondsMatchingPeriod,
+                value
+            );
 
         /// <summary>
         /// Add a collection of Regex to match the log messages against as a criterion for banning IP addresses.
@@ -46,13 +52,15 @@
         /// <returns>
         ///   <paramref name="this" /> with a fail regex criterion configured.
         /// </returns>
-        public static TModule WithRegexRules<TModule>(this TModule @this,
+        public static TModule WithRegexRules<TModule>(
+            this TModule @this,
             int maxMatchCount,
             int secondsMatchingPeriod,
-            params string[] value)
-            where TModule : IPBanningModule
+            params string[] value
+        ) where TModule : IPBanningModule
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RegisterCriterion(new IPBanningRegexCriterion(@this, value, maxMatchCount, secondsMatchingPeriod));
             return @this;
         }
@@ -66,10 +74,13 @@
         /// <returns>
         ///     <paramref name="this"/> with a maximum requests per second configured.
         /// </returns>
-        public static TModule WithMaxRequestsPerSecond<TModule>(this TModule @this, int maxRequests = IPBanningRequestsCriterion.DefaultMaxRequestsPerSecond)
-            where TModule : IPBanningModule
+        public static TModule WithMaxRequestsPerSecond<TModule>(
+            this TModule @this,
+            int maxRequests = IPBanningRequestsCriterion.DefaultMaxRequestsPerSecond
+        ) where TModule : IPBanningModule
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RegisterCriterion(new IPBanningRequestsCriterion(maxRequests));
             return @this;
         }
