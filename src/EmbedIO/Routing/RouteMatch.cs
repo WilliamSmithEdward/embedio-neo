@@ -18,9 +18,8 @@ namespace EmbedIO.Routing
     /// </summary>
     public sealed class RouteMatch : IReadOnlyList<string>, IReadOnlyDictionary<string, string>
     {
-        private static readonly IReadOnlyList<string> EmptyStringList = Array.Empty<string>();
-        private static readonly IReadOnlyDictionary<string, string> EmptyParameters = new Dictionary<string, string>();
-
+        private static readonly IReadOnlyList<string> EmptyStringList = [];
+        private static readonly Dictionary<string, string> EmptyParameters = [];
         private readonly IReadOnlyList<string> _values;
 
         internal RouteMatch(string path, IReadOnlyList<string> names, IReadOnlyList<string> values, string? subPath)
@@ -48,9 +47,10 @@ namespace EmbedIO.Routing
         /// </remarks>
         public static RouteMatch None { get; } = new RouteMatch(
             string.Empty,
-            Array.Empty<string>(),
-            Array.Empty<string>(),
-            null);
+            [],
+            [],
+            null
+        );
 
         /// <summary>
         /// Gets the URL path that was successfully matched against the route.
@@ -92,6 +92,7 @@ namespace EmbedIO.Routing
             get
             {
                 var count = Names.Count;
+
                 for (var i = 0; i < count; i++)
                 {
                     if (Names[i] == key)
@@ -119,8 +120,8 @@ namespace EmbedIO.Routing
         /// calling this method, using either <see cref="Validate.RoutePath"/>
         /// or <see cref="UrlPath.IsValid"/>.</para>
         /// </remarks>
-        public static RouteMatch UnsafeFromRoot(string requestPath)
-            => new RouteMatch(requestPath, EmptyStringList, EmptyStringList, requestPath);
+        public static RouteMatch UnsafeFromRoot(string requestPath) =>
+            new(requestPath, EmptyStringList, EmptyStringList, requestPath);
 
         /// <summary>
         /// Returns a <see cref="RouteMatch"/> object equal to the one
@@ -142,7 +143,9 @@ namespace EmbedIO.Routing
         public static RouteMatch? UnsafeFromBasePath(string basePath, string requestPath)
         {
             var subPath = UrlPath.UnsafeStripPrefix(requestPath, basePath);
-            return subPath == null ? null : new RouteMatch(requestPath, EmptyStringList, EmptyStringList, "/" + subPath);
+            return subPath == null
+                ? null
+                : new RouteMatch(requestPath, EmptyStringList, EmptyStringList, "/" + subPath);
         }
 
         /// <inheritdoc />
@@ -180,10 +183,12 @@ namespace EmbedIO.Routing
         {
             if (Names is List<string?> list)
                 return list.IndexOf(name);
+
             if (Names is string[] array)
                 return Array.IndexOf(array, name);
 
             var count = Names.Count;
+
             for (var i = 0; i < count; i++)
             {
                 if (Names[i] == name)
@@ -196,8 +201,10 @@ namespace EmbedIO.Routing
         }
 
         /// <inheritdoc />
-        IEnumerator<KeyValuePair<string, string>> IEnumerable<KeyValuePair<string, string>>.GetEnumerator()
-            => Names.Zip(_values, (n, v) => new KeyValuePair<string, string>(n, v)).GetEnumerator();
+        IEnumerator<KeyValuePair<string, string>> IEnumerable<KeyValuePair<string, string>>.GetEnumerator() =>
+            Names
+                .Zip(_values, (n, v) => new KeyValuePair<string, string>(n, v))
+                .GetEnumerator();
 
         /// <inheritdoc />
         IEnumerator<string> IEnumerable<string>.GetEnumerator() => _values.GetEnumerator();

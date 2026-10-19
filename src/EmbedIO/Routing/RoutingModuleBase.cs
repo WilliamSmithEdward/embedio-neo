@@ -1,5 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System;
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using EmbedIO.Internal;
 
@@ -9,18 +9,15 @@ namespace EmbedIO.Routing
     /// Base class for modules that handle requests by resolving route / method pairs associated with handlers.
     /// </summary>
     /// <seealso cref="WebModuleBase" />
-    public abstract class RoutingModuleBase : WebModuleBase
+    /// <inheritdoc cref="WebModuleBase(string)"/>
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="RoutingModuleBase"/> class.
+    /// </remarks>
+    public abstract class RoutingModuleBase(string baseRoute) : WebModuleBase(baseRoute)
     {
-        private readonly RouteVerbResolverCollection _resolvers = new RouteVerbResolverCollection(nameof(RoutingModuleBase));
-
-        /// <inheritdoc cref="WebModuleBase(string)"/>
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RoutingModuleBase"/> class.
-        /// </summary>
-        protected RoutingModuleBase(string baseRoute)
-            : base(baseRoute)
-        {
-        }
+        private readonly RouteVerbResolverCollection _resolvers = new(
+            nameof(RoutingModuleBase)
+        );
 
         /// <inheritdoc />
         public override bool IsFinalHandler => true;
@@ -35,18 +32,24 @@ namespace EmbedIO.Routing
         /// <inheritdoc />
         protected override async Task OnRequestAsync(IHttpContext context)
         {
-            var result = await _resolvers.ResolveAsync(context).ConfigureAwait(false);
+            var result = await _resolvers
+                .ResolveAsync(context)
+                .ConfigureAwait(false);
+
             switch (result)
             {
                 case RouteResolutionResult.RouteNotMatched:
                 case RouteResolutionResult.NoHandlerSuccessful:
                     await OnPathNotFoundAsync(context).ConfigureAwait(false);
                     break;
+
                 case RouteResolutionResult.NoHandlerSelected:
                     await OnMethodNotAllowedAsync(context).ConfigureAwait(false);
                     break;
+
                 case RouteResolutionResult.Success:
                     return;
+
                 default:
                     throw SelfCheck.Failure($"Internal error: unknown route resolution result {result}.");
             }
@@ -65,8 +68,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void AddHandler(HttpVerbs verb, RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(verb, matcher, handler);
+        protected void AddHandler(HttpVerbs verb, RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(verb, matcher, handler);
 
         /// <summary>
         /// Associates a HTTP method and a route to a synchronous handler.
@@ -81,8 +84,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void AddHandler(HttpVerbs verb, RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(verb, matcher, handler);
+        protected void AddHandler(HttpVerbs verb, RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(verb, matcher, handler);
 
         /// <summary>
         /// <para>Adds handlers, associating them with HTTP method / route pairs by means
@@ -93,8 +96,7 @@ namespace EmbedIO.Routing
         /// <returns>The number of handlers that were added.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode(RouteVerbResolverCollection.ScanMessage)]
-        protected int AddHandlersFrom(object target)
-            => _resolvers.AddFrom(target);
+        protected int AddHandlersFrom(object target) => _resolvers.AddFrom(target);
 
         /// <summary>
         /// Associates all requests matching a route to a handler.
@@ -106,8 +108,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnAny(RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Any, matcher, handler);
+        protected void OnAny(RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Any, matcher, handler);
 
         /// <summary>
         /// Associates all requests matching a route to a synchronous handler.
@@ -119,8 +121,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnAny(RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Any, matcher, handler);
+        protected void OnAny(RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Any, matcher, handler);
 
         /// <summary>
         /// Associates <c>DELETE</c> requests matching a route to a handler.
@@ -132,8 +134,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnDelete(RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Delete, matcher, handler);
+        protected void OnDelete(RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Delete, matcher, handler);
 
         /// <summary>
         /// Associates <c>DELETE</c> requests matching a route to a synchronous handler.
@@ -145,8 +147,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnDelete(RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Delete, matcher, handler);
+        protected void OnDelete(RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Delete, matcher, handler);
 
         /// <summary>
         /// Associates <c>GET</c> requests matching a route to a handler.
@@ -158,8 +160,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnGet(RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Get, matcher, handler);
+        protected void OnGet(RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Get, matcher, handler);
 
         /// <summary>
         /// Associates <c>GET</c> requests matching a route to a synchronous handler.
@@ -171,8 +173,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnGet(RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Get, matcher, handler);
+        protected void OnGet(RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Get, matcher, handler);
 
         /// <summary>
         /// Associates <c>HEAD</c> requests matching a route to a handler.
@@ -184,8 +186,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnHead(RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Head, matcher, handler);
+        protected void OnHead(RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Head, matcher, handler);
 
         /// <summary>
         /// Associates <c>HEAD</c> requests matching a route to a synchronous handler.
@@ -197,8 +199,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnHead(RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Head, matcher, handler);
+        protected void OnHead(RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Head, matcher, handler);
 
         /// <summary>
         /// Associates <c>OPTIONS</c> requests matching a route to a handler.
@@ -210,8 +212,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnOptions(RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Options, matcher, handler);
+        protected void OnOptions(RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Options, matcher, handler);
 
         /// <summary>
         /// Associates <c>OPTIONS</c> requests matching a route to a synchronous handler.
@@ -223,8 +225,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnOptions(RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Options, matcher, handler);
+        protected void OnOptions(RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Options, matcher, handler);
 
         /// <summary>
         /// Associates <c>PATCH</c> requests matching a route to a handler.
@@ -236,8 +238,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnPatch(RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Patch, matcher, handler);
+        protected void OnPatch(RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Patch, matcher, handler);
 
         /// <summary>
         /// Associates <c>PATCH</c> requests matching a route to a synchronous handler.
@@ -249,8 +251,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnPatch(RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Patch, matcher, handler);
+        protected void OnPatch(RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Patch, matcher, handler);
 
         /// <summary>
         /// Associates <c>POST</c> requests matching a route to a handler.
@@ -262,8 +264,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnPost(RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Post, matcher, handler);
+        protected void OnPost(RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Post, matcher, handler);
 
         /// <summary>
         /// Associates <c>POST</c> requests matching a route to a synchronous handler.
@@ -275,8 +277,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnPost(RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Post, matcher, handler);
+        protected void OnPost(RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Post, matcher, handler);
 
         /// <summary>
         /// Associates <c>PUT</c> requests matching a route to a handler.
@@ -288,8 +290,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnPut(RouteMatcher matcher, RouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Put, matcher, handler);
+        protected void OnPut(RouteMatcher matcher, RouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Put, matcher, handler);
 
         /// <summary>
         /// Associates <c>PUT</c> requests matching a route to a synchronous handler.
@@ -301,8 +303,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected void OnPut(RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => _resolvers.Add(HttpVerbs.Put, matcher, handler);
+        protected void OnPut(RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            _resolvers.Add(HttpVerbs.Put, matcher, handler);
 
         /// <summary>
         /// <para>Called when no route is matched for the requested URL path.</para>
@@ -310,8 +312,7 @@ namespace EmbedIO.Routing
         /// </summary>
         /// <param name="context">The context of the request being handled.</param>
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
-        protected virtual Task OnPathNotFoundAsync(IHttpContext context)
-            => throw HttpException.NotFound();
+        protected virtual Task OnPathNotFoundAsync(IHttpContext context) => throw HttpException.NotFound();
 
         /// <summary>
         /// <para>Called when at least one route is matched for the requested URL path,
@@ -320,7 +321,6 @@ namespace EmbedIO.Routing
         /// </summary>
         /// <param name="context">The context of the request being handled.</param>
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
-        protected virtual Task OnMethodNotAllowedAsync(IHttpContext context)
-            => throw HttpException.MethodNotAllowed();
+        protected virtual Task OnMethodNotAllowedAsync(IHttpContext context) => throw HttpException.MethodNotAllowed();
     }
 }

@@ -2,10 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using EmbedIO.Configuration;
 using EmbedIO.Internal;
 using EmbedIO.Utilities;
-
-using EmbedIO.Configuration;
 
 namespace EmbedIO.Routing
 {
@@ -20,7 +19,7 @@ namespace EmbedIO.Routing
     public abstract class RouteResolverCollectionBase<TData, TResolver> : ConfiguredObject
         where TResolver : RouteResolverBase<TData>
     {
-        private readonly List<TResolver> _resolvers = new List<TResolver>();
+        private readonly List<TResolver> _resolvers = [];
 
         /// <summary>
         /// Associates some data and a route to a handler.
@@ -84,10 +83,14 @@ namespace EmbedIO.Routing
         public async Task<RouteResolutionResult> ResolveAsync(IHttpContext context)
         {
             var result = RouteResolutionResult.RouteNotMatched;
+
             foreach (var resolver in _resolvers)
             {
-                var resolverResult = await resolver.ResolveAsync(context).ConfigureAwait(false);
+                var resolverResult = await resolver
+                    .ResolveAsync(context)
+                    .ConfigureAwait(false);
                 OnResolverCalled(context, resolver, resolverResult);
+
                 if (resolverResult == RouteResolutionResult.Success)
                     return RouteResolutionResult.Success;
 
@@ -132,13 +135,13 @@ namespace EmbedIO.Routing
         /// <param name="resolver">The resolver just called.</param>
         /// <param name="result">The result returned by <paramref name="resolver"/>.<see cref="RouteResolverBase{TData}.ResolveAsync">ResolveAsync</see>.</param>
         protected virtual void OnResolverCalled(IHttpContext context, TResolver resolver, RouteResolutionResult result)
-        {
-        }
+        { }
 
         private TResolver GetResolver(RouteMatcher matcher)
         {
             EnsureConfigurationNotLocked();
             var resolver = _resolvers.FirstOrDefault(r => r.Matcher.Equals(matcher));
+
             if (resolver != null)
                 return resolver;
 
