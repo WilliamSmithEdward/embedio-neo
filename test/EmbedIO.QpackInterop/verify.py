@@ -170,7 +170,13 @@ if __name__ == "__main__":
     if args.iterations < 1:
         parser.error("--iterations must be positive")
     print(f"Independent QPACK interop: pylsqpack {pylsqpack.__version__}; {args.assembly}")
-    if pylsqpack.__version__ != "0.3.24":
+    requirements = Path(__file__).with_name("requirements.txt").read_text(encoding="utf8")
+    pins = [
+        line.split()[0].partition("==")[2]
+        for line in requirements.splitlines()
+        if line.startswith("pylsqpack==")
+    ]
+    if len(pins) != 1 or pylsqpack.__version__ != pins[0]:
         raise SystemExit("Install the pinned QPACK requirements before running this probe.")
     results = [run(capacity, args.assembly, args.seed, args.iterations) for capacity in (0, 220, 4096)]
     report = {
