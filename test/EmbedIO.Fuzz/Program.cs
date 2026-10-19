@@ -68,6 +68,7 @@ var stateMachines = new Dictionary<string, Func<StateMachineTrace, CancellationT
     ["typed-results"] = HttpResultsFuzz.RunAsync,
     ["request-validation"] = RequestValidationFuzz.RunAsync,
     ["request-binding"] = RequestBindingFuzz.RunAsync,
+    ["minimal-endpoints"] = RequestBindingFuzz.RunAsync,
     ["controller-parity"] = ControllerParityFuzz.RunAsync,
     ["permanent-bans"] = PermanentBanFuzz.RunAsync,
     ["response-http1"] = ResponsePipelineFuzz.Http1Async,

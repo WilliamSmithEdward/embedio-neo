@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [2.16.0] - 2026-10-18
+
+### Added
+
+- Opt-in typed minimal endpoints and nested route groups with exact method matching,
+  generated/AOT bindings, validation, request-scoped DI, names and safe links,
+  effective authorization and response policies, completion hooks and OpenAPI.
+  Includes regression cases, shared six-client fuzzing and cold/warm latency scenarios.
+  Existing controllers, prefix callbacks, targets and runtime dependency groups remain
+  compatible. See [minimal endpoints](docs/guides/minimal-endpoints.md).
+
 ## [2.15.0] - 2026-10-18
 
 ### Added

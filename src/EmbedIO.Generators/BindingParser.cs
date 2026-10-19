@@ -607,6 +607,14 @@ namespace EmbedIO.Generators
 
                 arguments.Add(argument);
 
+                if (
+                    _endpointMethod != null
+                    && InheritedParameterAttributes(method, i).Any(
+                        a => a.AttributeClass?.ToDisplayString() == "EmbedIO.DependencyInjection.FromServicesAttribute"
+                    )
+                )
+                    _meta = null;
+
                 if (_meta is not null)
                     metadata.Add(ParameterExpression(parameter, _meta, validation));
 
@@ -624,7 +632,14 @@ namespace EmbedIO.Generators
                         );
             }
 
-            var call = CallExpression(controller, method, arguments);
+            var call = _endpointMethod == null
+                ? CallExpression(controller, method, arguments)
+                : Literals.TypeName(method.ContainingType)
+                    + "."
+                    + Literals.Identifier(method.Name)
+                    + "("
+                    + string.Join(", ", arguments)
+                    + ")";
             var work = WorkExpression(method, call, methodLocation);
 
             if (failed || work is null)
@@ -636,7 +651,7 @@ namespace EmbedIO.Generators
                     .Append("        private static readonly global::EmbedIO.WebApi.WebApiOperation ")
                     .Append(operationName)
                     .Append(" = ")
-                    .Append(OperationExpression(controller, method, metadata))
+                    .Append(OperationExpression(_endpointMethod?.ContainingType ?? controller, method, metadata))
                     .Append(";\n\n");
             }
 
@@ -736,6 +751,15 @@ namespace EmbedIO.Generators
             }
 
             var returnType = method.ReturnType;
+
+            if (_endpointMethod != null && IsValueTask(returnType))
+            {
+                call = "(" + call + ").AsTask()";
+                returnType = returnType is INamedTypeSymbol value && value.IsGenericType
+                    ? _types.TaskOfT.Construct(value.TypeArguments[0])
+                    : _types.Task;
+            }
+
             var httpResult = HttpResultReturnType(returnType);
 
             if (httpResult != null)
@@ -885,6 +909,29 @@ namespace EmbedIO.Generators
             if (attributes.Any(IsExplicitRequestBinding))
                 return BindExplicitRequest(parameter, attributes, ref awaits, out problem);
 
+            if (
+                _endpointMethod != null
+                && !attributes.Any(
+                    a => RequestDataInterfaces([a], _types.RequestDataOfController).Count != 0
+                        || RequestDataInterfaces([a], _types.RequestDataOfControllerAndData).Count != 0
+                )
+            )
+            {
+                var special = type.ToDisplayString();
+
+                if (special == "EmbedIO.IHttpContext") return "__context";
+
+                if (special == "EmbedIO.IHttpRequest") return "__context.Request";
+
+                if (special == "EmbedIO.IHttpResponse") return "__context.Response";
+
+                if (special == "System.Threading.CancellationToken") return "__context.CancellationToken";
+
+                if (special == "EmbedIO.Routing.RouteMatch") return "__route";
+
+                if (special == "System.Security.Principal.IPrincipal") return "__context.User";
+            }
+
             // 1. Request data attributes with an IRequestDataAttribute<TController, TData> interface.
             var genericCandidates = RequestDataInterfaces(attributes, _types.RequestDataOfControllerAndData);
             var failedRequestData = false;
@@ -957,7 +1004,12 @@ namespace EmbedIO.Generators
             var defaultValue = parameter.HasExplicitDefaultValue
                 ? Literals.Constant(parameter.ExplicitDefaultValue, type)
                 : "default(" + typeName + ")";
-            _meta = new ParameterMeta(ParameterSource.RouteOrDefault, name, false, null);
+            _meta = new ParameterMeta(
+                ParameterSource.RouteOrDefault,
+                name,
+                _endpointMethod != null && !parameter.HasExplicitDefaultValue,
+                null
+            );
 
             if (!TryGetConverter(type, out var converter))
             {
@@ -1846,12 +1898,18 @@ namespace EmbedIO.Generators
 
             if (httpResult != null) return TypeOf(httpResult);
 
-            if (method.ReturnsVoid || SymbolEqualityComparer.Default.Equals(method.ReturnType, _types.Task))
+            if (
+                method.ReturnsVoid
+                || SymbolEqualityComparer.Default.Equals(method.ReturnType, _types.Task)
+                || _endpointMethod != null && SymbolEqualityComparer.Default.Equals(method.ReturnType, _types.ValueTask)
+            )
                 return "null";
 
             return method.ReturnType is INamedTypeSymbol named
                 && named.IsGenericType
-                && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, _types.TaskOfT)
+                && (SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, _types.TaskOfT)
+                    || _endpointMethod != null
+                        && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, _types.ValueTaskOfT))
                 ? TypeOf(named.TypeArguments[0])
                 : TypeOf(method.ReturnType);
         }

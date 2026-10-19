@@ -7,6 +7,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../src/EmbedIO.Generators/EmbedIO.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" /></ItemGroup>
   <ItemGroup><Compile Include="../Shared/HttpsSmoke.cs" Link="HttpsSmoke.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../Shared/BenchmarkEndpoints.cs" Link="PlatformTests/BenchmarkEndpoints.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../Shared/CompressibleJson.cs" Link="PlatformTests/CompressibleJson.cs" /></ItemGroup>

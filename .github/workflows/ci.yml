@@ -170,7 +170,7 @@ jobs:
         shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7530'
+          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7600'
           # Owner-approved macOS coverage allowance; case deadlines and discovery stay enforced.
           EMBEDIO_REGRESSION_TIMEOUT: "${{ (matrix.os == 'macos-15' || (matrix.os == 'ubuntu-24.04' && github.event_name == 'push')) && '12m' || '8m' }}"
         run: |
@@ -241,7 +241,8 @@ jobs:
             test/EmbedIO.Tests/bin/Release/net10.0/openapi/security.json \
             test/EmbedIO.Tests/bin/Release/net10.0/openapi/declared.json \
             test/EmbedIO.Tests/bin/Release/net10.0/openapi/typed-errors.json \
-            test/EmbedIO.Tests/bin/Release/net10.0/openapi/typed-binding.json
+            test/EmbedIO.Tests/bin/Release/net10.0/openapi/typed-binding.json \
+            test/EmbedIO.Tests/bin/Release/net10.0/openapi/minimal-endpoints.json
       - name: Verify independent QPACK codecs and feedback
         if: runner.os == 'Linux'
         shell: bash

@@ -95,6 +95,23 @@ namespace EmbedIO.OpenApi
             return this;
         }
 
+        /// <summary>Adds all described minimal endpoints, compiling and freezing their module configuration.</summary>
+        /// <param name="module">The endpoint module.</param>
+        /// <returns>This document builder.</returns>
+        public OpenApiDocumentBuilder AddEndpoints(Endpoints.EndpointModule module)
+        {
+            module = Validate.NotNull(nameof(module), module);
+
+            module.Compile();
+            var routes = module.Descriptions.ToArray();
+            _entries.Add(writer =>
+            {
+                foreach (var route in routes)
+                    writer.AddRoute(string.Empty, new RouteDescription(route.Verb, route.Route, false, route.Operation));
+            });
+            return this;
+        }
+
         /// <summary>
         /// Adds an operation the builder cannot read from a generated binding, such as a route
         /// handled by a <see cref="Routing.RoutingModule"/> or a custom module.

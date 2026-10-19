@@ -54,7 +54,7 @@ internal static class EndpointLatency
         var available = new[]
         {
             "literal", "literal-100", "parameter", "controller", "json", "cookies", "large-header", "security-static",
-            "security-nonce"
+            "security-nonce", "minimal-generated", "minimal-reflection", "minimal-parameter", "controller-parameter"
         };
         var selected = Environment
             .GetEnvironmentVariable("EMBEDIO_LATENCY_SCENARIOS")
@@ -178,7 +178,8 @@ internal static class EndpointLatency
                 for (var i = 0; i < 20; i++)
                     await RequestAsync(client, url + "__control", "ok", token).ConfigureAwait(false);
 
-            var target = url + (scenario == "parameter" ? "target/42" : "target");
+            var target = url
+                + (scenario is "parameter" or "minimal-parameter" or "controller-parameter" ? "target/42" : "target");
             var expected = scenario == "json" ? "{\"message\":\"ok\"}" : "ok";
             var (HeadersMilliseconds, CompleteMilliseconds) = await RequestAsync(
                 client,
@@ -331,14 +332,18 @@ internal static class EndpointLatency
             .PreferNoCompressionFor("text/*")
             .PreferNoCompressionFor("application/json");
 
-        if (scenario == "controller")
+        if (scenario is "controller" or "controller-parameter")
         {
-            server.WithWebApi(
-                "/",
-                ResponseSerializer.None(false),
-                module => module.WithController<LatencyController>()
-            );
+            server.WithWebApi("/", ResponseSerializer.None(false), module =>
+            {
+                if (scenario == "controller-parameter") module.WithController<LatencyParameterController>();
+
+                else module.WithController<LatencyController>();
+            });
         }
+
+        else if (scenario.StartsWith("minimal-", StringComparison.Ordinal))
+            MinimalEndpointTiming.Configure(server, scenario);
 
         else
         {
@@ -425,7 +430,17 @@ internal static class EndpointLatency
         public Task Target() => ReplyAsync(HttpContext, "ok");
     }
 
-    private static async Task ReplyAsync(IHttpContext context, string text)
+    public sealed class LatencyParameterController : WebApiController
+    {
+        [Route(HttpVerbs.Get, "/__control")]
+        public Task Control() => ReplyAsync(HttpContext, "ok");
+
+        [Route(HttpVerbs.Get, "/target/{id}")]
+        public Task TargetId(int id) =>
+            id == 42 ? ReplyAsync(HttpContext, "ok") : throw new InvalidOperationException("Wrong bound ID.");
+    }
+
+    internal static async Task ReplyAsync(IHttpContext context, string text)
     {
         var bytes = System.Text.Encoding.UTF8.GetBytes(text);
         context.Response.ContentType = "text/plain";
