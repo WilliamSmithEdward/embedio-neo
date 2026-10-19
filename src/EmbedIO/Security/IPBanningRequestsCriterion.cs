@@ -18,32 +18,26 @@ namespace EmbedIO.Security
         public const int DefaultMaxRequestsPerSecond = 50;
 
         // Histories retain global ownership; each list is also its private synchronization lock.
-        private static readonly ConcurrentDictionary<IPAddress, List<long>> Requests = new ConcurrentDictionary<IPAddress, List<long>>();
-
+        private static readonly ConcurrentDictionary<IPAddress, List<long>> Requests = new();
         private readonly int _maxRequestsPerSecond;
-
         private bool _disposed;
 
-        internal IPBanningRequestsCriterion(int maxRequestsPerSecond)
-        {
-            _maxRequestsPerSecond = maxRequestsPerSecond;
-        }
+        internal IPBanningRequestsCriterion(int maxRequestsPerSecond) => _maxRequestsPerSecond = maxRequestsPerSecond;
 
         /// <summary>
         /// Finalizes an instance of the <see cref="IPBanningRequestsCriterion"/> class.
         /// </summary>
-        ~IPBanningRequestsCriterion()
-        {
-            Dispose(false);
-        }
+        ~IPBanningRequestsCriterion() => Dispose(false);
 
         /// <inheritdoc />
         public Task<bool> ValidateIPAddress(IPAddress address)
         {
             var requestedAt = DateTime.Now.Ticks;
+
             while (true)
             {
-                var attempts = Requests.GetOrAdd(address, _ => new List<long>());
+                var attempts = Requests.GetOrAdd(address, _ => []);
+
                 lock (attempts)
                 {
                     // A purge or explicit reset may remove this history while we wait.
@@ -57,22 +51,25 @@ namespace EmbedIO.Security
                     var lastMinute = DateTime.Now.AddMinutes(-1).Ticks;
                     var secondCount = 0;
                     var minuteCount = 0;
+
                     for (var i = 0; i < attempts.Count; i++)
                     {
                         var time = attempts[i];
+
                         if (time >= lastSecond) secondCount++;
+
                         if (time >= lastMinute) minuteCount++;
                     }
 
-                    return Task.FromResult(secondCount >= _maxRequestsPerSecond
-                        || minuteCount / 60 >= _maxRequestsPerSecond);
+                    return Task.FromResult(
+                        secondCount >= _maxRequestsPerSecond || minuteCount / 60 >= _maxRequestsPerSecond
+                    );
                 }
             }
         }
 
         /// <inheritdoc />
-        public void ClearIPAddress(IPAddress address) =>
-            Requests.TryRemove(address, out _);
+        public void ClearIPAddress(IPAddress address) => Requests.TryRemove(address, out _);
 
         /// <inheritdoc />
         public void PurgeData()
@@ -82,14 +79,17 @@ namespace EmbedIO.Security
             foreach (var pair in Requests)
             {
                 var attempts = pair.Value;
+
                 lock (attempts)
                 {
                     if (!Requests.TryGetValue(pair.Key, out var current) || !ReferenceEquals(current, attempts))
                         continue;
 
                     attempts.RemoveAll(time => time < minTime);
+
                     if (attempts.Count == 0)
                         ((ICollection<KeyValuePair<IPAddress, List<long>>>)Requests).Remove(pair);
+
                     else
                         attempts.TrimExcess();
                 }
@@ -108,6 +108,7 @@ namespace EmbedIO.Security
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed) return;
+
             if (disposing)
             {
                 Requests.Clear();

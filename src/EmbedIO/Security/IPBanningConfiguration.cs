@@ -1,11 +1,11 @@
-﻿using EmbedIO.Utilities;
-using EmbedIO.Configuration;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using EmbedIO.Configuration;
+using EmbedIO.Utilities;
 
 namespace EmbedIO.Security
 {
@@ -15,24 +15,19 @@ namespace EmbedIO.Security
     /// <seealso cref="ConfiguredObject" />
     public class IPBanningConfiguration : ConfiguredObject, IDisposable
     {
-        private readonly List<IIPBanningCriterion> _criterions = new List<IIPBanningCriterion>();
-        private readonly ConcurrentDictionary<IPAddress, BanInfo> _blacklistDictionary = new ConcurrentDictionary<IPAddress, BanInfo>();
-        private readonly ConcurrentBag<IPAddress> _whiteListBag = new ConcurrentBag<IPAddress>();
+        private readonly List<IIPBanningCriterion> _criterions = [];
+        private readonly ConcurrentDictionary<IPAddress, BanInfo> _blacklistDictionary = new(
+        );
+        private readonly ConcurrentBag<IPAddress> _whiteListBag = [];
         private readonly int _banTime;
         private bool _disposed;
 
-        internal IPBanningConfiguration(int banTime)
-        {
-            _banTime = banTime;
-        }
+        internal IPBanningConfiguration(int banTime) => _banTime = banTime;
 
         /// <summary>
         /// Finalizes an instance of the <see cref="IPBanningConfiguration"/> class.
         /// </summary>
-        ~IPBanningConfiguration()
-        {
-            Dispose(false);
-        }
+        ~IPBanningConfiguration() => Dispose(false);
 
         /// <summary>
         /// Gets the black list.
@@ -40,7 +35,7 @@ namespace EmbedIO.Security
         /// <value>
         /// The black list.
         /// </value>
-        public List<BanInfo> BlackList => _blacklistDictionary.Values.ToList();
+        public List<BanInfo> BlackList => [.. _blacklistDictionary.Values];
 
         /// <summary>
         /// Check if a Criterion should continue testing an IP Address.
@@ -75,7 +70,9 @@ namespace EmbedIO.Security
 
             foreach (var criterion in _criterions)
             {
-                var result = await criterion.ValidateIPAddress(clientAddress).ConfigureAwait(false);
+                var result = await criterion
+                    .ValidateIPAddress(clientAddress)
+                    .ConfigureAwait(false);
 
                 if (!result) continue;
 
@@ -101,7 +98,10 @@ namespace EmbedIO.Security
 
             foreach (var whiteAddress in whitelist)
             {
-                var parsedAddresses = await IPParser.ParseAsync(whiteAddress).ConfigureAwait(false);
+                var parsedAddresses = await IPParser
+                    .ParseAsync(whiteAddress)
+                    .ConfigureAwait(false);
+
                 foreach (var address in parsedAddresses.Where(x => !_whiteListBag.Contains(x)))
                 {
                     _whiteListBag.Add(address);
@@ -131,14 +131,14 @@ namespace EmbedIO.Security
         {
             try
             {
-                _blacklistDictionary.AddOrUpdate(address,
-                    k =>
-                        new BanInfo
-                        {
-                            IPAddress = k,
-                            ExpiresAt = banUntil?.Ticks ?? DateTime.Now.AddMinutes(_banTime).Ticks,
-                            IsExplicit = isExplicit,
-                        },
+                _blacklistDictionary.AddOrUpdate(
+                    address,
+                    k => new BanInfo
+                    {
+                        IPAddress = k,
+                        ExpiresAt = banUntil?.Ticks ?? DateTime.Now.AddMinutes(_banTime).Ticks,
+                        IsExplicit = isExplicit
+                    },
                     (k, v) =>
                     {
                         var now = DateTime.Now;
@@ -152,12 +152,14 @@ namespace EmbedIO.Security
                         {
                             IPAddress = k,
                             ExpiresAt = expiresAt,
-                            IsExplicit = isExplicit || (v.IsExplicit && v.ExpiresAt > now.Ticks),
+                            IsExplicit = isExplicit || (v.IsExplicit && v.ExpiresAt > now.Ticks)
                         };
-                    });
+                    }
+                );
 
                 return true;
             }
+
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
                 return false;
@@ -188,10 +190,11 @@ namespace EmbedIO.Security
         {
             foreach (var k in _blacklistDictionary.Keys)
             {
-                if (_blacklistDictionary.TryGetValue(k, out var info) &&
-                    DateTime.Now.Ticks > info.ExpiresAt)
+                if (_blacklistDictionary.TryGetValue(k, out var info) && DateTime.Now.Ticks > info.ExpiresAt)
                     // Remove only the expired entry inspected above; a new ban may have replaced it.
-                    ((ICollection<KeyValuePair<IPAddress, BanInfo>>)_blacklistDictionary).Remove(new KeyValuePair<IPAddress, BanInfo>(k, info));
+                    ((ICollection<KeyValuePair<IPAddress, BanInfo>>)_blacklistDictionary).Remove(
+                        new KeyValuePair<IPAddress, BanInfo>(k, info)
+                    );
             }
         }
     }

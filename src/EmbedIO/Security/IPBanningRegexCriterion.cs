@@ -1,11 +1,11 @@
-﻿using EmbedIO.Diagnostics;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 
 namespace EmbedIO.Security
 {
@@ -24,10 +24,9 @@ namespace EmbedIO.Security
         /// The default maximum match count per period.
         /// </summary>
         public const int DefaultMaxMatchCount = 10;
-
-        private readonly ConcurrentDictionary<IPAddress, ConcurrentBag<long>> _failRegexMatches = new ConcurrentDictionary<IPAddress, ConcurrentBag<long>>();
-        private readonly object _matchesSync = new object();
-        private readonly ConcurrentDictionary<string, Regex> _failRegex = new ConcurrentDictionary<string, Regex>();
+        private readonly ConcurrentDictionary<IPAddress, ConcurrentBag<long>> _failRegexMatches = new();
+        private readonly object _matchesSync = new();
+        private readonly ConcurrentDictionary<string, Regex> _failRegex = new();
         private readonly IPBanningModule _parent;
         private readonly int _secondsMatchingPeriod;
         private readonly int _maxMatchCount;
@@ -41,33 +40,36 @@ namespace EmbedIO.Security
         /// <param name="rules">The rules.</param>
         /// <param name="maxMatchCount">The maximum match count.</param>
         /// <param name="secondsMatchingPeriod">The seconds matching period.</param>
-        public IPBanningRegexCriterion(IPBanningModule parent, IEnumerable<string> rules, int maxMatchCount = DefaultMaxMatchCount, int secondsMatchingPeriod = DefaultSecondsMatchingPeriod)
+        public IPBanningRegexCriterion(
+            IPBanningModule parent,
+            IEnumerable<string> rules,
+            int maxMatchCount = DefaultMaxMatchCount,
+            int secondsMatchingPeriod = DefaultSecondsMatchingPeriod
+        )
         {
             if (rules is null) throw new System.NullReferenceException();
+
             _secondsMatchingPeriod = secondsMatchingPeriod;
             _maxMatchCount = maxMatchCount;
             _parent = parent;
 
             AddRules(rules);
 
-            if (_failRegex.Any())
+            if (!_failRegex.IsEmpty)
                 _innerLogger = new InnerRegexCriterionLogger(this);
         }
 
         /// <summary>
         /// Finalizes an instance of the <see cref="IPBanningRegexCriterion"/> class.
         /// </summary>
-        ~IPBanningRegexCriterion()
-        {
-            Dispose(false);
-        }
+        ~IPBanningRegexCriterion() => Dispose(false);
 
         /// <inheritdoc />
         public Task<bool> ValidateIPAddress(IPAddress address)
         {
             var minTime = DateTime.Now.AddSeconds(-1 * _secondsMatchingPeriod).Ticks;
-            var shouldBan = _failRegexMatches.TryGetValue(address, out var attempts) &&
-                            attempts.Count(x => x >= minTime) >= _maxMatchCount;
+            var shouldBan = _failRegexMatches.TryGetValue(address, out var attempts)
+                && attempts.Count(x => x >= minTime) >= _maxMatchCount;
 
             return Task.FromResult(shouldBan);
         }
@@ -92,8 +94,10 @@ namespace EmbedIO.Security
                     if (!_failRegexMatches.TryGetValue(k, out var failRegexMatches)) continue;
 
                     var recentMatches = new ConcurrentBag<long>(failRegexMatches.Where(x => x >= minTime));
-                    if (!recentMatches.Any())
+
+                    if (recentMatches.IsEmpty)
                         _failRegexMatches.TryRemove(k, out _);
+
                     else
                         _failRegexMatches.AddOrUpdate(k, recentMatches, (x, y) => recentMatches);
                 }
@@ -117,11 +121,10 @@ namespace EmbedIO.Security
             if (disposing)
             {
                 lock (_matchesSync) _failRegexMatches.Clear();
+
                 _failRegex.Clear();
-                if (_innerLogger != null)
-                {
-                    _innerLogger.Dispose();
-                }
+
+                _innerLogger?.Dispose();
             }
 
             _disposed = true;
@@ -139,12 +142,18 @@ namespace EmbedIO.Security
                     if (!regex.IsMatch(message)) continue;
 
                     lock (_matchesSync)
-                        _failRegexMatches.GetOrAdd(address, _ => new ConcurrentBag<long>()).Add(DateTime.Now.Ticks);
+                        _failRegexMatches
+                            .GetOrAdd(address, _ => [])
+                            .Add(DateTime.Now.Ticks);
+
                     break;
                 }
+
                 catch (RegexMatchTimeoutException ex)
                 {
-                    $"Timeout trying to match '{ex.Input}' with pattern '{ex.Pattern}'.".Error(nameof(InnerRegexCriterionLogger));
+                    $"Timeout trying to match '{ex.Input}' with pattern '{ex.Pattern}'.".Error(
+                        nameof(InnerRegexCriterionLogger)
+                    );
                 }
             }
         }
@@ -159,8 +168,16 @@ namespace EmbedIO.Security
         {
             try
             {
-                _failRegex.TryAdd(pattern, new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(500)));
+                _failRegex.TryAdd(
+                    pattern,
+                    new Regex(
+                        pattern,
+                        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+                        TimeSpan.FromMilliseconds(500)
+                    )
+                );
             }
+
             catch (ArgumentException ex)
             {
                 ex.Log(nameof(IPBanningModule), $"Invalid regex - '{pattern}'.");
@@ -188,6 +205,7 @@ namespace EmbedIO.Security
                 // The message names its own request, so the match is charged to that request's
                 // client. A message from no request this module handled is charged to nobody.
                 var clientAddress = _parent._parent.ResolveMessageClient(message);
+
                 if (clientAddress == null)
                     return;
 
