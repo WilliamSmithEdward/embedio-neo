@@ -1,6 +1,6 @@
 ﻿using System;
-using System.IO;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,8 +24,11 @@ namespace EmbedIO.Net.Internal
         internal RequestStream(Stream stream, byte[] buffer, int offset, int length, long contentLength = -1)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
+
             ValidateDestination(buffer, offset, length);
+
             if (contentLength < -1) throw new ArgumentOutOfRangeException(nameof(contentLength));
+
             _connectionInput = new EmbedIO.Internal.BorrowedResource<Stream>(stream);
             _readAheadBytes = buffer;
             _readCursor = offset;
@@ -34,14 +37,15 @@ namespace EmbedIO.Net.Internal
         }
 
         internal virtual bool IsBodyConsumed => _bytesLeft == 0;
+
         public virtual bool TryGetTrailers(out IReadOnlyList<KeyValuePair<string, string>> trailers)
         {
             trailers = RequestTrailerSnapshot.Empty;
             return IsBodyConsumed && !HasBodyFramingFailure && !_trailerInputAbandoned;
         }
 
-        internal virtual ArraySegment<byte> BufferedRemainder => IsBodyConsumed
-            ? new ArraySegment<byte>(_readAheadBytes, _readCursor, _readEnd - _readCursor) : default;
+        internal virtual ArraySegment<byte> BufferedRemainder =>
+            IsBodyConsumed ? new ArraySegment<byte>(_readAheadBytes, _readCursor, _readEnd - _readCursor) : default;
         internal bool HasBodyFramingFailure => _bodyFailure != null;
         protected bool HasFramingFailure => HasBodyFramingFailure;
         protected bool TrailerInputAbandoned => _trailerInputAbandoned;
@@ -49,6 +53,7 @@ namespace EmbedIO.Net.Internal
         protected override void Dispose(bool disposing)
         {
             if (disposing && !IsBodyConsumed) _trailerInputAbandoned = true;
+
             base.Dispose(disposing);
         }
 
@@ -57,12 +62,17 @@ namespace EmbedIO.Net.Internal
             _bodyFailure = ExceptionDispatchInfo.Capture(error);
             ObserveInputFailure();
         }
-        protected void ObserveInputFailure() => EmbedIO.Internal.RequestAbortRegistry.Find(this)?.Abort();
+
+        protected void ObserveInputFailure() =>
+            EmbedIO.Internal.RequestAbortRegistry
+                .Find(this)
+                ?.Abort();
 
         internal bool IsFramingError(Exception error)
         {
-            for (Exception? cause = error; cause != null; cause = cause.InnerException)
+            for (var cause = error; cause != null; cause = cause.InnerException)
                 if (ReferenceEquals(cause, _bodyFailure?.SourceException)) return true;
+
             return false;
         }
 
@@ -70,6 +80,7 @@ namespace EmbedIO.Net.Internal
         public override bool CanSeek => false;
         public override bool CanWrite => false;
         public override long Length => throw new NotSupportedException();
+
         public override long Position
         {
             get => throw new NotSupportedException();
@@ -77,67 +88,132 @@ namespace EmbedIO.Net.Internal
         }
 
         public override void Flush() { }
+
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
         public override void SetLength(long value) => throw new NotSupportedException();
+
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
         public override int Read(byte[] buffer, int offset, int count)
         {
             ValidateDestination(buffer, offset, count);
             var limit = ReadLimit(count);
+
             if (limit == 0) return 0;
+
             var buffered = CopyReadAhead(buffer, offset, limit);
+
             if (buffered != 0) return buffered;
-            try { return AccountTransportRead(_connectionInput.Value.Read(buffer, offset, limit)); }
-            catch (IOException) { ObserveInputFailure(); throw; }
-            catch (System.Net.Sockets.SocketException) { ObserveInputFailure(); throw; }
+
+            try
+            {
+                return AccountTransportRead(_connectionInput.Value.Read(buffer, offset, limit));
+            }
+
+            catch (IOException)
+            {
+                ObserveInputFailure();
+                throw;
+            }
+
+            catch (System.Net.Sockets.SocketException)
+            {
+                ObserveInputFailure();
+                throw;
+            }
         }
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
         {
             ValidateDestination(buffer, offset, count);
+
             if (cancellationToken.IsCancellationRequested) return Task.FromCanceled<int>(cancellationToken);
+
             var limit = ReadLimit(count);
+
             if (limit == 0) return Task.FromResult(0);
+
             var buffered = CopyReadAhead(buffer, offset, limit);
-            return buffered != 0 ? Task.FromResult(buffered)
+            return buffered != 0
+                ? Task.FromResult(buffered)
                 : ReadConnectionAsync(buffer, offset, limit, cancellationToken);
         }
 
         private async Task<int> ReadConnectionAsync(byte[] buffer, int offset, int count, CancellationToken token)
         {
-            try { return AccountTransportRead(await _connectionInput.Value.ReadAsync(buffer, offset, count, token).ConfigureAwait(false)); }
-            catch (IOException) { ObserveInputFailure(); throw; }
-            catch (System.Net.Sockets.SocketException) { ObserveInputFailure(); throw; }
-        }
+            try
+            {
+                return AccountTransportRead(
+                    await _connectionInput.Value
+                        .ReadAsync(buffer, offset, count, token)
+                        .ConfigureAwait(false)
+                );
+            }
 
+            catch (IOException)
+            {
+                ObserveInputFailure();
+                throw;
+            }
+
+            catch (System.Net.Sockets.SocketException)
+            {
+                ObserveInputFailure();
+                throw;
+            }
+        }
 #if NET10_0_OR_GREATER
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             if (cancellationToken.IsCancellationRequested) return ValueTask.FromCanceled<int>(cancellationToken);
+
             var limit = ReadLimit(buffer.Length);
+
             if (limit == 0) return new ValueTask<int>(0);
+
             var buffered = Math.Min(limit, _readEnd - _readCursor);
+
             if (buffered != 0)
             {
-                _readAheadBytes.AsMemory(_readCursor, buffered).CopyTo(buffer);
+                _readAheadBytes
+                    .AsMemory(_readCursor, buffered)
+                    .CopyTo(buffer);
                 AccountReadAhead(buffered);
                 return new ValueTask<int>(buffered);
             }
+
             return ReadConnectionAsync(buffer.Slice(0, limit), cancellationToken);
         }
 
         private async ValueTask<int> ReadConnectionAsync(Memory<byte> buffer, CancellationToken token)
         {
-            try { return AccountTransportRead(await _connectionInput.Value.ReadAsync(buffer, token).ConfigureAwait(false)); }
-            catch (IOException) { ObserveInputFailure(); throw; }
-            catch (System.Net.Sockets.SocketException) { ObserveInputFailure(); throw; }
+            try
+            {
+                return AccountTransportRead(
+                    await _connectionInput.Value
+                        .ReadAsync(buffer, token)
+                        .ConfigureAwait(false)
+                );
+            }
+
+            catch (IOException)
+            {
+                ObserveInputFailure();
+                throw;
+            }
+
+            catch (System.Net.Sockets.SocketException)
+            {
+                ObserveInputFailure();
+                throw;
+            }
         }
 #endif
-
         private int ReadLimit(int requested)
         {
             if (requested == 0 || _bytesLeft == 0) return 0;
+
             _bodyFailure?.Throw();
             return _bytesLeft < 0 ? requested : (int)Math.Min(requested, _bytesLeft);
         }
@@ -145,17 +221,20 @@ namespace EmbedIO.Net.Internal
         private int CopyReadAhead(byte[] destination, int offset, int limit)
         {
             var copied = Math.Min(limit, _readEnd - _readCursor);
+
             if (copied != 0)
             {
                 Buffer.BlockCopy(_readAheadBytes, _readCursor, destination, offset, copied);
                 AccountReadAhead(copied);
             }
+
             return copied;
         }
 
         private void AccountReadAhead(int count)
         {
             _readCursor += count;
+
             if (_bytesLeft >= 0) _bytesLeft -= count;
         }
 
@@ -163,7 +242,11 @@ namespace EmbedIO.Net.Internal
         {
             if (count == 0 && _bytesLeft > 0)
             {
-                try { throw new EndOfStreamException("Incomplete fixed-length request body."); }
+                try
+                {
+                    throw new EndOfStreamException("Incomplete fixed-length request body.");
+                }
+
                 catch (EndOfStreamException failure)
                 {
                     // Capture after the first throw has established its origin.
@@ -171,16 +254,22 @@ namespace EmbedIO.Net.Internal
                     throw;
                 }
             }
+
             if (_bytesLeft >= 0) _bytesLeft -= count;
+
             return count;
         }
 
         protected static void ValidateDestination(byte[] buffer, int off, int count)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+
             if (off < 0) throw new ArgumentOutOfRangeException(nameof(off), "< 0");
+
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count), "< 0");
+
             if (off > buffer.Length) throw new ArgumentException("destination offset is beyond array size");
+
             if (count > buffer.Length - off) throw new ArgumentException("Reading would overrun buffer");
         }
     }

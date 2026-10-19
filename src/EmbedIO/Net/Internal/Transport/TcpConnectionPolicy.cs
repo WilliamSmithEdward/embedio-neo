@@ -14,7 +14,6 @@ namespace EmbedIO.Net.Internal
         // between requests; HTTP/2 connections without streams have no idle deadline.
         internal const int DefaultHeaderTimeoutMilliseconds = 30000;
         internal static readonly TcpConnectionPolicy Default = new(null, DefaultHeaderTimeoutMilliseconds, null);
-
         private int _open;
 
         internal TcpConnectionPolicy(int? maximumConnections, int headerTimeoutMilliseconds, int? keepAliveMilliseconds)
@@ -28,17 +27,14 @@ namespace EmbedIO.Net.Internal
         }
 
         internal int? MaximumConnections { get; }
-
         internal int HeaderTimeoutMilliseconds { get; }
 
         // Null keeps the existing behavior: 15 seconds on HTTP/1, none on HTTP/2.
         internal int? ConfiguredKeepAliveMilliseconds { get; }
-
         internal int Http1KeepAliveMilliseconds => ConfiguredKeepAliveMilliseconds ?? 15000;
 
         // Value of the HTTP/1 Keep-Alive response header.
         internal string Http1KeepAliveHeader { get; }
-
         internal bool IsDefault => ReferenceEquals(this, Default);
 
         // Claims a connection slot. Every successful claim is released exactly once.
@@ -49,10 +45,13 @@ namespace EmbedIO.Net.Internal
                 _ = Interlocked.Increment(ref _open);
                 return true;
             }
+
             while (true)
             {
                 var open = Volatile.Read(ref _open);
+
                 if (open >= maximum) return false;
+
                 if (Interlocked.CompareExchange(ref _open, open + 1, open) == open) return true;
             }
         }

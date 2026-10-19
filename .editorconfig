@@ -196,3 +196,37 @@ dotnet_diagnostic.CA1844.severity = none
 [src/EmbedIO/Internal/Responses/JsonSequenceWriter.cs]
 # Preserve intentional aggregation of operation failures with producer/stream cleanup failures.
 dotnet_diagnostic.CA2219.severity = none
+
+[src/EmbedIO/Net/Internal/Http1/Http1ResponseOutput.cs]
+# Preserve shared array-based overrides; synchronous=true ValueTask paths perform only synchronous transport I/O.
+dotnet_diagnostic.CA1844.severity = none
+dotnet_diagnostic.CA2012.severity = none
+
+[src/EmbedIO/Net/Internal/Http2/Http2FrameTransport.cs]
+# Preserve the explicit output-write constructor instead of restructuring solely for style.
+dotnet_diagnostic.IDE0290.severity = none
+
+[src/EmbedIO/Net/Internal/Http2/Http2RequestBody.cs]
+# Owner-approved: retain shared array-based stream overrides without target-specific branches.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Net/Internal/Http3/Http3QuicConnection.cs]
+# Preserve coordinated QUIC lifecycle helper signatures; the flagged finally throw is inside a continuation callback.
+dotnet_diagnostic.CA1068.severity = none
+dotnet_diagnostic.CA2219.severity = none
+
+[src/EmbedIO/Net/Internal/Http3/Http3RequestBody.cs]
+# Preserve the existing array-based read implementation without adding an overload solely for this suggestion.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Net/Internal/Http3/QpackEncoder.cs]
+# Dictionary.TryAdd is unavailable on .NET Standard 2.0; preserve first-entry-wins initialization.
+dotnet_diagnostic.CA1864.severity = none
+
+[src/EmbedIO/Net/Internal/Multiplexed/MultiplexedResponse.cs]
+# Preserve shared array-based response stream overrides without target-specific branches.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Net/Internal/Transport/ListenerPrefix.cs]
+# Span-based string.Concat is unavailable on .NET Standard 2.0; retain the shared implementation.
+dotnet_diagnostic.CA1845.severity = none

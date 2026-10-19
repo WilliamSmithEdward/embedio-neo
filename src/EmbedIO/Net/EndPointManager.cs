@@ -14,20 +14,35 @@ namespace EmbedIO.Net
 
         internal static void AddListener(HttpListener listener)
         {
-            try { TcpEndpointRegistry.Register(listener, listener.Prefixes); }
-            catch (Exception error) { error.Log(nameof(AddListener)); throw; }
+            try
+            {
+                TcpEndpointRegistry.Register(listener, listener.Prefixes);
+            }
+
+            catch (Exception error)
+            {
+                error.Log(nameof(AddListener));
+                throw;
+            }
         }
 
-        internal static void AddPrefix(string prefix, HttpListener listener)
-            => TcpEndpointRegistry.Register(listener, new[] { prefix });
+        internal static void AddPrefix(string prefix, HttpListener listener) =>
+            TcpEndpointRegistry.Register(listener, [prefix]);
 
         internal static void RemoveListener(HttpListener listener) => TcpEndpointRegistry.Remove(listener);
 
-        internal static HashSet<HttpConnection> BeginDrain(HttpListener listener, out HashSet<EndPointListener> exclusive)
-            => TcpEndpointRegistry.BeginDrain(listener, out exclusive);
+        internal static HashSet<HttpConnection> BeginDrain(
+            HttpListener listener,
+            out HashSet<EndPointListener> exclusive
+        ) => TcpEndpointRegistry.BeginDrain(listener, out exclusive);
 
-        internal static EndPointListener[] OwnedEndpoints(HttpListener listener) => TcpEndpointRegistry.OwnedEndpoints(listener);
-        internal static EndPointListener? FindEndpoint(IPAddress address, int port) => TcpEndpointRegistry.FindEndpoint(address, port);
-        internal static bool TryEndpoints(out EndPointListener[] endpoints) => TcpEndpointRegistry.TryEndpoints(out endpoints);
+        internal static EndPointListener[] OwnedEndpoints(HttpListener listener) =>
+            TcpEndpointRegistry.OwnedEndpoints(listener);
+
+        internal static EndPointListener? FindEndpoint(IPAddress address, int port) =>
+            TcpEndpointRegistry.FindEndpoint(address, port);
+
+        internal static bool TryEndpoints(out EndPointListener[] endpoints) =>
+            TcpEndpointRegistry.TryEndpoints(out endpoints);
     }
 }

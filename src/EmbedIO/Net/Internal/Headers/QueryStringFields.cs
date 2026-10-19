@@ -17,15 +17,25 @@ namespace EmbedIO.Net.Internal
         internal static void AddTo(string query, NameValueCollection result)
         {
             if (query.Length == 0) return;
+
             for (var start = query[0] == '?' ? 1 : 0; ;)
             {
                 var end = query.IndexOf('&', start);
+
                 if (end < 0) end = query.Length;
+
                 var equals = query.IndexOf('=', start, end - start);
+
                 if (equals < 0) result.Add(null, WebUtility.UrlDecode(query.Substring(start, end - start)));
-                else result.Add(WebUtility.UrlDecode(query.Substring(start, equals - start)),
-                    WebUtility.UrlDecode(query.Substring(equals + 1, end - equals - 1)));
+
+                else
+                    result.Add(
+                        WebUtility.UrlDecode(query.Substring(start, equals - start)),
+                        WebUtility.UrlDecode(query.Substring(equals + 1, end - equals - 1))
+                    );
+
                 if (end == query.Length) return;
+
                 start = end + 1;
             }
         }

@@ -19,19 +19,35 @@ namespace EmbedIO.Net.Internal.WebTransport
         public long InitialMaxStreamsBidirectional { get; private set; }
 
         // Section 5.1: declaring any non-zero initial limit is an intent to use flow control.
-        public bool DeclaresFlowControl => InitialMaxData != 0 || InitialMaxStreamsUnidirectional != 0 || InitialMaxStreamsBidirectional != 0;
+        public bool DeclaresFlowControl =>
+            InitialMaxData != 0 || InitialMaxStreamsUnidirectional != 0 || InitialMaxStreamsBidirectional != 0;
 
         // Section 3.1: every SETTINGS requirement a server peer must have met before
         // :protocol=webtransport-h3 requests are processed as sessions.
         public bool SettingsRequirementsMet => ExtendedConnect && Datagrams && Enabled;
 
-        internal static WebTransportSettings Local(bool enabled, long initialMaxData, long initialMaxStreamsUnidirectional, long initialMaxStreamsBidirectional)
+        internal static WebTransportSettings Local(
+            bool enabled,
+            long initialMaxData,
+            long initialMaxStreamsUnidirectional,
+            long initialMaxStreamsBidirectional
+        )
         {
-            if (initialMaxData < 0 || initialMaxData > QuicInteger.Maximum) throw new ArgumentOutOfRangeException(nameof(initialMaxData));
-            if (initialMaxStreamsUnidirectional < 0 || initialMaxStreamsUnidirectional > WebTransportProtocol.MaximumStreamCount)
+            if (initialMaxData < 0 || initialMaxData > QuicInteger.Maximum)
+                throw new ArgumentOutOfRangeException(nameof(initialMaxData));
+
+            if (
+                initialMaxStreamsUnidirectional < 0
+                || initialMaxStreamsUnidirectional > WebTransportProtocol.MaximumStreamCount
+            )
                 throw new ArgumentOutOfRangeException(nameof(initialMaxStreamsUnidirectional));
-            if (initialMaxStreamsBidirectional < 0 || initialMaxStreamsBidirectional > WebTransportProtocol.MaximumStreamCount)
+
+            if (
+                initialMaxStreamsBidirectional < 0
+                || initialMaxStreamsBidirectional > WebTransportProtocol.MaximumStreamCount
+            )
                 throw new ArgumentOutOfRangeException(nameof(initialMaxStreamsBidirectional));
+
             return new WebTransportSettings
             {
                 ExtendedConnect = true,
@@ -39,7 +55,7 @@ namespace EmbedIO.Net.Internal.WebTransport
                 Enabled = enabled,
                 InitialMaxData = initialMaxData,
                 InitialMaxStreamsUnidirectional = initialMaxStreamsUnidirectional,
-                InitialMaxStreamsBidirectional = initialMaxStreamsBidirectional,
+                InitialMaxStreamsBidirectional = initialMaxStreamsBidirectional
             };
         }
 
@@ -50,12 +66,29 @@ namespace EmbedIO.Net.Internal.WebTransport
             {
                 switch (id)
                 {
-                    case WebTransportProtocol.SettingEnableConnectProtocol: settings.ExtendedConnect = Http3PeerSettings.Boolean(value); break;
-                    case WebTransportProtocol.SettingH3Datagram: settings.Datagrams = Http3PeerSettings.Boolean(value); break;
-                    case WebTransportProtocol.SettingEnabled: settings.Enabled = Http3PeerSettings.Boolean(value); break;
-                    case WebTransportProtocol.SettingInitialMaxData: settings.InitialMaxData = value; break;
-                    case WebTransportProtocol.SettingInitialMaxStreamsUnidirectional: settings.InitialMaxStreamsUnidirectional = StreamCount(value); break;
-                    case WebTransportProtocol.SettingInitialMaxStreamsBidirectional: settings.InitialMaxStreamsBidirectional = StreamCount(value); break;
+                    case WebTransportProtocol.SettingEnableConnectProtocol:
+                        settings.ExtendedConnect = Http3PeerSettings.Boolean(value);
+                        break;
+
+                    case WebTransportProtocol.SettingH3Datagram:
+                        settings.Datagrams = Http3PeerSettings.Boolean(value);
+                        break;
+
+                    case WebTransportProtocol.SettingEnabled:
+                        settings.Enabled = Http3PeerSettings.Boolean(value);
+                        break;
+
+                    case WebTransportProtocol.SettingInitialMaxData:
+                        settings.InitialMaxData = value;
+                        break;
+
+                    case WebTransportProtocol.SettingInitialMaxStreamsUnidirectional:
+                        settings.InitialMaxStreamsUnidirectional = StreamCount(value);
+                        break;
+
+                    case WebTransportProtocol.SettingInitialMaxStreamsBidirectional:
+                        settings.InitialMaxStreamsBidirectional = StreamCount(value);
+                        break;
                 }
             });
             return settings;
@@ -65,7 +98,9 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal static bool FlowControlEnabled(WebTransportSettings local, WebTransportSettings peer)
         {
             if (local == null) throw new ArgumentNullException(nameof(local));
+
             if (peer == null) throw new ArgumentNullException(nameof(peer));
+
             return local.DeclaresFlowControl && peer.DeclaresFlowControl;
         }
 
@@ -76,10 +111,28 @@ namespace EmbedIO.Net.Internal.WebTransport
         {
             var bytes = new byte[64];
             var count = 0;
+
             if (Enabled) count += Pair(bytes, count, WebTransportProtocol.SettingEnabled, 1);
-            if (InitialMaxData != 0) count += Pair(bytes, count, WebTransportProtocol.SettingInitialMaxData, InitialMaxData);
-            if (InitialMaxStreamsUnidirectional != 0) count += Pair(bytes, count, WebTransportProtocol.SettingInitialMaxStreamsUnidirectional, InitialMaxStreamsUnidirectional);
-            if (InitialMaxStreamsBidirectional != 0) count += Pair(bytes, count, WebTransportProtocol.SettingInitialMaxStreamsBidirectional, InitialMaxStreamsBidirectional);
+
+            if (InitialMaxData != 0)
+                count += Pair(bytes, count, WebTransportProtocol.SettingInitialMaxData, InitialMaxData);
+
+            if (InitialMaxStreamsUnidirectional != 0)
+                count += Pair(
+                    bytes,
+                    count,
+                    WebTransportProtocol.SettingInitialMaxStreamsUnidirectional,
+                    InitialMaxStreamsUnidirectional
+                );
+
+            if (InitialMaxStreamsBidirectional != 0)
+                count += Pair(
+                    bytes,
+                    count,
+                    WebTransportProtocol.SettingInitialMaxStreamsBidirectional,
+                    InitialMaxStreamsBidirectional
+                );
+
             var result = new byte[count];
             Array.Copy(bytes, result, count);
             return result;
@@ -95,7 +148,12 @@ namespace EmbedIO.Net.Internal.WebTransport
         // setting value; section 5.6.2 states the 2^60 bound for capsules only.
         private static long StreamCount(long value)
         {
-            if (value > WebTransportProtocol.MaximumStreamCount) throw new Http3ProtocolException(WebTransportProtocol.H3SettingsError, "WebTransport initial stream limit exceeds 2^60.");
+            if (value > WebTransportProtocol.MaximumStreamCount)
+                throw new Http3ProtocolException(
+                    WebTransportProtocol.H3SettingsError,
+                    "WebTransport initial stream limit exceeds 2^60."
+                );
+
             return value;
         }
     }

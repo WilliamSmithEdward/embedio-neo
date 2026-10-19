@@ -13,7 +13,7 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly object _sync = new();
         private readonly QpackDecoderTable _table;
-        private readonly Dictionary<long, Pending> _pending = new();
+        private readonly Dictionary<long, Pending> _pending = [];
         private readonly int _maximumCapacity;
         private readonly int _maximumBlockedStreams;
         private readonly int _maximumEncodedBytes;
@@ -26,14 +26,25 @@ namespace EmbedIO.Net.Internal.Http3
         private long _failure;
         private bool _disposed;
 
-        internal QpackDecoder(int maximumCapacity, int maximumBlockedStreams, int maximumEncodedBytes,
-            int maximumDecodedBytes, long maximumBlockedBytes, int maximumFeedbackBytes)
+        internal QpackDecoder(
+            int maximumCapacity,
+            int maximumBlockedStreams,
+            int maximumEncodedBytes,
+            int maximumDecodedBytes,
+            long maximumBlockedBytes,
+            int maximumFeedbackBytes
+        )
         {
             if (maximumBlockedStreams < 0) throw new ArgumentOutOfRangeException(nameof(maximumBlockedStreams));
+
             if (maximumEncodedBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumEncodedBytes));
+
             if (maximumDecodedBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumDecodedBytes));
+
             if (maximumBlockedBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumBlockedBytes));
+
             if (maximumFeedbackBytes < 1) throw new ArgumentOutOfRangeException(nameof(maximumFeedbackBytes));
+
             _table = new QpackDecoderTable(maximumCapacity);
             _maximumCapacity = maximumCapacity;
             _maximumBlockedStreams = maximumBlockedStreams;
@@ -43,37 +54,85 @@ namespace EmbedIO.Net.Internal.Http3
             _maximumFeedbackBytes = maximumFeedbackBytes;
             _feedback = new MemoryStream(Math.Min(maximumFeedbackBytes, 128));
         }
-        public int BlockedStreams { get { lock (_sync) return _pending.Count; } }
-        public long BlockedBytes { get { lock (_sync) return _blockedBytes; } }
-        public long KnownReceivedCount { get { lock (_sync) return _knownReceivedCount; } }
-        internal bool HasFeedback { get { lock (_sync) return _feedback.Length != 0; } }
+
+        public int BlockedStreams
+        {
+            get
+            {
+                lock (_sync) return _pending.Count;
+            }
+        }
+
+        public long BlockedBytes
+        {
+            get
+            {
+                lock (_sync) return _blockedBytes;
+            }
+        }
+
+        public long KnownReceivedCount
+        {
+            get
+            {
+                lock (_sync) return _knownReceivedCount;
+            }
+        }
+
+        internal bool HasFeedback
+        {
+            get
+            {
+                lock (_sync) return _feedback.Length != 0;
+            }
+        }
 
         internal HpackField[]? Submit(long streamId, byte[] wire)
         {
             ValidateStream(streamId);
+
             if (wire == null) throw new ArgumentNullException(nameof(wire));
+
             lock (_sync)
             {
                 CheckUsable();
-                if (_pending.ContainsKey(streamId)) throw new InvalidOperationException("Resume the previous field section before reading another on this stream.");
+
+                if (_pending.ContainsKey(streamId))
+                    throw new InvalidOperationException(
+                        "Resume the previous field section before reading another on this stream."
+                    );
+
                 try
                 {
                     var section = _table.ReadSection(wire, _maximumEncodedBytes, _maximumDecodedBytes);
                     var fields = section.TryDecode();
+
                     if (fields != null)
                     {
                         Acknowledge(streamId, section.RequiredInsertCount);
                         return fields;
                     }
-                    if (_pending.Count >= _maximumBlockedStreams) throw new Http3ProtocolException(0x200, "Peer exceeded advertised QPACK blocked-stream count.");
+
+                    if (_pending.Count >= _maximumBlockedStreams)
+                        throw new Http3ProtocolException(0x200, "Peer exceeded advertised QPACK blocked-stream count.");
+
                     if (wire.Length > _maximumBlockedBytes - _blockedBytes) throw Excessive();
+
                     _pending.Add(streamId, new Pending(section, wire.Length));
                     _blockedBytes += wire.Length;
                     return null;
                 }
+
                 catch (QpackFieldSectionLimitException error)
-                { throw new Http3StreamException(streamId, error.ErrorCode, error.Message); }
-                catch (Http3ProtocolException error) { Fail(error.ErrorCode); throw; }
+                {
+                    throw new Http3StreamException(streamId, error.ErrorCode, error.Message);
+                }
+
+                catch (Http3ProtocolException error)
+                {
+                    Fail(error.ErrorCode);
+                    throw;
+                }
             }
         }
 
@@ -82,38 +141,60 @@ namespace EmbedIO.Net.Internal.Http3
             lock (_sync)
             {
                 CheckUsable();
+
                 try
                 {
                     _table.Feed(bytes, offset, count);
                     var completed = new List<QpackDecodedSection>();
+
                     foreach (var item in _pending)
                     {
                         HpackField[]? fields;
-                        try { fields = item.Value.Section.TryDecode(); }
+
+                        try
+                        {
+                            fields = item.Value.Section.TryDecode();
+                        }
+
                         catch (QpackFieldSectionLimitException error)
                         {
-                            completed.Add(new QpackDecodedSection(item.Key,
-                                new Http3StreamException(item.Key, error.ErrorCode, error.Message)));
+                            completed.Add(
+                                new QpackDecodedSection(
+                                    item.Key,
+                                    new Http3StreamException(item.Key, error.ErrorCode, error.Message)
+                                )
+                            );
                             continue;
                         }
+
                         if (fields == null) continue;
+
                         Acknowledge(item.Key, item.Value.Section.RequiredInsertCount);
                         completed.Add(new QpackDecodedSection(item.Key, fields));
                     }
+
                     foreach (var item in completed)
                     {
                         _blockedBytes -= _pending[item.StreamId].Length;
                         _pending.Remove(item.StreamId);
                     }
+
                     var inserts = _table.InsertCount;
+
                     if (inserts > _knownReceivedCount)
                     {
                         Instruction(inserts - _knownReceivedCount, 6, 0);
                         _knownReceivedCount = inserts;
                     }
-                    return completed.ToArray();
+
+                    return [.. completed];
                 }
-                catch (Http3ProtocolException error) { Fail(error.ErrorCode); throw; }
+
+                catch (Http3ProtocolException error)
+                {
+                    Fail(error.ErrorCode);
+                    throw;
+                }
             }
         }
 
@@ -122,9 +203,11 @@ namespace EmbedIO.Net.Internal.Http3
         internal void Cancel(long streamId)
         {
             ValidateStream(streamId);
+
             lock (_sync)
             {
                 CheckUsable();
+
                 try
                 {
                     if (_pending.TryGetValue(streamId, out var pending))
@@ -132,9 +215,15 @@ namespace EmbedIO.Net.Internal.Http3
                         _blockedBytes -= pending.Length;
                         _pending.Remove(streamId);
                     }
+
                     if (_maximumCapacity != 0) Instruction(streamId, 6, 64);
                 }
-                catch (Http3ProtocolException error) { Fail(error.ErrorCode); throw; }
+
+                catch (Http3ProtocolException error)
+                {
+                    Fail(error.ErrorCode);
+                    throw;
+                }
             }
         }
 
@@ -143,13 +232,16 @@ namespace EmbedIO.Net.Internal.Http3
             lock (_sync)
             {
                 CheckUsable();
-                if (_feedback.Length == 0) return Array.Empty<byte>();
+
+                if (_feedback.Length == 0) return [];
+
                 var result = _feedback.ToArray();
                 _feedback.SetLength(0);
                 _feedback.Position = 0;
                 return result;
             }
         }
+
         internal void EncoderClosed()
         {
             lock (_sync)
@@ -159,60 +251,90 @@ namespace EmbedIO.Net.Internal.Http3
                 throw new Http3ProtocolException(0x104, "QPACK encoder critical stream closed.");
             }
         }
+
         public void Dispose()
         {
             lock (_sync)
             {
                 if (_disposed) return;
+
                 Fail(0x200);
                 _feedback.Dispose();
                 _disposed = true;
             }
+
             GC.SuppressFinalize(this);
         }
+
         internal void Abort()
         {
             lock (_sync) Fail(0x200);
         }
+
         private void Acknowledge(long streamId, long required)
         {
             if (required == 0) return;
+
             Instruction(streamId, 7, 128);
             _knownReceivedCount = Math.Max(_knownReceivedCount, required);
         }
+
         private void Instruction(long value, int bits, byte flags)
         {
             var mask = (1 << bits) - 1;
             var length = 1;
+
             if (value >= mask)
             {
                 length++;
+
                 for (var remainder = value - mask; remainder >= 128; remainder >>= 7) length++;
             }
+
             if (length > _maximumFeedbackBytes - _feedback.Length) throw Excessive();
+
             var needed = (int)_feedback.Length + length;
+
             if (needed > _feedback.Capacity)
                 _feedback.Capacity = (int)Math.Min(_maximumFeedbackBytes, Math.Max(needed, _feedback.Capacity * 2L));
+
             QpackInteger.Write(_feedback, value, bits, flags);
         }
+
         private static void ValidateStream(long streamId)
-        { if (streamId < 0 || streamId > QuicInteger.Maximum) throw new ArgumentOutOfRangeException(nameof(streamId)); }
+        {
+            if (streamId < 0 || streamId > QuicInteger.Maximum) throw new ArgumentOutOfRangeException(nameof(streamId));
+        }
+
         private static Http3ProtocolException Excessive() => new(0x107, "QPACK connection buffer budget exceeded.");
+
         private void CheckUsable()
-        { if (_failure != 0) throw new Http3ProtocolException(_failure, "QPACK connection state is no longer usable."); }
+        {
+            if (_failure != 0)
+                throw new Http3ProtocolException(_failure, "QPACK connection state is no longer usable.");
+        }
+
         private void Fail(long code)
         {
             if (_disposed) return;
+
             if (_failure == 0) _failure = code;
+
             _pending.Clear();
             _blockedBytes = 0;
             _feedback.SetLength(0);
             _feedback.Position = 0;
             _table.Abort();
         }
+
         private sealed class Pending
         {
-            internal Pending(QpackFieldSection section, int length) { Section = section; Length = length; }
+            internal Pending(QpackFieldSection section, int length)
+            {
+                Section = section;
+                Length = length;
+            }
+
             internal QpackFieldSection Section { get; }
             internal int Length { get; }
         }
@@ -220,10 +342,22 @@ namespace EmbedIO.Net.Internal.Http3
 
     internal readonly struct QpackDecodedSection
     {
-        internal QpackDecodedSection(long streamId, HpackField[] fields) { StreamId = streamId; Fields = fields; Error = null; }
+        internal QpackDecodedSection(long streamId, HpackField[] fields)
+        {
+            StreamId = streamId;
+            Fields = fields;
+            Error = null;
+        }
+
         public long StreamId { get; }
+
         internal QpackDecodedSection(long streamId, Http3StreamException error)
-        { StreamId = streamId; Fields = Array.Empty<HpackField>(); Error = error; }
+        {
+            StreamId = streamId;
+            Fields = [];
+            Error = error;
+        }
+
         public HpackField[] Fields { get; }
         public Http3StreamException? Error { get; }
     }

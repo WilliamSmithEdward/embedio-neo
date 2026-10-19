@@ -14,6 +14,6 @@
         Allow,
 
         /// <summary>Clients must send a certificate that passes validation; the handshake fails otherwise.</summary>
-        Require,
+        Require
     }
 }

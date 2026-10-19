@@ -6,7 +6,13 @@ namespace EmbedIO.Net.Internal.Http2
     internal sealed class Http2HeaderBlock
     {
         internal Http2HeaderBlock(int streamId, bool endStream, HpackField[] fields, uint streamError)
-        { StreamId = streamId; EndStream = endStream; Fields = fields; StreamError = streamError; }
+        {
+            StreamId = streamId;
+            EndStream = endStream;
+            Fields = fields;
+            StreamError = streamError;
+        }
+
         public int StreamId { get; }
         public bool EndStream { get; }
         public HpackField[] Fields { get; }
@@ -30,7 +36,9 @@ namespace EmbedIO.Net.Internal.Http2
         internal Http2HeaderBlocks(int maximumBytes = 65536, int maximumFragments = 1024)
         {
             if (maximumBytes < 0) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+
             if (maximumFragments < 1) throw new ArgumentOutOfRangeException(nameof(maximumFragments));
+
             _maximumBytes = maximumBytes;
             _maximumFragments = maximumFragments;
         }
@@ -38,7 +46,9 @@ namespace EmbedIO.Net.Internal.Http2
         internal Http2HeaderBlock? Process(Http2Frame frame)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(Http2HeaderBlocks));
+
             if (_failed) throw new Http2ProtocolException(1, "Header sequence is no longer usable.");
+
             try
             {
                 if (_streamId != 0)
@@ -46,19 +56,29 @@ namespace EmbedIO.Net.Internal.Http2
                     if (frame.Type != 9 || frame.StreamId != _streamId)
                         throw new Http2ProtocolException(1, "Interrupted HTTP/2 header block.");
                 }
+
                 else
                 {
                     if (frame.Type == 9) throw new Http2ProtocolException(1, "Unexpected CONTINUATION.");
+
                     if (frame.Type != 1) return null;
                 }
+
                 frame.ValidateShape();
                 var offset = 0;
                 var count = frame.Payload.Length;
+
                 if (frame.Type == 1)
                 {
                     _streamId = frame.StreamId;
                     _endStream = (frame.Flags & 1) != 0;
-                    if ((frame.Flags & 8) != 0) { offset++; count -= 1 + frame.Payload[0]; }
+
+                    if ((frame.Flags & 8) != 0)
+                    {
+                        offset++;
+                        count -= 1 + frame.Payload[0];
+                    }
+
                     if ((frame.Flags & 32) != 0)
                     {
                         // Skip deprecated dependency/weight fields, preserving HPACK bytes.
@@ -66,35 +86,56 @@ namespace EmbedIO.Net.Internal.Http2
                         count -= 5;
                     }
                 }
+
                 if (++_fragments > _maximumFragments || count > _maximumBytes - (_buffer?.Length ?? 0))
                     throw new Http2ProtocolException(11, "HTTP/2 header block exceeds resource limits.");
+
                 if ((frame.Flags & 4) == 0)
                 {
                     _buffer ??= new MemoryStream(Math.Min(_maximumBytes, Math.Max(count, 256)));
                     _buffer.Write(frame.Payload, offset, count);
                     return null;
                 }
+
                 byte[] encoded;
+
                 if (_buffer != null)
                 {
                     _buffer.Write(frame.Payload, offset, count);
                     encoded = _buffer.ToArray();
                 }
+
                 else if (offset == 0 && count == frame.Payload.Length) encoded = frame.Payload;
+
                 else
                 {
                     encoded = new byte[count];
                     Buffer.BlockCopy(frame.Payload, offset, encoded, 0, count);
                 }
+
                 HpackField[] fields;
-                try { fields = _decoder.Decode(encoded); }
+
+                try
+                {
+                    fields = _decoder.Decode(encoded);
+                }
+
                 catch (Exception error) when (error is InvalidDataException || error is EndOfStreamException)
-                { throw new Http2ProtocolException(9, "Invalid HPACK header block."); }
+                {
+                    throw new Http2ProtocolException(9, "Invalid HPACK header block.");
+                }
+
                 var block = new Http2HeaderBlock(_streamId, _endStream, fields, 0);
                 Reset();
                 return block;
             }
-            catch { _failed = true; Reset(); throw; }
+
+            catch
+            {
+                _failed = true;
+                Reset();
+                throw;
+            }
         }
 
         internal void CompleteInput()
@@ -115,6 +156,10 @@ namespace EmbedIO.Net.Internal.Http2
             _fragments = 0;
         }
 
-        public void Dispose() { _disposed = true; Reset(); }
+        public void Dispose()
+        {
+            _disposed = true;
+            Reset();
+        }
     }
 }

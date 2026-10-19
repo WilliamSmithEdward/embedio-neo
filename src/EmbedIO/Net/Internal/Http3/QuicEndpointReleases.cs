@@ -21,9 +21,8 @@ namespace EmbedIO.Net.Internal.Http3
     {
         // Every traced deferred close completed within 230 microseconds of disposal.
         private static readonly TimeSpan Window = TimeSpan.FromSeconds(1);
-
         private readonly object _sync = new();
-        private readonly Dictionary<IPEndPoint, long> _released = new();
+        private readonly Dictionary<IPEndPoint, long> _released = [];
         private readonly long _window;
         private readonly Func<long> _clock;
         private long _retries;
@@ -45,10 +44,15 @@ namespace EmbedIO.Net.Internal.Http3
         internal void Record(IPEndPoint endpoint)
         {
             var now = _clock();
+
             lock (_sync)
             {
-                foreach (var stale in _released.Where(entry => now - entry.Value > _window).Select(entry => entry.Key).ToList())
+                foreach (var stale in _released
+                    .Where(entry => now - entry.Value > _window)
+                    .Select(entry => entry.Key)
+                    .ToList())
                     _released.Remove(stale);
+
                 _released[new IPEndPoint(endpoint.Address, endpoint.Port)] = now;
             }
         }
@@ -59,8 +63,14 @@ namespace EmbedIO.Net.Internal.Http3
         {
             while (true)
             {
-                try { return bind(); }
-                catch (SocketException error) when (error.SocketErrorCode == SocketError.AddressAlreadyInUse && IsRecent(endpoint))
+                try
+                {
+                    return bind();
+                }
+
+                catch (SocketException error) when (
+                    error.SocketErrorCode == SocketError.AddressAlreadyInUse && IsRecent(endpoint)
+                )
                 {
                     Interlocked.Increment(ref _retries);
                     Thread.Sleep(1);
@@ -71,6 +81,7 @@ namespace EmbedIO.Net.Internal.Http3
         private bool IsRecent(IPEndPoint endpoint)
         {
             var now = _clock();
+
             lock (_sync) return _released.TryGetValue(endpoint, out var released) && now - released <= _window;
         }
     }
