@@ -110,10 +110,12 @@ namespace EmbedIO.Net.Internal
                 next[position] = new Route(prefix, owner);
                 Array.Copy(current, position, next, position + 1, current.Length - position);
 
-                if (ReferenceEquals(
-                    Interlocked.CompareExchange(ref _snapshot, snapshot.With(prefix.Host, next), snapshot),
-                    snapshot
-                )) return true;
+                if (
+                    ReferenceEquals(
+                        Interlocked.CompareExchange(ref _snapshot, snapshot.With(prefix.Host, next), snapshot),
+                        snapshot
+                    )
+                ) return true;
             }
         }
 
@@ -138,10 +140,12 @@ namespace EmbedIO.Net.Internal
                 Array.Copy(current, 0, next, 0, index);
                 Array.Copy(current, index + 1, next, index, current.Length - index - 1);
 
-                if (ReferenceEquals(
-                    Interlocked.CompareExchange(ref _snapshot, snapshot.With(prefix.Host, next), snapshot),
-                    snapshot
-                )) return;
+                if (
+                    ReferenceEquals(
+                        Interlocked.CompareExchange(ref _snapshot, snapshot.With(prefix.Host, next), snapshot),
+                        snapshot
+                    )
+                ) return;
             }
         }
 

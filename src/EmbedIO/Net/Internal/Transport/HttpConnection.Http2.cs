@@ -24,9 +24,7 @@ namespace EmbedIO.Net.Internal
                     if (_http2Listeners == null || !_http2Listeners.TryGetValue(owner, out var exchanges))
                         return Task.CompletedTask;
 
-                    return WaitForOwnerContextsAsync(
-                        [.. exchanges.Values.Select(context => context.Completion)]
-                    );
+                    return WaitForOwnerContextsAsync([.. exchanges.Values.Select(context => context.Completion)]);
                 }
             }
 

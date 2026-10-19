@@ -13,8 +13,10 @@ namespace EmbedIO.Net.Internal.Http2
             RemoteEnded = remoteEnded;
             InitialEndStream = remoteEnded;
             RequestHeaders = headers;
+
             if (!HttpPriority.TryParse(headers.Headers["priority"] ?? "", out var priority))
                 priority = new HttpPriority(3, false);
+
             SetPriority(priority);
         }
 
@@ -248,10 +250,12 @@ namespace EmbedIO.Net.Internal.Http2
             for (var i = 4; i < frame.Payload.Length; i++)
                 if (frame.Payload[i] > 127) throw new Http2ProtocolException(1, "Priority field is not ASCII.");
 
-            if (!HttpPriority.TryParse(
-                Encoding.ASCII.GetString(frame.Payload, 4, frame.Payload.Length - 4),
-                out var priority
-            ))
+            if (
+                !HttpPriority.TryParse(
+                    Encoding.ASCII.GetString(frame.Payload, 4, frame.Payload.Length - 4),
+                    out var priority
+                )
+            )
                 throw new Http2ProtocolException(1, "Malformed priority dictionary.");
 
             if (_active.TryGetValue(id, out var stream))

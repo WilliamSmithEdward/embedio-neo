@@ -31,7 +31,16 @@ namespace EmbedIO.Net.Internal.WebTransport
         private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
         internal static bool IsSessionCapsule(long type) =>
-            type is WebTransportProtocol.CloseSessionCapsule or WebTransportProtocol.DrainSessionCapsule or WebTransportProtocol.MaxDataCapsule or WebTransportProtocol.DataBlockedCapsule or WebTransportProtocol.MaxStreamsBidirectionalCapsule or WebTransportProtocol.MaxStreamsUnidirectionalCapsule or WebTransportProtocol.StreamsBlockedBidirectionalCapsule or WebTransportProtocol.StreamsBlockedUnidirectionalCapsule or WebTransportProtocol.ProhibitedMaxStreamDataCapsule or WebTransportProtocol.ProhibitedStreamDataBlockedCapsule;
+            type is WebTransportProtocol.CloseSessionCapsule
+                or WebTransportProtocol.DrainSessionCapsule
+                or WebTransportProtocol.MaxDataCapsule
+                or WebTransportProtocol.DataBlockedCapsule
+                or WebTransportProtocol.MaxStreamsBidirectionalCapsule
+                or WebTransportProtocol.MaxStreamsUnidirectionalCapsule
+                or WebTransportProtocol.StreamsBlockedBidirectionalCapsule
+                or WebTransportProtocol.StreamsBlockedUnidirectionalCapsule
+                or WebTransportProtocol.ProhibitedMaxStreamDataCapsule
+                or WebTransportProtocol.ProhibitedStreamDataBlockedCapsule;
 
         // Section 6: senders truncate at a UTF-8 character boundary.
         internal static string TruncateCloseMessage(string message)
@@ -154,10 +163,18 @@ namespace EmbedIO.Net.Internal.WebTransport
         }
 
         internal static bool IsLimitCapsule(long type) =>
-            type is WebTransportProtocol.MaxDataCapsule or WebTransportProtocol.DataBlockedCapsule or WebTransportProtocol.MaxStreamsBidirectionalCapsule or WebTransportProtocol.MaxStreamsUnidirectionalCapsule or WebTransportProtocol.StreamsBlockedBidirectionalCapsule or WebTransportProtocol.StreamsBlockedUnidirectionalCapsule;
+            type is WebTransportProtocol.MaxDataCapsule
+                or WebTransportProtocol.DataBlockedCapsule
+                or WebTransportProtocol.MaxStreamsBidirectionalCapsule
+                or WebTransportProtocol.MaxStreamsUnidirectionalCapsule
+                or WebTransportProtocol.StreamsBlockedBidirectionalCapsule
+                or WebTransportProtocol.StreamsBlockedUnidirectionalCapsule;
 
         internal static bool IsStreamLimitCapsule(long type) =>
-            type is WebTransportProtocol.MaxStreamsBidirectionalCapsule or WebTransportProtocol.MaxStreamsUnidirectionalCapsule or WebTransportProtocol.StreamsBlockedBidirectionalCapsule or WebTransportProtocol.StreamsBlockedUnidirectionalCapsule;
+            type is WebTransportProtocol.MaxStreamsBidirectionalCapsule
+                or WebTransportProtocol.MaxStreamsUnidirectionalCapsule
+                or WebTransportProtocol.StreamsBlockedBidirectionalCapsule
+                or WebTransportProtocol.StreamsBlockedUnidirectionalCapsule;
 
         private static WebTransportException Malformed(string message) =>
             new(WebTransportProtocol.H3MessageError, message);

@@ -111,7 +111,8 @@ namespace EmbedIO.Net.Internal.Http3
         {
             private readonly MsQuicApi _api;
             private readonly MsQuicRegistration _registration;
-            private static readonly byte[] Alpn = [
+            private static readonly byte[] Alpn =
+            [
                 (byte)'h',
                 (byte)'3'
             ];
@@ -274,9 +275,11 @@ namespace EmbedIO.Net.Internal.Http3
                     var certificate = _certificates.Current;
                     var thumbprint = Thumbprint(certificate);
 
-                    if (thumbprint
-                        .AsSpan()
-                        .SequenceEqual(_configurationThumbprint))
+                    if (
+                        thumbprint
+                            .AsSpan()
+                            .SequenceEqual(_configurationThumbprint)
+                    )
                     {
                         _configurationVersion = version;
                         return _configuration;

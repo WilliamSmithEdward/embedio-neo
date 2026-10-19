@@ -293,9 +293,7 @@ namespace EmbedIO.Net.Internal
         internal static EndPointListener[] OwnedEndpoints(HttpListener owner)
         {
             lock (Gate)
-                return Owners.TryGetValue(owner, out var leases)
-                    ? [.. Endpoints(leases)]
-                    : [];
+                return Owners.TryGetValue(owner, out var leases) ? [.. Endpoints(leases)] : [];
         }
 
         internal static EndPointListener? FindEndpoint(IPAddress address, int port)

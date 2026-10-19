@@ -473,7 +473,10 @@ namespace EmbedIO.Net.Internal
                         }
 
                         _drainAdmission = deadline.Token.Register(StopAdmission);
-                        _shutdown = Task.Run(() => DrainTransportsAsync(tcp, quic, deadline.Token), CancellationToken.None);
+                        _shutdown = Task.Run(
+                            () => DrainTransportsAsync(tcp, quic, deadline.Token),
+                            CancellationToken.None
+                        );
                     }
 
                     shutdown = _shutdown;

@@ -403,7 +403,10 @@ namespace EmbedIO.Net.Internal.Http3
                             !_acceptStop.IsCancellationRequested
                             && (error is AuthenticationException
                                 || error is QuicException quic
-                                    && quic.QuicError is QuicError.ConnectionAborted or QuicError.ConnectionTimeout or QuicError.ConnectionIdle or QuicError.TransportError)
+                                && quic.QuicError is QuicError.ConnectionAborted
+                                or QuicError.ConnectionTimeout
+                                or QuicError.ConnectionIdle
+                                or QuicError.TransportError)
                         )
                         {
                             // The BCL reports failed peer handshakes through Accept.
@@ -578,7 +581,8 @@ namespace EmbedIO.Net.Internal.Http3
                 return prefixes.Any(
                     prefix => prefix.Port == local.Port
                         && prefix.Port == uri.Port
-                        && (prefix.Host is "*" or "+"
+                        && (prefix.Host is "*"
+                            or "+"
                             || string.Equals(prefix.Host, uri.Host, StringComparison.OrdinalIgnoreCase))
                         && (path.StartsWith(prefix.Path, StringComparison.Ordinal)
                             || slash.StartsWith(prefix.Path, StringComparison.Ordinal))

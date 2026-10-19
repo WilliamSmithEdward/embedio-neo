@@ -73,8 +73,7 @@ namespace EmbedIO.Net
         }
 
         // A fixed certificate configured the existing way keeps its existing behavior: no new checks.
-        internal static ServerCertificateSource Fixed(X509Certificate2 certificate) =>
-            new(certificate, 1, true);
+        internal static ServerCertificateSource Fixed(X509Certificate2 certificate) => new(certificate, 1, true);
 
         private static X509Certificate2 Validated(X509Certificate2 certificate)
         {
@@ -132,10 +131,12 @@ namespace EmbedIO.Net
             try
             {
                 using var rsa = certificate.GetRSAPrivateKey();
+
                 if (rsa != null)
                     return true;
 
                 using var ecdsa = certificate.GetECDsaPrivateKey();
+
                 if (ecdsa != null)
                     return true;
 

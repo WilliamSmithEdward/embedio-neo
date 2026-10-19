@@ -236,10 +236,11 @@ namespace EmbedIO.Net.Internal
                     peer = _admission.Socket.Accept();
                 }
 
-                catch (Exception error) when (error is ObjectDisposedException or SocketException or ArgumentException
-                {
-                    ParamName: "socketAddress"
-                })
+                catch (Exception error) when (
+                    error is ObjectDisposedException
+                        or SocketException
+                        or ArgumentException { ParamName: "socketAddress" }
+                )
                 {
                     if (error is ObjectDisposedException || AdmissionStopped) return;
 

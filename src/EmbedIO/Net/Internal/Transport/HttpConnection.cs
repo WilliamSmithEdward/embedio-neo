@@ -681,9 +681,7 @@ namespace EmbedIO.Net.Internal
                 _requestAborts?.Retire();
                 EndResponse(false);
                 protocolStop = _http2Stop?.Value;
-                protocolListeners = _http2Listeners == null
-                    ? []
-                    : [.. _http2Listeners.Keys];
+                protocolListeners = _http2Listeners == null ? [] : [.. _http2Listeners.Keys];
                 _http2Listeners?.Clear();
                 input = _iStream;
                 request = _context.HttpListenerRequest;

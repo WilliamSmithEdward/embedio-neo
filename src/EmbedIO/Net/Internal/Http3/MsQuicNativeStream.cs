@@ -795,7 +795,6 @@ namespace EmbedIO.Net.Internal.Http3
                     _signals.PendingSend = pending;
                 }
 
-
                 if (!MemoryMarshal.TryGetArray(payload, out var bytes) || bytes.Array == null)
                 {
                     pooled = ArrayPool<byte>.Shared.Rent(payload.Length);

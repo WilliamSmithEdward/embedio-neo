@@ -80,7 +80,11 @@ namespace EmbedIO.Net.Internal
                                     using var abandoned = await operation.ConfigureAwait(false);
                                 }
 
-                                catch (Exception error) when (error is SocketException or ObjectDisposedException or OperationCanceledException)
+                                catch (Exception error) when (
+                                    error is SocketException
+                                        or ObjectDisposedException
+                                        or OperationCanceledException
+                                )
                                 { }
                             }
 

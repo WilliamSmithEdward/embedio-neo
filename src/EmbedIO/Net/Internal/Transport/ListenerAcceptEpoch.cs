@@ -180,12 +180,14 @@ namespace EmbedIO.Net.Internal
 
         private bool TryClaim([NotNullWhen(true)] out IHttpContextImpl? context)
         {
-            while (Volatile
-                .Read(ref _order)
-                .TryDequeue(out var candidate))
-                if (((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(
-                    new(candidate.Id, candidate)
-                ))
+            while (
+                Volatile
+                    .Read(ref _order)
+                    .TryDequeue(out var candidate)
+            )
+                if (
+                    ((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(new(candidate.Id, candidate))
+                )
                 {
                     context = candidate;
                     Pulse();
@@ -229,9 +231,11 @@ namespace EmbedIO.Net.Internal
             foreach (var entry in _pending)
                 if (_pending.TryRemove(entry.Key, out var context)) retired.Add(context);
 
-            while (Volatile
-                .Read(ref _order)
-                .TryDequeue(out _)) { }
+            while (
+                Volatile
+                    .Read(ref _order)
+                    .TryDequeue(out _)
+            ) { }
 
             return [.. retired];
         }

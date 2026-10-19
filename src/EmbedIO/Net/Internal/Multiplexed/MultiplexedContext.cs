@@ -358,9 +358,7 @@ namespace EmbedIO.Net.Internal
                 );
 
         public IReadOnlyList<string> RequestedTunnelProtocols =>
-            _exchange.Request.Protocol is string protocol
-                ? _tunnelProtocols ??= Array.AsReadOnly([protocol])
-                : [];
+            _exchange.Request.Protocol is string protocol ? _tunnelProtocols ??= Array.AsReadOnly([protocol]) : [];
 
         private bool TunnelProtocolMatches(string? selected) =>
             _exchange.Request.Protocol is string requested

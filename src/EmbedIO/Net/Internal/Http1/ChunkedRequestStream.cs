@@ -43,8 +43,7 @@ namespace EmbedIO.Net.Internal
             return available;
         }
 
-        internal ChunkedRequestStream(Stream source, byte[] buffer, int offset, int length)
-            : base(source, [], 0, 0, 0)
+        internal ChunkedRequestStream(Stream source, byte[] buffer, int offset, int length) : base(source, [], 0, 0, 0)
         {
             _source = new EmbedIO.Internal.BorrowedResource<Stream>(source);
             _input = buffer;
