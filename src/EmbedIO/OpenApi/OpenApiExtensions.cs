@@ -12,8 +12,10 @@
         /// <param name="path">The document's URL path, such as <c>/openapi.json</c>.</param>
         /// <param name="document">The document.</param>
         /// <returns><paramref name="this"/> with the module added.</returns>
-        public static TContainer WithOpenApiDocument<TContainer>(this TContainer? @this, string path, OpenApiDocument document)
-            where TContainer : class, IWebModuleContainer
-            => @this.WithModule(new OpenApiDocumentModule(path, document));
+        public static TContainer WithOpenApiDocument<TContainer>(
+            this TContainer? @this,
+            string path,
+            OpenApiDocument document
+        ) where TContainer : class, IWebModuleContainer => @this.WithModule(new OpenApiDocumentModule(path, document));
     }
 }
