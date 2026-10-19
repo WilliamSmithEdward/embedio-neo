@@ -36,7 +36,7 @@ The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET
 The tests target .NET 10.
 
 The full regression suite has a 12-minute scheduling budget on Linux/macOS and
-an 8-minute budget on Windows. These host-wide deadlines do not replace individual
+an 8-minute budget on ordinary Windows PRs and 12 minutes on instrumented Windows main pushes. These host-wide deadlines do not replace individual
 test assertions or the minimum discovered-test count.
 
 CI requires the Mac Catalyst smoke job and the Windows, Mac Catalyst and Android
@@ -99,7 +99,8 @@ select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--time
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
 least 7600 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full regression and coverage
-suite budget is eight minutes on Windows and twelve minutes on Linux/macOS. Linux coverage
+suite budget is eight minutes on ordinary Windows PRs and twelve minutes on Linux/macOS
+and instrumented Windows main pushes. Linux coverage
 run 38970758078 stopped near its eight-minute boundary with 6,522 of 6,695 cases
 reported and zero reported case failures; the uninstrumented final PR suite
 reported all 6,695 cases in about six minutes. The longer Linux coverage allowance
@@ -117,10 +118,19 @@ Linux PR run 39203317429 reported 7,483 and 7,425 of 7,600 cases in two unchange
 eight-minute runs on 2026-10-18, with zero reported case failures. Ordinary Linux
 PRs use the same twelve-minute whole-suite allowance as Linux main and macOS; the
 original incomplete runs remain retained and a complete final-source run is required.
+Windows main coverage run 39207894817 likewise reported 7,427 of 7,600 cases in
+two unchanged eight-minute runs, with zero reported case failures; all 70 new cases
+passed in both. The uninstrumented final PR suite completed all 7,600 cases.
+Instrumented Windows main pushes use twelve minutes; ordinary Windows PRs stay at
+eight minutes. The enclosing Windows main job allows twenty minutes for setup,
+the instrumented suite and adjacent checks; ordinary Windows PR jobs stay at
+fifteen minutes. Per-case deadlines and the test minimum remain unchanged. A
+complete successful main run is still required.
 Per-case deadlines, assertions, iterations, coverage and the discovery minimum
 remain enforced; this is a whole-run allowance, not a failure exemption. NUnit 5
 async assertions must be awaited.
-The Test job allows 20 minutes on macOS/Linux and 15 on Windows, so each suite
+The Test job allows 20 minutes on macOS/Linux and Windows main pushes, and 15 on
+ordinary Windows PRs, so each suite
 budget plus setup fits: CI 38479185526 finished all 6,056 macOS cases one
 second before a 15-minute job limit cancelled it (approved 2026-10-13).
 
