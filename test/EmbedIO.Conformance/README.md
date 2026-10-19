@@ -22,7 +22,7 @@ The audit, results and prioritized findings are in
 | `run-lifecycle-campaigns.sh` | The application lifecycle audit: response sections, capsules, lifecycle fuzz, ten drains per protocol on fresh servers and h2spec. `ONLY="phase ..."` limits a diagnostic rerun. |
 | `standards/capture_standards.py` | Captures RFC Editor metadata (with update and obsolescence chains), errata, the RFC index sweep, IANA registries and datatracker state of tracked drafts, with URLs, times and SHA-256. |
 | `ApplicabilityProbes.cs` | `applicability` mode: in-process minimal reproductions for the [standards applicability audit](../../docs/project/http-standards-applicability.md) (informational responses, trailers, Upgrade/CONNECT, QUERY, HTTP/2 SETTINGS). Uses the `/probe/*` routes. Outcome `gap` records a missing application capability the RFC permits; it does not fail a run. |
-| `docker/Dockerfile` | Pinned runner: the .NET SDK image for the SDK `global.json` pins, by digest, MsQuic 2.6.2 by SHA-256, h2spec v2.6.0 built from its tag commit, Python packages by hash. |
+| `../../../.github/test/conformance/Dockerfile` | Pinned runner: the .NET SDK image for the SDK `global.json` pins, by digest, MsQuic 2.6.2 by SHA-256, h2spec v2.6.0 built from its tag commit, Python packages by hash. |
 | `run-campaigns.sh` | Every campaign against one separate server process, with a summary tied to the source commit. |
 | `repro.sh` | One focused driver run with engine logging, for reducing a failure. |
 
@@ -46,7 +46,7 @@ the Windows audit exports raw `git cat-file blob` bytes and verifies their Git
 blob identities before execution:
 
 ```sh
-docker build -f test/EmbedIO.Conformance/docker/Dockerfile -t embedio-conformance test/EmbedIO.Conformance
+docker build -f .github/test/conformance/Dockerfile -t embedio-conformance test/EmbedIO.Conformance
 git archive --format=tar -o TestResults/http-conformance/src.tar HEAD
 docker run --rm --cpus=4 --memory=6g -e SOURCE_SHA=$(git rev-parse HEAD) -v "$PWD/TestResults/http-conformance:/runs" embedio-conformance \
   bash -c "mkdir /src && tar -xf /runs/src.tar -C /src && bash /src/test/EmbedIO.Conformance/run-campaigns.sh /src /runs/out 20261009 1"

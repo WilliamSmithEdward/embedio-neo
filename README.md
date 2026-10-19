@@ -6,7 +6,7 @@
 [![Security](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/security.yml)
 [![Malware scan](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml/badge.svg?branch=main)](https://github.com/WilliamSmithEdward/embedio-neo/actions/workflows/malware-scan.yml)
 [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/WilliamSmithEdward/embedio-neo?label=openssf%20score)](https://scorecard.dev/viewer/?uri=github.com/WilliamSmithEdward/embedio-neo)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/LICENSE)
 
 ![HTTP/1.1: supported](https://img.shields.io/badge/HTTP%2F1.1-supported-brightgreen)
 ![HTTP/2: supported](https://img.shields.io/badge/HTTP%2F2-supported-brightgreen)
@@ -148,7 +148,7 @@ Report issues and submit pull requests at
 See [CONTRIBUTING.md](CONTRIBUTING.md) for pinned tooling and validation commands.
 
 Maintained by William Smith. EmbedIO-Neo is an independent continuation of
-[EmbedIO](https://github.com/unosquare/embedio), licensed under [MIT](LICENSE).
+[EmbedIO](https://github.com/unosquare/embedio), licensed under [MIT](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/LICENSE).
 Original copyrights and third-party notices are preserved. The
 [engine development record](docs/project/http-engine.md) contains conformance,
 performance evidence and remaining acceptance work.

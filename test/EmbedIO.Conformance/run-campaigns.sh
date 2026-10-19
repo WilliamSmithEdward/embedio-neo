@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs every conformance and stateful campaign. Each phase gets a fresh, separate
 # server process so a finding that stops a listener cannot invalidate later phases.
-# Intended for the pinned container in docker/Dockerfile; see README.md.
+# Intended for the pinned container in .github/test/conformance/Dockerfile; see README.md.
 # Usage: run-campaigns.sh <source-dir> <output-dir> <seed> <scale>
 #   scale multiplies fuzz iterations (1 = quick, 10 = extended).
 set -uo pipefail
