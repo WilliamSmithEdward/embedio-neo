@@ -7479,7 +7479,7 @@ peer without datagram support.
 
 On Linux the same cases ran from a source build of 6b76423 (git archive extracted
 inside the container, not a bind mount) in the pinned conformance image built from
-`test/EmbedIO.Conformance/docker/Dockerfile`: SDK 10.0.401, runtime 10.0.12,
+`.github/test/conformance/Dockerfile`: SDK 10.0.401, runtime 10.0.12,
 MsQuic 2.6.2 (library SHA-256 6729b82d...6497cf), Python 3.12.3 and aioquic 1.3.0
 installed with `--require-hashes`, under WSL2 kernel 6.18 with two CPUs. The build
 had no warnings, and three runs each passed all 35 cases with none skipped and

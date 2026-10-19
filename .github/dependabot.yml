@@ -32,6 +32,7 @@ updates:
     directories:
       - /.github/security/semgrep
       - /.github/security/clamav
+      - /.github/test/conformance
     schedule:
       interval: weekly
     cooldown:
@@ -53,8 +54,13 @@ updates:
       interval: daily
     cooldown:
       default-days: 7
+      exclude: [pyopenvba, pyofficeeditor, pyprettyvba, vba-reference, pyvbaanalysis, pyvbaharness, xlide-mcp]
     commit-message:
       prefix: ci
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
     allow:
       - dependency-name: semgrep
 

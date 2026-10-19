@@ -20,6 +20,7 @@ permissions:
 
 jobs:
   observe:
+    name: Observe HTTP/1 closure (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:

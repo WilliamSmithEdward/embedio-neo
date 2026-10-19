@@ -1,7 +1,7 @@
 # Test-only conformance runner. Every input is pinned: images by digest, h2spec by
 # commit (its go.sum verifies dependencies), MsQuic by SHA-256 and Python packages by hash.
 # Build from the repository root:
-#   docker build -f test/EmbedIO.Conformance/docker/Dockerfile -t embedio-conformance test/EmbedIO.Conformance
+#   docker build -f .github/test/conformance/Dockerfile -t embedio-conformance test/EmbedIO.Conformance
 
 # golang:1.25-bookworm (go1.25.14), digest recorded 2026-10-09.
 FROM golang@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437 AS h2spec
