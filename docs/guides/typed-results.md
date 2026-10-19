@@ -1,6 +1,6 @@
-# Typed HTTP results (unreleased)
+# Typed HTTP results (2.14.0+)
 
-The initial APIs are merged on main but are **not in NuGet 2.13.0**. They require
+These APIs require **version 2.14.0+**. They require
 no new core dependency. Existing object/string/Task controller returns keep their
 serializer and disposal behavior. Only a declared `HttpResult` type (including
 its subclasses and supported Task/ValueTask wrappers) opts into this execution path.

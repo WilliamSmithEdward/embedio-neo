@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-10-18
+
 ### Added
 
 - Typed fixed-status Problem Details and bounded validation results, DataAnnotations

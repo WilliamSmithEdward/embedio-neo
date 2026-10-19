@@ -651,3 +651,18 @@ Verified pins, full rule, printed scans, exact bytes, alert-query receipts and
 the approved proposal remain under ignored `TestResults/release-2.13.0/yara-review`
 and `local-yara`. Final CI and published packages require independent exact-byte
 and full-scan verification.
+
+## 2.14.0 typed results release revalidation
+
+Written acceptance covers only `GODMODERULES_IDDQD_God_Mode_Rule` on:
+
+- `dist/EmbedIO-Neo.DependencyInjection.2.14.0-unpacked/lib/net10.0/EmbedIO.DependencyInjection.dll`
+- `dist/EmbedIO-Neo.DependencyInjection.2.14.0-unpacked/lib/netstandard2.0/EmbedIO.DependencyInjection.dll`
+
+Pinned YARA-X 1.21.0 / YARA Forge 20261011 full-rule scans independently match only `Injection.pdb` in compiler RSDS/CodeView metadata. No other rule matched either assembly. Pinned archive/extracted-tool hashes and exact CodeView byte bounds verified. No DI code or scanner-pin changes.
+
+Local package SHA-256: `0f0524c70f0e3e22fbb47deaa1fa57dffe32409ab07f9f1347b6ef7b4b82d009`.
+net10.0 assembly SHA-256: `0dae5cc4f29fade8f4aad25853d3a838bba70da70a11cf5287b4431b3266fcc4`, offset `0x6ca2`.
+netstandard2.0 assembly SHA-256: `a9cb2999814214114c92fdd01c06d0f88f72f56758a871af8e57e3e3606bb027`, offset `0x758d`.
+
+Paginated open/fixed/dismissed code-scanning alert queries expose no matching alert. William explicitly approved: "Approve both 2.14.0 paths and the unavailable-alert waiver." No dismissal is claimed. Local candidate hashes identify reviewed precommit bytes; final CI and published packages require independent exact-byte and full-rule verification. Every other match, scanner error, stale acceptance and CI check remains blocking. This new approval is restricted to the two 2.14.0 paths above. Evidence is retained under ignored `TestResults/release-2.14.0/yara-review` and `local-yara`.

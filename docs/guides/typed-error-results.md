@@ -1,7 +1,7 @@
-# Typed errors and validation (unreleased)
+# Typed errors and validation (2.14.0+)
 
-These helpers extend the unreleased [typed HTTP results](typed-results.md) surface.
-They are not in NuGet 2.13.0. Existing empty `BadRequest<T>()`, `NotFound<T>()`,
+These helpers extend the [typed HTTP results](typed-results.md) surface in 2.14.0+.
+Existing empty `BadRequest<T>()`, `NotFound<T>()`,
 `Conflict<T>()`, dynamic `Problem(problem)` and automatic `[Validate]` behavior
 remain unchanged. No runtime dependency or target is added.
 
