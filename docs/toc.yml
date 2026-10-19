@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Typed minimal endpoints (2.16.0+)
+      href: guides/minimal-endpoints.md
     - name: Typed request binding (2.15.0+)
       href: guides/typed-request-binding.md
     - name: Typed errors and validation

@@ -141,5 +141,13 @@ namespace EmbedIO.Generators
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true
         );
+        internal static readonly DiagnosticDescriptor InvalidEndpoint = new(
+            "EMBEDIO018",
+            "Invalid generated endpoint",
+            "Endpoint binding is invalid: {0}",
+            "EmbedIO.Endpoints",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true
+        );
     }
 }

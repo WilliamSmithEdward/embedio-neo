@@ -13,6 +13,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.Authorization;
+using EmbedIO.Endpoints;
 using EmbedIO.OpenApi;
 using EmbedIO.PlatformTests;
 using EmbedIO.Problems;
@@ -191,7 +192,13 @@ namespace EmbedIO.Tests
         [TestCase(true, 2)]
         [TestCase(false, 3)]
         [TestCase(true, 3)]
-        public async Task GeneratedAndReflectionBindingsWorkOnRealHttpConnections(bool generated, int protocol)
+        public async Task GeneratedAndReflectionBindingsWorkOnRealHttpConnections(bool generated, int protocol) =>
+            await RequestBindingWire.RunAsync(generated, protocol, false);
+    }
+
+    internal static class RequestBindingWire
+    {
+        internal static async Task RunAsync(bool generated, int protocol, bool minimal)
         {
             if (protocol == 3 && (!QuicListener.IsSupported || !QuicConnection.IsSupported))
             {
@@ -215,13 +222,40 @@ namespace EmbedIO.Tests
                     certificate ?? throw new InvalidOperationException("Missing certificate."),
                     url
                 )).WithProblemDetails(new ProblemDetailsOptions { HtmlHttpExceptionHandler = null });
-            var module = new WebApiModule("/api", ResponseSerializer.None(false));
 
-            if (generated) module.WithController(TypedBindings.TypedBindingController);
+            if (minimal)
+            {
+                var module = new EndpointModule(ResponseSerializer.None(false));
+                var group = module.Root.MapGroup("/api");
 
-            else module.WithController<TypedBindingController>();
+                if (generated)
+                {
+                    group.MapGet("/query", MinimalWireHandlers.QueryEndpoint);
+                    group.MapPost("/form", MinimalWireHandlers.FormEndpoint);
+                    group.MapGet("/cookie-last", MinimalWireHandlers.CookieEndpoint);
+                }
 
-            server.WithModule(module);
+                else
+                {
+                    group.MapGet("/query", MinimalWireHandlers.Query);
+                    group.MapPost("/form", MinimalWireHandlers.Form);
+                    group.MapGet("/cookie-last", MinimalWireHandlers.Cookie);
+                }
+
+                server.WithModule(module);
+            }
+
+            else
+            {
+                var module = new WebApiModule("/api", ResponseSerializer.None(false));
+
+                if (generated) module.WithController(TypedBindings.TypedBindingController);
+
+                else module.WithController<TypedBindingController>();
+
+                server.WithModule(module);
+            }
+
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             server.StateChanged += (_, change) =>
             {

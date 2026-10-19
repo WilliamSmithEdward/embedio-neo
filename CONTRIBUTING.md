@@ -83,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7530
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7600
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -97,10 +97,9 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 7287 executed/reported test cases to catch accidental discovery loss; update
-that baseline deliberately when adding or removing tests. The full coverage
-suite budget is eight minutes on Windows and ordinary Linux pull requests,
-and twelve minutes on macOS and instrumented Linux main pushes. Linux coverage
+least 7600 executed/reported test cases to catch accidental discovery loss; update
+that baseline deliberately when adding or removing tests. The full regression and coverage
+suite budget is eight minutes on Windows and twelve minutes on Linux/macOS. Linux coverage
 run 38970758078 stopped near its eight-minute boundary with 6,522 of 6,695 cases
 reported and zero reported case failures; the uninstrumented final PR suite
 reported all 6,695 cases in about six minutes. The longer Linux coverage allowance
@@ -114,10 +113,14 @@ allowance on 2026-10-10 and requested loosening the Windows allowance on
 2026-10-11 after a coverage run reported all 4,976 cases with zero failures but
 its host ended at the five-minute boundary. A longer budget does not classify
 that host exit as resolved; the changed-source CI run must finish successfully.
+Linux PR run 39203317429 reported 7,483 and 7,425 of 7,600 cases in two unchanged
+eight-minute runs on 2026-10-18, with zero reported case failures. Ordinary Linux
+PRs use the same twelve-minute whole-suite allowance as Linux main and macOS; the
+original incomplete runs remain retained and a complete final-source run is required.
 Per-case deadlines, assertions, iterations, coverage and the discovery minimum
 remain enforced; this is a whole-run allowance, not a failure exemption. NUnit 5
 async assertions must be awaited.
-The Test job allows 20 minutes on macOS/Linux main coverage and 15 elsewhere, so each suite
+The Test job allows 20 minutes on macOS/Linux and 15 on Windows, so each suite
 budget plus setup fits: CI 38479185526 finished all 6,056 macOS cases one
 second before a 15-minute job limit cancelled it (approved 2026-10-13).
 

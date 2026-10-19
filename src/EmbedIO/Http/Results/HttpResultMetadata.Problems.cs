@@ -5,7 +5,7 @@ namespace EmbedIO
 {
     partial class HttpResultMetadata
     {
-        private static int FixedProblemStatus(Type type) =>
+        internal static int FixedProblemStatus(Type type) =>
             type == typeof(BadRequestProblemResult) || type == typeof(ValidationProblemResult)
                 ? 400
                 : type == typeof(NotFoundProblemResult) ? 404 : type == typeof(ConflictProblemResult) ? 409 : 0;

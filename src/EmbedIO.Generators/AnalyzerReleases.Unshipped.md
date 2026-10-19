@@ -1,4 +1,4 @@
-; Unshipped analyzer release
+﻿; Unshipped analyzer release
 ; https://github.com/dotnet/roslyn-analyzers/blob/main/src/Microsoft.CodeAnalysis.Analyzers/ReleaseTrackingAnalyzers.Help.md
 
 ### New Rules
@@ -22,3 +22,4 @@ EMBEDIO014 | EmbedIO.WebApi | Error | Invalid before-handler hook
 EMBEDIO015 | EmbedIO.WebApi | Error | Unsupported request validation
 EMBEDIO016 | EmbedIO.WebApi | Error | Invalid browser protection mode
 EMBEDIO017 | EmbedIO.WebApi | Error | Invalid security-header policy name
+EMBEDIO018 | EmbedIO.Endpoints | Error | Invalid generated endpoint

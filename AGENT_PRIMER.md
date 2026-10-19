@@ -28,6 +28,36 @@ Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.
 
+### Typed minimal endpoints (2.16.0+)
+
+Use `EmbedIO.Endpoints` for opt-in exact MapGet/MapPost/MapPut/MapPatch/MapDelete/
+MapHead/MapOptions routes, MapMethods and nested MapGroup prefixes. Existing OnGet
+prefix callbacks and controllers retain their behavior. GeneratedEndpointBinding
+on a static partial class creates MethodEndpoint descriptors for its public static
+handlers; pass those to MapGet for reflection-free/AOT registration. Delegate/method
+group overloads compile bindings through reflection at registration and require
+an untrimmed runtime. Keep helper methods private and handler names unique.
+
+Reuse typed request binding, Validate, HttpResults, explicit JSON/multipart and
+streaming contracts. Framework context/request/response/route/principal and bare
+CancellationToken parameters are request-owned; the token is context.CancellationToken,
+not implicit disconnect detection. FromServices uses the optional DI package's
+request scope. JSON body context and response serializer metadata are configured
+separately. Captured delegate targets are application-owned, shared and never disposed.
+
+Configure authentication, CORS, rate limits and DI before the first server.Map* call,
+which installs a root endpoint module at that position. Unknown paths pass through.
+Policies and hooks freeze with Compile, AddEndpoints, Links or startup; configure
+all children first. Group authorization requirements combine with AND; AllowAnonymous
+is explicit, and RequireAuthorization restores accumulated requirements. Closest
+explicit cache/idempotency/browser/security-header selection wins. Use the existing
+module policy registries and restrictions. Literal routes precede parameter routes;
+avoid ambiguous parameterized templates. GET does not imply HEAD. WithName supplies
+safe named links and operation IDs. AddEndpoints reads the effective OpenAPI contract.
+Before/after callbacks are fluent endpoint hooks, not controller BeforeHandler attributes.
+See [minimal endpoints](docs/guides/minimal-endpoints.md) for complete generated/AOT
+code, ownership, override order, fuzzing, startup failures and latency experiments.
+
 ### Typed request binding (2.15.0+)
 
 Use `[QueryObject]` / `[FormObject]` for flat mutable DTOs, `[RequestField]` for
@@ -217,7 +247,7 @@ limits, failure matrix, concurrency fuzzing and cross-target support.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current source version | 2.15.0, the v2 engine. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current source version | 2.16.0, the v2 engine. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x

@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO;
 using EmbedIO.Actions;
+using EmbedIO.Endpoints;
 using EmbedIO.Problems;
 using EmbedIO.Routing;
 using EmbedIO.Testing;
@@ -21,25 +22,23 @@ internal static class RequestBindingFuzz
 
     internal static async Task<bool> SelfTestAsync(string[] args)
     {
-        if (args.Length == 0 || args[0] != "--request-binding-selftest") return false;
+        if (args.Length == 0 || args[0] is not ("--request-binding-selftest" or "--minimal-endpoints-selftest"))
+            return false;
+
+        var scenario = args[0] == "--minimal-endpoints-selftest" ? "minimal-endpoints" : "request-binding";
 
         if (args.Length != 1) throw new ArgumentException("Usage: --request-binding-selftest");
 
         using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        await Reject(true, false, "request-binding.actor-body");
-        await Reject(false, true, "request-binding.error-fields");
+        await Reject(true, false, scenario + ".actor-body");
+        await Reject(false, true, scenario + ".error-fields");
         return true;
 
         async Task Reject(bool bodyFault, bool fieldsFault, string invariant)
         {
             try
             {
-                await RunCoreAsync(
-                    new StateMachineTrace("request-binding", 1729, []),
-                    bodyFault,
-                    fieldsFault,
-                    stop.Token
-                );
+                await RunCoreAsync(new StateMachineTrace(scenario, 1729, []), bodyFault, fieldsFault, stop.Token);
             }
 
             catch (StateMachineFailure error) when (error.Invariant == invariant)
@@ -98,6 +97,60 @@ internal static class RequestBindingFuzz
 
                     await gate.Task.WaitAsync(token);
                 }));
+
+            if (trace.Scenario == "minimal-endpoints")
+            {
+                var endpoints = new EndpointModule(ResponseSerializer.None(false));
+                var group = endpoints.Root
+                    .MapGroup("/api")
+                    .MapGroup("/v1");
+
+                if (useGenerated)
+                {
+                    group
+                        .MapGet("/query", MinimalBindingHandlers.QueryEndpoint)
+                        .WithName("query");
+                    group.MapPost("/form", MinimalBindingHandlers.FormEndpoint);
+                    group.MapGet("/strict", MinimalBindingHandlers.StrictEndpoint);
+                    group.MapGet("/required", MinimalBindingHandlers.RequiredEndpoint);
+                    group.MapGet("/route/{id}", MinimalBindingHandlers.RouteIdEndpoint);
+                    group.MapGet("/header", MinimalBindingHandlers.HeaderEndpoint);
+                    group.MapGet("/cookie", MinimalBindingHandlers.CookieEndpoint);
+                }
+
+                else
+                {
+                    group
+                        .MapGet("/query", MinimalBindingHandlers.Query)
+                        .WithName("query");
+                    group.MapPost("/form", MinimalBindingHandlers.Form);
+                    group.MapGet("/strict", MinimalBindingHandlers.Strict);
+                    group.MapGet("/required", MinimalBindingHandlers.Required);
+                    group.MapGet("/route/{id}", MinimalBindingHandlers.RouteId);
+                    group.MapGet("/header", MinimalBindingHandlers.Header);
+                    group.MapGet("/cookie", MinimalBindingHandlers.Cookie);
+                }
+
+                if (endpoints.Links.GetPath("query") != "/api/v1/query")
+                    throw new StateMachineFailure("minimal-endpoints.links", "Nested route link mismatch.");
+
+                try
+                {
+                    group.AllowAnonymous();
+                }
+
+                catch (InvalidOperationException)
+                {
+                    server.WithModule(endpoints);
+                    return;
+                }
+
+                throw new StateMachineFailure(
+                    "minimal-endpoints.configuration",
+                    "Compiled configuration remained mutable."
+                );
+            }
+
             var module = new WebApiModule("/", ResponseSerializer.None(false));
 
             if (useGenerated) module.WithController(BindingFuzzBindings.BindingFuzzController);
@@ -227,6 +280,9 @@ internal static class RequestBindingFuzz
 
                 trace.Cover("binding-source-" + mode.ToString(CultureInfo.InvariantCulture));
                 trace.Cover("binding-status-" + expected.ToString(CultureInfo.InvariantCulture));
+
+                if (trace.Scenario == "minimal-endpoints") path = "/api/v1" + path;
+
                 using var request = new HttpRequestMessage(form == null ? HttpMethod.Get : HttpMethod.Post, path);
                 request.Headers.Add("X-Actor", actor.ToString(CultureInfo.InvariantCulture));
 
@@ -250,7 +306,7 @@ internal static class RequestBindingFuzz
 
                 if ((int)response.StatusCode != expected)
                     throw new StateMachineFailure(
-                        "request-binding.status",
+                        trace.Scenario + ".status",
                         "Unexpected binding status for mode " + mode.ToString(CultureInfo.InvariantCulture)
                     );
 
@@ -260,7 +316,7 @@ internal static class RequestBindingFuzz
 
                     if (text != expectedBody)
                         throw new StateMachineFailure(
-                            "request-binding.actor-body",
+                            trace.Scenario + ".actor-body",
                             "The bound payload belongs to another actor or value."
                         );
                 }
@@ -270,7 +326,7 @@ internal static class RequestBindingFuzz
                     var json = JsonNode.Parse(text);
                     var errors = json?["errors"]?.AsObject()
                         ?? throw new StateMachineFailure(
-                            "request-binding.error-fields",
+                            trace.Scenario + ".error-fields",
                             "Missing bounded field errors."
                         );
 
@@ -282,7 +338,7 @@ internal static class RequestBindingFuzz
                         || !errors.ContainsKey(errorField)
                     )
                         throw new StateMachineFailure(
-                            "request-binding.error-fields",
+                            trace.Scenario + ".error-fields",
                             "The structured error lost its field or request identity."
                         );
                 }
@@ -348,7 +404,7 @@ internal sealed class BindingFuzzController : WebApiController
         return actor.ToString(CultureInfo.InvariantCulture) + "|" + theme;
     }
 
-    private static string Echo(BindingFuzzInput input) =>
+    internal static string Echo(BindingFuzzInput input) =>
         input.Actor.ToString(CultureInfo.InvariantCulture)
             + "|"
             + input.Value.ToString(CultureInfo.InvariantCulture)
@@ -385,4 +441,28 @@ internal readonly record struct BindingFuzzId(int Value)
         result = new BindingFuzzId(parsed);
         return true;
     }
+}
+
+[GeneratedEndpointBinding]
+internal static partial class MinimalBindingHandlers
+{
+    public static string Query([QueryObject, Validate] BindingFuzzInput input) => BindingFuzzController.Echo(input);
+
+    public static string Form([FormObject, Validate] BindingFuzzInput input) => BindingFuzzController.Echo(input);
+
+    public static string Strict([QueryObject(RejectUnknownFields = true)] BindingFuzzInput input) =>
+        BindingFuzzController.Echo(input);
+
+    public static string Required([QueryObject] BindingFuzzRequired input) => input.Name;
+
+    public static string RouteId([RouteField] BindingFuzzId id, [HeaderField("X-Actor")] int actor) =>
+        actor.ToString(CultureInfo.InvariantCulture) + "|" + id.Value.ToString(CultureInfo.InvariantCulture);
+
+    public static string Header([HeaderField("X-Value")] string value, [HeaderField("X-Actor")] int actor) =>
+        actor.ToString(CultureInfo.InvariantCulture) + "|" + value;
+
+    public static string Cookie(
+        [CookieField("theme", DuplicateValues = RequestDuplicateValues.Last)] string theme,
+        [HeaderField("X-Actor")] int actor
+    ) => actor.ToString(CultureInfo.InvariantCulture) + "|" + theme;
 }
