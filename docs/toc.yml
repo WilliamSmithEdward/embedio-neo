@@ -40,11 +40,13 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Typed request binding (2.15.0+)
+      href: guides/typed-request-binding.md
     - name: Typed errors and validation
       href: guides/typed-error-results.md
     - name: Typed HTTP results
       href: guides/typed-results.md
-    - name: Response security headers (unreleased)
+    - name: Response security headers (2.13.0+)
       href: guides/security-headers.md
     - name: Resumable uploads using tus (2.12.0+)
       href: guides/resumable-uploads.md

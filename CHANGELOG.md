@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-10-18
+
+### Added
+
+- Opt-in flat query/form DTO binding, explicit header/cookie/route fields, invariant
+  custom TryParse identifiers, bounded strict decoding, duplicate/default policies,
+  generated/reflection parity and Native AOT/OpenAPI integration. Existing binding
+  behavior, targets and runtime dependency groups are preserved. Includes regression
+  tests and concurrent state-machine fuzzing. See
+  [typed request binding](docs/guides/typed-request-binding.md).
+
 ## [2.14.0] - 2026-10-18
 
 ### Added

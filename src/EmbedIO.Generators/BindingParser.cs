@@ -609,6 +609,19 @@ namespace EmbedIO.Generators
 
                 if (_meta is not null)
                     metadata.Add(ParameterExpression(parameter, _meta, validation));
+
+                if (_requestObjectFields != null)
+                    foreach (var (Property, Meta) in _requestObjectFields)
+                        metadata.Add(
+                            BindingParameterExpression(
+                                Property.Name,
+                                Property.Type,
+                                Meta,
+                                validation == null
+                                    ? null
+                                    : validation + ".ForMember(" + Literals.String(Property.Name) + ")"
+                            )
+                        );
             }
 
             var call = CallExpression(controller, method, arguments);
@@ -839,6 +852,7 @@ namespace EmbedIO.Generators
         {
             problem = null;
             _meta = null;
+            _requestObjectFields = null;
             var type = parameter.Type;
 
             if (parameter.RefKind != RefKind.None)
@@ -867,6 +881,9 @@ namespace EmbedIO.Generators
             var typeName = Literals.TypeName(type);
             var name = Literals.String(parameter.Name);
             var attributes = InheritedParameterAttributes(method, ordinal);
+
+            if (attributes.Any(IsExplicitRequestBinding))
+                return BindExplicitRequest(parameter, attributes, ref awaits, out problem);
 
             // 1. Request data attributes with an IRequestDataAttribute<TController, TData> interface.
             var genericCandidates = RequestDataInterfaces(attributes, _types.RequestDataOfControllerAndData);
@@ -1340,9 +1357,11 @@ namespace EmbedIO.Generators
                         .Where(c => c.DeclaredAccessibility == Accessibility.Public)
                         .ToArray();
 
-                    if (constructors.Any(
-                        c => c.Parameters.Length == 1 && c.Parameters[0].Type.ToDisplayString() == "System.Type"
-                    ))
+                    if (
+                        constructors.Any(
+                            c => c.Parameters.Length == 1 && c.Parameters[0].Type.ToDisplayString() == "System.Type"
+                        )
+                    )
                     {
                         converter = ConverterField(
                             converterType,
@@ -1466,10 +1485,9 @@ namespace EmbedIO.Generators
             {
                 foreach (var attribute in type.GetAttributes())
                 {
-                    if (!SymbolEqualityComparer.Default.Equals(
-                        attribute.AttributeClass,
-                        _types.AttributeUsageAttribute
-                    ))
+                    if (
+                        !SymbolEqualityComparer.Default.Equals(attribute.AttributeClass, _types.AttributeUsageAttribute)
+                    )
                         continue;
 
                     var allowMultiple = false;
@@ -1668,18 +1686,26 @@ namespace EmbedIO.Generators
             );
 
         private static string ParameterExpression(IParameterSymbol parameter, ParameterMeta meta, string? validation) =>
+            BindingParameterExpression(parameter.Name, parameter.Type, meta, validation);
+
+        private static string BindingParameterExpression(
+            string name,
+            ITypeSymbol type,
+            ParameterMeta meta,
+            string? validation
+        ) =>
             "new global::EmbedIO.WebApi.WebApiOperationParameter("
-                + Literals.String(parameter.Name)
+                + Literals.String(name)
                 + ", "
                 + meta.FieldName
                 + ", (global::EmbedIO.WebApi.WebApiParameterSource)("
                 + Literals.Int((int)meta.Source)
                 + "), "
-                + TypeOf(parameter.Type)
+                + TypeOf(type)
                 + ", "
                 + (meta.Required ? "true" : "false")
                 + ", "
-                + EnumNames(parameter.Type)
+                + EnumNames(type)
                 + ", "
                 + (meta.CustomAttribute ?? "null")
                 + ", "
@@ -1901,7 +1927,11 @@ namespace EmbedIO.Generators
             FormCollection,
             JsonBody,
             Custom,
-            Multipart
+            Multipart,
+            Header,
+            Cookie,
+            QueryObjectField,
+            FormObjectField
         }
 
         private sealed class ParameterMeta

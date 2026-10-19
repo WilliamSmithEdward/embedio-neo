@@ -22,7 +22,7 @@ Logical negation and exclamation marks in literal text are permitted. The separa
 Python guard rejects compiler/analyzer directives and build configuration opt-outs,
 except the owner-approved IDE0130 setting in the root `.editorconfig` and the two
 exact CA2213 ownership suppressions enumerated in the guard for output-cache
-capture, plus the six .NET Standard informational compatibility attributes
+capture, plus the narrowly scoped .NET Standard informational compatibility attributes
 documented below. The capture borrows its transport and parent; disposing those references
 would close the response or discard recording prematurely. Implementation folders
 do not have to mirror namespaces.
@@ -83,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7451
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7530
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -200,13 +200,17 @@ narrow scope and compatibility reason, and add a matching narrow guard exception
 if needed. Errors and warnings must be corrected. Keep a single compatible
 implementation rather than adding compiler branches solely for style suggestions.
 
-The tus and browser protection implementations currently have eleven method/constructor/field-scoped informational
-suppressions, authorized with this preference. CA1510/CA1512/CA1513 suggest throw
+The compatibility attributes are scoped to individual methods, constructors or fields
+and authorized with this preference. CA1510/CA1512/CA1513 suggest throw
 helpers unavailable in .NET Standard 2.0; CA1835 suggests memory-based Stream
 async overloads absent from that contract; CA1850 suggests the unavailable static
 SHA256.HashData API. IDE0330 suggests System.Threading.Lock, also absent from
 .NET Standard 2.0; IDE0057 suggests ranges requiring unavailable System.Range
-and System.Index types. Each attribute documents that reason. The suppression guard
+and System.Index types; IDE0056 similarly requires System.Index. Typed request
+binding retains Substring in BoundedRequestFields.Query/Parse and RequestFieldPlan.Bind,
+and array/string indexing in RequestFieldPlan.Bind and ReflectionRequestBinding.Scalar,
+with exact IDE0056/IDE0057 exceptions for that reason. BoundedRequestFields.FormAsync
+retains the byte-array Stream.ReadAsync overload under an exact CA1835 exception. Each attribute documents it. The suppression guard
 matches the exact file, member, diagnostic and justification, and its negative
 tests reject broader or moved exceptions. No errors or warnings are suppressed.
 

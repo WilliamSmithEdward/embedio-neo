@@ -612,6 +612,10 @@ namespace EmbedIO.WebApi
             ParameterExpression routeInLambda
         )
         {
+            var explicitBinding = ReflectionRequestBinding.Bind(parameter, controller, routeInLambda);
+
+            if (explicitBinding != null) return explicitBinding;
+
             // First, check for generic request data interfaces in attributes, then for non-generic ones.
             var requestData = TypedRequestData(parameter, controllerType, controller, out var typedAttributes);
             var untypedAttributes = false;
@@ -1079,13 +1083,15 @@ namespace EmbedIO.WebApi
                                 "Case-insensitive declarations have not been initialized."
                             );
 
-                        if (!AcceptCaseInsensitiveDeclaration(
-                            attribute.Verb,
-                            matcher,
-                            method,
-                            controllerType,
-                            staged.Select(p => (p.Verb, p.Matcher, p.Method))
-                        ))
+                        if (
+                            !AcceptCaseInsensitiveDeclaration(
+                                attribute.Verb,
+                                matcher,
+                                method,
+                                controllerType,
+                                staged.Select(p => (p.Verb, p.Matcher, p.Method))
+                            )
+                        )
                             continue;
 
                         staged.Add(
@@ -1361,13 +1367,15 @@ namespace EmbedIO.WebApi
                     var route = routes[i];
                     var matcher = matchers[i].WithCaseInsensitiveLiterals();
 
-                    if (!AcceptCaseInsensitiveDeclaration(
-                        route.Verb,
-                        matcher,
-                        route.HandlerId,
-                        controllerType,
-                        pending.Select(p => (p.Verb, p.Matcher, p.Method))
-                    ))
+                    if (
+                        !AcceptCaseInsensitiveDeclaration(
+                            route.Verb,
+                            matcher,
+                            route.HandlerId,
+                            controllerType,
+                            pending.Select(p => (p.Verb, p.Matcher, p.Method))
+                        )
+                    )
                         continue;
 
                     pending.Add(

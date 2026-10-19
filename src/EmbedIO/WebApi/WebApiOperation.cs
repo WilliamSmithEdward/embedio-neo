@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using EmbedIO.OpenApi;
 using EmbedIO.Authorization;
+using EmbedIO.OpenApi;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.WebApi
@@ -34,10 +34,9 @@ namespace EmbedIO.WebApi
             WebApiOperationParameter[] parameters,
             OpenApiOperationAttribute? operation,
             OpenApiResponseAttribute[] responses,
-            bool ignored)
-            : this(controllerName, methodName, resultType, parameters, operation, responses, ignored, null)
-        {
-        }
+            bool ignored
+        ) : this(controllerName, methodName, resultType, parameters, operation, responses, ignored, null)
+        { }
 
         /// <summary>Creates generated operation metadata including authorization requirements.</summary>
         /// <param name="controllerName">The controller name.</param>
@@ -49,15 +48,27 @@ namespace EmbedIO.WebApi
         /// <param name="ignored">Whether OpenAPI ignores the operation.</param>
         /// <param name="authorization">Optional authorization metadata.</param>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public WebApiOperation(string controllerName, string methodName, Type? resultType, WebApiOperationParameter[] parameters,
-            OpenApiOperationAttribute? operation, OpenApiResponseAttribute[] responses, bool ignored, AuthorizationMetadata? authorization)
+        public WebApiOperation(
+            string controllerName,
+            string methodName,
+            Type? resultType,
+            WebApiOperationParameter[] parameters,
+            OpenApiOperationAttribute? operation,
+            OpenApiResponseAttribute[] responses,
+            bool ignored,
+            AuthorizationMetadata? authorization
+        )
         {
-            ControllerName = Validate.NotNull(nameof(controllerName), controllerName);
-            MethodName = Validate.NotNull(nameof(methodName), methodName);
+            controllerName = Validate.NotNull(nameof(controllerName), controllerName);
+            methodName = Validate.NotNull(nameof(methodName), methodName);
+            parameters = Validate.NotNull(nameof(parameters), parameters);
+            responses = Validate.NotNull(nameof(responses), responses);
+            ControllerName = controllerName;
+            MethodName = methodName;
             ResultType = resultType;
-            Parameters = Validate.NotNull(nameof(parameters), parameters);
+            Parameters = parameters;
             Operation = operation;
-            Responses = Validate.NotNull(nameof(responses), responses);
+            Responses = responses;
             Ignored = ignored;
             Authorization = authorization;
         }
@@ -109,14 +120,18 @@ namespace EmbedIO.WebApi
             Type type,
             bool isRequired,
             string[]? enumNames,
-            string? customAttribute)
+            string? customAttribute
+        )
         {
-            Name = Validate.NotNull(nameof(name), name);
-            FieldName = Validate.NotNull(nameof(fieldName), fieldName);
+            name = Validate.NotNull(nameof(name), name);
+            fieldName = Validate.NotNull(nameof(fieldName), fieldName);
+            type = Validate.NotNull(nameof(type), type);
+            Name = name;
+            FieldName = fieldName;
             Source = source;
-            Type = Validate.NotNull(nameof(type), type);
+            Type = type;
             IsRequired = isRequired;
-            EnumNames = enumNames ?? Array.Empty<string>();
+            EnumNames = enumNames ?? [];
             CustomAttribute = customAttribute;
         }
 
@@ -130,9 +145,16 @@ namespace EmbedIO.WebApi
         /// <param name="customAttribute">Custom binding attribute name.</param>
         /// <param name="validation">Opt-in validation metadata.</param>
         [EditorBrowsable(EditorBrowsableState.Never)]
-        public WebApiOperationParameter(string name, string fieldName, WebApiParameterSource source, Type type, bool isRequired,
-            string[]? enumNames, string? customAttribute, RequestValidationParameter? validation)
-            : this(name, fieldName, source, type, isRequired, enumNames, customAttribute) => Validation = validation;
+        public WebApiOperationParameter(
+            string name,
+            string fieldName,
+            WebApiParameterSource source,
+            Type type,
+            bool isRequired,
+            string[]? enumNames,
+            string? customAttribute,
+            RequestValidationParameter? validation
+        ) : this(name, fieldName, source, type, isRequired, enumNames, customAttribute) => Validation = validation;
 
         /// <summary>Gets explicitly enabled parameter validation metadata, or null.</summary>
         public RequestValidationParameter? Validation { get; }
@@ -185,5 +207,13 @@ namespace EmbedIO.WebApi
 
         /// <summary>A streaming multipart form (<see cref="MultipartFormAttribute"/>).</summary>
         Multipart,
+        /// <summary>An explicitly bound header.</summary>
+        Header,
+        /// <summary>An explicitly bound case-sensitive cookie.</summary>
+        Cookie,
+        /// <summary>A flattened query-object field.</summary>
+        QueryObjectField,
+        /// <summary>A flattened form-object field.</summary>
+        FormObjectField
     }
 }

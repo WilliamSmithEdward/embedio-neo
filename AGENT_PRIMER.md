@@ -28,6 +28,29 @@ Request-abort fuzz artifacts retain the outstanding wait and token state on a
 case deadline; retained traces may depend on runtime scheduling and are not
 necessarily deterministic reproductions.
 
+### Typed request binding (2.15.0+)
+
+Use `[QueryObject]` / `[FormObject]` for flat mutable DTOs, `[RequestField]` for
+aliases/required presence/duplicate policy, and `[HeaderField]` / `[CookieField]`
+for explicit parameters. `[RouteField]` opts custom TryParse IDs into invariant
+route parsing; implicit route conversion is unchanged. Missing DTO fields retain
+initializers; scalar duplicates reject by default, arrays retain repeated keys,
+and empty nullable values become null. Validation remains opt-in `[Validate]`.
+Query/form names use ordinal case-insensitive matching; cookies are exact-case
+and never URL-decoded.
+
+Limits: 128 fields, 1024 values, 4096 UTF-16 code units/value, 64 KiB decoded UTF-8
+(names charged per pair), and 256 KiB encoded form bytes after decompression.
+Strict percent/Unicode errors are 400; wrong form media is 415. New FormObject
+cannot share an action with legacy form/JSON/multipart body attributes. The parsed
+source is read-only and request-local; DTO instances are new. Generated bindings
+support Native AOT without DTO JSON metadata and flatten OpenAPI fields. Raw
+header/cookie arrays fail OpenAPI generation unless explicitly excluded/documented.
+Auth still precedes activation/binding; header/cookie input never establishes
+identity or automatically extends cache keys/idempotency fingerprints. Existing
+binding APIs/defaults are preserved. See [typed request binding](docs/guides/typed-request-binding.md)
+for supported shapes, ownership, errors, examples and concurrent fuzzing.
+
 ### Typed HTTP results (2.14.0+)
 
 Main adds root-namespace `HttpResult<T>`, concrete result types and
@@ -194,7 +217,7 @@ limits, failure matrix, concurrency fuzzing and cross-target support.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current source version | 2.14.0, the v2 engine. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current source version | 2.15.0, the v2 engine. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x

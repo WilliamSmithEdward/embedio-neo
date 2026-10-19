@@ -666,3 +666,18 @@ net10.0 assembly SHA-256: `0dae5cc4f29fade8f4aad25853d3a838bba70da70a11cf5287b44
 netstandard2.0 assembly SHA-256: `a9cb2999814214114c92fdd01c06d0f88f72f56758a871af8e57e3e3606bb027`, offset `0x758d`.
 
 Paginated open/fixed/dismissed code-scanning alert queries expose no matching alert. William explicitly approved: "Approve both 2.14.0 paths and the unavailable-alert waiver." No dismissal is claimed. Local candidate hashes identify reviewed precommit bytes; final CI and published packages require independent exact-byte and full-rule verification. Every other match, scanner error, stale acceptance and CI check remains blocking. This new approval is restricted to the two 2.14.0 paths above. Evidence is retained under ignored `TestResults/release-2.14.0/yara-review` and `local-yara`.
+
+## 2.15.0 typed request binding release revalidation
+
+Written acceptance covers only `GODMODERULES_IDDQD_God_Mode_Rule` on:
+
+- `dist/EmbedIO-Neo.DependencyInjection.2.15.0-unpacked/lib/net10.0/EmbedIO.DependencyInjection.dll`
+- `dist/EmbedIO-Neo.DependencyInjection.2.15.0-unpacked/lib/netstandard2.0/EmbedIO.DependencyInjection.dll`
+
+Pinned YARA-X 1.21.0 / YARA Forge 20261011 full-rule scans with printed strings independently match only `Injection.pdb` in compiler RSDS/CodeView metadata. No other rule matched either assembly. Archive/extracted-tool hashes and exact CodeView byte bounds verified. No DI source or scanner-pin changes.
+
+Local precommit package SHA-256: `d79d1646a93f6b17d62ffbe5273b2baea67597ace628cabd3b306f49db624d52`.
+net10.0 assembly SHA-256: `973ede990e7f35378cfd04c4f75b99a331b29aa07734e14ece02bc7fc6455698`, match offset `0x6ca2`.
+netstandard2.0 assembly SHA-256: `213daae575c078f00c8d29a8a41a48654157dbb189f46da8f22a0afa4be4aca4`, match offset `0x758d`.
+
+Paginated open/fixed/dismissed GitHub code-scanning alert queries expose no matching YARA alert. William explicitly approved: "Approve both 2.15.0 paths and the unavailable-alert waiver." No dismissal is claimed. Local hashes identify reviewed precommit bytes, not future CI/release builds. Final exact-byte reviews, independent full scans and all CI gates remain required. Every other finding, scanner error and stale acceptance remains fatal. This approval is restricted to the two version-qualified 2.15.0 paths above. Evidence remains under ignored TestResults/release-2.15.0/yara-review and local-yara.

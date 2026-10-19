@@ -219,3 +219,11 @@ with uncommitted tails. `--tus-selftest` rejects an injected offset mismatch;
 recovery and exact final bytes. The retained `state-corpus/tus-uploads.json`
 trace replays the main transitions. These model checks complement the owned
 HTTP/1-3 regressions; see [resumable uploads](resumable-uploads.md).
+
+## Typed request binding
+
+The `request-binding` campaign runs three actors per generated/reflection server
+with independent response and error-field checks. It covers flat query/form DTOs,
+strict decoding and bounds, header/cookie duplicates, custom route IDs and recovery.
+Run `--request-binding-selftest` to verify both corruption oracles. See
+[typed request binding](typed-request-binding.md#verification-and-fuzzing).
