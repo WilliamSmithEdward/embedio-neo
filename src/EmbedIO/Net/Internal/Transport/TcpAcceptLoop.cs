@@ -18,6 +18,7 @@ namespace EmbedIO.Net.Internal
         private readonly Action _stopAccepting;
         private int _stopRequested;
         private const int InlineBudget = 64;
+
         internal TcpAcceptLoop(Socket listener, Action<Socket> admit, Func<bool> stopped, Action stopAccepting)
         {
             _listener = new BorrowedResource<Socket>(listener ?? throw new ArgumentNullException(nameof(listener)));
@@ -25,20 +26,24 @@ namespace EmbedIO.Net.Internal
             _stopped = stopped ?? throw new ArgumentNullException(nameof(stopped));
             _stopAccepting = stopAccepting ?? throw new ArgumentNullException(nameof(stopAccepting));
         }
+
         internal async Task RunAsync()
         {
             var inline = 0;
             var reportedError = false;
             Socket? ready = null;
+
             try
             {
                 while (!_stopped())
                 {
                     Socket? pending = null;
                     var admissionFailed = false;
+
                     try
                     {
                         var listener = _listener.Value;
+
                         // Independently retain the Windows AcceptEx handle even when
                         // the runtime clears its completion state after failure.
                         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -49,25 +54,45 @@ namespace EmbedIO.Net.Internal
                         var operation = listener.AcceptAsync(pending);
 #endif
                         if (!operation.IsCompleted) inline = 0;
+
                         // Rearm before admission starts request parsing or a TLS handshake.
                         // The next socket remains owned until its accept is awaited.
-                        try { AdmitReady(ref ready, ref reportedError); }
+                        try
+                        {
+                            AdmitReady(ref ready, ref reportedError);
+                        }
+
                         catch
                         {
                             // Even a nonrecoverable callback or diagnostic exception
                             // must not abandon the operation already armed above.
                             admissionFailed = true;
-                            try { RequestOwnerStop(); }
+
+                            try
+                            {
+                                RequestOwnerStop();
+                            }
+
                             finally
                             {
-                                try { using var abandoned = await operation.ConfigureAwait(false); }
-                                catch (Exception error) when (error is SocketException or ObjectDisposedException or OperationCanceledException) { }
+                                try
+                                {
+                                    using var abandoned = await operation.ConfigureAwait(false);
+                                }
+
+                                catch (Exception error) when (error is SocketException or ObjectDisposedException or OperationCanceledException)
+                                { }
                             }
+
                             throw;
                         }
+
                         ready = await operation.ConfigureAwait(false);
+
                         if (!ReferenceEquals(pending, ready)) pending?.Dispose();
+
                         pending = null;
+
                         if (++inline == InlineBudget)
                         {
                             inline = 0;
@@ -76,33 +101,62 @@ namespace EmbedIO.Net.Internal
                             await Task.Yield();
                         }
                     }
-                    catch (ObjectDisposedException) when (!admissionFailed) { return; }
+
+                    catch (ObjectDisposedException) when (!admissionFailed)
+                    {
+                        return;
+                    }
+
                     catch (SocketException) when (!admissionFailed)
                     {
                         AdmitReady(ref ready, ref reportedError);
+
                         if (_stopped()) return;
-                        await Task.Delay(100).ConfigureAwait(false);
+
+                        await Task
+                            .Delay(100)
+                            .ConfigureAwait(false);
                     }
-                    finally { pending?.Dispose(); }
+
+                    finally
+                    {
+                        pending?.Dispose();
+                    }
                 }
             }
-            catch { RequestOwnerStop(); throw; }
-            finally { ready?.Dispose(); }
+
+            catch
+            {
+                RequestOwnerStop();
+                throw;
+            }
+
+            finally
+            {
+                ready?.Dispose();
+            }
         }
+
         private void RequestOwnerStop()
         {
             if (Interlocked.Exchange(ref _stopRequested, 1) == 0) _stopAccepting();
         }
+
         private void AdmitReady(ref Socket? ready, ref bool reportedError)
         {
-            var accepted = ready; ready = null;
+            var accepted = ready;
+            ready = null;
+
             if (accepted == null) return;
+
             try
             {
                 if (_stopped()) return;
+
                 _admit(accepted);
                 accepted = null;
             }
+
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
                 if (!reportedError)
@@ -111,7 +165,11 @@ namespace EmbedIO.Net.Internal
                     reportedError = true;
                 }
             }
-            finally { accepted?.Dispose(); }
+
+            finally
+            {
+                accepted?.Dispose();
+            }
         }
     }
 }

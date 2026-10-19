@@ -25,30 +25,42 @@ namespace EmbedIO.Net.Internal
         private int _released;
 
         internal ListenerAcceptEpoch() => StopToken = _stop.Token;
+
         internal CancellationToken StopToken { get; }
         internal bool Graceful { get; set; }
         internal bool Retired => Volatile.Read(ref _retired) != 0;
         internal bool AdmissionOpen => Volatile.Read(ref _open) != 0;
 
         internal void OpenAdmission() => Volatile.Write(ref _open, 1);
+
         internal void SealAdmission()
         {
             Interlocked.Exchange(ref _open, 0);
             var spin = default(SpinWait);
+
             while (Volatile.Read(ref _producers) != 0) spin.SpinOnce();
         }
+
         internal bool BorrowPublication()
         {
             Interlocked.Increment(ref _producers);
+
             if (AdmissionOpen) return true;
+
             ReturnPublication();
             return false;
         }
+
         internal void ReturnPublication() => Interlocked.Decrement(ref _producers);
+
         internal void Publish(IHttpContextImpl context)
         {
-            if (!_pending.TryAdd(context.Id, context)) throw new InvalidOperationException("Unable to register context.");
-            Volatile.Read(ref _order).Enqueue(context);
+            if (!_pending.TryAdd(context.Id, context))
+                throw new InvalidOperationException("Unable to register context.");
+
+            Volatile
+                .Read(ref _order)
+                .Enqueue(context);
             Interlocked.MemoryBarrier();
             Pulse();
         }
@@ -56,33 +68,48 @@ namespace EmbedIO.Net.Internal
         internal bool BorrowReader()
         {
             Interlocked.Increment(ref _readers);
+
             if (!Retired) return true;
+
             ReturnReader();
             return false;
         }
+
         internal void ReturnReader()
         {
             if (Interlocked.Decrement(ref _readers) == 0) Reclaim();
         }
+
         internal void Retire()
         {
             if (Interlocked.Exchange(ref _retired, 1) != 0) return;
-            try { _stop.Cancel(); }
+
+            try
+            {
+                _stop.Cancel();
+            }
+
             finally
             {
                 Volatile.Write(ref _cancelFinished, 1);
                 Reclaim();
             }
         }
+
         public void Dispose()
         {
             SealAdmission();
             Retire();
         }
+
         private void Reclaim()
         {
-            if (Volatile.Read(ref _cancelFinished) == 0 || Volatile.Read(ref _readers) != 0
-                || Interlocked.CompareExchange(ref _released, 1, 0) != 0) return;
+            if (
+                Volatile.Read(ref _cancelFinished) == 0
+                || Volatile.Read(ref _readers) != 0
+                || Interlocked.CompareExchange(ref _released, 1, 0) != 0
+            ) return;
+
             _wake.Dispose();
             _stop.Dispose();
         }
@@ -91,21 +118,36 @@ namespace EmbedIO.Net.Internal
         {
             try
             {
-                if (!cancellationToken.IsCancellationRequested && !StopToken.IsCancellationRequested && TryClaim(out var ready)) return ready;
+                if (
+                    !cancellationToken.IsCancellationRequested
+                    && !StopToken.IsCancellationRequested
+                    && TryClaim(out var ready)
+                ) return ready;
+
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, StopToken);
+
                 try
                 {
                     while (true)
                     {
                         linked.Token.ThrowIfCancellationRequested();
                         Interlocked.Increment(ref _waiters);
+
                         try
                         {
                             if (TryClaim(out var context)) return context;
-                            await _wake.WaitAsync(linked.Token).ConfigureAwait(false);
+
+                            await _wake
+                                .WaitAsync(linked.Token)
+                                .ConfigureAwait(false);
                             Interlocked.Exchange(ref _pulse, 0);
                         }
-                        finally { Interlocked.Decrement(ref _waiters); }
+
+                        finally
+                        {
+                            Interlocked.Decrement(ref _waiters);
+                        }
+
                         if (linked.IsCancellationRequested)
                         {
                             Pulse();
@@ -113,49 +155,85 @@ namespace EmbedIO.Net.Internal
                         }
                     }
                 }
+
                 catch (OperationCanceledException error) when (cancellationToken.IsCancellationRequested)
-                { throw new OperationCanceledException("Accept canceled.", error, cancellationToken); }
+                {
+                    throw new OperationCanceledException("Accept canceled.", error, cancellationToken);
+                }
+
                 catch (OperationCanceledException)
-                { throw Stopped(); }
+                {
+                    throw Stopped();
+                }
             }
-            finally { ReturnReader(); }
+
+            finally
+            {
+                ReturnReader();
+            }
         }
-        internal Exception Stopped() => Graceful ? new ListenerDrainedException()
-            : new System.Net.HttpListenerException(995, "The listener stopped accepting requests.");
+
+        internal Exception Stopped() =>
+            Graceful
+                ? new ListenerDrainedException()
+                : new System.Net.HttpListenerException(995, "The listener stopped accepting requests.");
+
         private bool TryClaim([NotNullWhen(true)] out IHttpContextImpl? context)
         {
-            while (Volatile.Read(ref _order).TryDequeue(out var candidate))
-                if (((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(new(candidate.Id, candidate)))
+            while (Volatile
+                .Read(ref _order)
+                .TryDequeue(out var candidate))
+                if (((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(
+                    new(candidate.Id, candidate)
+                ))
                 {
                     context = candidate;
                     Pulse();
                     return true;
                 }
+
             context = null;
             return false;
         }
+
         private void Pulse()
         {
-            if (Volatile.Read(ref _waiters) != 0 && !_pending.IsEmpty && Interlocked.CompareExchange(ref _pulse, 1, 0) == 0)
+            if (
+                Volatile.Read(ref _waiters) != 0
+                && !_pending.IsEmpty
+                && Interlocked.CompareExchange(ref _pulse, 1, 0) == 0
+            )
                 _wake.Release();
         }
-        internal bool Withdraw(IHttpContextImpl context)
-            => ((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(new(context.Id, context));
+
+        internal bool Withdraw(IHttpContextImpl context) =>
+            ((ICollection<KeyValuePair<string, IHttpContextImpl>>)_pending).Remove(new(context.Id, context));
+
         internal bool NeedsCompaction => Volatile.Read(ref _order).Count > _pending.Count + 128;
+
         internal void Compact()
         {
             var replacement = new ConcurrentQueue<IHttpContextImpl>();
+
             foreach (var context in Volatile.Read(ref _order))
-                if (_pending.TryGetValue(context.Id, out var current) && ReferenceEquals(current, context)) replacement.Enqueue(context);
+                if (_pending.TryGetValue(context.Id, out var current) && ReferenceEquals(current, context))
+                    replacement.Enqueue(context);
+
             Volatile.Write(ref _order, replacement);
         }
+
         internal IHttpContextImpl[] DetachPending()
         {
             var retired = new List<IHttpContextImpl>();
+
             foreach (var entry in _pending)
                 if (_pending.TryRemove(entry.Key, out var context)) retired.Add(context);
-            while (Volatile.Read(ref _order).TryDequeue(out _)) { }
-            return retired.ToArray();
+
+            while (Volatile
+                .Read(ref _order)
+                .TryDequeue(out _)) { }
+
+            return [.. retired];
         }
     }
 }

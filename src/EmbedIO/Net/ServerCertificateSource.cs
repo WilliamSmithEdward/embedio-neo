@@ -19,8 +19,7 @@ namespace EmbedIO.Net
     public sealed class ServerCertificateSource
     {
         private const string ServerAuthenticationOid = "1.3.6.1.5.5.7.3.1";
-
-        private readonly object _publishSync = new object();
+        private readonly object _publishSync = new();
         private readonly bool _fixed;
         private X509Certificate2 _current;
         private long _version;
@@ -32,10 +31,7 @@ namespace EmbedIO.Net
         /// <exception cref="ArgumentNullException"><paramref name="certificate"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="certificate"/> is not usable as a server certificate;
         /// see <see cref="Publish"/>.</exception>
-        public ServerCertificateSource(X509Certificate2 certificate)
-            : this(Validated(certificate), 1, false)
-        {
-        }
+        public ServerCertificateSource(X509Certificate2 certificate) : this(Validated(certificate), 1, false) { }
 
         private ServerCertificateSource(X509Certificate2? certificate, long version, bool isFixed)
         {
@@ -68,6 +64,7 @@ namespace EmbedIO.Net
         public void Publish(X509Certificate2 certificate)
         {
             Validate(certificate, nameof(certificate));
+
             lock (_publishSync)
             {
                 Volatile.Write(ref _current, certificate);
@@ -76,7 +73,8 @@ namespace EmbedIO.Net
         }
 
         // A fixed certificate configured the existing way keeps its existing behavior: no new checks.
-        internal static ServerCertificateSource Fixed(X509Certificate2 certificate) => new ServerCertificateSource(certificate, 1, true);
+        internal static ServerCertificateSource Fixed(X509Certificate2 certificate) =>
+            new(certificate, 1, true);
 
         private static X509Certificate2 Validated(X509Certificate2 certificate)
         {
@@ -93,8 +91,12 @@ namespace EmbedIO.Net
                 throw new ArgumentException("The certificate has no private key.", parameterName);
 
             var now = DateTime.Now;
+
             if (certificate.NotBefore > now)
-                throw new ArgumentException($"The certificate is not valid before {certificate.NotBefore:O}.", parameterName);
+                throw new ArgumentException(
+                    $"The certificate is not valid before {certificate.NotBefore:O}.",
+                    parameterName
+                );
 
             if (certificate.NotAfter < now)
                 throw new ArgumentException($"The certificate expired on {certificate.NotAfter:O}.", parameterName);
@@ -105,6 +107,7 @@ namespace EmbedIO.Net
                     continue;
 
                 var allowed = false;
+
                 foreach (var oid in usage.EnhancedKeyUsages)
                 {
                     if (oid.Value == ServerAuthenticationOid)
@@ -112,7 +115,10 @@ namespace EmbedIO.Net
                 }
 
                 if (!allowed)
-                    throw new ArgumentException("The certificate's enhanced key usage does not include server authentication.", parameterName);
+                    throw new ArgumentException(
+                        "The certificate's enhanced key usage does not include server authentication.",
+                        parameterName
+                    );
             }
 
             if (!HasUsablePrivateKey(certificate, out var error))
@@ -122,22 +128,20 @@ namespace EmbedIO.Net
         private static bool HasUsablePrivateKey(X509Certificate2 certificate, out Exception? error)
         {
             error = null;
+
             try
             {
-                using (var rsa = certificate.GetRSAPrivateKey())
-                {
-                    if (rsa != null)
-                        return true;
-                }
+                using var rsa = certificate.GetRSAPrivateKey();
+                if (rsa != null)
+                    return true;
 
-                using (var ecdsa = certificate.GetECDsaPrivateKey())
-                {
-                    if (ecdsa != null)
-                        return true;
-                }
+                using var ecdsa = certificate.GetECDsaPrivateKey();
+                if (ecdsa != null)
+                    return true;
 
                 return false;
             }
+
             catch (CryptographicException exception)
             {
                 error = exception;

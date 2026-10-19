@@ -8,7 +8,8 @@ namespace EmbedIO.Net.Internal.WebTransport
     // integrating transport closes the connection through its existing path.
     internal sealed class WebTransportException : IOException
     {
-        internal WebTransportException(long errorCode, string message) : base(message) { ErrorCode = errorCode; }
+        internal WebTransportException(long errorCode, string message) : base(message) => ErrorCode = errorCode;
+
         public long ErrorCode { get; }
     }
 }

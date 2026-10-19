@@ -10,15 +10,29 @@ namespace EmbedIO.Net.Internal.Http3
         internal static long ReadHeader(byte[] packet, int offset, int count, out int payloadOffset)
         {
             if (packet == null) throw new ArgumentNullException(nameof(packet));
+
             if (offset < 0 || count < 0 || offset > packet.Length - count)
                 throw new ArgumentOutOfRangeException(nameof(count));
+
             var cursor = offset;
             long quarter;
-            try { quarter = QuicInteger.Read(packet, ref cursor, offset + count); }
+
+            try
+            {
+                quarter = QuicInteger.Read(packet, ref cursor, offset + count);
+            }
+
             catch (EndOfStreamException)
-            { throw new Http3ProtocolException(0x33, "Truncated HTTP/3 datagram stream identifier."); }
+            {
+                throw new Http3ProtocolException(0x33, "Truncated HTTP/3 datagram stream identifier.");
+            }
+
             if (quarter >= 1L << 60)
-                throw new Http3ProtocolException(0x33, "HTTP/3 datagram stream identifier exceeds the QUIC stream limit.");
+                throw new Http3ProtocolException(
+                    0x33,
+                    "HTTP/3 datagram stream identifier exceeds the QUIC stream limit."
+                );
+
             payloadOffset = cursor;
             return quarter << 2;
         }
@@ -26,18 +40,33 @@ namespace EmbedIO.Net.Internal.Http3
         internal static int WriteHeader(byte[] packet, int offset, long streamId)
         {
             if (streamId < 0 || streamId > QuicInteger.Maximum || (streamId & 3) != 0)
-                throw new ArgumentOutOfRangeException(nameof(streamId), "Datagrams require a client-initiated bidirectional request stream.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(streamId),
+                    "Datagrams require a client-initiated bidirectional request stream."
+                );
+
             return QuicInteger.Write(packet, offset, streamId >> 2);
         }
 #if NET10_0_OR_GREATER
         internal static long ReadPacketHeader(ReadOnlySpan<byte> packet, out int payloadOffset)
         {
             if (packet.IsEmpty) throw new Http3ProtocolException(0x33, "Truncated HTTP/3 datagram stream identifier.");
+
             var width = 1 << (packet[0] >> 6);
-            if (packet.Length < width) throw new Http3ProtocolException(0x33, "Truncated HTTP/3 datagram stream identifier.");
+
+            if (packet.Length < width)
+                throw new Http3ProtocolException(0x33, "Truncated HTTP/3 datagram stream identifier.");
+
             long quarter = packet[0] & 63;
+
             for (var index = 1; index < width; index++) quarter = (quarter << 8) | packet[index];
-            if (quarter >= 1L << 60) throw new Http3ProtocolException(0x33, "HTTP/3 datagram stream identifier exceeds the QUIC stream limit.");
+
+            if (quarter >= 1L << 60)
+                throw new Http3ProtocolException(
+                    0x33,
+                    "HTTP/3 datagram stream identifier exceeds the QUIC stream limit."
+                );
+
             payloadOffset = width;
             return quarter << 2;
         }

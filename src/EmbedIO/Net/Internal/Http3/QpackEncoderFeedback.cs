@@ -18,8 +18,8 @@ namespace EmbedIO.Net.Internal.Http3
             internal readonly Queue<(long[] References, long Required)> Pending = new();
             internal long Required;
         }
-        private readonly Dictionary<long, StreamSections> _sections = new();
-        private readonly Dictionary<long, int> _references = new();
+        private readonly Dictionary<long, StreamSections> _sections = [];
+        private readonly Dictionary<long, int> _references = [];
         private readonly byte[] _pending = new byte[10];
         private int _count;
         private int _sectionCount;
@@ -77,7 +77,7 @@ namespace EmbedIO.Net.Internal.Http3
                 // No ownership mutation on admission failure. The caller can emit
                 // a stateless section instead without waiting for the peer.
                 if (_sectionCount == _maximumSections || references.Length > _maximumReferences - _referenceCount) return false;
-                var owned = ownedReferences ? references : references.Distinct().ToArray();
+                var owned = ownedReferences ? references : [.. references.Distinct()];
                 if (stream == null) _sections.Add(streamId, stream = new StreamSections());
                 stream.Pending.Enqueue((owned, required));
                 stream.Required = Math.Max(stream.Required, required);
@@ -135,14 +135,14 @@ namespace EmbedIO.Net.Internal.Http3
             if ((instruction & 128) != 0)
             {
                 if (!_sections.TryGetValue(value, out var stream)) throw Invalid();
-                var section = stream.Pending.Dequeue();
+                var (references, required) = stream.Pending.Dequeue();
                 if (stream.Required > _known) --_blockedStreamCount;
                 stream.Required = 0;
-                foreach (var pending in stream.Pending) stream.Required = Math.Max(stream.Required, pending.Required);
+                foreach (var (_, pendingRequired) in stream.Pending) stream.Required = Math.Max(stream.Required, pendingRequired);
                 if (stream.Required > _known) ++_blockedStreamCount;
-                Release(section.References);
+                Release(references);
                 if (stream.Pending.Count == 0) _sections.Remove(value);
-                AdvanceKnown(section.Required);
+                AdvanceKnown(required);
             }
             else if ((instruction & 64) != 0)
             {
@@ -150,7 +150,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_sections.TryGetValue(value, out var stream))
                 {
                     if (stream.Required > _known) --_blockedStreamCount;
-                    foreach (var section in stream.Pending) Release(section.References);
+                    foreach (var (references, _) in stream.Pending) Release(references);
                     _sections.Remove(value);
                 }
             }
