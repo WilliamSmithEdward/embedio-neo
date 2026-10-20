@@ -54,12 +54,15 @@ def check_pretty(report: Path) -> bool:
         raise RuntimeError("No source files discovered")
     for path in files:
         relative = path.relative_to(ROOT).as_posix()
-        source = path.read_text(encoding="utf-8-sig")
+        source = path.read_text(encoding="utf-8")
+        settings = settings_for(path)
         try:
-            formatted = prettycsharp.format_source(source, settings_for(path), lang_version=14.0)
+            formatted = prettycsharp.format_source(source.lstrip("\ufeff"), settings, lang_version=14.0)
         except Exception as error:
             raise RuntimeError(f"{relative}: prettyCSharp failed: {error}") from error
         expected = expected_format(relative, formatted).replace("\r\n", "\n")
+        if settings.charset == "utf-8-bom" or (settings.charset == "preserve" and source.startswith("\ufeff")):
+            expected = "\ufeff" + expected
         if source != expected:
             print(f"{relative}: prettyCSharp formatting differs", file=sys.stderr)
             differences.extend(difflib.unified_diff(source.splitlines(True), expected.splitlines(True),

@@ -8,6 +8,19 @@ from check_source_quality import check_pretty, expected_format, scan_failed
 
 
 class SourceQualityTests(unittest.TestCase):
+    def test_missing_editorconfig_bom_fails(self):
+        import prettycsharp
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src").mkdir()
+            (root / ".editorconfig").write_text("root = true\n[*.cs]\ncharset = utf-8-bom\n", encoding="utf-8")
+            source = root / "src" / "C.cs"
+            source.write_text(prettycsharp.format_source("class C {}\n"), encoding="utf-8")
+            with patch("check_source_quality.ROOT", root):
+                self.assertFalse(check_pretty(root))
+                source.write_bytes(b"\xef\xbb\xbf" + source.read_bytes())
+                self.assertTrue(check_pretty(root))
+
     def test_bad_formatting_fails_and_does_not_modify_source(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
