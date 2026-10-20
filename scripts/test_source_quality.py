@@ -1,0 +1,58 @@
+"""Regression cases proving source-quality gates fail closed."""
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+from check_source_quality import check_pretty, expected_format, scan_failed
+
+
+class SourceQualityTests(unittest.TestCase):
+    def test_bad_formatting_fails_and_does_not_modify_source(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src").mkdir()
+            source = root / "src" / "C.cs"
+            source.write_text("class C{int x=1;}\n", encoding="utf-8")
+            original = source.read_bytes()
+            with patch("check_source_quality.ROOT", root):
+                self.assertFalse(check_pretty(root))
+            self.assertEqual(source.read_bytes(), original)
+            self.assertTrue((root / "pretty.diff").read_text())
+
+    def test_informational_message_fails(self):
+        for code in ("IDE0090", "CA1844", "CS9236"):
+            self.assertTrue(scan_failed(2, f"src/C.cs(1,2): info {code}: example\nFormat complete in 1ms."))
+
+    def test_hidden_only_does_not_fail(self):
+        self.assertFalse(scan_failed(2, "src/C.cs(1,2): hidden IDE0011: braces\nFormat complete in 1ms."))
+
+    def test_errors_and_incomplete_scans_fail(self):
+        for output in ("", "Format complete in 1ms.\nRequired references did not load",
+                       "src/C.cs(1,2): warning CA1001: example\nFormat complete in 1ms."):
+            self.assertTrue(scan_failed(0, output))
+        self.assertTrue(scan_failed(1, "Format complete in 1ms."))
+
+    def test_workaround_is_path_and_expression_specific(self):
+        source = "i* ExactAllocationLimit; j* ExactAllocationLimit;"
+        self.assertEqual(expected_format("src/Other.cs", source), source)
+        self.assertEqual(expected_format("src/EmbedIO/WebSockets/Internal/WebSocketFrameStream.cs", source),
+                         "i * ExactAllocationLimit; j* ExactAllocationLimit;")
+
+    def test_unrelated_attribute_is_not_rewritten(self):
+        source = '[SuppressMessage("Usage", "CA2213", Justification = "other")]'
+        self.assertEqual(expected_format("src/EmbedIO/Caching/OutputCacheCapture.cs", source), source)
+
+    def test_owned_capture_attribute_layout_is_preserved(self):
+        reason = "Borrowed parent reference; disposing it here would discard the buffer before cache publication."
+        source = ('[System.Diagnostics.CodeAnalysis.SuppressMessage(\n'
+                  '    "Usage",\n    "CA2213:Disposable fields should be disposed",\n'
+                  f'    Justification = "{reason}"\n)]')
+        result = expected_format("src/EmbedIO/Caching/OutputCacheCapture.cs", source)
+        self.assertNotIn("\n", result)
+        self.assertIn(reason, result)
+        self.assertEqual(expected_format("src/Other.cs", source), source)
+
+
+if __name__ == "__main__":
+    unittest.main()

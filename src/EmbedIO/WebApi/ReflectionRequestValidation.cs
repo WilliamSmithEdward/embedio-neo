@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
@@ -52,14 +52,14 @@ namespace EmbedIO.WebApi
                 {
                     var sequence = type
                         .GetInterfaces()
-                        .Concat([type])
+                        .Append(type)
                         .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
 
                     if (
                         sequence == null
                         || type
                             .GetInterfaces()
-                            .Concat([type])
+                            .Append(type)
                             .Any(
                                 i => i.IsGenericType
                                     && (i.GetGenericTypeDefinition() == typeof(IDictionary<,>)
@@ -131,9 +131,11 @@ namespace EmbedIO.WebApi
 
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         private static ValidationAttribute[] Attributes(MemberInfo member) =>
-            [.. Attribute
+        [
+            .. Attribute
                 .GetCustomAttributes(member, typeof(ValidationAttribute), true)
-                .Cast<ValidationAttribute>()];
+                .Cast<ValidationAttribute>()
+        ];
 
         private static bool Scalar(Type type) =>
             type.IsPrimitive

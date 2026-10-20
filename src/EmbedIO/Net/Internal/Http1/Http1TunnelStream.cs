@@ -8,7 +8,11 @@ namespace EmbedIO.Net.Internal
 {
     // The connection owns the socket; this handoff owns its lifetime. Prefix
     // replay remains borrowed so disposal must go through the connection owner.
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1844:Override memory-based stream operations", Justification = "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1844:Override memory-based stream operations",
+        Justification = "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads."
+    )]
     internal sealed class Http1TunnelStream : Stream
     {
         private readonly BorrowedResource<Stream> _stream;

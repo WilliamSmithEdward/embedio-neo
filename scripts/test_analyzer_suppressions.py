@@ -18,7 +18,9 @@ class SuppressionGuardTests(unittest.TestCase):
                 self.assertTrue(violations(source, filename='.editorconfig'))
 
     def test_compatibility_message_exception_requires_exact_member_and_reason(self):
-        path, category, diagnostic, reason, _ = COMPATIBILITY_SUPPRESSIONS[0]
+        path, category, diagnostic, reason, _ = next(
+            entry for entry in COMPATIBILITY_SUPPRESSIONS
+            if entry[0] == 'src/EmbedIO/Tus/TusUploadOptions.cs')
         source = ('[System.Diagnostics.CodeAnalysis.SuppressMessage(\n'
                   f'    "{category}", "{diagnostic}",\n'
                   f'    Justification = "{reason}"\n)]\n'

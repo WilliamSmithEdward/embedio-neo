@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -46,12 +46,8 @@ namespace EmbedIO.Endpoints
 
         internal void CheckMutable() => EnsureConfigurationNotLocked();
 
-        internal EndpointBuilder Add(
-            EndpointRouteGroup group,
-            string route,
-            HttpVerbs method,
-            EndpointHandler handler
-        ) => Add(group, route, [method], handler);
+        internal EndpointBuilder Add(EndpointRouteGroup group, string route, HttpVerbs verb, EndpointHandler handler) =>
+            Add(group, route, [verb], handler);
 
         internal EndpointBuilder Add(
             EndpointRouteGroup group,
@@ -181,7 +177,9 @@ namespace EmbedIO.Endpoints
             var links = new NamedRoutes(names);
 
             // Literal endpoints take precedence even when a parameter route was declared first.
-            foreach (var (endpoint, verb, matcher, handler, operation) in pending.OrderBy(item => item.Matcher.ParameterNames.Count))
+            foreach (var (endpoint, verb, matcher, handler, operation) in pending.OrderBy(
+                item => item.Matcher.ParameterNames.Count
+            ))
             {
                 AddHandler(verb, matcher, handler);
                 _compiledMethods.Add((verb, matcher));
@@ -265,15 +263,17 @@ namespace EmbedIO.Endpoints
                 source.ResultType,
                 [.. source.Parameters],
                 operation,
-                [.. source.Responses
-                    .Where(r => !endpoint.Responses.Any(x => x.StatusCode == r.StatusCode))
-                    .Concat(endpoint.Responses)
-                    .Select(r => new OpenApiResponseAttribute(r.StatusCode)
-                    {
-                        Type = r.Type,
-                        Description = r.Description,
-                        ContentType = r.ContentType
-                    })],
+                [
+                    .. source.Responses
+                        .Where(r => !endpoint.Responses.Any(x => x.StatusCode == r.StatusCode))
+                        .Concat(endpoint.Responses)
+                        .Select(r => new OpenApiResponseAttribute(r.StatusCode)
+                        {
+                            Type = r.Type,
+                            Description = r.Description,
+                            ContentType = r.ContentType
+                        })
+                ],
                 source.Ignored,
                 plan.Authorization
             );

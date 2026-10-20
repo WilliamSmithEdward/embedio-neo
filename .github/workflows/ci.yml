@@ -415,6 +415,19 @@ jobs:
           dotnet run --project tools/EmbedIO.AnalyzerGuard -c Release --no-restore -- .
       - name: Validate the .NET SDK updater
         run: python3 scripts/test_update_dotnet_sdk.py
+      - name: Check source formatting and informational diagnostics
+        run: |
+          python3 -m venv "$RUNNER_TEMP/source-quality-venv"
+          "$RUNNER_TEMP/source-quality-venv/bin/python" -m pip --isolated install --require-hashes --only-binary=:all: -r .github/requirements/prettycsharp.txt
+          "$RUNNER_TEMP/source-quality-venv/bin/python" scripts/test_source_quality.py
+          "$RUNNER_TEMP/source-quality-venv/bin/python" scripts/check_source_quality.py
+      - name: Upload source quality reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: source-quality
+          path: TestResults/source-quality/
+          if-no-files-found: warn
       - name: Verify formatting
         # Folder mode covers the test and tool projects outside EmbedIO.sln too, the MAUI
         # apps included, without loading them; SDK-generated files are skipped.

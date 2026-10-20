@@ -61,6 +61,8 @@ High Level Guardrail(s) -->
 
 # Fork maintenance rules
 
+- For every new development change, run `python scripts/test_source_quality.py` and `python scripts/check_source_quality.py` after the final edit, with `.github/requirements/prettycsharp.txt` installed in an isolated Python 3.11+ environment and the solution restored. The gate checks all `src` C# files with pinned prettyCSharp and all source projects for informational, warning and error diagnostics, including analyzers discovered at hidden severity. Hidden hints remain report-only. Fix failures before committing or updating a PR; parser/load failures are failures, not clean scans. Preserve the documented exact formatter compatibility workarounds; do not add broad exclusions to pass CI.
+
 - Preserve compatibility by default. Any breaking change requires discussion with William and his explicit approval before implementation, plus release notes and migration documentation.
 - Prefer a documented analyzer suppression over compiler `#if` branches added solely to satisfy style suggestions. Keep one implementation compatible with the supported targets, and add any necessary narrow analyzer-guard exception for the suppression.
 - Follow CONTRIBUTING.md for development and validation. Preserve existing license and third-party notices.

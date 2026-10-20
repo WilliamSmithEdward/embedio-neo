@@ -255,8 +255,9 @@ namespace EmbedIO.Internal
 
             try
             {
-                result.Buffer?.AsSpan(0, result.Count)
-                        .CopyTo(buffer);
+                result.Buffer
+                    ?.AsSpan(0, result.Count)
+                    .CopyTo(buffer);
 
                 return result.Count;
             }
@@ -276,8 +277,9 @@ namespace EmbedIO.Internal
 
             try
             {
-                result.Buffer?.AsMemory(0, result.Count)
-                        .CopyTo(buffer);
+                result.Buffer
+                    ?.AsMemory(0, result.Count)
+                    .CopyTo(buffer);
 
                 return result.Count;
             }

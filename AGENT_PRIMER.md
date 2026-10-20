@@ -5,6 +5,11 @@ It states the rules and APIs an agent needs to write correct code the first
 time, and links to the guides that hold the detail. It is not a contributor
 guide; see [CONTRIBUTING.md](CONTRIBUTING.md) for changing the library itself.
 
+Library development must run the pinned source-quality checks described in
+CONTRIBUTING after the final edit. They reject prettyCSharp formatting issues,
+informational diagnostics and higher severities, and incomplete scans; hidden
+hints are report-only. These are contributor checks, not application runtime requirements.
+
 Every API named here exists in the v2 source. When this primer and a guide
 disagree, the guide and the source win.
 
