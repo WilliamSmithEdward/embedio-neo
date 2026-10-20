@@ -10,11 +10,14 @@ namespace EmbedIO.QuicPrototype
         private readonly AesGcm _aead;
         private readonly Aes _header;
         private readonly byte[] _iv;
+        private readonly byte[] _secret;
+        private bool _disposed;
 
-        internal PacketKeys(ReadOnlySpan<byte> secret)
+        internal PacketKeys(ReadOnlySpan<byte> secret, byte[]? retainedHeaderKey = null)
         {
+            _secret = secret.ToArray();
             var key = Expand(secret, "quic key", 16);
-            var headerKey = Expand(secret, "quic hp", 16);
+            var headerKey = retainedHeaderKey ?? Expand(secret, "quic hp", 16);
             _iv = Expand(secret, "quic iv", 12);
             _aead = new AesGcm(key, 16);
             _header = Aes.Create();
@@ -75,7 +78,8 @@ namespace EmbedIO.QuicPrototype
             ReadOnlySpan<byte> protectedPacket,
             int numberOffset,
             ulong expected,
-            out ulong number
+            out ulong number,
+            bool phase = false
         )
         {
             if (numberOffset < 0 || numberOffset + 20 > protectedPacket.Length)
@@ -108,10 +112,32 @@ namespace EmbedIO.QuicPrototype
                 packet.AsSpan(0, headerLength)
             );
 
-            if ((packet[0] & (longHeader ? 12 : 24)) != 0 || (!longHeader && (packet[0] & 4) != 0))
-                throw new InvalidDataException("Reserved bits or key updates are unsupported in this probe.");
+            if ((packet[0] & (longHeader ? 12 : 24)) != 0 || (!longHeader && ((packet[0] & 4) != 0) != phase))
+                throw new InvalidDataException("Invalid reserved bits or key phase.");
 
             return plaintext;
+        }
+
+        internal PacketKeys Next()
+        {
+            var secret = Expand(_secret, "quic ku", 32);
+
+            try
+            {
+                return new PacketKeys(secret, _header.Key);
+            }
+
+            finally
+            {
+                CryptographicOperations.ZeroMemory(secret);
+            }
+        }
+
+        internal bool Phase(ReadOnlySpan<byte> packet, int offset)
+        {
+            Span<byte> mask = stackalloc byte[16];
+            _header.EncryptEcb(packet.Slice(offset + 4, 16), mask, PaddingMode.None);
+            return ((packet[0] ^ mask[0]) & 4) != 0;
         }
 
         internal static ulong Reconstruct(ulong truncated, int length, ulong expected)
@@ -147,9 +173,13 @@ namespace EmbedIO.QuicPrototype
 
         public void Dispose()
         {
+            if (_disposed) return;
+
+            _disposed = true;
             _aead.Dispose();
             _header.Dispose();
             CryptographicOperations.ZeroMemory(_iv);
+            CryptographicOperations.ZeroMemory(_secret);
         }
     }
 }

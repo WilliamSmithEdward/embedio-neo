@@ -130,12 +130,12 @@ namespace EmbedIO.QuicPrototype
             while (_contiguous < _bytes.Length && _present[_contiguous]) _contiguous++;
         }
 
-        internal byte[] Consume()
+        internal byte[] Consume(int maximum = int.MaxValue)
         {
             var result = _bytes
-                .AsSpan(_consumed, _contiguous - _consumed)
+                .AsSpan(_consumed, Math.Max(0, Math.Min(_contiguous, maximum) - _consumed))
                 .ToArray();
-            _consumed = _contiguous;
+            _consumed += result.Length;
             return result;
         }
     }

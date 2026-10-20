@@ -14,6 +14,7 @@ from pathlib import Path
 import socket
 import ssl
 import subprocess
+import xml.etree.ElementTree as ET
 
 from aioquic.asyncio import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
@@ -37,8 +38,14 @@ class Peer(QuicConnectionProtocol):
 
 class DatagramRelay(asyncio.DatagramProtocol):
     """Mutates wire packets without inspecting either QUIC implementation."""
-    def __init__(self, server):
+    def __init__(self, server, mode="tamper"):
         self.server = server
+        self.mode = mode
+        self.server_initial = 0
+        self.server_short = 0
+        self.client_short = 0
+        self.dropped = 0
+        self.reordered = 0
         self.client = None
         self.transport = None
         self.injected = False
@@ -48,14 +55,35 @@ class DatagramRelay(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, address):
         if address == self.server:
+            long_header = bool(data and data[0] & 0x80)
+            packet_type = (data[0] >> 4) & 3 if long_header else -1
+            if packet_type == 0:
+                self.server_initial += 1
+            if not long_header:
+                self.server_short += 1
+            drop = (self.mode == "loss-initial" and self.server_initial == 2 and packet_type == 0
+                    or self.mode == "loss-handshake" and packet_type == 2
+                    or self.mode == "loss-stream" and 5 <= self.server_short <= 7 and not long_header)
+            if drop and self.dropped < (3 if self.mode == "loss-stream" else 1):
+                self.dropped += 1
+                return
             if self.client is not None:
-                self.transport.sendto(data, self.client)
+                if self.mode == "reorder" and not long_header and self.reordered == 0:
+                    self.reordered += 1
+                    asyncio.get_running_loop().call_later(0.08, self.transport.sendto, data, self.client)
+                else:
+                    self.transport.sendto(data, self.client)
             return
         if self.client is None:
             self.client = address
         if address != self.client:
             return
-        if data and not data[0] & 0x80 and not self.injected:
+        if data and not data[0] & 0x80:
+            self.client_short += 1
+            if self.mode == "loss-ack" and self.client_short == 2:
+                self.dropped += 1
+                return
+        if self.mode == "tamper" and data and not data[0] & 0x80 and not self.injected:
             self.injected = True
             self.transport.sendto(data[:5], self.server)
             altered = bytearray(data)
@@ -92,7 +120,7 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
         port = ready["port"]
         if relay:
             relay_transport, relay_protocol = await asyncio.get_running_loop().create_datagram_endpoint(
-                lambda: DatagramRelay(("127.0.0.1", ready["port"])), local_addr=("127.0.0.1", 0))
+                lambda: DatagramRelay(("127.0.0.1", ready["port"]), "tamper" if relay is True else relay), local_addr=("127.0.0.1", 0))
             port = relay_transport.get_extra_info("sockname")[1]
         configuration = QuicConfiguration(
             is_client=True, alpn_protocols=[alpn], server_name=hostname,
@@ -136,10 +164,40 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
         and termination["code"] == expected_code)
     if noise and positive:
         passed = passed and report.get("rejectedPackets", 0) >= 4
-    if relay:
+    if relay is True:
         passed = passed and relay_protocol.injected and report.get("rejectedPackets", 0) >= 2
+    elif relay:
+        passed = passed and relay_protocol.dropped + relay_protocol.reordered > 0
+        if relay in ("loss-initial", "loss-handshake", "loss-stream"):
+            passed = passed and report.get("retransmittedPackets", 0) > 0
     return {"name": name, "passed": passed, "clientSucceeded": success,
             "clientFailure": failure, "termination": termination, "serverExit": process.returncode, "server": report}
+
+
+def provenance(args):
+    project = Path(__file__).resolve().parent
+    root = project.parents[1]
+    files = set(project.glob("*.cs")) | set(project.glob("*.py")) | set(project.glob("*.csproj"))
+    files.update(project.glob("peer/*"))
+    files = {path for path in files if path.is_file()}
+    for item in ET.parse(project / "EmbedIO.QuicPrototype.csproj").iter("Compile"):
+        included = project / item.attrib["Include"]
+        files.update(included.parent.glob(included.name))
+    for name in ("global.json", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props",
+                 ".editorconfig", "test/EmbedIO.Conformance/drivers/requirements.txt"):
+        path = root / name
+        if path.exists():
+            files.add(path)
+    libraries = {}
+    for name in ("libssl-3-x64.dll", "libcrypto-3-x64.dll", "libssl.so.3", "libcrypto.so.3"):
+        path = Path(args.openssl) / name
+        if path.exists():
+            libraries[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return {"libraries": libraries,
+            "assemblySha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
+            "sdk": subprocess.run([args.dotnet, "--version"], check=True, capture_output=True, text=True).stdout.strip(),
+            "sourceHashes": {path.resolve().relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                             for path in sorted(files)}}
 
 
 async def main(args):
@@ -165,16 +223,14 @@ async def main(args):
         ):
             results.append(await case(args, name, b"certificate-validated QUIC echo", **options))
             print(json.dumps(results[-1]), flush=True)
-    libraries = {}
-    for name in ("libssl-3-x64.dll", "libcrypto-3-x64.dll", "libssl.so.3", "libcrypto.so.3"):
-        path = Path(args.openssl) / name
-        if path.exists():
-            libraries[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    if all(result["passed"] for result in results):
+        for mode in ("loss-initial", "loss-handshake", "loss-stream", "loss-ack", "reorder"):
+            results.append(await case(args, mode, bytes(i % 251 for i in range(8192)), relay=mode))
+            print(json.dumps(results[-1]), flush=True)
     receipt = {"peer": "aioquic", "peerVersion": importlib.metadata.version("aioquic"),
-               "libraries": libraries, "assemblySha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
-               "sourceHashes": {str(path.name): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(Path(__file__).parent.glob("*.cs"))},
+               **provenance(args),
                "cases": results,
-               "passed": len(results) == 10 and all(result["passed"] for result in results)}
+               "passed": len(results) == 15 and all(result["passed"] for result in results)}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     return 0 if receipt["passed"] else 1
 

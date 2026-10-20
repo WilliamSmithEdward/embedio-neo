@@ -4,7 +4,9 @@ This is an isolated development experiment in `test/EmbedIO.QuicPrototype`, outs
 `EmbedIO.sln` and every shipped package. It establishes that original C# QUIC packet
 and stream handling can use an existing TLS provider and communicate with an
 independent implementation. It adds no public listener mode or application API.
-HTTP/3 continues to use the existing provider. WebTransport remains unavailable.
+The production HTTP/3 listener continues to use its existing provider. Public
+WebTransport APIs remain unavailable. The prototype now includes loss recovery,
+NewReno congestion control and an experimental HTTP/3/WebTransport adapter.
 
 ## Scope and provenance
 
@@ -22,8 +24,11 @@ References:
   packet/header protection, TLS CRYPTO transport and alert mapping.
 - [OpenSSL 3.5 QUIC TLS callbacks](https://docs.openssl.org/3.5/man3/SSL_set_quic_tls_cbs/).
   The runtime is deliberately pinned to OpenSSL 3.5.7 for this experiment.
-- [RFC 9002](https://www.rfc-editor.org/rfc/rfc9002.html), required future loss
-  recovery and congestion control; these are not implemented here.
+- [RFC 9002](https://www.rfc-editor.org/rfc/rfc9002.html), ACK ranges, RTT sampling,
+  packet/time loss thresholds, PTO, NewReno, persistent congestion and pacing.
+- [WebTransport HTTP/3 draft 16](https://datatracker.ietf.org/doc/html/draft-ietf-webtrans-http3-16)
+  and [reliable stream reset draft 11](https://datatracker.ietf.org/doc/html/draft-ietf-quic-reliable-stream-reset-11).
+  The experimental adapter uses current parameter `0x1d` and frame `0x24`.
 
 OpenSSL performs the TLS 1.3 handshake, certificate/key handling and secret
 calculation. The original C# code owns UDP, QUIC packetization, packet protection,
@@ -37,25 +42,54 @@ packaging decision. The independent test client reuses the existing, hash-pinned
 
 ## Feasibility profile
 
-The executable always binds IPv4 loopback, with an ephemeral port. Each process
-accepts one connection, one client-initiated bidirectional stream (ID 0), up to
-8192 stream bytes and a ten-second overall deadline. It echoes the complete stream,
-including an empty stream, after TLS authentication finishes. The peer authenticates
-the server through a temporary trusted localhost certificate and hostname checking.
-The application protocol is `embedio-quic-probe`, not HTTP/3.
+The executable always binds IPv4 loopback on an ephemeral port. Each process
+accepts one connection with a ten-second deadline. It has two application modes:
 
-CRYPTO reassembly has a 64 KiB bound at each encryption level. Packet tracking and
-outbound packet numbers have a 4096-packet bound per number space, the outbound
-queue has a 128-packet bound, and pre-validation sends obey the three-times-received
-byte allowance. Retransmitted data is checked for matching overlapping bytes and
-consistent final sizes. Certificate keys are generated into the caller's ignored
-results directory, never into source or a package.
+- `serve` keeps the original `embedio-quic-probe` ALPN, one bidirectional stream
+  and 8192-byte exact echo.
+- `serve-h3` negotiates `h3`, sends HTTP/3 SETTINGS, decodes bounded QPACK headers
+  with dynamic capacity zero, and accepts `CONNECT :protocol=webtransport-h3` at
+  `https://localhost/echo`. It links the existing repository codecs and session
+  core into this test executable; production files are not copied or modified.
 
-This profile is deliberately incomplete. It has no general retransmission/PTO,
-congestion control, pacing, Retry, migration, key updates, resumption, 0-RTT,
-multiple connections/streams, QUIC datagrams or reliable reset. Its limited ACK and
-transport-parameter processing must be extended before general use. It requires
-an orderly loopback exchange; successful echo is not QUIC conformance acceptance.
+The H3 profile requires the current reset parameter, QUIC/HTTP datagrams,
+WebTransport settings, the exact loopback Origin and a fresh per-process bearer
+value. The harness receives that value through the startup pipe, passes it to its
+child through the environment and removes it from retained logs. This is a test
+admission callback, not integration with the shipped bearer/JWT middleware.
+At most two sessions are admitted when session flow control is negotiated; the
+existing session core allows one when it is not. Bidirectional and unidirectional
+stream echo, datagram association, close capsules, session faults and partial
+reset delivery use the same session ownership logic as the internal core.
+
+Recovery runs on an injected monotonic clock. ACK ranges retire physical packets
+once; retransmissions get new packet numbers while retaining logical delivery
+identity. Late ACKs cancel redundant retransmissions without subtracting in-flight
+bytes twice. Packet and time thresholds schedule retransmission; PTO probes retain
+anti-amplification checks. NewReno reduces its window once per recovery epoch,
+observes the two-packet minimum, detects persistent congestion and paces sends.
+Application-limited ACKs do not increase the congestion window. QUIC datagrams
+consume congestion credit but are not retransmitted.
+
+Bounds remain deliberate: 64 KiB CRYPTO reassembly per encryption level, 4096 sent
+packet numbers per space, 4096 active recovery records, bounded ACK/loss history
+and 512 queued packets. H3 permits 16 incoming streams of each direction, 64 KiB
+per stream and 256 KiB total receive credit. Final reset sizes consume credit once,
+including gaps. The prototype waits for the reliable prefix before reporting a
+partial reset and preserves the header when a local reset waits for send credit.
+It does not replenish the connection receive window for indefinite transfers.
+Pre-validation sends obey the three-times-received byte allowance.
+
+Peer-initiated key updates derive fresh packet secrets while preserving header
+protection, mirror the peer's send phase, and retain the previous receive keys for
+reordering during three PTO durations. The larger peer cases require a recorded
+key update and complete exact-byte transfer.
+
+This remains a restricted experiment. It has no Retry, migration, locally initiated
+key updates, resumption, 0-RTT, complete post-handshake TLS processing,
+multi-connection listener, complete draining/closing state
+machine or production provider interface. It supports a bounded H3 echo profile,
+not a general request dispatcher, public application facade or browser release.
 Do not change the bind address or embed this executable into an application.
 
 ## Reproduce on Windows x64
@@ -87,36 +121,63 @@ the repository's aioquic pin. The temporary certificate is valid for one day.
 
 ## Observed local result
 
-Windows x64, .NET SDK 10.0.402 and OpenSSL 3.5.7 completed ten independent aioquic
-1.6.0 cases: exact echo at 0, 1, 128, 4096 and 8192 bytes; rejection of an untrusted
-certificate, wrong hostname and wrong ALPN; malformed packets before a valid
-connection; and a relay injecting truncation, ciphertext corruption and a duplicate
-into an established connection. TLS errors retain the corresponding QUIC
-CRYPTO_ERROR code. The peer still receives the exact response after relay injection.
+Windows x64 with SDK 10.0.402 and OpenSSL 3.5.7 completed the following local
+checks. Run receipts retain exact assembly/source/native-library identities.
 
-The executable's deterministic checks perform 10,076 assertions, including the
-RFC 9001 key/IV/header-protection vectors, modified-packet rejection, reassembly
-bounds/overlap/final-size checks, varint boundaries and 10,000 seeded random varint
-inputs. These are primitive checks, not 10,076 connection or browser tests.
+- Fifteen aioquic 1.6.0 cases cover the original ten interoperability cases plus
+  Initial/handshake/response loss, ACK loss and reordering. The designated reliable
+  loss cases require actual retransmitted packets as well as an exact response.
+- Thirteen quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
+  datagrams, two sessions and quota rejection, authorization/Origin rejection,
+  missing current-reset negotiation, incoming and outgoing partial resets,
+  a malformed capsule followed by a healthy sibling, larger transfers, withheld
+  transport credit, peer key updates and handshake/response loss.
+- The original 10,076 primitive assertions remain. Additional deterministic
+  recovery and bridge regressions cover packet spaces, RTT/ACK delay, PTO backoff,
+  late/duplicate ACKs, persistent congestion, blocked credit, sparse reliable
+  prefixes, final-size conflicts and session admission. A seeded recovery campaign
+  checks 10,000 state transitions plus complete retirement of each run.
 
-No Linux/macOS wire validation, browser validation, latency comparison or production
-acceptance is claimed. This experiment has no automatic CI wire job. Source-quality
-checks and project-specific formatter/analyzer checks apply in addition to the
-commands above.
+CI builds the standalone project and runs the managed checks without loading
+OpenSSL or adding another job. The two independent wire harnesses remain explicit
+local checks. No Linux/macOS wire validation, browser interoperability, latency
+comparison or production acceptance is claimed.
+
+### Current-wire peer
+
+Use Go 1.27.3 for the independent peer. Its source dependencies are pinned in
+`test/EmbedIO.QuicPrototype/peer/go.mod` and authenticated by `go.sum`. The Windows
+amd64 toolchain archive is
+[`go1.27.3.windows-amd64.zip`](https://go.dev/dl/go1.27.3.windows-amd64.zip), SHA-256
+`f26081f438319757f8a1b46d7d0b2c5ec7583d4038e485e0aa725cfde7885fff`.
+The local validation used that exact archive. Go is BSD-3-Clause licensed;
+quic-go and qpack are MIT licensed. They are development-only and are not added to
+any NuGet dependency group or package payload.
+
+```powershell
+$env:GOTOOLCHAIN = 'local'
+go version # Expect go1.27.3.
+go -C test/EmbedIO.QuicPrototype/peer mod download
+go -C test/EmbedIO.QuicPrototype/peer mod verify
+go -C test/EmbedIO.QuicPrototype/peer build -mod=readonly -trimpath -o ../../../TestResults/webtransport-peer.exe .
+& $python test/EmbedIO.QuicPrototype/verify_webtransport.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --peer TestResults/webtransport-peer.exe --output TestResults/quic-prototype-webtransport
+```
 
 ## Next acceptance boundaries
 
-1. Specify connection, stream, timer and memory ownership and implement a deterministic
-   transport core with injected time and packet delivery. Add complete RFC 9000/9002
-   state transitions, ACK/loss recovery, congestion control and address validation.
-2. Prove independent interoperability under packet loss, reordering, blocked credit,
-   malformed authenticated input, key updates, cancellation and concurrent sessions.
-3. Add QUIC DATAGRAM and the current RESET_STREAM_AT extension, verifying final-size
-   accounting and reliable-prefix delivery. Then connect the existing HTTP/3 and
-   WebTransport session layers through the transport abstraction.
-4. Validate Windows, Linux and macOS using exact dependency artifacts, then browser
-   behavior, application authorization and session limits. Measure warm steady-state
-   and tail latency separately from cold start before choosing any default provider.
+1. Extend the bounded connection/stream machinery to sustained receive-credit
+   replenishment, complete shutdown/draining, repeated and locally initiated key updates, and
+   concurrent connections.
+   Broaden loss/congestion campaigns before treating the recovery algorithm as
+   production transport acceptance.
+2. Exercise outbound partial reset, withheld credit, concurrent session termination
+   and malformed authenticated traffic more extensively against independent peers.
+3. Connect the validated transport to the production HTTP/3 provider abstraction,
+   request dispatcher and application authorization APIs. Keep capability checks
+   bound to the live connection before exposing a public WebTransport API.
+4. Validate Windows, Linux and macOS using exact dependency artifacts, then browsers.
+   Measure warm steady-state and tail latency separately from cold start before
+   choosing any default provider.
 
 The existing [WebTransport upstream readiness record](webtransport-upstream-readiness.md)
 continues to describe the MsQuic route. This experiment explores a separate provider;

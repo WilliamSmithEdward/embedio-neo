@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -25,11 +26,13 @@ namespace EmbedIO.QuicPrototype
                     return 0;
                 }
 
-                if (arguments is ["serve", var library, var certificate, var key])
-                    return await ServeAsync(library, certificate, key).ConfigureAwait(false);
+                if (arguments is ["serve" or "serve-h3", var library, var certificate, var key])
+                    return await ServeAsync(library, certificate, key, arguments[0] == "serve-h3").ConfigureAwait(
+                        false
+                    );
 
                 Console.Error.WriteLine(
-                    "Usage: self-test | certificate <output-directory> | serve <absolute-openssl-directory> <certificate.pem> <key.pem>"
+                    "Usage: self-test | certificate <output-directory> | serve[-h3] <absolute-openssl-directory> <certificate.pem> <key.pem>"
                 );
                 return 2;
             }
@@ -37,6 +40,7 @@ namespace EmbedIO.QuicPrototype
             catch (Exception error) when (
                 error is InvalidOperationException
                     or IOException
+                    or SocketException
                     or InvalidDataException
                     or CryptographicException
                     or ArgumentException
@@ -82,13 +86,15 @@ namespace EmbedIO.QuicPrototype
             Console.WriteLine(JsonSerializer.Serialize(new { certificateCreated = true }));
         }
 
-        private static async Task<int> ServeAsync(string library, string certificate, string key)
+        private static async Task<int> ServeAsync(string library, string certificate, string key, bool webTransport)
         {
             using var socket = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var authorization = webTransport ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) : string.Empty;
             var ready = new
             {
                 ready = true,
+                authorization,
                 port = ((IPEndPoint)(socket.Client.LocalEndPoint
                     ?? throw new InvalidOperationException("UDP endpoint unavailable."))).Port
             };
@@ -97,13 +103,38 @@ namespace EmbedIO.QuicPrototype
             IPEndPoint? peer = null;
             var ignored = 0;
 
+            Task<UdpReceiveResult>? receive = null;
+
             try
             {
+                var clock = Stopwatch.StartNew();
+                receive = socket
+                    .ReceiveAsync(deadline.Token)
+                    .AsTask();
+
                 while (!deadline.IsCancellationRequested)
                 {
-                    var datagram = await socket
+                    if (connection != null && peer != null)
+                    {
+                        await Task
+                            .WhenAny(receive, Task.Delay(2, deadline.Token))
+                            .ConfigureAwait(false);
+
+                        if (!receive.IsCompleted)
+                        {
+                            foreach (var packet in connection.Tick(clock.Elapsed.TotalMilliseconds))
+                                await socket
+                                    .SendAsync(packet, peer, deadline.Token)
+                                    .ConfigureAwait(false);
+
+                            continue;
+                        }
+                    }
+
+                    var datagram = await receive.ConfigureAwait(false);
+                    receive = socket
                         .ReceiveAsync(deadline.Token)
-                        .ConfigureAwait(false);
+                        .AsTask();
 
                     if (peer != null && !peer.Equals(datagram.RemoteEndPoint)) continue;
 
@@ -111,7 +142,14 @@ namespace EmbedIO.QuicPrototype
                     {
                         try
                         {
-                            connection = new ProbeConnection(datagram.Buffer, library, certificate, key);
+                            connection = new ProbeConnection(
+                                datagram.Buffer,
+                                library,
+                                certificate,
+                                key,
+                                webTransport,
+                                authorization
+                            );
                         }
 
                         catch (Exception error) when (error is InvalidDataException or CryptographicException)
@@ -125,7 +163,7 @@ namespace EmbedIO.QuicPrototype
                         peer = datagram.RemoteEndPoint;
                     }
 
-                    foreach (var packet in connection.Receive(datagram.Buffer))
+                    foreach (var packet in connection.Receive(datagram.Buffer, clock.Elapsed.TotalMilliseconds))
                         await socket
                             .SendAsync(packet, datagram.RemoteEndPoint, deadline.Token)
                             .ConfigureAwait(false);
@@ -141,6 +179,22 @@ namespace EmbedIO.QuicPrototype
 
             finally
             {
+                await deadline
+                    .CancelAsync()
+                    .ConfigureAwait(false);
+
+                if (receive != null)
+                {
+                    try
+                    {
+                        await receive.ConfigureAwait(false);
+                    }
+
+                    catch (OperationCanceledException) { }
+
+                    catch (SocketException) { }
+                }
+
                 var result = new
                 {
                     established = connection?.Established ?? false,
@@ -148,7 +202,19 @@ namespace EmbedIO.QuicPrototype
                     echoBytes = connection?.EchoBytes ?? 0,
                     receivedBytes = connection?.ReceivedBytes ?? 0,
                     sentBytes = connection?.SentBytes ?? 0,
-                    rejectedPackets = ignored + (connection?.RejectedPackets ?? 0)
+                    rejectedPackets = ignored + (connection?.RejectedPackets ?? 0),
+                    lostPackets = connection?.LostPackets ?? 0,
+                    retransmittedPackets = connection?.RetransmittedPackets ?? 0,
+                    keyUpdates = connection?.KeyUpdates ?? 0,
+                    outboundResets = connection?.OutboundResets ?? 0,
+                    probeTimeouts = connection?.ProbeTimeouts ?? 0,
+                    congestionEvents = connection?.CongestionEvents ?? 0,
+                    bytesInFlight = connection?.BytesInFlight ?? 0,
+                    acceptedSessions = connection?.WebTransport?.AcceptedSessions ?? 0,
+                    rejectedSessions = connection?.WebTransport?.RejectedSessions ?? 0,
+                    streamsDelivered = connection?.WebTransport?.StreamsDelivered ?? 0,
+                    datagramsDelivered = connection?.WebTransport?.DatagramsDelivered ?? 0,
+                    resetsDelivered = connection?.WebTransport?.ResetsDelivered ?? 0
                 };
                 Console.WriteLine(JsonSerializer.Serialize(result));
                 connection?.Dispose();

@@ -10,6 +10,7 @@ namespace EmbedIO.QuicPrototype
     {
         internal const string ApplicationProtocol = "embedio-quic-probe";
         private readonly NativeApi _api;
+        private readonly string _protocol;
         private readonly nint _context;
         private readonly nint _ssl;
         private readonly nint _dispatch;
@@ -35,8 +36,15 @@ namespace EmbedIO.QuicPrototype
 
         private bool _disposed;
 
-        internal OpenSslTls(string directory, string certificate, string privateKey, byte[] parameters)
+        internal OpenSslTls(
+            string directory,
+            string certificate,
+            string privateKey,
+            byte[] parameters,
+            string protocol = ApplicationProtocol
+        )
         {
+            _protocol = protocol;
             _api = new NativeApi(directory);
 
             try
@@ -202,7 +210,7 @@ namespace EmbedIO.QuicPrototype
             return 0;
         }
 
-        private static int SelectProtocol(
+        private int SelectProtocol(
             nint ssl,
             out nint output,
             out byte outputLength,
@@ -216,7 +224,7 @@ namespace EmbedIO.QuicPrototype
 
             if (inputLength > 65535) return 2;
 
-            var expected = Encoding.ASCII.GetBytes(ApplicationProtocol);
+            var expected = Encoding.ASCII.GetBytes(_protocol);
             var offset = 0;
 
             while (offset < (int)inputLength)

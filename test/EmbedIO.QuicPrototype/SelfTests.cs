@@ -96,10 +96,14 @@ namespace EmbedIO.QuicPrototype
                 }
             }
 
+            RecoveryTests.Run();
+            BridgeTests.Run();
+            KeyUpdateTests.Run();
             var result = new
             {
                 selfTests = "passed",
-                assertions = _assertions
+                primitiveAssertions = _assertions,
+                recoveryAndBridge = "passed"
             };
             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(result));
         }

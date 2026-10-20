@@ -5,4 +5,23 @@
     <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http2/HpackEncoder.cs" Link="Shared/Http2/HpackEncoder.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http2/PrefixInteger.cs" Link="Shared/Http2/PrefixInteger.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Tunnels/HttpCapsuleTransport.cs" Link="Shared/HttpCapsuleTransport.cs" />
+    <Compile Include="../../src/EmbedIO/Tunnels/HttpCapsuleHeader.cs" Link="Shared/HttpCapsuleHeader.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/WebTransport/*.cs" Link="Shared/WebTransport/%(Filename)%(Extension)" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/QuicInteger.cs" Link="Shared/Http3/QuicInteger.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/Http3FrameReader.cs" Link="Shared/Http3/Http3FrameReader.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/Http3PeerSettings.cs" Link="Shared/Http3/Http3PeerSettings.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/QpackDecoderTable.cs" Link="Shared/Http3/QpackDecoderTable.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/QpackFieldSection.cs" Link="Shared/Http3/QpackFieldSection.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/QpackSectionPrefix.cs" Link="Shared/Http3/QpackSectionPrefix.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/QpackInteger.cs" Link="Shared/Http3/QpackInteger.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/QpackStaticTable.cs" Link="Shared/Http3/QpackStaticTable.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/QpackEncoder.cs" Link="Shared/Http3/QpackEncoder.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http3/QpackEncoder.FieldSection.cs" Link="Shared/Http3/QpackEncoder.FieldSection.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http2/HpackDecoder.cs" Link="Shared/Http2/HpackDecoder.cs" />
+    <Compile Include="../../src/EmbedIO/Net/Internal/Http2/HpackHuffman.cs" Link="Shared/Http2/HpackHuffman.cs" />
+  </ItemGroup>
 </Project>

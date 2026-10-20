@@ -3,11 +3,31 @@ using System.Security.Cryptography;
 
 namespace EmbedIO.QuicPrototype
 {
-    // Deliberately restricted to one loopback connection and stream 0. This milestone
-    // establishes the TLS boundary, not general QUIC conformance or loss recovery.
+    // Restricted to one loopback connection: raw stream echo or the bounded HTTP/3
+    // WebTransport profile. This executable is not a production QUIC provider.
     internal sealed class ProbeConnection : IDisposable
     {
         private const int StreamBudget = 8192;
+        private readonly bool _webTransport;
+        private readonly string _authorization;
+        private ConnectionStreams? _streams;
+        private ulong _peerRemoteStreamData;
+        private ulong _peerUniStreamData;
+        private ulong _peerBidiCount;
+        private ulong _peerUniCount;
+        private ulong _peerDatagram;
+        private bool _peerReset;
+        private PacketKeys? _previousRead;
+        private PacketKeys? _nextRead;
+        private bool _readPhase;
+        private bool _writePhase;
+        private ulong _phaseBoundary;
+        private double _previousExpires;
+
+        internal int KeyUpdates { get; private set; }
+        internal int OutboundResets => _streams?.OutboundResets ?? 0;
+        internal WebTransportApplication? WebTransport => _streams?.Application;
+
         private readonly byte[] _originalId;
         private readonly byte[] _clientId;
         private readonly byte[] _serverId = RandomNumberGenerator.GetBytes(8);
@@ -24,7 +44,18 @@ namespace EmbedIO.QuicPrototype
             []
         ];
         private readonly Reassembly _stream = new(StreamBudget);
-        private readonly Queue<byte[]> _pending = new();
+        private readonly Queue<Delivery> _pending = new();
+        private readonly Queue<Delivery> _urgent = new();
+        private readonly Recovery _recovery;
+        private double _now;
+        private int _ackDelayExponent = 3;
+
+        internal int LostPackets => _recovery.LostPackets;
+        internal int RetransmittedPackets => _recovery.RetransmittedPackets;
+        internal int ProbeTimeouts => _recovery.ProbeTimeouts;
+        internal int CongestionEvents => _recovery.CongestionEvents;
+        internal long BytesInFlight => _recovery.BytesInFlight;
+
         private bool _addressValidated;
         private bool _parametersValidated;
         private bool _handshakeDone;
@@ -33,15 +64,26 @@ namespace EmbedIO.QuicPrototype
         private ulong _peerStreamData;
 
         internal bool Established => _tls.Established;
-        internal bool Complete => _responseSent;
+        internal bool Complete => _webTransport ? _streams?.Application.AcceptedSessions > 0 : _responseSent;
         internal bool Closed { get; private set; }
         internal int EchoBytes { get; private set; }
         internal long ReceivedBytes { get; private set; }
         internal long SentBytes { get; private set; }
         internal int RejectedPackets { get; private set; }
 
-        internal ProbeConnection(ReadOnlySpan<byte> firstPacket, string library, string certificate, string key)
+        internal ProbeConnection(
+            ReadOnlySpan<byte> firstPacket,
+            string library,
+            string certificate,
+            string key,
+            bool webTransport = false,
+            string authorization = ""
+        )
         {
+            _webTransport = webTransport;
+            _authorization = authorization;
+            _recovery = new Recovery(QueueRepeat);
+
             if (firstPacket.Length < 1200) throw new InvalidDataException("Initial datagram must be padded.");
 
             var reader = new WireReader(firstPacket);
@@ -76,7 +118,13 @@ namespace EmbedIO.QuicPrototype
             {
                 _initialRead.Unprotect(firstPacket[..(numberOffset + payloadLength)], numberOffset, 0, out _);
                 _initialWrite = PacketKeys.Initial(_originalId, true);
-                _tls = new OpenSslTls(library, certificate, key, LocalParameters());
+                _tls = new OpenSslTls(
+                    library,
+                    certificate,
+                    key,
+                    LocalParameters(),
+                    webTransport ? "h3" : OpenSslTls.ApplicationProtocol
+                );
             }
 
             catch
@@ -87,10 +135,11 @@ namespace EmbedIO.QuicPrototype
             }
         }
 
-        internal List<byte[]> Receive(ReadOnlySpan<byte> datagram)
+        internal List<byte[]> Receive(ReadOnlySpan<byte> datagram, double now)
         {
             if (Closed) return [];
 
+            _now = now;
             ReceivedBytes += datagram.Length;
             var position = 0;
 
@@ -102,6 +151,12 @@ namespace EmbedIO.QuicPrototype
                 {
                     RejectedPackets++;
                     break;
+                }
+
+                if (_recovery.IsDiscarded(level))
+                {
+                    position += length;
+                    continue;
                 }
 
                 var keys = level == 0 ? _initialRead : _tls.ReadKeys[level];
@@ -118,7 +173,9 @@ namespace EmbedIO.QuicPrototype
 
                 try
                 {
-                    plaintext = keys.Unprotect(remaining[..length], numberOffset, _nextReceived[level], out number);
+                    plaintext = level == 2
+                        ? UnprotectApplication(remaining[..length], numberOffset, out number)
+                        : keys.Unprotect(remaining[..length], numberOffset, _nextReceived[level], out number);
                 }
 
                 catch (CryptographicException)
@@ -133,13 +190,17 @@ namespace EmbedIO.QuicPrototype
                 var fresh = _received[level].Add(number);
                 _nextReceived[level] = Math.Max(_nextReceived[level], number + 1);
 
-                if (level == 1) _addressValidated = true;
+                if (level == 1)
+                {
+                    _addressValidated = true;
+                    _recovery.Discard(0);
+                }
 
                 if (fresh)
                 {
                     var acknowledge = Frames(level, plaintext);
 
-                    if (acknowledge) Send(level, Wire.Frame(2, number, 0, 0, 0));
+                    if (acknowledge && !Closed) AcknowledgeReceived(level);
 
                     try
                     {
@@ -149,7 +210,7 @@ namespace EmbedIO.QuicPrototype
                     catch (InvalidDataException) when (_tls.AlertCode.HasValue)
                     {
                         // RFC 9001 section 4.8: carry TLS alerts as QUIC CRYPTO_ERROR.
-                        Send(level, Wire.Frame(0x1c, 0x100UL + _tls.AlertCode.Value, 6, 0));
+                        Send(level, Wire.Frame(0x1c, 0x100UL + _tls.AlertCode.Value, 6, 0), false, false);
                         Closed = true;
                         break;
                     }
@@ -162,23 +223,198 @@ namespace EmbedIO.QuicPrototype
                         if (!_parametersValidated) throw new InvalidDataException("Missing peer transport parameters.");
 
                         _handshakeDone = true;
+                        _recovery.HandshakeConfirmed = true;
+                        _recovery.Discard(1);
                         Send(2, Wire.Frame(0x1e));
+
+                        if (_webTransport)
+                            _streams = new ConnectionStreams(
+                                (bytes, reliable) =>
+                                {
+                                    var delivery = new Delivery(2, bytes, reliable);
+                                    QueueRepeat(delivery, false);
+                                    return delivery;
+                                },
+                                _peerMaxData,
+                                _peerStreamData,
+                                _peerRemoteStreamData,
+                                _peerUniStreamData,
+                                _peerUniCount,
+                                _peerBidiCount,
+                                _peerDatagram,
+                                _peerReset,
+                                headers => headers.TryGetValue("authorization", out var value)
+                                    && value == "Bearer " + _authorization
+                            );
                     }
 
                     TryEcho();
                 }
 
+                else AcknowledgeReceived(level);
+
                 position += length;
             }
 
+            return Drain();
+        }
+
+        private byte[] UnprotectApplication(ReadOnlySpan<byte> packet, int offset, out ulong number)
+        {
+            var current = _tls.ReadKeys[2] ?? throw new InvalidOperationException("Missing application keys.");
+            var phase = current.Phase(packet, offset);
+
+            if (phase == _readPhase) return current.Unprotect(packet, offset, _nextReceived[2], out number, phase);
+
+            if (_previousRead != null && _now <= _previousExpires)
+            {
+                try
+                {
+                    var previous = _previousRead.Unprotect(packet, offset, _nextReceived[2], out number, phase);
+
+                    if (number >= _phaseBoundary)
+                        throw new InvalidDataException("Old key phase above update boundary.");
+
+                    return previous;
+                }
+
+                catch (CryptographicException) { }
+            }
+
+            _nextRead ??= current.Next();
+            var plaintext = _nextRead.Unprotect(packet, offset, _nextReceived[2], out number, phase);
+
+            if (!_recovery.HandshakeConfirmed || number < _nextReceived[2])
+                throw new InvalidDataException("Invalid key update ordering.");
+
+            _previousRead?.Dispose();
+            _previousRead = current;
+            _previousExpires = _now + _recovery.KeyRetention;
+            _phaseBoundary = number;
+            _readPhase = phase;
+            _tls.ReadKeys[2] = _nextRead;
+            _nextRead = null;
+
+            if (_writePhase != phase)
+            {
+                var write = _tls.WriteKeys[2] ?? throw new InvalidOperationException("Missing application write keys.");
+                _tls.WriteKeys[2] = write.Next();
+                write.Dispose();
+                _writePhase = phase;
+            }
+
+            KeyUpdates++;
+            return plaintext;
+        }
+
+        internal List<byte[]> Tick(double now)
+        {
+            _now = now;
+
+            if (_previousRead != null && now > _previousExpires)
+            {
+                _previousRead.Dispose();
+                _previousRead = null;
+            }
+
+            if (!Closed && (_addressValidated || SentBytes + 1200 <= ReceivedBytes * 3)) _recovery.Tick(now);
+
+            return Drain();
+        }
+
+        private void AcknowledgeReceived(int level)
+        {
+            var numbers = _received[level]
+                .OrderDescending()
+                .ToArray();
+            var ranges = new List<(ulong Low, ulong High)>();
+
+            foreach (var number in numbers)
+            {
+                if (ranges.Count != 0 && ranges[^1].Low != 0 && number == ranges[^1].Low - 1)
+                    ranges[^1] = (number, ranges[^1].High);
+
+                else ranges.Add((number, number));
+            }
+
+            if (ranges.Count > 128) throw new InvalidDataException("ACK range budget exceeded.");
+
+            using var frame = new MemoryStream();
+            Wire.Integer(frame, 2);
+            Wire.Integer(frame, ranges[0].High);
+            Wire.Integer(frame, 0);
+            Wire.Integer(frame, (ulong)ranges.Count - 1);
+            Wire.Integer(frame, ranges[0].High - ranges[0].Low);
+
+            for (var i = 1; i < ranges.Count; i++)
+            {
+                Wire.Integer(frame, ranges[i - 1].Low - ranges[i].High - 2);
+                Wire.Integer(frame, ranges[i].High - ranges[i].Low);
+            }
+
+            Send(level, frame.ToArray(), false, false);
+        }
+
+        private void QueueRepeat(Delivery delivery, bool probe)
+        {
+            if (delivery.Acknowledged || _recovery.IsDiscarded(delivery.Level)) return;
+
+            if (delivery.Queued)
+            {
+                if (probe && !delivery.ProbePending)
+                {
+                    if (_urgent.Count >= 128) throw new InvalidDataException("Urgent queue budget exceeded.");
+
+                    delivery.ProbePending = true;
+                    _urgent.Enqueue(delivery);
+                }
+
+                return;
+            }
+
+            if (_pending.Count + _urgent.Count >= 512)
+                throw new InvalidDataException("Outbound probe budget exceeded.");
+
+            delivery.Queued = true;
+            delivery.ProbePending = probe;
+            (probe || !delivery.Eliciting ? _urgent : _pending).Enqueue(delivery);
+        }
+
+        private List<byte[]> Drain()
+        {
             var output = new List<byte[]>();
 
-            while (
-                _pending.TryPeek(out var packet)
-                && (_addressValidated || SentBytes + packet.Length <= ReceivedBytes * 3)
-            )
+            while (_urgent.Count + _pending.Count != 0)
             {
-                _pending.Dequeue();
+                var queue = _urgent.Count != 0 ? _urgent : _pending;
+                var delivery = queue.Peek();
+                var level = delivery.Level;
+
+                if (!delivery.Queued || delivery.Acknowledged || _recovery.IsDiscarded(level))
+                {
+                    queue.Dequeue();
+                    delivery.Queued = false;
+                    continue;
+                }
+
+                var packet = Protect(delivery);
+
+                if (!_addressValidated && SentBytes + packet.Length > ReceivedBytes * 3) break;
+
+                if (delivery.Eliciting && !_recovery.CanSend(packet.Length, _now, queue == _urgent)) break;
+
+                queue.Dequeue();
+                delivery.Queued = false;
+                delivery.ProbePending = false;
+                _recovery.SentPacket(
+                    level,
+                    _sentNumbers[level]++,
+                    packet.Length,
+                    _now,
+                    delivery,
+                    level == 0,
+                    _pending.Count == 0
+                );
                 SentBytes += packet.Length;
                 output.Add(packet);
             }
@@ -266,13 +502,15 @@ namespace EmbedIO.QuicPrototype
 
                     if (largest >= _sentNumbers[level]) throw new InvalidDataException("ACK for unsent packet.");
 
-                    reader.Integer();
+                    var delay = reader.Integer() * Math.Pow(2, _ackDelayExponent) / 1000;
                     var ranges = reader.Length(128);
+                    var acknowledged = new List<(ulong Low, ulong High)>();
                     var range = reader.Integer();
 
                     if (range > largest) throw new InvalidDataException("Invalid ACK range.");
 
                     var smallest = largest - range;
+                    acknowledged.Add((smallest, largest));
 
                     for (var i = 0; i < ranges; i++)
                     {
@@ -282,8 +520,12 @@ namespace EmbedIO.QuicPrototype
                         if (gap + 2 > smallest || range > smallest - gap - 2)
                             throw new InvalidDataException("Invalid ACK gap.");
 
-                        smallest -= gap + 2 + range;
+                        var high = smallest - gap - 2;
+                        smallest = high - range;
+                        acknowledged.Add((smallest, high));
                     }
+
+                    _recovery.Acknowledge(level, acknowledged, delay, _now);
 
                     if (type == 3)
                     {
@@ -323,15 +565,27 @@ namespace EmbedIO.QuicPrototype
 
                 if (type is >= 8 and <= 15)
                 {
-                    if (reader.Integer() != 0)
+                    var id = reader.Integer();
+
+                    if (!_webTransport && id != 0)
                         throw new InvalidDataException("Only client bidirectional stream 0 is admitted by the probe.");
 
                     var offset = (type & 4) != 0 ? reader.Integer() : 0;
-                    var length = (type & 2) != 0 ? reader.Length(StreamBudget) : reader.Remaining;
-                    _stream.Add(offset, reader.Take(length), (type & 1) != 0);
+                    var length = (type & 2) != 0
+                        ? reader.Length(_webTransport ? 65536 : StreamBudget)
+                        : reader.Remaining;
+                    var bytes = reader.Take(length);
+
+                    if (_streams != null) _streams.Receive(id, offset, bytes.ToArray(), (type & 1) != 0);
+
+                    else _stream.Add(offset, bytes, (type & 1) != 0);
                 }
 
-                else if (type == 0x10) _peerMaxData = Math.Max(_peerMaxData, reader.Integer());
+                else if (type == 0x10)
+                {
+                    _peerMaxData = Math.Max(_peerMaxData, reader.Integer());
+                    _streams?.UpdateData(_peerMaxData);
+                }
 
                 else if (type == 0x11)
                 {
@@ -339,9 +593,44 @@ namespace EmbedIO.QuicPrototype
                     var maximum = reader.Integer();
 
                     if (id == 0) _peerStreamData = Math.Max(_peerStreamData, maximum);
+
+                    _streams?.UpdateStream(id, maximum);
                 }
 
-                else if (type is 0x12 or 0x13) reader.Integer();
+                else if (type is 0x12 or 0x13)
+                {
+                    var value = reader.Integer();
+                    _streams?.UpdateCount(type == 0x13, value);
+                }
+
+                else if (_streams != null && type is 4 or 0x24)
+                {
+                    var id = reader.Integer();
+                    var error = reader.Integer();
+                    var final = reader.Integer();
+                    var reliable = type == 0x24 ? reader.Integer() : 0;
+                    _streams.Reset(id, error, final, reliable, type == 0x24);
+                }
+
+                else if (_streams != null && type == 5) _streams.Stop(reader.Integer(), reader.Integer());
+
+                else if (_streams != null && type is 0x30 or 0x31)
+                {
+                    var length = type == 0x31 ? reader.Length(1100) : reader.Remaining;
+                    _streams.Datagram(
+                        reader
+                            .Take(length)
+                            .ToArray()
+                    );
+                }
+
+                else if (type is 0x14 or 0x16 or 0x17) reader.Integer();
+
+                else if (type == 0x15)
+                {
+                    reader.Integer();
+                    reader.Integer();
+                }
 
                 else if (type == 0x18)
                 {
@@ -381,15 +670,22 @@ namespace EmbedIO.QuicPrototype
             Wire.Parameter(output, 0, _originalId);
             Wire.Parameter(output, 1, 10000);
             Wire.Parameter(output, 3, 1472);
-            Wire.Parameter(output, 4, StreamBudget);
-            Wire.Parameter(output, 5, StreamBudget);
-            Wire.Parameter(output, 6, StreamBudget);
-            Wire.Parameter(output, 7, 0);
-            Wire.Parameter(output, 8, 1);
-            Wire.Parameter(output, 9, 0);
+            Wire.Parameter(output, 4, _webTransport ? 262144UL : StreamBudget);
+            Wire.Parameter(output, 5, _webTransport ? 65536UL : StreamBudget);
+            Wire.Parameter(output, 6, _webTransport ? 65536UL : StreamBudget);
+            Wire.Parameter(output, 7, _webTransport ? 65536UL : 0);
+            Wire.Parameter(output, 8, _webTransport ? 16UL : 1);
+            Wire.Parameter(output, 9, _webTransport ? 16UL : 0);
             Wire.Parameter(output, 12, []);
             Wire.Parameter(output, 14, 2);
             Wire.Parameter(output, 15, _serverId);
+
+            if (_webTransport)
+            {
+                Wire.Parameter(output, 0x20, 1200);
+                Wire.Parameter(output, 0x1d, []);
+            }
+
             return output.ToArray();
         }
 
@@ -416,7 +712,14 @@ namespace EmbedIO.QuicPrototype
                 else if (id == 12 && bytes.Length != 0)
                     throw new InvalidDataException("Invalid disable-migration parameter.");
 
-                else if (id is >= 1 and <= 11 or 14)
+                else if (id == 0x1d)
+                {
+                    if (bytes.Length != 0) throw new InvalidDataException("Invalid reliable-reset parameter.");
+
+                    _peerReset = true;
+                }
+
+                else if (id is >= 1 and <= 11 or 14 or 0x20)
                 {
                     var valueReader = new WireReader(bytes);
                     var value = valueReader.Integer();
@@ -429,12 +732,27 @@ namespace EmbedIO.QuicPrototype
                         || (id == 10 && value > 20)
                         || (id == 11 && value >= 16384)
                         || (id == 14 && value < 2)
+                        || (id is 8 or 9 && value > 1UL << 60)
                     )
                         throw new InvalidDataException("Invalid transport parameter value.");
+
+                    if (id == 10) _ackDelayExponent = (int)value;
+
+                    if (id == 11) _recovery.MaximumAckDelay = value;
 
                     if (id == 4) _peerMaxData = value;
 
                     if (id == 5) _peerStreamData = value;
+
+                    if (id == 6) _peerRemoteStreamData = value;
+
+                    if (id == 7) _peerUniStreamData = value;
+
+                    if (id == 8) _peerBidiCount = value;
+
+                    if (id == 9) _peerUniCount = value;
+
+                    if (id == 0x20) _peerDatagram = value;
                 }
             }
 
@@ -464,7 +782,7 @@ namespace EmbedIO.QuicPrototype
 
         private void TryEcho()
         {
-            if (_responseSent || !_tls.Established || !_stream.Complete) return;
+            if (_webTransport || _responseSent || !_tls.Established || !_stream.Complete) return;
 
             if ((ulong)_stream.Contiguous > Math.Min(_peerMaxData, _peerStreamData)) return;
 
@@ -490,9 +808,15 @@ namespace EmbedIO.QuicPrototype
             _responseSent = true;
         }
 
-        private void Send(int level, byte[] payload)
+        private void Send(int level, byte[] payload, bool reliable = true, bool eliciting = true) =>
+            QueueRepeat(new Delivery(level, payload, reliable, eliciting), false);
+
+        private byte[] Protect(Delivery delivery)
         {
-            if (_pending.Count >= 128 || _sentNumbers[level] >= 4096)
+            var level = delivery.Level;
+            var payload = delivery.Bytes;
+
+            if (_sentNumbers[level] >= 4096)
                 throw new InvalidDataException("Outbound probe budget exceeded.");
 
             using var header = new MemoryStream();
@@ -518,22 +842,25 @@ namespace EmbedIO.QuicPrototype
 
             else
             {
-                header.WriteByte(0x43);
+                header.WriteByte(_writePhase ? (byte)0x47 : (byte)0x43);
                 header.Write(_clientId);
             }
 
             var numberOffset = (int)header.Length;
-            var number = _sentNumbers[level]++;
+            var number = _sentNumbers[level];
             Span<byte> encoded = stackalloc byte[4];
             BinaryPrimitives.WriteUInt32BigEndian(encoded, checked((uint)number));
             header.Write(encoded);
             var keys = (level == 0 ? _initialWrite : _tls.WriteKeys[level])
                 ?? throw new InvalidOperationException("Packet keys are unavailable.");
-            _pending.Enqueue(keys.Protect(header.ToArray(), numberOffset, number, payload));
+            return keys.Protect(header.ToArray(), numberOffset, number, payload);
         }
 
         public void Dispose()
         {
+            _previousRead?.Dispose();
+            _nextRead?.Dispose();
+            _streams?.Dispose();
             _tls.Dispose();
             _initialRead.Dispose();
             _initialWrite.Dispose();

@@ -380,8 +380,10 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 WebTransport is not supported by the public listener. The internal session core
 and native experiments do not make it available to applications. The independent
 QUIC engine feasibility project is test-only, uses OpenSSL 3.5.7 for TLS, and is
-outside the solution and published packages. It is not a replacement for the
-current HTTP/3 provider. See [its scope and reproduction steps](docs/project/quic-engine-feasibility.md)
+outside the solution and published packages. Its bounded prototype now includes
+loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
+current reliable-reset framing. It has no public application API and is not a
+replacement for the current HTTP/3 provider. See [its scope and reproduction steps](docs/project/quic-engine-feasibility.md)
 and [WebTransport readiness](docs/project/webtransport-upstream-readiness.md).
 
 ## 5. HTTPS and TLS
