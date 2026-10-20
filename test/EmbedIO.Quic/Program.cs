@@ -42,6 +42,27 @@ namespace EmbedIO.Quic
                     return 0;
                 }
 
+                if (
+                    arguments is [
+                        "serve-many" or "serve-many-h3",
+                        var sharedLibrary,
+                        var sharedCertificate,
+                        var sharedKey,
+                        var expected,
+                        var port
+                    ]
+                )
+                    return await SharedListener
+                        .RunAsync(
+                            sharedLibrary,
+                            sharedCertificate,
+                            sharedKey,
+                            arguments[0] == "serve-many-h3",
+                            int.Parse(expected, System.Globalization.CultureInfo.InvariantCulture),
+                            int.Parse(port, System.Globalization.CultureInfo.InvariantCulture)
+                        )
+                        .ConfigureAwait(false);
+
                 if (arguments is ["serve" or "serve-h3", var library, var certificate, var key])
                     return await ServeAsync(library, certificate, key, arguments[0] == "serve-h3").ConfigureAwait(
                         false

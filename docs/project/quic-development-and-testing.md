@@ -20,6 +20,7 @@ TLS; .NET cryptography supplies AES-GCM, AES and HKDF. Our code owns the transpo
 | HTTP/3 and WebTransport bridge | Existing H3/QPACK/capsule/session code is linked into the prototype. The bridge handles SETTINGS, authorized CONNECT, exact Origin admission, bidi/uni streams, datagrams, independent sessions and reliable partial resets. quic-go provides a separate wire peer. |
 | Sustained transfers | A fixed sliding receive window retains final-size history and compacts consumed H3 input. MAX_DATA/MAX_STREAM_DATA track consumption, including reset gaps after their reliable prefix. Independent cases transfer 512 KiB, with small peer windows and loss. |
 | Connection lifetime | Active, closing, draining and closed states use injected time. Idle expiry is silent; close replies are bounded; repeated sends or duplicate close traffic do not extend retirement. Windows ICMP reset notifications during retirement are handled explicitly. |
+| Shared listener | Destination-ID demultiplexing, endpoint-bound original-ID aliases, 16 resident owners, bounded admission attempts and fixed handshake deadlines. One cancellable UDP receive loop retires owners and permits clean port rebinding. |
 | Fuzz integration | All existing fuzz engines now have direct QUIC core entry points. Packet-header and ACK-range parsing are shared between the actual connection and fuzz targets. Dedicated native campaigns also exercise fresh OpenSSL contexts through authenticated Initial frames. |
 
 These stages are a bounded transport profile. They are not completion of
@@ -39,6 +40,7 @@ All files in this table are under `test/EmbedIO.Quic` unless stated.
 | Recovery/congestion | `Recovery.cs` | Deterministic algorithm cases, logical/physical accounting, duplicate ACKs, discard, loss/PTO/retransmit traces, resource bounds and independent connection ownership. |
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
+| Connection ownership | `ConnectionSet.cs`, `SharedListener.cs`, `ConnectionSetTests.cs`, `verify_connections.py` | Capacity/deadline/disposal regressions, seeded admission/retirement mutations and simultaneous independent clients on one UDP port. |
 | Native TLS boundary | `OpenSslTls.cs`, `ProbeConnection.cs`, `NativeFuzz.cs` | Fresh native contexts, authenticated Initial frame/CRYPTO mutations, unauthenticated-packet isolation, cleanup and amplification accounting. This is not coverage instrumentation of OpenSSL itself. |
 | Independent transport peer | `verify.py` | aioquic positive/negative handshake, exact echo, corruption, ALPN, flow-control and packet-loss/reordering cases. |
 | Independent H3 peer | `peer/main.go`, `verify_webtransport.py` | quic-go/qpack interoperability, sessions, resets, datagrams, credit, sustained transfers, key update and close/idle behavior. |
@@ -79,6 +81,12 @@ Recovery histories and peer buffers remain bounded by the prototype's limits.
   input. It uses no sockets, never disables authentication and feeds both validly
   protected malformed frames and corrupted packets. It does not claim complete
   TLS state-space exploration or managed coverage feedback inside native code.
+  Each native campaign also exercises up to 10,000 shared-owner commands, retaining
+  its seed and checking owner routing, bounded admission, amplification and retirement.
+
+Shared-owner regressions also verify that terminal resource limits retire one
+owner while a healthy neighbor continues. These host checks preserve the current
+bounds; sustainable production packet/stream histories remain separate work.
 
 The negative oracle self-checks verify detection of changed/missing/duplicated
 stream bytes and a falsely classified authenticated packet. Existing deterministic
@@ -104,6 +112,7 @@ The defaults perform 20 seeds, each separated by 104729, starting at 1729:
 | QUIC deterministic mutations | 2,000,000 inputs |
 | Recovery/lifetime state machines | 400,000 traces; 19,200,000 commanded transitions |
 | Native connection/TLS mutation | 100,000 fresh contexts when `--openssl` is supplied |
+| Shared-owner native traces | 100,000 admission/retirement commands when `--openssl` is supplied |
 | SharpFuzz/libFuzzer | 600 seconds |
 | AFL++ | 600 seconds, one CPU and 4 GiB container limit |
 
@@ -166,15 +175,27 @@ the local campaign script also passed both coverage engines. Do not count the
 earlier wrapper failure as a passing gate.
 Native/fuzz local runs do not establish macOS or browser compatibility.
 
+The shared-listener increment passed all 38 wire scenarios (15 aioquic, 19
+quic-go and four shared-listener scenarios), another 100,000 native-context cases
+and 10,000 seeded shared-owner commands. Four additional seeds passed 2,800,000
+QUIC property cases, 2,400,000 existing property cases, 400,000 mutations and
+80,000 three-actor traces. Fresh coverage campaigns completed 526,220 libFuzzer
+inputs and 33,630 AFL++ inputs without crashes or hangs. Debug/Release builds,
+full PR changed-file formatter/diagnostic checks and the mandatory whole-source
+gates passed after the final C# edit. The loss relay now selects three larger
+encrypted response packets, retaining exact-byte and retransmission assertions;
+the earlier timing-dependent relay failure is preserved in local evidence.
+
 CI run 39470892485 on the preceding pushed head passed on attempt 2. Its original
 macOS failure occurred during checkout DNS resolution; the targeted retry passed.
 This is evidence for that head, not for subsequent uncommitted changes.
 
 ## Remaining production acceptance work
 
-1. A real multi-connection listener with demultiplexing, owned cancellation and
-   bounded resource admission; current multi-actor fuzzing is offline state
-   isolation, not a production listener load test.
+1. Promote the bounded shared listener into the production ownership/transport
+   interfaces, with application configuration, certificate lifetime and graceful
+   shutdown parity. Its current admission limits and ten-second host deadline are
+   development-host bounds; the offline actor model is not a listener load test.
 2. Sustainable stream-count replenishment and packet/ACK-history retirement,
    retransmission under longer transfer/loss patterns, and repeated key updates.
 3. Complete transport/application error classification, stateless reset, Retry,

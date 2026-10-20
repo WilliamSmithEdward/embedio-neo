@@ -61,9 +61,10 @@ class DatagramRelay(asyncio.DatagramProtocol):
                 self.server_initial += 1
             if not long_header:
                 self.server_short += 1
+            # Select response-sized encrypted packets; ordinal counts can select only ACKs.
             drop = (self.mode == "loss-initial" and self.server_initial == 2 and packet_type == 0
                     or self.mode == "loss-handshake" and packet_type == 2
-                    or self.mode == "loss-stream" and 5 <= self.server_short <= 7 and not long_header)
+                    or self.mode == "loss-stream" and len(data) > 512 and not long_header)
             if drop and self.dropped < (3 if self.mode == "loss-stream" else 1):
                 self.dropped += 1
                 return
@@ -171,6 +172,8 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
         passed = passed and relay_protocol.dropped + relay_protocol.reordered > 0
         if relay in ("loss-initial", "loss-handshake", "loss-stream"):
             passed = passed and report.get("retransmittedPackets", 0) > 0
+        if relay == "loss-stream":
+            passed = passed and relay_protocol.dropped == 3
     return {"name": name, "passed": passed, "clientSucceeded": success,
             "clientFailure": failure, "termination": termination, "serverExit": process.returncode, "server": report}
 

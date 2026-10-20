@@ -4,6 +4,34 @@ namespace EmbedIO.Quic
 {
     internal static class PacketHeader
     {
+        internal static bool TryDestination(
+            ReadOnlySpan<byte> packet,
+            out ReadOnlySpan<byte> destination,
+            out bool initial
+        )
+        {
+            destination = default;
+            initial = false;
+
+            if (packet.Length < 9 || (packet[0] & 64) == 0) return false;
+
+            if ((packet[0] & 128) == 0)
+            {
+                destination = packet.Slice(1, 8);
+                return true;
+            }
+
+            if (BinaryPrimitives.ReadUInt32BigEndian(packet.Slice(1, 4)) != 1) return false;
+
+            var length = packet[5];
+
+            if (length > 20 || packet.Length < 6 + length) return false;
+
+            destination = packet.Slice(6, length);
+            initial = (packet[0] & 48) == 0;
+            return true;
+        }
+
         internal static bool TryRead(
             ReadOnlySpan<byte> packet,
             ReadOnlySpan<byte> originalId,

@@ -34,6 +34,8 @@ namespace EmbedIO.Quic
             try
             {
                 CheckCloseLevels(library, certificate, key, keys, original, client);
+                ConnectionSetTests.Run(library, certificate, key);
+                ConnectionSetTests.Mutate(library, certificate, key, seed, Math.Min(count, 10000));
 
                 for (; index < count; index++)
                 {
@@ -90,6 +92,7 @@ namespace EmbedIO.Quic
                 cases = count,
                 passed = true,
                 sockets = 0,
+                connectionSetSteps = Math.Min(count, 10000),
                 scope = "Fresh native TLS contexts and authenticated Initial frame/CRYPTO mutations"
             });
             File.WriteAllText(Path.Combine(output, "receipt.json"), report);
@@ -132,7 +135,7 @@ namespace EmbedIO.Quic
             QuicFuzzChecks.Require(connection.Phase == ConnectionPhase.Draining, "closing-transport-close-accepted");
         }
 
-        private static byte[] Initial(
+        internal static byte[] Initial(
             PacketKeys keys,
             byte[] original,
             byte[] client,

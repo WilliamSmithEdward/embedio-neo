@@ -202,6 +202,12 @@ namespace EmbedIO.Quic
 
         private static void HeadersAndAcks(ReadOnlySpan<byte> data)
         {
+            if (PacketHeader.TryDestination(data, out var destination, out var initial))
+            {
+                Require(destination.Length <= 20 && destination.Length <= data.Length, "destination-bounds");
+                Require(initial == ((data[0] & 0xf0) == 0xc0), "destination-packet-type");
+            }
+
             byte[] original = [1, 2, 3, 4];
             byte[] server = [5, 6, 7, 8];
             byte[] client = [9, 10, 11, 12];
@@ -224,6 +230,19 @@ namespace EmbedIO.Quic
                     && length == wire.Length
                     && offset + 24 == length,
                 "initial-header-token"
+            );
+            Require(
+                PacketHeader.TryDestination(wire.ToArray(), out destination, out initial)
+                    && initial
+                    && destination.SequenceEqual(original),
+                "initial-destination"
+            );
+            byte[] shortPacket = [0x40, 1, 2, 3, 4, 5, 6, 7, 8];
+            Require(
+                PacketHeader.TryDestination(shortPacket, out destination, out initial)
+                    && !initial
+                    && destination.SequenceEqual(shortPacket.AsSpan(1)),
+                "short-destination"
             );
             var reader = new WireReader(data);
 

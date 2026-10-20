@@ -5,8 +5,8 @@ using EmbedIO.Net.Internal.WebTransport;
 
 namespace EmbedIO.Quic
 {
-    // Restricted to one loopback connection: raw stream echo or the bounded HTTP/3
-    // WebTransport profile. This executable is not a production QUIC provider.
+    // Connection state for raw stream echo or the bounded HTTP/3 WebTransport profile. This executable is not a
+    // production QUIC provider.
     internal sealed class ProbeConnection : IDisposable
     {
         private const int StreamBudget = 8192;
@@ -75,6 +75,7 @@ namespace EmbedIO.Quic
         private ulong _peerMaxData;
         private ulong _peerStreamData;
 
+        internal ReadOnlySpan<byte> ServerId => _serverId;
         internal bool Established => _tls.Established;
         internal bool Complete => _webTransport ? _streams?.Application.AcceptedSessions > 0 : _responseSent;
         internal bool Closed => Phase == ConnectionPhase.Closed;
@@ -89,9 +90,12 @@ namespace EmbedIO.Quic
             string certificate,
             string key,
             bool webTransport = false,
-            string authorization = ""
+            string authorization = "",
+            double now = 0
         )
         {
+            _now = now;
+            _lifetime.Authenticated(now);
             _webTransport = webTransport;
             _authorization = authorization;
             _recovery = new Recovery(QueueRepeat);
@@ -398,6 +402,13 @@ namespace EmbedIO.Quic
             if (Phase == ConnectionPhase.Active && (_addressValidated || SentBytes + 1200 <= ReceivedBytes * 3))
                 _recovery.Tick(now);
 
+            return Drain();
+        }
+
+        internal List<byte[]> CloseProtocol(double now)
+        {
+            _now = now;
+            BeginClose(_tls.WriteKeys[2] != null ? 2 : _tls.WriteKeys[1] != null ? 1 : 0, Wire.Frame(0x1c, 0x0a, 0, 0));
             return Drain();
         }
 

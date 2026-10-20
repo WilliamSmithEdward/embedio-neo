@@ -48,7 +48,7 @@ packaging decision. The independent test client reuses the existing, hash-pinned
 ## Feasibility profile
 
 The executable always binds IPv4 loopback on an ephemeral port. Each process
-accepts one connection with a ten-second deadline. It has two application modes:
+uses a ten-second process deadline. The single-connection modes are:
 
 - `serve` keeps the original `embedio-quic-probe` ALPN, one bidirectional stream
   and 8192-byte exact echo.
@@ -103,9 +103,16 @@ can trigger a rate-limited close retry; closing/draining deadlines are not exten
 The Windows harness tolerates ICMP connection-reset notifications while finishing
 those states. The hard ten-second process deadline remains independent.
 
+The shared `serve-many` / `serve-many-h3` host routes by destination connection ID,
+checks the existing peer endpoint, admits at most 16 resident owners and 16 new
+attempts per one-second window, and retires incomplete handshakes after three
+seconds. Those host limits are independent of each established connection's idle
+state. Cancellation owns the pending receive/timer operations and every connection;
+retired IDs and endpoint aliases are removed. Migration remains unsupported.
+
 The current transport profile has no Retry, migration, locally initiated
 key updates, resumption, 0-RTT, complete post-handshake TLS processing,
-multi-connection listener, complete transport-error classification, stateless reset
+complete transport-error classification, stateless reset
 or production provider interface. It supports a bounded H3 echo profile,
 not a general request dispatcher, public application facade or browser release.
 Do not change the bind address or embed this executable into an application.
@@ -161,7 +168,7 @@ checks. Run receipts retain exact assembly/source/native-library identities.
   checks 10,000 state transitions plus complete retirement of each run.
 
 CI builds the standalone project and runs the managed checks without loading
-OpenSSL or adding another job. The two independent wire harnesses remain explicit
+OpenSSL or adding another job. The three independent wire harnesses remain explicit
 local checks. No Linux/macOS wire validation, browser interoperability, latency
 comparison or production acceptance is claimed.
 
@@ -195,7 +202,7 @@ coverage. The production provider remains unchanged.
 
 ## Next acceptance boundaries
 
-1. Extend the bounded connection/stream machinery to concurrent connections,
+1. Extend the bounded shared-listener/stream machinery to production lifetimes,
    replenished stream counts, bounded retirement of packet history, complete error
    classification/stateless reset, and repeated/locally initiated key updates.
    Broaden loss/congestion and close-retry campaigns before treating the recovery
@@ -212,3 +219,18 @@ coverage. The production provider remains unchanged.
 The existing [WebTransport upstream readiness record](webtransport-upstream-readiness.md)
 continues to describe the MsQuic route. EmbedIO.Quic implements a separate provider;
 it does not establish that either route is ready to ship.
+
+## Shared listener validation
+
+After building the pinned peer above, run the additional ownership cases:
+
+```powershell
+& $python test/EmbedIO.Quic/verify_connections.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --peer TestResults/webtransport-peer.exe --output TestResults/embedio-quic-connections
+```
+
+The four cases cover eight simultaneous aioquic clients with loss/malformed input,
+twelve clients in waves after rebinding the same UDP port, four simultaneous
+quic-go WebTransport clients, and cancellation while an established connection is
+still active. Every case checks that the shared host retains zero owners at exit.
+The native mutation entry point also exercises admission, endpoint/CID isolation,
+capacity, handshake deadlines and once-only disposal without sockets.
