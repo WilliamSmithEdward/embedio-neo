@@ -392,7 +392,10 @@ send acknowledgement; cumulative stream credit replenishes within resident bound
 The stream core accepts an owner-bound application adapter with explicit byte
 consumption and reliable-prefix ownership. The raw multiplexed echo profile
 exercises it without HTTP/3 control-stream or WebTransport session assumptions;
-asynchronous application ownership and production dispatch remain pending.
+its async test-host API adds owned reads/writes, outbound bidi/uni streams,
+consumption-driven buffering, cancellation with explicit read-abort codes, FIN-ACK
+completion and bounded datagram/open/accept queues. Application commands wake the
+UDP owner directly. Production dispatch and TLS/certificate parity remain pending.
 A bounded shared listener adds destination-ID routing, admission
 limits, handshake deadlines and cancellation across multiple connections. It has
 no public application API; the intended fully validated

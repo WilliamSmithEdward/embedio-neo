@@ -12,6 +12,7 @@ namespace EmbedIO.Quic
         private const int StreamBudget = 8192;
         private readonly bool _webTransport;
         private readonly bool _streamed;
+        private readonly bool _asyncStreams;
         private readonly string _authorization;
         private ConnectionStreams? _streams;
         private ulong _peerRemoteStreamData;
@@ -39,11 +40,13 @@ namespace EmbedIO.Quic
         {
             WebTransportApplication application => application.RetainedInputs,
             StreamEchoApplication application => application.Retained,
+            AsyncStreamApplication application => application.Retained,
             _ => 0
         };
         internal int OutboundResets => _streams?.OutboundResets ?? 0;
         internal int ReceiveCreditUpdates => _streams?.ReceiveCreditUpdates ?? 0;
         internal ulong StreamBytesReceived => _streams?.ReceivedData ?? 0;
+        internal AsyncStreamApplication? AsyncApplication => _streams?.Protocol as AsyncStreamApplication;
         internal WebTransportApplication? WebTransport => _streams?.Protocol as WebTransportApplication;
         internal int RawStreamsCompleted => (_streams?.Protocol as StreamEchoApplication)?.Completed ?? 0;
 
@@ -93,7 +96,9 @@ namespace EmbedIO.Quic
         internal ReadOnlySpan<byte> ServerId => _serverId;
         internal bool Established => _tls.Established;
         internal bool Complete =>
-            _webTransport ? WebTransport?.AcceptedSessions > 0 : _streamed ? RawStreamsCompleted > 0 : _responseSent;
+            _webTransport
+                ? WebTransport?.AcceptedSessions > 0
+                : _streamed ? RawStreamsCompleted > 0 || AsyncApplication?.RetiredStreams > 0 : _responseSent;
         internal bool Closed => Phase == ConnectionPhase.Closed;
         internal int EchoBytes { get; private set; }
         internal long ReceivedBytes { get; private set; }
@@ -111,7 +116,8 @@ namespace EmbedIO.Quic
             int keyUpdateInterval = KeyUpdateState.DefaultInterval,
             int encryptionLimit = PacketKeys.MaximumEncryptions,
             ulong authenticationLimit = 1UL << 52,
-            bool multiplexed = false
+            bool multiplexed = false,
+            bool asyncStreams = false
         )
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(encryptionLimit, 16);
@@ -124,7 +130,8 @@ namespace EmbedIO.Quic
             _now = now;
             _lifetime.Authenticated(now);
             _webTransport = webTransport;
-            _streamed = webTransport || multiplexed;
+            _streamed = webTransport || multiplexed || asyncStreams;
+            _asyncStreams = asyncStreams;
             _authorization = authorization;
             _recovery = new Recovery(QueueRepeat);
 
@@ -381,7 +388,11 @@ namespace EmbedIO.Quic
                                         headers => headers.TryGetValue("authorization", out var value)
                                             && value == "Bearer " + _authorization
                                     )
-                                    : new StreamEchoApplication(operations)
+                                    : _asyncStreams
+                                        ? new AsyncStreamApplication(operations)
+                                        : new StreamEchoApplication(operations),
+                                canQueue: count => _pending.Count + _urgent.Count + (count + 899) / 900 + 1 <= 480,
+                                close: code => BeginClose(2, Wire.Frame(0x1d, code, 0))
                             );
                     }
 
@@ -466,6 +477,14 @@ namespace EmbedIO.Quic
             BeginClose(_tls.WriteKeys[2] != null ? 2 : _tls.WriteKeys[1] != null ? 1 : 0, Wire.Frame(0x1c, 0x0a, 0, 0));
             return Drain();
         }
+
+        internal List<byte[]> PumpApplications(double now)
+        {
+            _now = now;
+            return Drain();
+        }
+
+        internal void CancelApplications() => _streams?.Dispose();
 
         private void BeginClose(int level, byte[] payload)
         {
@@ -561,6 +580,8 @@ namespace EmbedIO.Quic
             }
 
             _streams?.Prune();
+
+            if (Phase != ConnectionPhase.Active) return Drain();
 
             while (_urgent.Count + _pending.Count != 0)
             {
@@ -668,11 +689,12 @@ namespace EmbedIO.Quic
                     if (type == 0x1d && level != 2)
                         throw new InvalidDataException("Application close outside application packet space.");
 
-                    reader.Integer();
+                    var closeCode = reader.Integer();
 
                     if (type == 0x1c) reader.Integer();
 
                     reader.Take(reader.Length(4096));
+                    _streams?.Protocol.ConnectionClosed(closeCode, type == 0x1d);
                     _pending.Clear();
                     _urgent.Clear();
                     _lifetime.Drain(_now, _recovery.KeyRetention);

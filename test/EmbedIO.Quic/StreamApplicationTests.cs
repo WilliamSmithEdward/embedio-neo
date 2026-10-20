@@ -13,7 +13,7 @@
 
             internal override void Stream(ulong id, byte[] bytes, bool fin) => Received.Add((id, bytes, fin));
 
-            internal override void Reset(ulong id, ulong error) => Resets.Add((id, error));
+            internal override void Reset(ulong id, ulong error, ulong reliableSize) => Resets.Add((id, error));
 
             internal override void ReceiveDatagram(byte[] bytes) { }
 

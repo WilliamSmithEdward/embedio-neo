@@ -11,6 +11,9 @@
 
             internal ulong Maximum = StreamLimit;
             internal ulong Released;
+            internal ulong Consumed;
+            internal ulong Discarded;
+            internal bool ReadStopped;
             internal ulong Extent;
             internal ulong? ResetError;
             internal ulong ReliableSize;
@@ -22,6 +25,7 @@
             internal ulong Offset;
             internal ulong Credit;
             internal bool Ended;
+            internal bool CompletionNotified;
             internal byte[]? Prefix;
             internal long? PendingReset;
             internal Delivery? FinalDelivery;
@@ -41,6 +45,8 @@
         private readonly StreamCountWindow _incomingBidi = new();
         private readonly StreamCountWindow _incomingUni = new();
         private readonly StreamCountWindow _localUni = new(32);
+        private readonly StreamCountWindow _localBidi = new(32);
+        private readonly Func<int, bool> _canQueue;
         private readonly Dictionary<ulong, ulong> _closedSizes = [];
         private readonly Queue<ulong> _closedOrder = new();
         private readonly Dictionary<ulong, Incoming> _incoming = [];
@@ -64,6 +70,7 @@
         internal int ClosedHistoryCount => _closedSizes.Count;
         internal int ReceiveCreditUpdates { get; private set; }
         internal ulong ReceivedData => _receivedExtent;
+        internal ulong ReleasedData => _released;
 
         private int _queuedBytes;
         private bool _disposed;
@@ -84,10 +91,13 @@
             ulong maxBidi,
             ulong peerDatagram,
             bool reset,
-            Func<StreamOperations, StreamApplication> createApplication
+            Func<StreamOperations, StreamApplication> createApplication,
+            Func<int, bool>? canQueue = null,
+            Action<ulong>? close = null
         )
         {
             _transmit = transmit;
+            _canQueue = canQueue ?? (static _ => true);
             _peerData = peerData;
             _localBidiCredit = localBidiCredit;
             _remoteBidiCredit = remoteBidiCredit;
@@ -97,7 +107,20 @@
             _peerDatagram = peerDatagram;
             _resetNegotiated = reset;
             Protocol = createApplication(
-                new StreamOperations(SendStream, SetReliablePrefix, SendDatagram, Abort, Release)
+                new StreamOperations(
+                    SendStream,
+                    SetReliablePrefix,
+                    SendDatagram,
+                    Abort,
+                    Release,
+                    TryWrite,
+                    OpenLocal,
+                    AbortRead,
+                    AbortWrite,
+                    TryDatagram,
+                    DatagramLimit(),
+                    close
+                )
             );
         }
 
@@ -105,9 +128,10 @@
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if ((id & 1) != 0) throw new TransportException(0x05, "Data on a send-only stream.");
+            if ((id & 3) == 3 || (id & 3) == 1 && id / 4 >= _localBidi.Opened)
+                throw new TransportException(0x05, "Data on a send-only or unopened local stream.");
 
-            var window = (id & 2) == 0 ? _incomingBidi : _incomingUni;
+            var window = (id & 1) != 0 ? _localBidi : (id & 2) == 0 ? _incomingBidi : _incomingUni;
 
             if (!window.Open(id / 4)) return null;
 
@@ -156,6 +180,15 @@
         {
             if (input.Terminal) return;
 
+            if (input.ReadStopped)
+            {
+                input.Buffer.Consume();
+                input.Discarded = input.Extent - input.Consumed;
+                input.Terminal = input.ResetError.HasValue || input.Buffer.FinalSize.HasValue;
+                ReleaseTo(id, input, input.Consumed + input.Discarded);
+                return;
+            }
+
             var maximum = input.ResetError.HasValue ? input.ReliableSize : StreamReassembly.MaximumOffset;
             var bytes = input.Buffer.Consume(maximum);
             var fin = !input.ResetError.HasValue && input.Buffer.Complete;
@@ -164,9 +197,10 @@
 
             if (input.ResetError.HasValue && input.Buffer.Delivered >= input.ReliableSize)
             {
-                Protocol.Reset(id, input.ResetError.Value);
+                Protocol.Reset(id, input.ResetError.Value, input.ReliableSize);
                 input.Terminal = true;
-                ReleaseTo(id, input, input.Extent);
+                input.Discarded = input.Extent - input.Buffer.Delivered;
+                ReleaseTo(id, input, input.Consumed + input.Discarded);
             }
 
             else input.Terminal = fin;
@@ -211,10 +245,11 @@
             ObjectDisposedException.ThrowIf(_disposed, this);
             var input = _incoming[id];
 
-            if ((ulong)count > input.Buffer.Delivered - input.Released)
+            if ((ulong)count > input.Buffer.Delivered - input.Consumed)
                 throw new InvalidOperationException("Application released unreceived stream bytes.");
 
-            ReleaseTo(id, input, input.Released + (ulong)count);
+            input.Consumed += (ulong)count;
+            ReleaseTo(id, input, input.Consumed + input.Discarded);
         }
 
         private void ReleaseTo(ulong id, Incoming input, ulong target)
@@ -234,7 +269,11 @@
 
             var streamTarget = Math.Min(StreamReassembly.MaximumOffset, input.Released + StreamLimit);
 
-            if (!input.Buffer.FinalSize.HasValue && streamTarget - input.Maximum >= StreamLimit / 2)
+            if (
+                !input.ReadStopped
+                && !input.Buffer.FinalSize.HasValue
+                && streamTarget - input.Maximum >= StreamLimit / 2
+            )
             {
                 input.Maximum = streamTarget;
                 _transmit(Wire.Frame(0x11, id, input.Maximum), true);
@@ -278,9 +317,12 @@
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if ((id & 3) is 1 or 2) throw new TransportException(0x05, "Invalid outbound stream ID.");
+            if ((id & 3) == 2 || (id & 3) == 1 && id / 4 >= _localBidi.Opened)
+                throw new TransportException(0x05, "Invalid outbound stream ID.");
 
-            ((id & 1) == 0 ? _incomingBidi : _localUni).Open(id / 4);
+            if ((id & 1) == 0) GetIncoming(id);
+
+            else ((id & 2) != 0 ? _localUni : _localBidi).Open(id / 4);
 
             if (!_outgoing.TryGetValue(id, out var output))
                 _outgoing.Add(
@@ -310,6 +352,61 @@
             _writes.Add(new Write(id, bytes, fin));
             _queuedBytes += bytes.Length;
             Flush();
+        }
+
+        private bool TryWrite(ulong id, ReadOnlyMemory<byte> bytes, bool fin)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (IsRetired(id)) throw new IOException("Stream has retired.");
+
+            var output = GetOutgoing(id);
+
+            if (output.Ended || output.PendingReset.HasValue) throw new IOException("Stream write side has closed.");
+
+            if (bytes.Length > 8192) throw new ArgumentOutOfRangeException(nameof(bytes));
+
+            if (_writes.Count >= 128 || bytes.Length > 262144 - _queuedBytes || !_canQueue(bytes.Length)) return false;
+
+            SendStream(id, bytes.ToArray(), fin);
+            return true;
+        }
+
+        private ulong? OpenLocal(bool unidirectional)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var window = unidirectional ? _localUni : _localBidi;
+            var maximum = unidirectional ? _maxUni : _maxBidi;
+            var ordinal = window.Opened;
+
+            if (ordinal >= maximum || ordinal >= window.Maximum || ordinal >= 1UL << 60) return null;
+
+            window.Open(ordinal);
+            var id = ordinal * 4 + (unidirectional ? 3UL : 1UL);
+            GetOutgoing(id);
+
+            if (!unidirectional) GetIncoming(id);
+
+            return id;
+        }
+
+        private void AbortRead(ulong id, ulong error)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var input = GetIncoming(id);
+
+            if (input == null || input.ReadStopped) return;
+
+            input.ReadStopped = true;
+            _transmit(Wire.Frame(5, id, error), true);
+            Deliver(id, input);
+        }
+
+        private void AbortWrite(ulong id, ulong error)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (!IsRetired(id)) ResetSend(id, checked((long)error));
         }
 
         private void SetReliablePrefix(ulong id, byte[] prefix)
@@ -364,6 +461,9 @@
 
                 var count = (int)Math.Min(900, Math.Min((ulong)remaining, credit));
                 var end = write.Position + count == write.Bytes.Length;
+
+                if (!_canQueue(count)) return;
+
                 using var frame = new MemoryStream();
                 Wire.Integer(frame, end && write.Fin ? 15UL : 14UL);
                 Wire.Integer(frame, write.Id);
@@ -399,6 +499,8 @@
 
             if (IsRetired(id)) return;
 
+            if (_outgoing.TryGetValue(id, out var output) && output.FinalDelivery?.Acknowledged == true) return;
+
             Protocol.Stop(id, error);
             ResetSend(id, (long)error);
         }
@@ -418,7 +520,7 @@
         {
             var output = GetOutgoing(id);
 
-            if (output.PendingReset.HasValue) return;
+            if (output.PendingReset.HasValue || output.FinalDelivery?.Acknowledged == true) return;
 
             var prefix = output.Prefix ?? [];
 
@@ -471,12 +573,17 @@
             0 => _incomingBidi.IsClosed(id / 4),
             2 => _incomingUni.IsClosed(id / 4),
             3 => _localUni.IsClosed(id / 4),
+            1 => _localBidi.IsClosed(id / 4),
             _ => false
         };
 
         private void ValidatePeerSendReference(ulong id)
         {
-            if ((id & 3) is 1 or 2 || ((id & 3) == 3 && id / 4 >= _localUni.Opened))
+            if (
+                (id & 3) == 2
+                || (id & 3) == 1 && id / 4 >= _localBidi.Opened
+                || (id & 3) == 3 && id / 4 >= _localUni.Opened
+            )
                 throw new TransportException(0x05, "Peer referenced an unopened or receive-only send stream.");
         }
 
@@ -489,6 +596,8 @@
         internal void Prune()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            Flush();
+            Protocol.Poll();
 
             foreach (var pair in _outgoing.ToArray())
             {
@@ -496,6 +605,12 @@
                 output.Deliveries.RemoveAll(item => item.Delivery.Acknowledged);
 
                 if (!output.Ended || output.FinalDelivery?.Acknowledged != true) continue;
+
+                if (!output.CompletionNotified)
+                {
+                    output.CompletionNotified = true;
+                    Protocol.WritesClosed(pair.Key);
+                }
 
                 if ((pair.Key & 3) == 3)
                 {
@@ -520,7 +635,7 @@
 
         private void RetireIncoming(ulong id, Incoming input)
         {
-            var window = (id & 2) == 0 ? _incomingBidi : _incomingUni;
+            var window = (id & 1) != 0 ? _localBidi : (id & 2) == 0 ? _incomingBidi : _incomingUni;
 
             if (!window.Retire(id / 4)) throw new InvalidOperationException("Stream already retired.");
 
@@ -533,8 +648,29 @@
             _incoming.Remove(id);
             _outgoing.Remove(id);
             Protocol.Retire(id);
-            _transmit(Wire.Frame((id & 2) == 0 ? 0x12UL : 0x13UL, window.Maximum), true);
+
+            if ((id & 1) == 0) _transmit(Wire.Frame((id & 2) == 0 ? 0x12UL : 0x13UL, window.Maximum), true);
+
             RetiredStreams++;
+        }
+
+        private int? DatagramLimit()
+        {
+            var size = (int)Math.Min(_peerDatagram, 1100);
+
+            if (size < 2) return null;
+
+            return size - (size - 2 >= 64 ? 3 : 2);
+        }
+
+        private bool TryDatagram(byte[] bytes)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (!_canQueue(bytes.Length)) return false;
+
+            SendDatagram(bytes);
+            return true;
         }
 
         private void SendDatagram(byte[] bytes)

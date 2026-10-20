@@ -45,6 +45,7 @@ namespace EmbedIO.Quic
                     break;
 
                 case 5:
+                    AsyncStreamTests.Mutate(data);
                     StreamApplicationTests.Mutate(data);
                     StreamCountTests.Mutate(data);
                     StreamLifecycleTests.Mutate(data);
@@ -62,12 +63,26 @@ namespace EmbedIO.Quic
 
         public static void StateMachine(ReadOnlySpan<byte> steps, Action<string>? cover = null)
         {
+            steps = steps[..Math.Min(steps.Length, MaximumInput)];
             RecoveryRetentionTests.Mutate(steps);
-            QuicFuzzState.Run(steps[..Math.Min(steps.Length, MaximumInput)], false, cover);
+            QuicFuzzState.Run(steps, false, cover);
+            Span<byte> commands = stackalloc byte[4];
+            var count = Math.Min(commands.Length, steps.Length / 3);
+
+            for (var index = 0; index < count; index++)
+                commands[index] = (byte)(steps[index * 3 + 1] | steps[index * 3 + 2]);
+
+            AsyncStreamTests.Mutate(commands[..count]);
+            cover?.Invoke("streams.async-ownership");
         }
 
-        public static void Lifecycle(ReadOnlySpan<byte> steps, Action<string>? cover = null) =>
-            QuicFuzzState.Run(steps[..Math.Min(steps.Length, MaximumInput)], true, cover);
+        public static void Lifecycle(ReadOnlySpan<byte> steps, Action<string>? cover = null)
+        {
+            steps = steps[..Math.Min(steps.Length, MaximumInput)];
+            QuicFuzzState.Run(steps, true, cover);
+            AsyncStreamTests.ConnectionClosure(steps);
+            cover?.Invoke("streams.async-closure");
+        }
 
         internal static void Require(bool condition, string invariant)
         {

@@ -31,7 +31,7 @@
             if (fin) _finished.Add(id);
         }
 
-        internal override void Reset(ulong id, ulong error)
+        internal override void Reset(ulong id, ulong error, ulong reliableSize)
         {
             if ((id & 2) == 0) operations.Abort(id, (long)error);
 

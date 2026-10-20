@@ -6,9 +6,15 @@
     {
         internal virtual void Open(ulong id) { }
 
+        internal virtual void Poll() { }
+
+        internal virtual void WritesClosed(ulong id) { }
+
+        internal virtual void ConnectionClosed(ulong error, bool application) { }
+
         internal abstract void Stream(ulong id, byte[] bytes, bool fin);
 
-        internal abstract void Reset(ulong id, ulong error);
+        internal abstract void Reset(ulong id, ulong error, ulong reliableSize);
 
         internal virtual void Stop(ulong id, ulong error) { }
 
@@ -29,7 +35,14 @@
         Action<ulong, byte[]> reliablePrefix,
         Action<byte[]> datagram,
         Action<ulong, long> abort,
-        Action<ulong, int> consume
+        Action<ulong, int> consume,
+        Func<ulong, ReadOnlyMemory<byte>, bool, bool> tryWrite,
+        Func<bool, ulong?> open,
+        Action<ulong, ulong> abortRead,
+        Action<ulong, ulong> abortWrite,
+        Func<byte[], bool> tryDatagram,
+        int? datagramLimit,
+        Action<ulong>? close
     )
     {
         internal Action<ulong, byte[], bool> Write { get; } = write;
@@ -37,5 +50,12 @@
         internal Action<byte[]> Datagram { get; } = datagram;
         internal Action<ulong, long> Abort { get; } = abort;
         internal Action<ulong, int> Consume { get; } = consume;
+        internal Func<ulong, ReadOnlyMemory<byte>, bool, bool> TryWrite { get; } = tryWrite;
+        internal Func<bool, ulong?> Open { get; } = open;
+        internal Action<ulong, ulong> AbortRead { get; } = abortRead;
+        internal Action<ulong, ulong> AbortWrite { get; } = abortWrite;
+        internal Func<byte[], bool> TryDatagram { get; } = tryDatagram;
+        internal int? DatagramLimit { get; } = datagramLimit;
+        internal Action<ulong>? Close { get; } = close;
     }
 }

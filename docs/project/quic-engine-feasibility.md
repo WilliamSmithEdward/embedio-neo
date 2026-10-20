@@ -57,6 +57,13 @@ uses a ten-second process deadline by default. The single-connection modes are:
   multiplexed bidi/uni echo. It has a 30-second host deadline. It sends no HTTP/3
   control streams or implicit WebTransport prefixes. The larger 2 MiB loss case
   has a 20-second peer deadline; existing probe case deadlines are unchanged.
+- `serve-async` exercises the async connection/stream API with the same bounded
+  raw profile and a 30-second deadline. Incoming uni streams receive alternating
+  server uni/bidi responses; the peer finishes the unused bidi half explicitly.
+  The host admits at most 32 application workers. Owner commands use a bounded
+  wakeup signal alongside UDP receive and recovery timers.
+- `serve-async-close` requests application connection closure with code `0x1234`
+  after an acknowledged response, then completes the normal closing timer.
 - `serve-h3` negotiates `h3`, sends HTTP/3 SETTINGS, decodes bounded QPACK headers
   with dynamic capacity zero, and accepts `CONNECT :protocol=webtransport-h3` at
   `https://localhost/echo`. It links the existing repository codecs and session
@@ -133,7 +140,14 @@ ranges merge around live or implicitly opened streams; MAX_STREAMS credit advanc
 only once per retired incoming stream. Bidirectional streams wait for response
 FIN/reset acknowledgement; the echo adapter also retains receive capacity while
 an associated outgoing uni response is pending. At most 32 local uni records can
-reside, including critical streams and work waiting for peer credit. A 64-entry
+reside, including critical streams and work waiting for peer credit. The async
+API additionally supports 32 resident locally initiated bidi streams. It bounds
+pending opens and accepts to 32, unread application data to 64 KiB per stream,
+and incoming/outgoing datagram queues to 32. Reads and writes permit one pending
+operation per direction. Unaccepted empty FINs keep stream credit until admission;
+FIN delivery and async disposal await the required ACK. Flow-blocked output and
+later credit updates respect the packet-queue budget. Reliable-reset discarded
+tails release their credit separately from any still-unread prefix. A 64-entry
 recent final-size cache checks delayed conflicts without retaining receive buffers;
 older closed IDs are ignored and never charged or opened again. Connection close,
 draining and idle expiry release application buffers, pending work and physical
@@ -193,13 +207,18 @@ the repository's aioquic pin. The temporary certificate is valid for one day.
 Windows x64 with SDK 10.0.402 and OpenSSL 3.5.7 completed the following local
 checks. Run receipts retain exact assembly/source/native-library identities.
 
-- Nineteen aioquic 1.6.0 cases cover the original ten interoperability cases plus
+- Twenty-four aioquic 1.6.0 cases cover the original ten interoperability cases plus
   Initial/handshake/response loss, ACK loss and reordering. The designated reliable
   loss cases require actual retransmitted packets as well as an exact response.
   Four raw multiplexed cases add 256 sequential bidi streams, 128 uni streams,
   four groups of 16 concurrent streams with distinct payloads and a 2 MiB sliding-window transfer with
   three dropped response packets. The peer runs its ordinary delayed-ACK timer
   and completes a public ping before exact ACK-gated retirement is checked.
+  Five async-host cases add 128 bidi inputs, 128 uni inputs with both server output
+  directions, 16 concurrent distinct requests, a 2 MiB loss transfer and verified
+  application-close code delivery. Application reads/writes own their memory only
+  until completion, and a canceled upload preserves the response half in managed
+  ownership regressions.
 - Twenty-three quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
   datagrams, two sessions and quota rejection, authorization/Origin rejection,
   missing current-reset negotiation, incoming and outgoing partial resets,

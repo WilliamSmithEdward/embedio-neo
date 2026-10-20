@@ -94,14 +94,18 @@ class DatagramRelay(asyncio.DatagramProtocol):
         self.transport.sendto(data, self.server)
 
 
-async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=ALPN, noise=False, relay=False, multiplexed=False, rounds=1, parallel=1, unidirectional=False, deadline=6):
+async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=ALPN, noise=False, relay=False, multiplexed=False, rounds=1, parallel=1, unidirectional=False, deadline=6, async_streams=False, close_code=None):
     process = await asyncio.create_subprocess_exec(
-        args.dotnet, args.assembly, "serve-streams" if multiplexed else "serve", args.openssl,
+        args.dotnet, args.assembly, "serve-async-close" if close_code is not None else "serve-async" if async_streams else "serve-streams" if multiplexed else "serve", args.openssl,
         str(args.output / "certificate.pem"), str(args.output / "key.pem"),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     peers = []
     inbound = asyncio.Queue(maxsize=16)
     def stream_handler(reader, writer):
+        # The async host alternates server uni/bidi responses for incoming uni
+        # requests. Finish the unused client half of a server-initiated bidi.
+        if writer.can_write_eof():
+            writer.write_eof()
         inbound.put_nowait(reader)
     def create_peer(*positional, **keywords):
         peer = Peer(*positional, **keywords)
@@ -156,7 +160,11 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
                     await asyncio.gather(upload(), download())
                 for iteration in range(rounds):
                     await asyncio.gather(*(exchange(iteration * parallel + index) for index in range(parallel)))
-                if multiplexed:
+                if close_code is not None:
+                    await peer.wait_closed()
+                    if peer.termination is None or peer.termination["code"] != close_code:
+                        raise AssertionError("Wrong application close code")
+                elif multiplexed:
                     # Let the independent peer's normal delayed-ACK timer run, then
                     # complete a public ping before checking ACK-gated retirement.
                     await asyncio.sleep(0.1)
@@ -188,6 +196,9 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
     if multiplexed:
         passed = passed and report.get("rawStreamsCompleted") == rounds * parallel
         passed = passed and report.get("retiredStreams") == rounds * parallel * (2 if unidirectional else 1)
+    if close_code is not None:
+        passed = passed and termination is not None and termination["code"] == close_code
+        passed = passed and report.get("closePackets", 0) > 0
     if noise and positive:
         passed = passed and report.get("rejectedPackets", 0) >= 4
     if relay is True:
@@ -266,10 +277,22 @@ async def main(args):
             print(json.dumps(results[-1]), flush=True)
             if not results[-1]["passed"]:
                 break
+    if all(result["passed"] for result in results):
+        for name, length, options in (
+            ("async-bidi-128", 64, {"rounds": 128}),
+            ("async-uni-128", 64, {"rounds": 128, "unidirectional": True}),
+            ("async-parallel-16", 4096, {"parallel": 16, "rounds": 4}),
+            ("async-sliding-2m-loss", 2 * 1024 * 1024, {"relay": "loss-stream", "deadline": 20}),
+            ("async-application-close", 1024, {"close_code": 0x1234}),
+        ):
+            results.append(await case(args, name, bytes(i % 251 for i in range(length)), multiplexed=True, async_streams=True, **options))
+            print(json.dumps(results[-1]), flush=True)
+            if not results[-1]["passed"]:
+                break
     receipt = {"peer": "aioquic", "peerVersion": importlib.metadata.version("aioquic"),
                **provenance(args),
                "cases": results,
-               "passed": len(results) == 19 and all(result["passed"] for result in results)}
+               "passed": len(results) == 24 and all(result["passed"] for result in results)}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     return 0 if receipt["passed"] else 1
 

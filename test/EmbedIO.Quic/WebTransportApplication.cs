@@ -533,7 +533,7 @@ namespace EmbedIO.Quic
             if (id is 3 or 7 or 11) throw new InvalidDataException("Peer stopped a critical HTTP/3 stream.");
         }
 
-        internal override void Reset(ulong id, ulong error)
+        internal override void Reset(ulong id, ulong error, ulong reliableSize)
         {
             if (_inputs.TryGetValue(id, out var critical) && critical.Type is 0 or 2 or 3)
                 throw new InvalidDataException("Peer reset a critical HTTP/3 stream.");

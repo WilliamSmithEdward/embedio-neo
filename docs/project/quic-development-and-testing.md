@@ -21,7 +21,8 @@ TLS; .NET cryptography supplies AES-GCM, AES and HKDF. Our code owns the transpo
 | Recovery and congestion | Bounded retired-packet metadata and acknowledgement barriers permit long-running recovery histories. Physical packet records retain logical delivery ownership through retransmission and late ACKs. Monotonic-time tests exercise packet/time loss, RTT, PTO probes, pacing, NewReno, application-limited ACKs and persistent congestion. |
 | HTTP/3 and WebTransport bridge | Existing H3/QPACK/capsule/session code is linked into the prototype. The bridge handles SETTINGS, authorized CONNECT, exact Origin admission, bidi/uni streams, datagrams, independent sessions and reliable partial resets. quic-go provides a separate wire peer. |
 | Sustained transfers | A fixed sliding receive window retains final-size history and compacts consumed H3 input. MAX_DATA/MAX_STREAM_DATA track consumption, including reset gaps after their reliable prefix. Independent cases transfer 512 KiB, with small peer windows and loss. A separate bounded endurance case transfers 8 MiB over two streams with frequent local key updates. |
-| Application boundary | `StreamApplication` and its owner-bound operations separate raw streams/datagrams from the H3 adapter. Consumption returns receive credit; reliable prefixes and critical-stream rules belong to the application. Async application ownership and production integration remain pending. |
+| Application boundary | `StreamApplication` and its owner-bound operations separate raw streams/datagrams from the H3 adapter. Consumption returns receive credit; reliable prefixes and critical-stream rules belong to the application. The subsequent async API connects this boundary to application workers; production integration remains pending. |
+| Async application ownership | `AsyncStreamApplication` and `AsyncQuicStream` provide owned read/write/open/accept/datagram/close operations, explicit cancellation and independent stream halves. A bounded signal wakes the UDP owner; FIN-ACK retirement and asynchronous disposal retain delivery ownership. The console host exercises application workers on a real connection. |
 | Stream lifetime | Cumulative stream credit replenishes after complete receive/application and required send-ACK retirement. Closed-ID ranges prevent reuse; at most 64 recent final sizes retain narrow conflict checks. ACK delays keep echo work within resident stream bounds. |
 | Connection lifetime | Active, closing, draining and closed states use injected time. Idle expiry is silent; close replies are bounded; repeated sends or duplicate close traffic do not extend retirement. Windows ICMP reset notifications during retirement are handled explicitly. |
 | Shared listener | Destination-ID demultiplexing, endpoint-bound original-ID aliases, 16 resident owners, bounded admission attempts and fixed handshake deadlines. One cancellable UDP receive loop retires owners and permits clean port rebinding. |
@@ -42,6 +43,7 @@ All files in this table are under `test/EmbedIO.Quic` unless stated.
 | Packet protection | `PacketKeys.cs`, `KeyUpdateState.cs`, `KeyUpdateTests.cs` | RFC vectors, encrypt/decrypt identity, tamper rejection, per-key encryption limits, packet-number truncation, repeated key generations, ACK/cooldown policy models and retained header protection. |
 | Receive state | `StreamReassembly.cs`, `Wire.cs` | Absolute-position dictionary oracle against the sliding ring; reversed/duplicated CRYPTO fragments; final-size, window, overlap and once-only delivery checks. |
 | Recovery/congestion | `Recovery.cs`, `RecoveryRetentionTests.cs` | Deterministic algorithm cases, history compaction/late-ACK models, logical/physical accounting, duplicate ACKs, discard, loss/PTO/retransmit traces, resource bounds and independent connection ownership. |
+| Async ownership and admission | `AsyncQuicStream.cs`, `AsyncStreamApplication.cs`, `AsyncStreamEcho.cs`, `AsyncStreamTests.cs` | Original error codes, borrowed-buffer release, reliable-prefix credit, pre/post-copy cancellation, sparse reads, outbound bidi/uni streams, packet/stream backpressure, unaccepted FINs, late controls, datagram bounds, close/dispose and independent-owner command oracles. |
 | Generic application ownership | `StreamApplication.cs`, `StreamEchoApplication.cs`, `StreamApplicationTests.cs` | Empty stream admission, original reset codes, deferred consumption/flow credit, raw bidi/uni ACK retirement, independent owners and rejection of operations after disposal. |
 | Stream counts and retirement | `StreamCountWindow.cs`, `StreamCountTests.cs`, `StreamLifecycleTests.cs` | Independent closed-ID sets, 100,000 sequential retirements, implicit stream opening, delayed/late ACKs, repeated requests, closed references, pending session association, final-size checks and buffer disposal. |
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
@@ -275,8 +277,9 @@ callbacks transfer write-buffer ownership and reject operations after disposal.
 Reset notification retains the peer's original application code and waits for any
 negotiated reliable prefix. Deterministic and all-engine mutation tests cover
 consumption-driven credit, empty stream admission, raw uni/bidi ACK retirement and
-connection isolation. Production asynchronous stream/connection ownership remains
-a separate acceptance item.
+connection isolation. Production asynchronous stream/connection integration remained
+a separate acceptance item at that checkpoint; the following increment supplies
+the owned API in the development host.
 
 All 46 wire scenarios passed: 19 aioquic, 23 quic-go and four shared-listener
 cases. The added raw cases pass 256 sequential bidi streams, 128 uni streams,
@@ -306,6 +309,53 @@ handle. Readiness now publishes by moving a closed adjacent file. Twelve repeate
 killed-process recovery trials passed locally, retaining all offset, ownership,
 resume and exact-byte assertions. The failed run is retained; hosted validation
 of the correction is required.
+
+The async-ownership increment uses one connection owner for transport state and
+synchronized application buffers for concurrent callers. Read consumption and
+explicit discard return credit; a reliable reset releases its discarded tail
+without releasing an unread prefix twice. Writes copy bounded chunks before
+releasing caller memory, pause under output pressure and reserve packet capacity
+when later peer credit arrives. Single outstanding reads/writes, bounded
+open/accept/datagram queues and unaccepted-FIN admission limit resident state.
+Application wakeups share the UDP loop with its persistent recovery timer.
+
+Managed cases verify original stream/connection error codes, cancellation before
+and after write progress, explicit H3_NO_ERROR read cancellation with an intact
+response half, no caller-buffer access after completion, independently opened
+server bidi/uni streams, FIN-ACK disposal, late STOP_SENDING after acknowledged
+FINs, shutdown wakeups and concurrent cancellation/data arrival. The generated
+byte-and-retirement oracle runs through the existing property, mutation,
+libFuzzer and AFL++ targets. Structured recovery traces also run the async byte
+oracle, and lifecycle traces generate local/peer/owner-close sequences that fail
+and release every pending accept, open, read, write and datagram operation.
+The raw async host bounds application workers to 32;
+its uni echo inputs alternate server uni/bidi outputs. The independent peer
+finishes the unused bidi half. This API is still internal to the development
+project; no production provider or public WebTransport API has changed.
+
+The final async source passes 10,076 deterministic assertions and 51 independent
+wire cases: 24 aioquic, 23 quic-go and four shared-listener cases. Five new wire
+cases exercise 128 bidi streams, 128 uni inputs with server bidi/uni responses,
+parallel distinct payloads, a 2 MiB transfer with loss and the original
+application close code. Twenty repeated self-tests pass 2000 cancellation/data
+races and isolated-process checks for unused close notifications. Notifications
+are created lazily; ordinary resets discard buffered data, while reliable resets
+retain only their required prefix and return each byte of credit once.
+
+A final two-seed campaign passes 1.4 million QUIC property cases, 1.2 million
+existing properties, 200,000 mutations, 40,000 recovery/lifecycle traces,
+10,000 native-context mutations and 10,000 shared-owner commands. Its receipt is
+`TestResults/quic-development/750b3e71069d4e14b00f5384a4c74168/receipt.json`.
+Fresh libFuzzer/AFL++ campaigns complete 185,945 / 32,981 inputs without retained
+crashes or hangs. Debug/Release builds, SARIF diagnostics, whole-PR changed-file
+formatting/style/analyzer checks, all-source quality and suppression guards pass.
+The final source hashes and all 51 wire receipts are retained under ignored
+`TestResults/quic-feasibility/continuation/final-validation-async-streams-08`;
+earlier intermediate receipts retain their own source hashes and failure history.
+
+The 373e7df checkpoint's 38 hosted checks are green, including the corrected
+Windows tus recovery fixture. The async increment needs its own exact-head
+hosted results after the next push.
 
 CI run 39470892485 on the preceding pushed head passed on attempt 2. Its original
 macOS failure occurred during checkout DNS resolution; the targeted retry passed.

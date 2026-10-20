@@ -96,6 +96,7 @@ namespace EmbedIO.Quic
                 }
             }
 
+            AsyncStreamTests.Run();
             StreamApplicationTests.Run();
             PacketNumberWindowTests.Run();
             RecoveryRetentionTests.Run();

@@ -14,6 +14,11 @@ namespace EmbedIO.Quic
         {
             try
             {
+                if (arguments is ["notification-self-test"])
+                    return await AsyncStreamTests
+                        .NotificationSelfTestAsync()
+                        .ConfigureAwait(false);
+
                 if (arguments is ["self-test"])
                 {
                     SelfTests.Run();
@@ -65,7 +70,12 @@ namespace EmbedIO.Quic
 
                 if (
                     arguments is [
-                        "serve" or "serve-streams" or "serve-h3" or "serve-h3-updates",
+                        "serve"
+                            or "serve-streams"
+                            or "serve-async"
+                            or "serve-async-close"
+                            or "serve-h3"
+                            or "serve-h3-updates",
                         var library,
                         var certificate,
                         var key
@@ -77,7 +87,9 @@ namespace EmbedIO.Quic
                         key,
                         arguments[0] is "serve-h3" or "serve-h3-updates",
                         arguments[0] == "serve-h3-updates",
-                        arguments[0] == "serve-streams"
+                        arguments[0] == "serve-streams",
+                        arguments[0] is "serve-async" or "serve-async-close",
+                        arguments[0] == "serve-async-close"
                     ).ConfigureAwait(false);
 
                 Console.Error.WriteLine(
@@ -141,12 +153,14 @@ namespace EmbedIO.Quic
             string key,
             bool webTransport,
             bool frequentUpdates,
-            bool multiplexed
+            bool multiplexed,
+            bool asyncStreams,
+            bool closeAfterEcho
         )
         {
             using var socket = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
             using var deadline = new CancellationTokenSource(
-                TimeSpan.FromSeconds(frequentUpdates || multiplexed ? 30 : 10)
+                TimeSpan.FromSeconds(frequentUpdates || multiplexed || asyncStreams ? 30 : 10)
             );
             var authorization = webTransport ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) : string.Empty;
             var ready = new
@@ -162,6 +176,11 @@ namespace EmbedIO.Quic
             var ignored = 0;
 
             Task<UdpReceiveResult>? receive = null;
+            Task<bool>? commands = null;
+            Task<bool>? tick = null;
+            Task? applicationTask = null;
+            AsyncStreamEcho? application = null;
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(2));
 
             try
             {
@@ -170,25 +189,58 @@ namespace EmbedIO.Quic
                     .ReceiveAsync(deadline.Token)
                     .AsTask();
 
+                tick = timer
+                    .WaitForNextTickAsync(deadline.Token)
+                    .AsTask();
+
                 while (!deadline.IsCancellationRequested)
                 {
+                    if (connection?.AsyncApplication is { } app && !app.IsClosed)
+                    {
+                        if (application == null)
+                        {
+                            application = new AsyncStreamEcho(app, closeAfterEcho);
+                            applicationTask = application.RunAsync(deadline.Token);
+                        }
+
+                        commands ??= app.WaitForCommandsAsync(deadline.Token);
+                    }
+
+                    if (applicationTask?.IsFaulted == true) await applicationTask.ConfigureAwait(false);
+
                     if (connection != null && peer != null)
                     {
                         await Task
-                            .WhenAny(receive, Task.Delay(2, deadline.Token))
+                            .WhenAny(receive, tick, commands ?? tick)
                             .ConfigureAwait(false);
 
-                        if (!receive.IsCompleted)
+                        if (commands?.IsCompleted == true)
                         {
+                            await commands.ConfigureAwait(false);
+                            commands = null;
+
+                            foreach (var packet in connection.PumpApplications(clock.Elapsed.TotalMilliseconds))
+                                await socket
+                                    .SendAsync(packet, peer, deadline.Token)
+                                    .ConfigureAwait(false);
+                        }
+
+                        if (tick.IsCompleted)
+                        {
+                            await tick.ConfigureAwait(false);
+                            tick = timer
+                                .WaitForNextTickAsync(deadline.Token)
+                                .AsTask();
+
                             foreach (var packet in connection.Tick(clock.Elapsed.TotalMilliseconds))
                                 await socket
                                     .SendAsync(packet, peer, deadline.Token)
                                     .ConfigureAwait(false);
-
-                            if (connection.Closed) break;
-
-                            continue;
                         }
+
+                        if (connection.Closed) break;
+
+                        if (!receive.IsCompleted) continue;
                     }
 
                     UdpReceiveResult datagram;
@@ -234,7 +286,8 @@ namespace EmbedIO.Quic
                                 webTransport,
                                 authorization,
                                 keyUpdateInterval: frequentUpdates ? 128 : KeyUpdateState.DefaultInterval,
-                                multiplexed: multiplexed
+                                multiplexed: multiplexed,
+                                asyncStreams: asyncStreams
                             );
                         }
 
@@ -281,9 +334,28 @@ namespace EmbedIO.Quic
                     catch (SocketException) { }
                 }
 
+                foreach (var pending in new[] { commands, tick })
+                    if (pending != null)
+                    {
+                        try
+                        {
+                            await pending.ConfigureAwait(false);
+                        }
+
+                        catch (OperationCanceledException) { }
+                    }
+
+                if (applicationTask != null)
+                {
+                    connection?.CancelApplications();
+                    await applicationTask
+                        .WaitAsync(TimeSpan.FromSeconds(5))
+                        .ConfigureAwait(false);
+                }
+
                 var result = new
                 {
-                    rawStreamsCompleted = connection?.RawStreamsCompleted ?? 0,
+                    rawStreamsCompleted = application?.Completed ?? connection?.RawStreamsCompleted ?? 0,
                     retiredStreams = connection?.RetiredStreams ?? 0,
                     retainedIncoming = connection?.RetainedIncoming ?? 0,
                     retainedOutgoing = connection?.RetainedOutgoing ?? 0,
