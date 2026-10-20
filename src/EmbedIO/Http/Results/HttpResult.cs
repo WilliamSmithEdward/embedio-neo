@@ -90,7 +90,11 @@ namespace EmbedIO
                 await WriteAsync(context, serializer ?? ResponseSerializer.Default).ConfigureAwait(false);
             }
 
-            catch (Exception error) when (error is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+            catch (Exception error) when (
+                error is not OutOfMemoryException
+                    and not StackOverflowException
+                    and not AccessViolationException
+            )
             {
                 failure = await AbortFailureAsync(context, error).ConfigureAwait(false);
             }
@@ -100,7 +104,11 @@ namespace EmbedIO
                 Release();
             }
 
-            catch (Exception cleanup) when (cleanup is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+            catch (Exception cleanup) when (
+                cleanup is not OutOfMemoryException
+                    and not StackOverflowException
+                    and not AccessViolationException
+            )
             {
                 var combined = failure == null ? cleanup : new AggregateException(failure, cleanup);
                 failure = await AbortFailureAsync(context, combined).ConfigureAwait(false);
@@ -122,7 +130,11 @@ namespace EmbedIO
                         .ConfigureAwait(false);
             }
 
-            catch (Exception abort) when (abort is not OutOfMemoryException and not StackOverflowException and not AccessViolationException)
+            catch (Exception abort) when (
+                abort is not OutOfMemoryException
+                    and not StackOverflowException
+                    and not AccessViolationException
+            )
             {
                 return new AggregateException(failure, abort);
             }

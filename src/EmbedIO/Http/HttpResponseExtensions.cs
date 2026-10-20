@@ -16,20 +16,21 @@ namespace EmbedIO
         public static void SetStatusCode(this IHttpResponse @this, int statusCode)
         {
             if (@this is null) throw new NullReferenceException();
+
             @this.StatusCode = statusCode;
         }
 
         /// <summary>Sets the response status from the standard HTTP status enumeration.</summary>
         /// <param name="this">The response.</param>
         /// <param name="statusCode">The final status code.</param>
-        public static void SetStatusCode(this IHttpResponse @this, HttpStatusCode statusCode)
-            => SetStatusCode(@this, (int)statusCode);
+        public static void SetStatusCode(this IHttpResponse @this, HttpStatusCode statusCode) =>
+            SetStatusCode(@this, (int)statusCode);
 
         /// <summary>Prepares an empty response using the existing integer validation.</summary>
         /// <param name="this">The response.</param>
         /// <param name="statusCode">The status code.</param>
-        public static void SetEmptyResponse(this IHttpResponse @this, HttpStatusCode statusCode)
-            => SetEmptyResponse(@this, (int)statusCode);
+        public static void SetEmptyResponse(this IHttpResponse @this, HttpStatusCode statusCode) =>
+            SetEmptyResponse(@this, (int)statusCode);
 
         /// <summary>Sets a cookie with an explicit SameSite policy on a built-in listener response.</summary>
         /// <param name="this">The response.</param>
@@ -43,12 +44,21 @@ namespace EmbedIO
         public static void SetCookie(this IHttpResponse? @this, Cookie? cookie, CookieSameSiteMode sameSite)
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
+
             if (cookie == null) throw new ArgumentNullException(nameof(cookie));
-            if (@this is Caching.OutputCacheCapture.CaptureResponse capture) { capture.DisableCapture(); @this = capture.Inner; }
+
+            if (@this is Caching.OutputCacheCapture.CaptureResponse capture)
+            {
+                capture.DisableCapture();
+                @this = capture.Inner;
+            }
+
             CookieSameSiteStore.ValidateMode(sameSite, nameof(sameSite));
             CookieSameSiteStore.ValidateCookie(cookie, sameSite);
+
             if (@this is not (EmbedIO.Net.Internal.HttpListenerResponse or EmbedIO.Net.Internal.MultiplexedResponse))
                 throw new NotSupportedException("SameSite cookie metadata requires a built-in listener response.");
+
             @this.SetCookie(cookie);
             CookieSameSiteStore.Attach(@this, cookie, sameSite);
         }
@@ -61,6 +71,7 @@ namespace EmbedIO
         public static void DisableCaching(this IHttpResponse @this)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             var headers = @this.Headers;
             headers.Set(HttpHeaderNames.Expires, "Sat, 26 Jul 1997 05:00:00 GMT");
             headers.Set(HttpHeaderNames.LastModified, HttpDate.Format(DateTime.UtcNow));
@@ -78,6 +89,7 @@ namespace EmbedIO
         public static void SetEmptyResponse(this IHttpResponse @this, int statusCode)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             if (!HttpStatusDescription.TryGet(statusCode, out var statusDescription))
                 throw new ArgumentException("Status code has no standard description.", nameof(statusCode));
 
@@ -89,17 +101,11 @@ namespace EmbedIO
 
         // Representation fields describing the body a failed handler was about to send.
         // They would otherwise frame or label the replacement body incorrectly.
-        private static readonly string[] ReplacedRepresentationHeaders =
-        {
-            HttpHeaderNames.ContentLength,
-            HttpHeaderNames.ContentEncoding,
-            HttpHeaderNames.ContentRange,
-            HttpHeaderNames.ContentLanguage,
-            HttpHeaderNames.ContentLocation,
-            HttpHeaderNames.ContentDisposition,
-            HttpHeaderNames.ETag,
-            HttpHeaderNames.TransferEncoding,
-        };
+        private static readonly string[] ReplacedRepresentationHeaders = [
+            HttpHeaderNames.ContentLength, HttpHeaderNames.ContentEncoding, HttpHeaderNames.ContentRange,
+            HttpHeaderNames.ContentLanguage, HttpHeaderNames.ContentLocation, HttpHeaderNames.ContentDisposition,
+            HttpHeaderNames.ETag, HttpHeaderNames.TransferEncoding
+        ];
 
         // Prepares an uncommitted response to be replaced by an exception handler:
         // an empty response for the status plus removal of stale representation and
@@ -111,6 +117,7 @@ namespace EmbedIO
             {
                 @this.SetEmptyResponse(statusCode);
             }
+
             else
             {
                 // An HttpException may carry any valid status the standard table lacks (418, 499...).
@@ -122,6 +129,7 @@ namespace EmbedIO
 
             foreach (var name in ReplacedRepresentationHeaders)
                 @this.Headers.Remove(name);
+
             @this.SendChunked = false;
         }
     }

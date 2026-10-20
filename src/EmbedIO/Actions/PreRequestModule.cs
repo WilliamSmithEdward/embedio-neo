@@ -12,19 +12,19 @@ namespace EmbedIO.Actions
     /// </remarks>
     public sealed class PreRequestModule : WebModuleBase
     {
+        /// <summary>Creates a callback module limited to the specified base route.</summary>
+        /// <param name="baseRoute">The base route, with existing case-sensitive matching.</param>
+        /// <param name="handler">The callback to await for each matching request.</param>
+        /// <exception cref="System.ArgumentNullException">The callback is null.</exception>
+        public PreRequestModule(string baseRoute, RequestHandlerCallback? handler) : base(baseRoute) =>
+            _handler = Validate.NotNull(nameof(handler), handler);
+
         private readonly RequestHandlerCallback _handler;
 
         /// <summary>Creates a callback module for all request paths.</summary>
         /// <param name="handler">The callback to await for each matching request.</param>
         /// <exception cref="System.ArgumentNullException">The callback is null.</exception>
         public PreRequestModule(RequestHandlerCallback? handler) : this("/", handler) { }
-
-        /// <summary>Creates a callback module limited to the specified base route.</summary>
-        /// <param name="baseRoute">The base route, with existing case-sensitive matching.</param>
-        /// <param name="handler">The callback to await for each matching request.</param>
-        /// <exception cref="System.ArgumentNullException">The callback is null.</exception>
-        public PreRequestModule(string baseRoute, RequestHandlerCallback? handler) : base(baseRoute)
-            => _handler = Validate.NotNull(nameof(handler), handler);
 
         /// <inheritdoc />
         public override bool IsFinalHandler => false;

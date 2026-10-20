@@ -33,12 +33,21 @@ namespace EmbedIO.Net.Internal
         private static void InvokeExpiry(object? state)
         {
             if (state is not Action expired) return;
-            try { expired(); }
+
+            try
+            {
+                expired();
+            }
+
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
                 // Retirement has already recorded its failure for drain. A
                 // callback has no synchronous caller to receive that exception.
-                try { error.Log("TCP deadline cleanup"); }
+                try
+                {
+                    error.Log("TCP deadline cleanup");
+                }
+
                 catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError))
                 {
                     // A failing application trace observer cannot turn an
@@ -56,7 +65,9 @@ namespace EmbedIO.Net.Internal
             {
                 lock (_gate)
                 {
-                    if (_state == 2) return _failure == null ? Task.CompletedTask : Task.FromException(_failure.SourceException);
+                    if (_state == 2)
+                        return _failure == null ? Task.CompletedTask : Task.FromException(_failure.SourceException);
+
                     _completion ??= new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     return _completion.Task;
                 }
@@ -68,6 +79,7 @@ namespace EmbedIO.Net.Internal
             lock (_gate)
             {
                 if (_state != 0) return;
+
                 _deadline = Stopwatch.GetTimestamp() + (long)(milliseconds * (double)Stopwatch.Frequency / 1000);
                 _deadlineArmed = true;
                 DeadlineTimer.Change(milliseconds, Timeout.Infinite);
@@ -79,6 +91,7 @@ namespace EmbedIO.Net.Internal
             lock (_gate)
             {
                 _deadlineArmed = false;
+
                 if (_state == 0) DeadlineTimer.Change(Timeout.Infinite, Timeout.Infinite);
             }
         }
@@ -88,13 +101,19 @@ namespace EmbedIO.Net.Internal
         internal bool ShortenDeadline(int milliseconds)
         {
             if (milliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(milliseconds));
+
             lock (_gate)
             {
                 if (_state != 0) return false;
+
                 var now = Stopwatch.GetTimestamp();
+
                 if (_deadlineArmed && _deadline <= now) return false;
+
                 var limit = now + (long)(milliseconds * (double)Stopwatch.Frequency / 1000);
+
                 if (_deadlineArmed && _deadline <= limit) return true;
+
                 _deadline = limit;
                 _deadlineArmed = true;
                 DeadlineTimer.Change(milliseconds, Timeout.Infinite);
@@ -107,12 +126,15 @@ namespace EmbedIO.Net.Internal
             lock (_gate)
             {
                 if (_state != 0) return false;
+
                 // A timer callback already queued before Stop/Arm cannot retire
                 // a request whose deadline was stopped or moved into the future.
                 if (deadlineOnly)
                 {
                     if (!_deadlineArmed) return false;
+
                     var remaining = _deadline - Stopwatch.GetTimestamp();
+
                     if (remaining > 0)
                     {
                         // Timer queues may wake before the monotonic deadline.
@@ -122,6 +144,7 @@ namespace EmbedIO.Net.Internal
                         return false;
                     }
                 }
+
                 _deadlineArmed = false;
                 Volatile.Write(ref _state, 1);
                 return true;
@@ -139,38 +162,99 @@ namespace EmbedIO.Net.Internal
 
         // The socket is disposed immediately, without a TLS grace period. Any
         // interrupted write remains owned until its actual completion is observed.
-        internal async Task FinishRetirementAfterWriteAsync(Task pendingWrite, IDisposable? input, Action detachProtocol)
+        internal async Task FinishRetirementAfterWriteAsync(
+            Task pendingWrite,
+            IDisposable? input,
+            Action detachProtocol
+        )
         {
             ExceptionDispatchInfo? first = null;
+
             try
             {
-                try { first = ReleaseResources(true, input, static () => { }); }
-                catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
-                { Capture(error); }
-                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-                { Capture(error); }
-                try { await pendingWrite.ConfigureAwait(false); }
-                catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException or OperationCanceledException)
+                try
                 {
-                    try { error.Log("Idle TLS shutdown interrupted by transport retirement"); }
-                    catch (Exception diagnosticError) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError)) { }
+                    first = ReleaseResources(true, input, static () => { });
+                }
+
+                catch (Exception error) when (
+                    error is OutOfMemoryException
+                        or StackOverflowException
+                        or AccessViolationException
+                )
+                {
+                    Capture(error);
+                }
+
+                catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                {
+                    Capture(error);
+                }
+
+                try
+                {
+                    await pendingWrite.ConfigureAwait(false);
+                }
+
+                catch (Exception error) when (
+                    error is IOException
+                        or SocketException
+                        or ObjectDisposedException
+                        or OperationCanceledException
+                )
+                {
+                    try
+                    {
+                        error.Log("Idle TLS shutdown interrupted by transport retirement");
+                    }
+
+                    catch (Exception diagnosticError) when (
+                        EmbedIO.Internal.ExceptionPolicy.IsRecoverable(diagnosticError)
+                    )
+                    { }
                 }
             }
-            catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
-            { Capture(error); }
+
+            catch (Exception error) when (
+                error is OutOfMemoryException
+                    or StackOverflowException
+                    or AccessViolationException
+            )
+            {
+                Capture(error);
+            }
+
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-            { Capture(error); }
+            {
+                Capture(error);
+            }
+
             finally
             {
-                try { detachProtocol(); }
-                catch (Exception error) when (error is OutOfMemoryException or StackOverflowException or AccessViolationException)
-                { Capture(error); }
+                try
+                {
+                    detachProtocol();
+                }
+
+                catch (Exception error) when (
+                    error is OutOfMemoryException
+                        or StackOverflowException
+                        or AccessViolationException
+                )
+                {
+                    Capture(error);
+                }
+
                 catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-                { Capture(error); }
+                {
+                    Capture(error);
+                }
+
                 // This is an actual terminal failure, including a critical one,
                 // rather than a successful close or an indefinitely pending drain.
                 PublishRetirement(first);
             }
+
             first?.Throw();
 
             void Capture(Exception error)
@@ -185,36 +269,62 @@ namespace EmbedIO.Net.Internal
         private ExceptionDispatchInfo? ReleaseResources(bool shutdown, IDisposable? input, Action detachProtocol)
         {
             ExceptionDispatchInfo? first = null;
+
             try
             {
                 if (shutdown)
                 {
-                    try { _socket.Shutdown(SocketShutdown.Both); }
+                    try
+                    {
+                        _socket.Shutdown(SocketShutdown.Both);
+                    }
+
                     catch (Exception error) when (error is SocketException or ObjectDisposedException) { }
                 }
             }
+
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-            { first = ExceptionDispatchInfo.Capture(error); }
+            {
+                first = ExceptionDispatchInfo.Capture(error);
+            }
+
             Release(_socket);
             Release(DeadlineTimer);
             Release(input);
             Release(_stream);
-            try { detachProtocol(); }
+
+            try
+            {
+                detachProtocol();
+            }
+
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-            { first ??= ExceptionDispatchInfo.Capture(error); }
+            {
+                first ??= ExceptionDispatchInfo.Capture(error);
+            }
+
             return first;
 
             void Release(IDisposable? resource)
             {
-                try { resource?.Dispose(); }
+                try
+                {
+                    resource?.Dispose();
+                }
+
                 catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
-                { first ??= ExceptionDispatchInfo.Capture(error); }
+                {
+                    first ??= ExceptionDispatchInfo.Capture(error);
+                }
             }
         }
 
         internal void RecordRetirementFailure(Exception error)
         {
-            lock (_gate) { _failure ??= ExceptionDispatchInfo.Capture(error); }
+            lock (_gate)
+            {
+                _failure ??= ExceptionDispatchInfo.Capture(error);
+            }
         }
 
         private void PublishRetirement(ExceptionDispatchInfo? first)
@@ -224,7 +334,9 @@ namespace EmbedIO.Net.Internal
                 first = _failure ?? first;
                 _failure = first;
                 Volatile.Write(ref _state, 2);
+
                 if (first == null) _completion?.TrySetResult(true);
+
                 else _completion?.TrySetException(first.SourceException);
             }
         }

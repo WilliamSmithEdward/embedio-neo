@@ -20,15 +20,14 @@ namespace EmbedIO.Net.Internal
 #else
             // Resolve the executing runtime's public flag without requiring an
             // older runtime to accept a protocol its reference assembly lacks.
-            return Enum.TryParse<SslProtocols>("Tls13", out var tls13)
-                && Enum.IsDefined(typeof(SslProtocols), tls13)
-                ? SslProtocols.Tls12 | tls13 : SslProtocols.Tls12;
+            return Enum.TryParse<SslProtocols>("Tls13", out var tls13) && Enum.IsDefined(typeof(SslProtocols), tls13)
+                ? SslProtocols.Tls12 | tls13
+                : SslProtocols.Tls12;
 #endif
         }
 
-        internal static SslProtocols GetProtocols(ServerTlsPolicy? policy)
-            => policy == null || policy.EnabledProtocols == SslProtocols.None
-                ? DefaultProtocols : policy.EnabledProtocols;
+        internal static SslProtocols GetProtocols(ServerTlsPolicy? policy) =>
+            policy == null || policy.EnabledProtocols == SslProtocols.None ? DefaultProtocols : policy.EnabledProtocols;
 
         internal static SslStream CreateStream(Stream inner, ServerTlsPolicy? policy)
         {
@@ -49,11 +48,16 @@ namespace EmbedIO.Net.Internal
             var options = new SslServerAuthenticationOptions
             {
                 EnabledSslProtocols = GetProtocols(policy),
-                ApplicationProtocols = new List<SslApplicationProtocol> { SslApplicationProtocol.Http2, SslApplicationProtocol.Http11 },
+                ApplicationProtocols = [SslApplicationProtocol.Http2, SslApplicationProtocol.Http11]
             };
+
             // The runtime refuses both a certificate and a selection callback.
             if (policy?.ServerCertificateSelector != null)
-                options.ServerCertificateSelectionCallback = (_, hostName) => policy.SelectServerCertificate(hostName, certificate);
+                options.ServerCertificateSelectionCallback = (_, hostName) => policy.SelectServerCertificate(
+                    hostName,
+                    certificate
+                );
+
             else
                 options.ServerCertificate = certificate;
 
@@ -72,7 +76,8 @@ namespace EmbedIO.Net.Internal
                 certificate,
                 policy != null && policy.RequestsClientCertificate,
                 GetProtocols(policy),
-                policy != null && policy.CheckCertificateRevocation);
+                policy != null && policy.CheckCertificateRevocation
+            );
 #endif
         }
 

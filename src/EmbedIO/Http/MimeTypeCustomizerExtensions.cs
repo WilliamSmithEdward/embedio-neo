@@ -69,8 +69,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException"><paramref name="this"/> has its configuration locked.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="mimeType"/>is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="mimeType"/>is not a valid MIME type or media range.</exception>
-        public static T PreferCompressionFor<T>(this T @this, string mimeType)
-            where T : IMimeTypeCustomizer
+        public static T PreferCompressionFor<T>(this T @this, string mimeType) where T : IMimeTypeCustomizer
         {
             @this.PreferCompression(mimeType, true);
             return @this;
@@ -89,8 +88,7 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException"><paramref name="this"/> has its configuration locked.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="mimeType"/>is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="mimeType"/>is not a valid MIME type or media range.</exception>
-        public static T PreferNoCompressionFor<T>(this T @this, string mimeType)
-            where T : IMimeTypeCustomizer
+        public static T PreferNoCompressionFor<T>(this T @this, string mimeType) where T : IMimeTypeCustomizer
         {
             @this.PreferCompression(mimeType, false);
             return @this;

@@ -18,7 +18,6 @@ namespace EmbedIO.Security
         /// The default ban minutes.
         /// </summary>
         public const int DefaultBanMinutes = 30;
-
         private bool _disposed;
 
         /// <summary>
@@ -27,10 +26,11 @@ namespace EmbedIO.Security
         /// <param name="baseRoute">The base route.</param>
         /// <param name="whitelist">A collection of valid IPs that never will be banned.</param>
         /// <param name="banMinutes">Minutes that an IP will remain banned.</param>
-        public IPBanningModule(string baseRoute = "/",
-                               IEnumerable<string>? whitelist = null,
-                               int banMinutes = DefaultBanMinutes)
-            : base(baseRoute)
+        public IPBanningModule(
+            string baseRoute = "/",
+            IEnumerable<string>? whitelist = null,
+            int banMinutes = DefaultBanMinutes
+        ) : base(baseRoute)
         {
             Configuration = new IPBanningConfiguration(banMinutes);
             AddToWhitelist(whitelist);
@@ -40,10 +40,7 @@ namespace EmbedIO.Security
         /// <summary>
         /// Finalizes an instance of the <see cref="IPBanningModule"/> class.
         /// </summary>
-        ~IPBanningModule()
-        {
-            Dispose(false);
-        }
+        ~IPBanningModule() => Dispose(false);
 
         /// <inheritdoc />
         public override bool IsFinalHandler => false;
@@ -52,8 +49,8 @@ namespace EmbedIO.Security
         // request ends can still name its client. Retiring oldest first bounds the map; a
         // retired or never-tracked id is charged to nobody rather than to the wrong client.
         private const int MaximumTrackedRequests = 4096;
-
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IPAddress> _requestAddresses = new();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IPAddress> _requestAddresses =
+            new();
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _trackedRequests = new();
 
         /// <summary>
@@ -68,11 +65,11 @@ namespace EmbedIO.Security
         /// module decides anything by reading it.
         /// </remarks>
         public IPAddress? ClientAddress { get; private set; }
-
         internal IPBanningConfiguration Configuration { get; }
 
         /// <summary>Gets a snapshot of this module's banned IP addresses.</summary>
-        public IEnumerable<BanInfo> BannedIPs => IPBanningExecutor.WithInstance(Configuration, instance => instance.BlackList);
+        public IEnumerable<BanInfo> BannedIPs =>
+            IPBanningExecutor.WithInstance(Configuration, instance => instance.BlackList);
 
         /// <summary>Bans a client in this module only.</summary>
         /// <param name="address">The client address.</param>
@@ -108,8 +105,7 @@ namespace EmbedIO.Security
         /// Registers the criterion.
         /// </summary>
         /// <param name="criterion">The criterion.</param>
-        public void RegisterCriterion(IIPBanningCriterion criterion) =>
-            Configuration.RegisterCriterion(criterion);
+        public void RegisterCriterion(IIPBanningCriterion criterion) => Configuration.RegisterCriterion(criterion);
 
         /// <inheritdoc />
         public void Dispose()
@@ -128,8 +124,15 @@ namespace EmbedIO.Security
         /// </returns>
         /// <exception cref="ArgumentException">baseRoute</exception>
         public static IEnumerable<BanInfo> GetBannedIPs(string baseRoute = "/") =>
-            IPBanningExecutor.WithInstances(baseRoute, instance => instance.BlackList).SelectMany(list => list)
-                .GroupBy(info => info.IPAddress).Select(group => group.OrderByDescending(info => info.ExpiresAt).First()).ToList();
+        [
+            .. IPBanningExecutor
+                .WithInstances(baseRoute, instance => instance.BlackList)
+                .SelectMany(list => list)
+                .GroupBy(info => info.IPAddress)
+                .Select(group => group
+                    .OrderByDescending(info => info.ExpiresAt)
+                    .First())
+        ];
 
         /// <summary>
         /// Tries to ban an IP in all live modules registered under the route.
@@ -141,8 +144,12 @@ namespace EmbedIO.Security
         /// <returns>
         ///   <c>true</c> if the IP was added to the blacklist; otherwise, <c>false</c>.
         /// </returns>
-        public static bool TryBanIP(IPAddress address, int banMinutes, string baseRoute = "/", bool isExplicit = true) =>
-            TryBanIP(address, DateTime.Now.AddMinutes(banMinutes), baseRoute, isExplicit);
+        public static bool TryBanIP(
+            IPAddress address,
+            int banMinutes,
+            string baseRoute = "/",
+            bool isExplicit = true
+        ) => TryBanIP(address, DateTime.Now.AddMinutes(banMinutes), baseRoute, isExplicit);
 
         /// <summary>
         /// Tries to ban an IP in all live modules registered under the route.
@@ -154,8 +161,12 @@ namespace EmbedIO.Security
         /// <returns>
         ///   <c>true</c> if the IP was added to the blacklist; otherwise, <c>false</c>.
         /// </returns>
-        public static bool TryBanIP(IPAddress address, TimeSpan banDuration, string baseRoute = "/", bool isExplicit = true) =>
-            TryBanIP(address, DateTime.Now.Add(banDuration), baseRoute, isExplicit);
+        public static bool TryBanIP(
+            IPAddress address,
+            TimeSpan banDuration,
+            string baseRoute = "/",
+            bool isExplicit = true
+        ) => TryBanIP(address, DateTime.Now.Add(banDuration), baseRoute, isExplicit);
 
         /// <summary>
         /// Tries to ban an IP in all live modules registered under the route.
@@ -168,10 +179,15 @@ namespace EmbedIO.Security
         ///   <c>true</c> if the IP was added to the blacklist; otherwise, <c>false</c>.
         /// </returns>
         /// <exception cref="ArgumentException">baseRoute</exception>
-        public static bool TryBanIP(IPAddress address, DateTime banUntil, string baseRoute = "/", bool isExplicit = true)
-        {
-            return IPBanningExecutor.WithInstances(baseRoute, instance => instance.TryBanIP(address, isExplicit, banUntil)).Any(result => result);
-        }
+        public static bool TryBanIP(
+            IPAddress address,
+            DateTime banUntil,
+            string baseRoute = "/",
+            bool isExplicit = true
+        ) =>
+            IPBanningExecutor
+                .WithInstances(baseRoute, instance => instance.TryBanIP(address, isExplicit, banUntil))
+                .Any(result => result);
 
         /// <summary>
         /// Tries to unban an IP in all live modules registered under the route.
@@ -183,10 +199,15 @@ namespace EmbedIO.Security
         /// </returns>
         /// <exception cref="ArgumentException">baseRoute</exception>
         public static bool TryUnbanIP(IPAddress address, string baseRoute = "/") =>
-            IPBanningExecutor.WithInstances(baseRoute, instance => instance.TryRemoveBlackList(address)).Any(result => result);
+            IPBanningExecutor
+                .WithInstances(baseRoute, instance => instance.TryRemoveBlackList(address))
+                .Any(result => result);
 
         internal void AddToWhitelist(IEnumerable<string>? whitelist) =>
-            Configuration.AddToWhitelistAsync(whitelist).GetAwaiter().GetResult();
+            Configuration
+                .AddToWhitelistAsync(whitelist)
+                .GetAwaiter()
+                .GetResult();
 
         /// <inheritdoc />
         protected override void OnStart(CancellationToken cancellationToken)
@@ -200,6 +221,7 @@ namespace EmbedIO.Security
         protected override Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             var address = context.Request.RemoteEndPoint.Address;
             ClientAddress = address;
             Track(context, address);
@@ -221,6 +243,7 @@ namespace EmbedIO.Security
                 return;
 
             _trackedRequests.Enqueue(context.Id);
+
             while (_trackedRequests.Count > MaximumTrackedRequests && _trackedRequests.TryDequeue(out var oldest))
                 _requestAddresses.TryRemove(oldest, out _);
         }
@@ -231,7 +254,9 @@ namespace EmbedIO.Security
         internal IPAddress? ResolveMessageClient(string message)
         {
             if (message == null || message.Length < 3 || message[0] != '[') return null;
+
             var end = EmbedIO.Internal.StringOperations.IndexOfOrdinal(message, ']');
+
             if (end < 2) return null;
 
             return _requestAddresses.TryGetValue(message.Substring(1, end - 1), out var address) ? address : null;
@@ -244,6 +269,7 @@ namespace EmbedIO.Security
         protected virtual void Dispose(bool disposing)
         {
             if (_disposed) return;
+
             if (disposing)
             {
                 IPBanningExecutor.Remove(Configuration);

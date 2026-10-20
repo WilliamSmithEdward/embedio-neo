@@ -8,8 +8,8 @@ namespace EmbedIO.Files
     {
         internal class Section
         {
-            private readonly object _syncRoot = new object();
-            private readonly Dictionary<string, FileCacheItem> _items = new Dictionary<string, FileCacheItem>(StringComparer.Ordinal);
+            private readonly object _syncRoot = new();
+            private readonly Dictionary<string, FileCacheItem> _items = new(StringComparer.Ordinal);
             private long _totalSize;
             private string? _oldestKey;
             private string? _newestKey;
@@ -82,8 +82,10 @@ namespace EmbedIO.Files
                 {
                     // Lock order is section, then item; compression runs outside these locks.
                     item.SetContentCore(compressionMethod, content, out var delta);
+
                     if (item.IsInCache)
                         _totalSize += delta;
+
                     return content;
                 }
             }
@@ -92,6 +94,7 @@ namespace EmbedIO.Files
             {
                 foreach (var item in _items.Values)
                     item.IsInCache = false;
+
                 _items.Clear();
                 _totalSize = 0;
                 _oldestKey = null;
@@ -109,6 +112,7 @@ namespace EmbedIO.Files
 
                 if (_newestKey != null)
                     _items[_newestKey].NextKey = path;
+
                 else
                     _oldestKey = path;
 
@@ -149,6 +153,7 @@ namespace EmbedIO.Files
             private long RemoveLeastRecentItemCore()
             {
                 var path = _oldestKey;
+
                 if (path == null)
                     return 0;
 
@@ -178,6 +183,7 @@ namespace EmbedIO.Files
                 item.NextKey = null;
 
                 if (_newestKey is { } newestKey) _items[newestKey].NextKey = path;
+
                 _newestKey = path;
             }
         }

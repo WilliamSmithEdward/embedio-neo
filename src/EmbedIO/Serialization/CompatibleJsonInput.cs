@@ -13,9 +13,11 @@ namespace EmbedIO.Serialization
             var inString = false;
             var escaped = false;
             var previous = '\0';
+
             for (var index = 0; index < json.Length; index++)
             {
                 var character = json[index];
+
                 if (inString)
                 {
                     if (escaped)
@@ -23,10 +25,14 @@ namespace EmbedIO.Serialization
                         escaped = false;
                         continue;
                     }
+
                     if (character == '\\') escaped = true;
+
                     else if (character == '"') inString = false;
+
                     else if (character < ' ')
                         output.Replace(index, 1, "\\u" + ((int)character).ToString("x4", CultureInfo.InvariantCulture));
+
                     continue;
                 }
 
@@ -36,19 +42,26 @@ namespace EmbedIO.Serialization
                     previous = '"';
                     continue;
                 }
+
                 if (char.IsWhiteSpace(character)) continue;
+
                 if (commentHandling != JsonCommentHandling.Disallow && SkipComment(json, ref index)) continue;
+
                 if (StartsNumber(previous, character))
                 {
                     var end = NumberEnd(json, index);
                     var number = CanonicalNumber(json, index, end);
+
                     if (number != null) output.Replace(index, end - index, number);
+
                     index = end - 1;
                     previous = '0';
                     continue;
                 }
+
                 previous = character;
             }
+
             return output.Finish();
         }
 
@@ -57,57 +70,89 @@ namespace EmbedIO.Serialization
         private static bool SkipComment(string json, ref int index)
         {
             if (json[index] != '/' || index + 1 >= json.Length) return false;
+
             if (json[index + 1] == '/')
             {
                 index += 2;
+
                 while (index < json.Length && json[index] != '\r' && json[index] != '\n') index++;
+
                 return true;
             }
+
             if (json[index + 1] != '*') return false;
+
             index += 2;
+
             while (index + 1 < json.Length && (json[index] != '*' || json[index + 1] != '/')) index++;
+
             index++;
             return true;
         }
 
         // A number may start the document or follow an opening bracket, a name or a comma.
-        private static bool StartsNumber(char previous, char character)
-            => (previous == '\0' || previous == '[' || previous == ':' || previous == ',')
+        private static bool StartsNumber(char previous, char character) =>
+            (previous == '\0' || previous == '[' || previous == ':' || previous == ',')
                 && (character == '+' || character == '-' || character == '.' || IsDigit(character));
 
         private static int NumberEnd(string json, int index)
         {
             var end = index + 1;
-            while (end < json.Length && (IsDigit(json[end]) || json[end] == '+' || json[end] == '-'
-                || json[end] == '.' || json[end] == 'e' || json[end] == 'E')) end++;
+
+            while (
+                end < json.Length
+                && (IsDigit(json[end])
+                    || json[end] == '+'
+                    || json[end] == '-'
+                    || json[end] == '.'
+                    || json[end] == 'e'
+                    || json[end] == 'E')
+            ) end++;
+
             return end;
         }
 
         // The strict spelling of a legacy number token (leading "+", leading zeros,
         // leading or trailing point), or null when the token is left as it is.
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Performance",
+            "CA1845:Use span-based string.Concat",
+            Justification = "The shared implementation targets netstandard2.0, which has no span-based string.Concat overloads."
+        )]
         private static string? CanonicalNumber(string json, int index, int end)
         {
             var start = json[index] == '+' ? index + 1 : index;
             var digits = start < end && json[start] == '-' ? start + 1 : start;
             var integerEnd = digits;
+
             while (integerEnd < end && IsDigit(json[integerEnd])) integerEnd++;
+
             var significant = digits;
+
             while (significant + 1 < integerEnd && json[significant] == '0') significant++;
+
             var leadingPoint = digits < end && json[digits] == '.';
-            var trailingPoint = integerEnd < end && json[integerEnd] == '.'
+            var trailingPoint = integerEnd < end
+                && json[integerEnd] == '.'
                 && (integerEnd + 1 == end || json[integerEnd + 1] == 'e' || json[integerEnd + 1] == 'E');
             var hasDigits = integerEnd > digits || (leadingPoint && digits + 1 < end && IsDigit(json[digits + 1]));
             var legacy = start != index || significant != digits || leadingPoint || trailingPoint;
+
             if (!hasDigits || !legacy) return null;
+
             var number = (digits != start ? "-" : string.Empty)
                 + (leadingPoint ? "0" : string.Empty)
                 + json.Substring(significant, integerEnd - significant);
+
             if (integerEnd < end)
             {
                 number += json[integerEnd];
+
                 if (trailingPoint) number += "0";
+
                 number += json.Substring(integerEnd + 1, end - integerEnd - 1);
             }
+
             return number;
         }
 
@@ -133,9 +178,10 @@ namespace EmbedIO.Serialization
                 _copied = start + length;
             }
 
-            internal string Finish()
+            internal readonly string Finish()
             {
                 if (_output == null) return _source;
+
                 _output.Append(_source, _copied, _source.Length - _copied);
                 return _output.ToString();
             }

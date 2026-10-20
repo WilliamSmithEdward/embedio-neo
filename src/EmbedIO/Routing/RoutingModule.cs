@@ -1,5 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System;
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EmbedIO.Routing
 {
@@ -7,17 +7,12 @@ namespace EmbedIO.Routing
     /// A module that handles requests by resolving route / method pairs associated with handlers.
     /// </summary>
     /// <seealso cref="WebModuleBase" />
-    public class RoutingModule : RoutingModuleBase
+    /// <inheritdoc cref="WebModuleBase(string)"/>
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="RoutingModule"/> class.
+    /// </remarks>
+    public class RoutingModule(string baseRoute) : RoutingModuleBase(baseRoute)
     {
-        /// <inheritdoc cref="WebModuleBase(string)"/>
-        /// <summary>
-        /// Initializes a new instance of the <see cref="RoutingModule"/> class.
-        /// </summary>
-        public RoutingModule(string baseRoute)
-            : base(baseRoute)
-        {
-        }
-
         /// <summary>
         /// Associates a HTTP method and a route to a handler.
         /// </summary>
@@ -31,8 +26,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        public void Add(HttpVerbs verb, RouteMatcher matcher, RouteHandlerCallback handler)
-            => AddHandler(verb, matcher, handler);
+        public void Add(HttpVerbs verb, RouteMatcher matcher, RouteHandlerCallback handler) =>
+            AddHandler(verb, matcher, handler);
 
         /// <summary>
         /// Associates a HTTP method and a route to a synchronous handler.
@@ -47,8 +42,8 @@ namespace EmbedIO.Routing
         /// <para>- or -</para>
         /// <para><paramref name="handler"/> is <see langword="null"/>.</para>
         /// </exception>
-        public void Add(HttpVerbs verb, RouteMatcher matcher, SyncRouteHandlerCallback handler)
-            => AddHandler(verb, matcher, handler);
+        public void Add(HttpVerbs verb, RouteMatcher matcher, SyncRouteHandlerCallback handler) =>
+            AddHandler(verb, matcher, handler);
 
         /// <summary>
         /// <para>Adds handlers, associating them with HTTP method / route pairs by means

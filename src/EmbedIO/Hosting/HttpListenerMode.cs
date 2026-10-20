@@ -24,6 +24,6 @@
         /// and a certificate with its private key. Supports bounded graceful drain across
         /// accepted TCP and QUIC requests.
         /// </summary>
-        EmbedIOCombined = 3,
+        EmbedIOCombined = 3
     }
 }

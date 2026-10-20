@@ -79,8 +79,11 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal static bool TryToApplicationErrorCode(long http3ErrorCode, out uint applicationErrorCode)
         {
             applicationErrorCode = 0;
+
             if (http3ErrorCode < FirstApplicationErrorCode || http3ErrorCode > LastApplicationErrorCode) return false;
+
             if ((http3ErrorCode - 0x21) % 0x1f == 0) return false;
+
             var shifted = http3ErrorCode - FirstApplicationErrorCode;
             applicationErrorCode = (uint)(shifted - (shifted / 0x1f));
             return true;
@@ -90,39 +93,69 @@ namespace EmbedIO.Net.Internal.WebTransport
         // signal. The caller has already consumed the type or signal and offers
         // whatever bytes it holds; a short buffer asks for more bytes rather than
         // failing, because the header may be split across QUIC frames.
-        internal static WebTransportHeaderStatus TryReadSessionId(byte[] bytes, int offset, int count, out long sessionId, out int consumed)
+        internal static WebTransportHeaderStatus TryReadSessionId(
+            byte[] bytes,
+            int offset,
+            int count,
+            out long sessionId,
+            out int consumed
+        )
         {
             ValidateBuffer(bytes, offset, count);
             sessionId = 0;
             consumed = 0;
+
             if (count == 0) return WebTransportHeaderStatus.NeedMoreData;
+
             var width = 1 << (bytes[offset] >> 6);
+
             if (count < width) return WebTransportHeaderStatus.NeedMoreData;
+
             var cursor = offset;
             sessionId = QuicInteger.Read(bytes, ref cursor, offset + width);
             consumed = width;
+
             // A session identifier never belongs to a server or unidirectional
             // stream (section 4). The connection must close with H3_ID_ERROR.
-            if (!IsSessionId(sessionId)) throw new Http3ProtocolException(H3IdError, "WebTransport session identifier is not a client-initiated bidirectional stream.");
+            if (!IsSessionId(sessionId))
+                throw new Http3ProtocolException(
+                    H3IdError,
+                    "WebTransport session identifier is not a client-initiated bidirectional stream."
+                );
+
             return WebTransportHeaderStatus.Complete;
         }
 
         // Reads the first bytes of a client bidirectional stream. Any signal other
         // than 0x41 means the stream is an ordinary HTTP/3 request stream and the
         // caller must hand the unchanged bytes to its frame parser.
-        internal static WebTransportHeaderStatus TryReadBidirectionalHeader(byte[] bytes, int offset, int count, out long sessionId, out int consumed)
+        internal static WebTransportHeaderStatus TryReadBidirectionalHeader(
+            byte[] bytes,
+            int offset,
+            int count,
+            out long sessionId,
+            out int consumed
+        )
         {
             ValidateBuffer(bytes, offset, count);
             sessionId = 0;
             consumed = 0;
+
             if (count == 0) return WebTransportHeaderStatus.NeedMoreData;
+
             var width = 1 << (bytes[offset] >> 6);
+
             if (count < width) return WebTransportHeaderStatus.NeedMoreData;
+
             var cursor = offset;
             var signal = QuicInteger.Read(bytes, ref cursor, offset + width);
+
             if (signal != BidirectionalStreamSignal) return WebTransportHeaderStatus.NotWebTransport;
+
             var status = TryReadSessionId(bytes, cursor, count - width, out sessionId, out var idBytes);
+
             if (status == WebTransportHeaderStatus.Complete) consumed = width + idBytes;
+
             return status;
         }
 
@@ -130,6 +163,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal static int WriteUnidirectionalHeader(byte[] bytes, int offset, long sessionId)
         {
             if (!IsSessionId(sessionId)) throw new ArgumentOutOfRangeException(nameof(sessionId));
+
             var count = QuicInteger.Write(bytes, offset, UnidirectionalStreamType);
             return count + QuicInteger.Write(bytes, offset + count, sessionId);
         }
@@ -138,6 +172,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal static int WriteBidirectionalHeader(byte[] bytes, int offset, long sessionId)
         {
             if (!IsSessionId(sessionId)) throw new ArgumentOutOfRangeException(nameof(sessionId));
+
             var count = QuicInteger.Write(bytes, offset, BidirectionalStreamSignal);
             return count + QuicInteger.Write(bytes, offset + count, sessionId);
         }
@@ -150,9 +185,23 @@ namespace EmbedIO.Net.Internal.WebTransport
             ValidateBuffer(packet, offset, count);
             var cursor = offset;
             long quarter;
-            try { quarter = QuicInteger.Read(packet, ref cursor, offset + count); }
-            catch (EndOfStreamException) { throw new Http3ProtocolException(H3DatagramError, "Truncated HTTP datagram quarter stream identifier."); }
-            if (quarter >= 1L << 60) throw new Http3ProtocolException(H3DatagramError, "HTTP datagram quarter stream identifier exceeds the QUIC stream space.");
+
+            try
+            {
+                quarter = QuicInteger.Read(packet, ref cursor, offset + count);
+            }
+
+            catch (EndOfStreamException)
+            {
+                throw new Http3ProtocolException(H3DatagramError, "Truncated HTTP datagram quarter stream identifier.");
+            }
+
+            if (quarter >= 1L << 60)
+                throw new Http3ProtocolException(
+                    H3DatagramError,
+                    "HTTP datagram quarter stream identifier exceeds the QUIC stream space."
+                );
+
             payloadOffset = cursor;
             return quarter << 2;
         }
@@ -160,13 +209,16 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal static int WriteDatagramHeader(byte[] packet, int offset, long sessionId)
         {
             if (!IsSessionId(sessionId)) throw new ArgumentOutOfRangeException(nameof(sessionId));
+
             return QuicInteger.Write(packet, offset, sessionId >> 2);
         }
 
         internal static void ValidateBuffer(byte[] bytes, int offset, int count)
         {
             if (bytes == null) throw new ArgumentNullException(nameof(bytes));
-            if (offset < 0 || count < 0 || offset > bytes.Length - count) throw new ArgumentOutOfRangeException(nameof(count));
+
+            if (offset < 0 || count < 0 || offset > bytes.Length - count)
+                throw new ArgumentOutOfRangeException(nameof(count));
         }
     }
 
@@ -174,6 +226,6 @@ namespace EmbedIO.Net.Internal.WebTransport
     {
         Complete,
         NeedMoreData,
-        NotWebTransport,
+        NotWebTransport
     }
 }

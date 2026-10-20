@@ -18,6 +18,7 @@ namespace EmbedIO.Utilities
         public static void Add<T>(this IComponentCollection<T> @this, T component)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.Add(null, component);
         }
     }

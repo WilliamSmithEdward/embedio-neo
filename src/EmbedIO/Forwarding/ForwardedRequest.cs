@@ -22,7 +22,7 @@ namespace EmbedIO.Forwarding
         XForwardedProto = 4,
 
         /// <summary><c>X-Forwarded-Host</c>: the host the client requested. Requires allowed hosts.</summary>
-        XForwardedHost = 8,
+        XForwardedHost = 8
     }
 
     /// <summary>
@@ -46,7 +46,7 @@ namespace EmbedIO.Forwarding
         Malformed,
 
         /// <summary>Both <c>Forwarded</c> and <c>X-Forwarded-*</c> headers arrived; nothing was applied.</summary>
-        Conflict,
+        Conflict
     }
 
     /// <summary>
@@ -68,7 +68,8 @@ namespace EmbedIO.Forwarding
             int hopsApplied,
             bool hostRejected,
             IPEndPoint physicalRemoteEndPoint,
-            bool physicalIsSecure)
+            bool physicalIsSecure
+        )
         {
             Outcome = outcome;
             ClientAddress = clientAddress;

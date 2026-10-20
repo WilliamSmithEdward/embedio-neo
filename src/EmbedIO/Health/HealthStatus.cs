@@ -8,6 +8,6 @@
         /// <summary>The application is functioning with a dependency or capacity limitation.</summary>
         Degraded,
         /// <summary>The check succeeded.</summary>
-        Healthy,
+        Healthy
     }
 }

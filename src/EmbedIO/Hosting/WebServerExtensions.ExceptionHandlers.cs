@@ -17,10 +17,13 @@ namespace EmbedIO
         /// <exception cref="ArgumentNullException"><paramref name="handler" /> is <see langwrd="null" />.</exception>
         /// <seealso cref="IWebServer.OnHttpException" />
         /// <seealso cref="HttpExceptionHandler" />
-        public static TWebServer HandleHttpException<TWebServer>(this TWebServer? @this, HttpExceptionHandlerCallback handler)
-            where TWebServer : IWebServer
+        public static TWebServer HandleHttpException<TWebServer>(
+            this TWebServer? @this,
+            HttpExceptionHandlerCallback handler
+        ) where TWebServer : IWebServer
         {
             if (@this is null) throw new NullReferenceException();
+
             @this.OnHttpException = handler;
             return @this;
         }
@@ -38,10 +41,13 @@ namespace EmbedIO
         /// <exception cref="ArgumentNullException"><paramref name="handler" /> is <see langwrd="null" />.</exception>
         /// <seealso cref="IWebServer.OnUnhandledException" />
         /// <seealso cref="ExceptionHandler" />
-        public static TWebServer HandleUnhandledException<TWebServer>(this TWebServer? @this, ExceptionHandlerCallback handler)
-            where TWebServer : IWebServer
+        public static TWebServer HandleUnhandledException<TWebServer>(
+            this TWebServer? @this,
+            ExceptionHandlerCallback handler
+        ) where TWebServer : IWebServer
         {
             if (@this is null) throw new NullReferenceException();
+
             @this.OnUnhandledException = handler;
             return @this;
         }

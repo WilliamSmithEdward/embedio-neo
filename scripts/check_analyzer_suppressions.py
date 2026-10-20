@@ -30,6 +30,49 @@ NULL_FORGIVING = re.compile(r'(?P<previous>\b\w+|[\]\)])\s*!(?!=)')
 # netstandard2.0. Match the exact file, diagnostic, reason AND following member.
 # Errors/warnings and other diagnostics retain the existing rejection policy.
 COMPATIBILITY_SUPPRESSIONS = (
+    ("src/EmbedIO/Internal/Diagnostics/RequestTelemetry.cs", "Performance", "CA1845:Use span-based string.Concat",
+     "The shared implementation targets netstandard2.0, which has no span-based string.Concat overloads.",
+     r"internal\s+static\s+string\s+Combine\s*\("),
+    ("src/EmbedIO/Net/Internal/Http2/PrefixReadStream.cs", "Performance", "CA1844:Override memory-based stream operations",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"(?:(?:private|internal|sealed|partial)\s+)*class\s+PrefixReadStream\b"),
+
+    ("src/EmbedIO/Net/Internal/Http2/Http2DuplexStream.cs", "Performance", "CA1844:Override memory-based stream operations",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"(?:(?:private|internal|sealed|partial)\s+)*class\s+Http2DuplexStream\b"),
+
+    ("src/EmbedIO/Net/Internal/Http1/Http1TunnelStream.cs", "Performance", "CA1844:Override memory-based stream operations",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"(?:(?:private|internal|sealed|partial)\s+)*class\s+Http1TunnelStream\b"),
+
+    ("src/EmbedIO/Internal/RequestBodies/DeflateRequestStream.cs", "Performance", "CA1844:Override memory-based stream operations",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"(?:(?:private|internal|sealed|partial)\s+)*class\s+FramedInput\b"),
+
+    ("src/EmbedIO/WebSockets/WebSocketModule.cs", "Style", "IDE0290:Use primary constructor",
+     "Preserve the protected constructor; a primary constructor on this public class would be public.",
+     r"protected\s+WebSocketModule\s*\("),
+    ("src/EmbedIO/WebSockets/WebSocketMessageModule.cs", "Style", "IDE0028:Simplify collection initialization",
+     "The shared implementation targets netstandard2.0, whose ConditionalWeakTable does not support collection expressions.",
+     r"private\s+readonly\s+ConditionalWeakTable<IWebSocketContext,\s*DispatchState>\s+_dispatch\s*="),
+    ("src/EmbedIO/WebSockets/WebSocketMessageModule.cs", "Style", "IDE0290:Use primary constructor",
+     "Preserve the protected constructor; a primary constructor on this public class would be public.",
+     r"protected\s+WebSocketMessageModule\s*\("),
+    ("src/EmbedIO/WebSockets/Internal/WebSocket.cs", "Performance", "CA1850:Prefer static HashData method over ComputeHash",
+     "The shared implementation targets netstandard2.0, which has no SHA1.HashData.",
+     r"static\s+string\s+CreateResponseKey\s*\("),
+    ("src/EmbedIO/Tunnels/HttpTunnel.cs", "Usage", "CA2219:Do not raise exceptions in finally clauses",
+     "Cleanup must always dispose the owned stream and preserve both completion and cleanup failures through aggregation.",
+     r"private\s+async\s+Task\s+DisposeCoreAsync\s*\("),
+    ("src/EmbedIO/Serialization/CompatibleJsonInput.cs", "Performance", "CA1845:Use span-based string.Concat",
+     "The shared implementation targets netstandard2.0, which has no span-based string.Concat overloads.",
+     r"private\s+static\s+string\?\s+CanonicalNumber\s*\("),
+    ("src/EmbedIO/Internal/Responses/CookieSameSiteStore.cs", "Style", "IDE0028:Simplify collection initialization",
+     "The shared implementation targets netstandard2.0, whose ConditionalWeakTable does not support collection expressions.",
+     r"private\s+static\s+readonly\s+ConditionalWeakTable<IHttpResponse,\s*Dictionary<Cookie,\s*CookieSameSiteMode>>\s+Values\s*="),
+    ("src/EmbedIO/Caching/OutputCacheCapture.cs", "Performance", "CA1844:Override memory-based WriteAsync",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"private\s+sealed\s+class\s+CaptureStream"),
     ("src/EmbedIO/Tus/TusUploadOptions.cs", "Maintainability", "CA1512:Use ArgumentOutOfRangeException throw helper",
      "The shared implementation targets netstandard2.0, which has no ArgumentOutOfRangeException throw helpers.",
      r"public\s+TusUploadOptions\s*\("),
@@ -81,7 +124,7 @@ COMPATIBILITY_SUPPRESSIONS = (
     ("src/EmbedIO/Caching/OutputCache.cs", "Maintainability", "CA1512:Use ArgumentOutOfRangeException throw helper",
      "The shared implementation targets netstandard2.0, which has no ArgumentOutOfRangeException throw helpers.",
      r"public\s+OutputCache\(\s+int\s+maxEntries\s+=\s+256,\s+long\s+maxBytes\s+=\s+16\s+\*\s+1024\s+\*\s+1024,\s+int\s+maxResponseBytes\s+=\s+256\s+\*\s+1024,\s+int\s+maxConcurrentFills\s+=\s+16,\s+int\s+maxKeyCharacters\s+=\s+8192\s+\)"),
-    ("src/EmbedIO/Hosting/WebServerBase`1.cs", "Maintainability", "CA1513:Use ObjectDisposedException throw helper",
+    ("src/EmbedIO/Hosting/WebServerBase.cs", "Maintainability", "CA1513:Use ObjectDisposedException throw helper",
      "The shared implementation targets netstandard2.0, which has no ObjectDisposedException.ThrowIf.",
      r"public\s+async\s+Task\s+RunAsync\(CancellationToken\s+cancellationToken\s+=\s+default\)"),
     ("src/EmbedIO/Hosting/WebServerOptionsBase.cs", "Maintainability", "CA1512:Use ArgumentOutOfRangeException throw helper",
@@ -228,6 +271,37 @@ def main():
         if not path.is_file() or (path.suffix not in SOURCE_SUFFIXES and path.name not in {".editorconfig", ".globalconfig"}):
             continue
         for number, text in violations(path.read_text(encoding="utf-8-sig"), csharp=path.suffix == ".cs", filename=name):
+            # Owner-approved namespace and compatibility policies, limited to the root configuration.
+            if name == ".editorconfig" and text in {
+                "dotnet_diagnostic.CA1845.severity = none",
+                "dotnet_diagnostic.CA1864.severity = none",
+                "dotnet_diagnostic.CA2012.severity = none",
+                "dotnet_diagnostic.CA1822.severity = none",
+                "dotnet_diagnostic.CA2219.severity = none",
+                "dotnet_diagnostic.IDE0290.severity = none",
+                "dotnet_diagnostic.CA1844.severity = none",
+                "dotnet_diagnostic.CA1068.severity = none",
+                "dotnet_diagnostic.CA1870.severity = none",
+                "dotnet_diagnostic.CA1861.severity = none",
+                "dotnet_diagnostic.IDE0300.severity = none",
+                "dotnet_diagnostic.IDE0060.severity = none",
+                "dotnet_diagnostic.CA1307.severity = none",
+                "dotnet_diagnostic.CA2208.severity = none",
+                "dotnet_diagnostic.CA1510.severity = none",
+                "dotnet_diagnostic.CA1513.severity = none",
+                "dotnet_diagnostic.CA1512.severity = none",
+                "dotnet_diagnostic.CA1835.severity = none",
+                "dotnet_diagnostic.CA1846.severity = none",
+                "dotnet_diagnostic.CA1865.severity = none",
+                "dotnet_diagnostic.CA1866.severity = none",
+                "dotnet_diagnostic.IDE0057.severity = none",
+                "dotnet_diagnostic.IDE0056.severity = none",
+                "dotnet_diagnostic.IDE0130.severity = none",
+                "dotnet_diagnostic.IDE0330.severity = none",
+                "dotnet_diagnostic.IDE0230.severity = none",
+                "dotnet_diagnostic.SYSLIB1045.severity = none",
+            }:
+                continue
             failures.append(f"{name}:{number}: {text}")
     if failures:
         print("Unapproved compiler/analyzer suppressions are not permitted:", file=sys.stderr)

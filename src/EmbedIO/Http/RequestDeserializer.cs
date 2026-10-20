@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Threading.Tasks;
 using System.Text.Json;
+using System.Threading.Tasks;
 using EmbedIO.Diagnostics;
 
 namespace EmbedIO
@@ -33,7 +33,10 @@ namespace EmbedIO
         public static Task<TData?> Json<TData>(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
-            if (!EmbedIO.Serialization.ReflectionSerialization.IsSupported) throw EmbedIO.Serialization.ReflectionSerialization.Disabled();
+
+            if (!EmbedIO.Serialization.ReflectionSerialization.IsSupported)
+                throw EmbedIO.Serialization.ReflectionSerialization.Disabled();
+
             return JsonInternal<TData>(context, EmbedIO.Serialization.Json.DefaultOptions());
         }
 
@@ -50,30 +53,36 @@ namespace EmbedIO
         public static RequestDeserializerCallback<TData?> Json<TData>(JsonSerializerOptions? options)
         {
             if (options == null) return Json<TData>;
+
             var snapshot = new JsonSerializerOptions(options);
             return context => JsonInternal<TData>(context, snapshot);
         }
 
-        private static Task<TData?> JsonInternal<TData>(IHttpContext context, JsonSerializerOptions options)
-            => JsonBodyAsync(context, body => EmbedIO.Serialization.Json.DeserializeWith<TData>(body, options));
+        private static Task<TData?> JsonInternal<TData>(IHttpContext context, JsonSerializerOptions options) =>
+            JsonBodyAsync(context, body => EmbedIO.Serialization.Json.DeserializeWith<TData>(body, options));
 
         // Reads the whole body as text and deserializes it; malformed JSON becomes HTTP 400.
         internal static async Task<TData?> JsonBodyAsync<TData>(IHttpContext context, Func<string, TData?> deserialize)
         {
             string body;
+
             using (var reader = context.OpenRequestText())
             {
-                body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                body = await reader
+                    .ReadToEndAsync()
+                    .ConfigureAwait(false);
             }
 
             try
             {
                 return deserialize(body);
             }
+
             catch (JsonException)
             {
-                $"[{context.Id}] Cannot convert JSON request body to {typeof(TData).Name}, sending 400 Bad Request..."
-                    .Warn($"{nameof(RequestDeserializer)}.{nameof(Json)}");
+                $"[{context.Id}] Cannot convert JSON request body to {typeof(TData).Name}, sending 400 Bad Request...".Warn(
+                    $"{nameof(RequestDeserializer)}.{nameof(Json)}"
+                );
 
                 throw HttpException.BadRequest("Incorrect request data format.");
             }

@@ -17,7 +17,8 @@ namespace EmbedIO.WebSockets.Internal
             IEnumerable<string> requestedProtocols,
             string acceptedProtocol,
             IWebSocket webSocket,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             Id = UniqueIdGenerator.GetNext();
             CancellationToken = cancellationToken;

@@ -15,10 +15,7 @@ namespace EmbedIO.Utilities
         /// <summary>
         /// Finalizes an instance of the <see cref="DisposableComponentCollection{T}"/> class.
         /// </summary>
-        ~DisposableComponentCollection()
-        {
-            Dispose(false);
-        }
+        ~DisposableComponentCollection() => Dispose(false);
 
         /// <summary>
         /// Releases unmanaged and - optionally - managed resources.

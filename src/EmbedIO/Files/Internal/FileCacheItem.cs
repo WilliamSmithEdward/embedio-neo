@@ -46,8 +46,7 @@ namespace EmbedIO.Files.Internal
 #else
         private static readonly long SizeOfItem = Environment.Is64BitProcess ? 96 : 128;
 #endif
-
-        private readonly object _syncRoot = new object();
+        private readonly object _syncRoot = new();
 
         // Used to update total size of section.
         // Weak reference avoids circularity.
@@ -61,7 +60,6 @@ namespace EmbedIO.Files.Internal
 #if NET10_0_OR_GREATER
         private byte[]? _brotliContent;
 #endif
-
         internal FileCacheItem(FileCache.Section section, DateTime lastModifiedUtc, long length)
         {
             _section = new WeakReference<FileCache.Section>(section);
@@ -79,7 +77,6 @@ namespace EmbedIO.Files.Internal
         }
 
         public DateTime LastModifiedUtc { get; }
-
         public long Length { get; }
 
         // This is the (approximate) in-memory size of this object.
@@ -93,40 +90,65 @@ namespace EmbedIO.Files.Internal
             {
                 case CompressionMethod.Deflate:
                     if (_deflatedContent != null) return _deflatedContent;
+
                     break;
+
                 case CompressionMethod.Brotli:
 #if NET10_0_OR_GREATER
                     if (_brotliContent != null) return _brotliContent;
+
                     break;
 #else
                     throw new NotSupportedException("Brotli caching requires the .NET 10 asset.");
 #endif
                 case CompressionMethod.Gzip:
                     if (_gzippedContent != null) return _gzippedContent;
+
                     break;
+
                 default:
                     if (_uncompressedContent != null) return _uncompressedContent;
+
                     break;
             }
 
             // Try to convert existing content, if any.
             byte[]? content;
+
             if (_uncompressedContent != null)
             {
-                content = CompressionUtility.ConvertCompression(_uncompressedContent, CompressionMethod.None, compressionMethod);
+                content = CompressionUtility.ConvertCompression(
+                    _uncompressedContent,
+                    CompressionMethod.None,
+                    compressionMethod
+                );
             }
+
             else if (_gzippedContent != null)
             {
-                content = CompressionUtility.ConvertCompression(_gzippedContent, CompressionMethod.Gzip, compressionMethod);
+                content = CompressionUtility.ConvertCompression(
+                    _gzippedContent,
+                    CompressionMethod.Gzip,
+                    compressionMethod
+                );
             }
+
             else if (_deflatedContent != null)
             {
-                content = CompressionUtility.ConvertCompression(_deflatedContent, CompressionMethod.Deflate, compressionMethod);
+                content = CompressionUtility.ConvertCompression(
+                    _deflatedContent,
+                    CompressionMethod.Deflate,
+                    compressionMethod
+                );
             }
 #if NET10_0_OR_GREATER
             else if (_brotliContent != null)
             {
-                content = CompressionUtility.ConvertCompression(_brotliContent, CompressionMethod.Brotli, compressionMethod);
+                content = CompressionUtility.ConvertCompression(
+                    _brotliContent,
+                    CompressionMethod.Brotli,
+                    compressionMethod
+                );
             }
 #endif
             else
@@ -150,6 +172,7 @@ namespace EmbedIO.Files.Internal
         internal void SetContentCore(CompressionMethod compressionMethod, byte[]? content, out long sizeDelta)
         {
             byte[]? oldContent;
+
             lock (_syncRoot)
             {
                 switch (compressionMethod)
@@ -158,6 +181,7 @@ namespace EmbedIO.Files.Internal
                         oldContent = _deflatedContent;
                         _deflatedContent = content;
                         break;
+
                     case CompressionMethod.Brotli:
 #if NET10_0_OR_GREATER
                         oldContent = _brotliContent;
@@ -170,6 +194,7 @@ namespace EmbedIO.Files.Internal
                         oldContent = _gzippedContent;
                         _gzippedContent = content;
                         break;
+
                     default:
                         oldContent = _uncompressedContent;
                         _uncompressedContent = content;

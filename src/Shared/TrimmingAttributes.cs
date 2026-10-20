@@ -5,32 +5,34 @@
 namespace System.Diagnostics.CodeAnalysis
 {
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Class, Inherited = false)]
-    internal sealed class RequiresUnreferencedCodeAttribute : Attribute
+    internal sealed class RequiresUnreferencedCodeAttribute(string message) : Attribute
     {
-        public RequiresUnreferencedCodeAttribute(string message) => Message = message;
-
-        public string Message { get; }
-
+        public string Message { get; } = message;
         public string? Url { get; set; }
     }
 
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Class, Inherited = false)]
-    internal sealed class RequiresDynamicCodeAttribute : Attribute
+    internal sealed class RequiresDynamicCodeAttribute(string message) : Attribute
     {
-        public RequiresDynamicCodeAttribute(string message) => Message = message;
-
-        public string Message { get; }
-
+        public string Message { get; } = message;
         public string? Url { get; set; }
     }
 
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.ReturnValue | AttributeTargets.GenericParameter | AttributeTargets.Parameter
-        | AttributeTargets.Property | AttributeTargets.Method | AttributeTargets.Class | AttributeTargets.Interface | AttributeTargets.Struct, Inherited = false)]
-    internal sealed class DynamicallyAccessedMembersAttribute : Attribute
+    [AttributeUsage(
+        AttributeTargets.Field
+            | AttributeTargets.ReturnValue
+            | AttributeTargets.GenericParameter
+            | AttributeTargets.Parameter
+            | AttributeTargets.Property
+            | AttributeTargets.Method
+            | AttributeTargets.Class
+            | AttributeTargets.Interface
+            | AttributeTargets.Struct,
+        Inherited = false
+    )]
+    internal sealed class DynamicallyAccessedMembersAttribute(DynamicallyAccessedMemberTypes memberTypes) : Attribute
     {
-        public DynamicallyAccessedMembersAttribute(DynamicallyAccessedMemberTypes memberTypes) => MemberTypes = memberTypes;
-
-        public DynamicallyAccessedMemberTypes MemberTypes { get; }
+        public DynamicallyAccessedMemberTypes MemberTypes { get; } = memberTypes;
     }
 
     [Flags]
@@ -38,7 +40,7 @@ namespace System.Diagnostics.CodeAnalysis
     {
         None = 0,
         PublicParameterlessConstructor = 0x0001,
-        PublicConstructors = 0x0002 | PublicParameterlessConstructor,
+        PublicConstructors = 0x0002 | PublicParameterlessConstructor
     }
 }
 #endif

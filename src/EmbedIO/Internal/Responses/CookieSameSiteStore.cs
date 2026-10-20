@@ -11,7 +11,13 @@ namespace EmbedIO.Internal
     // Reference keys remain valid when callers mutate cookie values or scopes before commit.
     internal static class CookieSameSiteStore
     {
-        private static readonly ConditionalWeakTable<IHttpResponse, Dictionary<Cookie, CookieSameSiteMode>> Values = new();
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Style",
+            "IDE0028:Simplify collection initialization",
+            Justification = "The shared implementation targets netstandard2.0, whose ConditionalWeakTable does not support collection expressions."
+        )]
+        private static readonly ConditionalWeakTable<IHttpResponse, Dictionary<Cookie, CookieSameSiteMode>> Values =
+            new();
 
         internal static void ValidateMode(CookieSameSiteMode mode, string parameter)
         {
@@ -29,28 +35,39 @@ namespace EmbedIO.Internal
         {
             var stored = response.Cookies.LastOrDefault(c => ReferenceEquals(c, cookie))
                 ?? response.Cookies.Last(c => c.Equals(cookie));
-            var values = Values.GetValue(response, _ => new Dictionary<Cookie, CookieSameSiteMode>(CookieReferences.Instance));
+            var values = Values.GetValue(
+                response,
+                _ => new Dictionary<Cookie, CookieSameSiteMode>(CookieReferences.Instance)
+            );
+
             lock (values) values[stored] = mode;
         }
 
         internal static CookieSameSiteMode? Get(IHttpResponse response, Cookie cookie)
         {
             if (!Values.TryGetValue(response, out var values)) return null;
+
             lock (values) return values.TryGetValue(cookie, out var mode) ? mode : null;
         }
 
         internal static void Append(StringBuilder value, IHttpResponse response, Cookie cookie)
         {
             var mode = Get(response, cookie);
+
             if (!mode.HasValue) return;
+
             ValidateCookie(cookie, mode.Value);
-            value.Append("; SameSite=").Append(mode.Value.ToString());
+            value
+                .Append("; SameSite=")
+                .Append(mode.Value.ToString());
         }
 
         private sealed class CookieReferences : IEqualityComparer<Cookie>
         {
             internal static readonly CookieReferences Instance = new();
+
             public bool Equals(Cookie? x, Cookie? y) => ReferenceEquals(x, y);
+
             public int GetHashCode(Cookie value) => RuntimeHelpers.GetHashCode(value);
         }
     }

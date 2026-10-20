@@ -8,9 +8,15 @@ namespace EmbedIO.Generators
         private string? ReadIdempotency(INamedTypeSymbol controller, IMethodSymbol action)
         {
             var attributeType = _compilation.GetTypeByMetadataName("EmbedIO.Idempotency.IdempotencyAttribute");
-            var attribute = InheritedAttributes(action).FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
+            var attribute = InheritedAttributes(action).FirstOrDefault(
+                a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType)
+            );
+
             for (var type = controller; type is not null && attribute is null; type = type.BaseType)
-                attribute = type.GetAttributes().FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
+                attribute = type
+                    .GetAttributes()
+                    .FirstOrDefault(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, attributeType));
+
             return attribute?.ConstructorArguments.FirstOrDefault().Value as string;
         }
     }

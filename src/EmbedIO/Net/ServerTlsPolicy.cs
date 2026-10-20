@@ -22,7 +22,6 @@ namespace EmbedIO.Net
     public sealed class ServerTlsPolicy : ConfiguredObject
     {
         private const SslProtocols Tls13 = (SslProtocols)12288;
-
         private ClientCertificateMode _clientCertificateMode;
         private Func<X509Certificate2, X509Chain?, SslPolicyErrors, bool>? _clientCertificateValidator;
         private bool _checkCertificateRevocation;
@@ -44,8 +43,10 @@ namespace EmbedIO.Net
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value < ClientCertificateMode.None || value > ClientCertificateMode.Require)
                     throw new ArgumentOutOfRangeException(nameof(value));
+
                 _clientCertificateMode = value;
             }
         }
@@ -104,9 +105,18 @@ namespace EmbedIO.Net
             set
             {
                 EnsureConfigurationNotLocked();
-                if (value != SslProtocols.None && value != SslProtocols.Tls12
-                    && value != Tls13 && value != (SslProtocols.Tls12 | Tls13))
-                    throw new ArgumentOutOfRangeException(nameof(value), "HTTPS requires TLS 1.2 or later and a known protocol mask.");
+
+                if (
+                    value != SslProtocols.None
+                    && value != SslProtocols.Tls12
+                    && value != Tls13
+                    && value != (SslProtocols.Tls12 | Tls13)
+                )
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value),
+                        "HTTPS requires TLS 1.2 or later and a known protocol mask."
+                    );
+
                 _enabledProtocols = value;
             }
         }
@@ -137,8 +147,8 @@ namespace EmbedIO.Net
 
         // Compare locked handshake settings, never invoke application callbacks. TLS is
         // negotiated before the request path can select a logical prefix owner.
-        internal static bool CanShareEndpoint(ServerTlsPolicy? first, ServerTlsPolicy? second)
-            => (first?._clientCertificateMode ?? ClientCertificateMode.None)
+        internal static bool CanShareEndpoint(ServerTlsPolicy? first, ServerTlsPolicy? second) =>
+            (first?._clientCertificateMode ?? ClientCertificateMode.None)
                 == (second?._clientCertificateMode ?? ClientCertificateMode.None)
                 && ReferenceEquals(first?._clientCertificateValidator, second?._clientCertificateValidator)
                 && (first?._checkCertificateRevocation ?? false) == (second?._checkCertificateRevocation ?? false)
@@ -156,7 +166,9 @@ namespace EmbedIO.Net
             // Both TCP and the default HTTP/3 binding support selection on this asset.
 #else
             if (_serverCertificateSelector != null)
-                throw new PlatformNotSupportedException("Selecting the server certificate by server name (SNI) requires the .NET 10 asset.");
+                throw new PlatformNotSupportedException(
+                    "Selecting the server certificate by server name (SNI) requires the .NET 10 asset."
+                );
 #endif
             if (!quic)
                 return;
@@ -168,16 +180,24 @@ namespace EmbedIO.Net
                 throw new NotSupportedException("The native HTTP/3 binding does not support client certificates.");
 
             if (nativeQuic && _serverCertificateSelector != null)
-                throw new NotSupportedException("The native HTTP/3 binding does not support selecting the server certificate by server name (SNI).");
+                throw new NotSupportedException(
+                    "The native HTTP/3 binding does not support selecting the server certificate by server name (SNI)."
+                );
         }
 
         // The runtime's validation callback for client certificates.
-        internal bool ValidateClientCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
+        internal bool ValidateClientCertificate(
+            object _,
+            X509Certificate? certificate,
+            X509Chain? chain,
+            SslPolicyErrors errors
+        )
         {
             if (certificate == null)
                 return _clientCertificateMode == ClientCertificateMode.Allow;
 
             var validator = _clientCertificateValidator;
+
             if (validator == null)
                 return errors == SslPolicyErrors.None;
 
@@ -185,9 +205,13 @@ namespace EmbedIO.Net
             {
                 return validator(certificate as X509Certificate2 ?? new X509Certificate2(certificate), chain, errors);
             }
+
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
-                error.Log(nameof(ServerTlsPolicy), "The client certificate validator threw; the handshake was refused.");
+                error.Log(
+                    nameof(ServerTlsPolicy),
+                    "The client certificate validator threw; the handshake was refused."
+                );
                 return false;
             }
         }
@@ -196,14 +220,17 @@ namespace EmbedIO.Net
         internal X509Certificate SelectServerCertificate(string? hostName, X509Certificate fallback)
         {
             var selector = _serverCertificateSelector;
+
             if (selector == null)
                 return fallback;
 
             X509Certificate2? selected;
+
             try
             {
                 selected = selector(string.IsNullOrEmpty(hostName) ? null : hostName);
             }
+
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
                 error.Log(nameof(ServerTlsPolicy), "The server certificate selector threw; the handshake was refused.");

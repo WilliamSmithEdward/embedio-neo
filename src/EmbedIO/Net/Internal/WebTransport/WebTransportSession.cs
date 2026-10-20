@@ -8,7 +8,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         // The CONNECT request arrived; the 2xx response is not sent yet.
         Pending,
         Established,
-        Closed,
+        Closed
     }
 
     internal enum WebTransportCapsuleEffect
@@ -16,11 +16,17 @@ namespace EmbedIO.Net.Internal.WebTransport
         None,
         SessionClosed,
         DrainRequested,
-        CreditIncreased,
+        CreditIncreased
     }
 
     internal delegate void WebTransportStreamHandler(WebTransportSession session, WebTransportStreamHandle stream);
-    internal delegate void WebTransportDatagramHandler(WebTransportSession session, byte[] bytes, int offset, int count);
+
+    internal delegate void WebTransportDatagramHandler(
+        WebTransportSession session,
+        byte[] bytes,
+        int offset,
+        int count
+    );
 
     // Bounds for one session's pre-establishment buffers and its advertised
     // receive windows. Windows apply only when flow control is negotiated.
@@ -43,7 +49,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         private readonly WebTransportSessionLimits _limits;
         private readonly WebTransportStreamHandler _streamHandler;
         private readonly WebTransportDatagramHandler _datagramHandler;
-        private readonly Dictionary<long, WebTransportStreamHandle> _streams = new();
+        private readonly Dictionary<long, WebTransportStreamHandle> _streams = [];
         private readonly Queue<WebTransportStreamHandle> _bufferedStreams = new();
         private readonly Queue<byte[]> _bufferedDatagrams = new();
         private readonly Queue<byte[]> _outgoingCapsules = new();
@@ -71,12 +77,22 @@ namespace EmbedIO.Net.Internal.WebTransport
         private long _blockedDataAt = -1;
         private bool _drainSent;
 
-        internal WebTransportSession(long id, bool flowControlEnabled, WebTransportSettings local, WebTransportSettings peer,
-            WebTransportSessionLimits limits, WebTransportStreamHandler streamHandler, WebTransportDatagramHandler datagramHandler)
+        internal WebTransportSession(
+            long id,
+            bool flowControlEnabled,
+            WebTransportSettings local,
+            WebTransportSettings peer,
+            WebTransportSessionLimits limits,
+            WebTransportStreamHandler streamHandler,
+            WebTransportDatagramHandler datagramHandler
+        )
         {
             if (!WebTransportProtocol.IsSessionId(id)) throw new ArgumentOutOfRangeException(nameof(id));
+
             if (local == null) throw new ArgumentNullException(nameof(local));
+
             if (peer == null) throw new ArgumentNullException(nameof(peer));
+
             Id = id;
             FlowControlEnabled = flowControlEnabled;
             _limits = limits ?? throw new ArgumentNullException(nameof(limits));
@@ -84,7 +100,8 @@ namespace EmbedIO.Net.Internal.WebTransport
             _datagramHandler = datagramHandler ?? throw new ArgumentNullException(nameof(datagramHandler));
             _initialLocalMaxData = _localMaxData = local.InitialMaxData;
             _initialLocalMaxStreamsBidirectional = _localMaxStreamsBidirectional = local.InitialMaxStreamsBidirectional;
-            _initialLocalMaxStreamsUnidirectional = _localMaxStreamsUnidirectional = local.InitialMaxStreamsUnidirectional;
+            _initialLocalMaxStreamsUnidirectional =
+                _localMaxStreamsUnidirectional = local.InitialMaxStreamsUnidirectional;
             _peerMaxData = peer.InitialMaxData;
             _peerMaxStreamsBidirectional = peer.InitialMaxStreamsBidirectional;
             _peerMaxStreamsUnidirectional = peer.InitialMaxStreamsUnidirectional;
@@ -97,18 +114,62 @@ namespace EmbedIO.Net.Internal.WebTransport
         public bool ClosedByPeer { get; private set; }
         public uint CloseErrorCode { get; private set; }
         public string CloseMessage { get; private set; } = string.Empty;
+
         // Set when this core terminated the session itself: the CONNECT stream must
         // be reset with this HTTP/3 error code.
         public long? FaultErrorCode { get; private set; }
+
         // Set after a local WT_CLOSE_SESSION is queued: the sender must finish the
         // CONNECT stream right after writing it (section 6).
         public bool OutputMustFinish { get; private set; }
-        public int ActiveStreamCount { get { lock (_gate) return _streams.Count; } }
-        public int BufferedStreamCount { get { lock (_gate) return _bufferedStreams.Count; } }
-        public int BufferedDatagramCount { get { lock (_gate) return _bufferedDatagrams.Count; } }
-        public int PendingCapsuleCount { get { lock (_gate) return _outgoingCapsules.Count; } }
-        public long PeerMaxData { get { lock (_gate) return _peerMaxData; } }
-        public long LocalMaxData { get { lock (_gate) return _localMaxData; } }
+
+        public int ActiveStreamCount
+        {
+            get
+            {
+                lock (_gate) return _streams.Count;
+            }
+        }
+
+        public int BufferedStreamCount
+        {
+            get
+            {
+                lock (_gate) return _bufferedStreams.Count;
+            }
+        }
+
+        public int BufferedDatagramCount
+        {
+            get
+            {
+                lock (_gate) return _bufferedDatagrams.Count;
+            }
+        }
+
+        public int PendingCapsuleCount
+        {
+            get
+            {
+                lock (_gate) return _outgoingCapsules.Count;
+            }
+        }
+
+        public long PeerMaxData
+        {
+            get
+            {
+                lock (_gate) return _peerMaxData;
+            }
+        }
+
+        public long LocalMaxData
+        {
+            get
+            {
+                lock (_gate) return _localMaxData;
+            }
+        }
 
         // Section 3.2: the server's session exists once it sends a 2xx response.
         // Streams and datagrams that arrived first are delivered now, in order.
@@ -116,19 +177,27 @@ namespace EmbedIO.Net.Internal.WebTransport
         {
             List<WebTransportStreamHandle> streams;
             List<byte[]> datagrams;
+
             lock (_gate)
             {
-                if (State != WebTransportSessionState.Pending) throw new InvalidOperationException("The session is not pending.");
+                if (State != WebTransportSessionState.Pending)
+                    throw new InvalidOperationException("The session is not pending.");
+
                 State = WebTransportSessionState.Established;
-                streams = new List<WebTransportStreamHandle>(_bufferedStreams);
-                datagrams = new List<byte[]>(_bufferedDatagrams);
+                streams = [.. _bufferedStreams];
+                datagrams = [.. _bufferedDatagrams];
                 _bufferedStreams.Clear();
                 _bufferedDatagrams.Clear();
                 _bufferedDatagramBytes = 0;
             }
+
             for (var i = 0; i < streams.Count; i++)
             {
-                try { AttachIncomingStream(streams[i]); }
+                try
+                {
+                    AttachIncomingStream(streams[i]);
+                }
+
                 catch
                 {
                     // The buffer no longer tracks the streams after this one; reset them so a
@@ -137,6 +206,7 @@ namespace EmbedIO.Net.Internal.WebTransport
                     throw;
                 }
             }
+
             foreach (var datagram in datagrams) _datagramHandler(this, datagram, 0, datagram.Length);
         }
 
@@ -145,8 +215,10 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal bool AttachIncomingStream(WebTransportStreamHandle stream)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
+
             long? reset = null;
             List<WebTransportStreamHandle>? aborted = null;
+
             lock (_gate)
             {
                 switch (State)
@@ -154,15 +226,29 @@ namespace EmbedIO.Net.Internal.WebTransport
                     case WebTransportSessionState.Closed:
                         reset = WebTransportProtocol.SessionGone;
                         break;
+
                     case WebTransportSessionState.Pending:
-                        if (_bufferedStreams.Count >= _limits.MaximumBufferedStreams) reset = WebTransportProtocol.BufferedStreamRejected;
-                        else { _bufferedStreams.Enqueue(stream); return true; }
+                        if (_bufferedStreams.Count >= _limits.MaximumBufferedStreams)
+                            reset = WebTransportProtocol.BufferedStreamRejected;
+
+                        else
+                        {
+                            _bufferedStreams.Enqueue(stream);
+                            return true;
+                        }
+
                         break;
+
                     default:
                         if (FlowControlEnabled)
                         {
-                            var opened = stream.Bidirectional ? _incomingStreamsBidirectional : _incomingStreamsUnidirectional;
-                            var limit = stream.Bidirectional ? _localMaxStreamsBidirectional : _localMaxStreamsUnidirectional;
+                            var opened = stream.Bidirectional
+                                ? _incomingStreamsBidirectional
+                                : _incomingStreamsUnidirectional;
+                            var limit = stream.Bidirectional
+                                ? _localMaxStreamsBidirectional
+                                : _localMaxStreamsUnidirectional;
+
                             if (opened >= limit)
                             {
                                 aborted = TerminateCore(WebTransportProtocol.FlowControlError);
@@ -170,17 +256,31 @@ namespace EmbedIO.Net.Internal.WebTransport
                                 break;
                             }
                         }
-                        if (stream.Bidirectional) _incomingStreamsBidirectional++; else _incomingStreamsUnidirectional++;
+
+                        if (stream.Bidirectional) _incomingStreamsBidirectional++;
+
+                        else _incomingStreamsUnidirectional++;
+
                         _streams[stream.Id] = stream;
                         break;
                 }
             }
+
             if (aborted != null)
             {
                 AbortAll(aborted, WebTransportProtocol.SessionGone);
-                throw new WebTransportException(WebTransportProtocol.FlowControlError, "Peer exceeded the advertised WebTransport stream limit.");
+                throw new WebTransportException(
+                    WebTransportProtocol.FlowControlError,
+                    "Peer exceeded the advertised WebTransport stream limit."
+                );
             }
-            if (reset.HasValue) { stream.Abort(reset.Value); return false; }
+
+            if (reset.HasValue)
+            {
+                stream.Abort(reset.Value);
+                return false;
+            }
+
             _streamHandler(this, stream);
             return true;
         }
@@ -192,23 +292,40 @@ namespace EmbedIO.Net.Internal.WebTransport
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed) return false;
+
                 if (FlowControlEnabled)
                 {
                     var opened = bidirectional ? _outgoingStreamsBidirectional : _outgoingStreamsUnidirectional;
                     var limit = bidirectional ? _peerMaxStreamsBidirectional : _peerMaxStreamsUnidirectional;
+
                     if (opened >= limit)
                     {
-                        ref var blockedAt = ref (bidirectional ? ref _blockedStreamsBidirectionalAt : ref _blockedStreamsUnidirectionalAt);
+                        ref var blockedAt =
+                            ref (bidirectional
+                                ? ref _blockedStreamsBidirectionalAt
+                                : ref _blockedStreamsUnidirectionalAt);
+
                         if (blockedAt != limit)
                         {
                             blockedAt = limit;
-                            _outgoingCapsules.Enqueue(WebTransportCapsuleCodec.EncodeLimit(
-                                bidirectional ? WebTransportProtocol.StreamsBlockedBidirectionalCapsule : WebTransportProtocol.StreamsBlockedUnidirectionalCapsule, limit));
+                            _outgoingCapsules.Enqueue(
+                                WebTransportCapsuleCodec.EncodeLimit(
+                                    bidirectional
+                                        ? WebTransportProtocol.StreamsBlockedBidirectionalCapsule
+                                        : WebTransportProtocol.StreamsBlockedUnidirectionalCapsule,
+                                    limit
+                                )
+                            );
                         }
+
                         return false;
                     }
                 }
-                if (bidirectional) _outgoingStreamsBidirectional++; else _outgoingStreamsUnidirectional++;
+
+                if (bidirectional) _outgoingStreamsBidirectional++;
+
+                else _outgoingStreamsUnidirectional++;
+
                 return true;
             }
         }
@@ -217,9 +334,15 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void RegisterOutgoingStream(WebTransportStreamHandle stream)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
+
             lock (_gate)
             {
-                if (State == WebTransportSessionState.Closed) { stream.Abort(WebTransportProtocol.SessionGone); return; }
+                if (State == WebTransportSessionState.Closed)
+                {
+                    stream.Abort(WebTransportProtocol.SessionGone);
+                    return;
+                }
+
                 _streams[stream.Id] = stream;
             }
         }
@@ -228,16 +351,26 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void RecordIncomingData(long count)
         {
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+
             List<WebTransportStreamHandle>? aborted = null;
+
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed) return;
+
                 _incomingData += count;
-                if (FlowControlEnabled && _incomingData > _localMaxData) aborted = TerminateCore(WebTransportProtocol.FlowControlError);
+
+                if (FlowControlEnabled && _incomingData > _localMaxData)
+                    aborted = TerminateCore(WebTransportProtocol.FlowControlError);
             }
+
             if (aborted == null) return;
+
             AbortAll(aborted, WebTransportProtocol.SessionGone);
-            throw new WebTransportException(WebTransportProtocol.FlowControlError, "Peer exceeded the advertised WebTransport data limit.");
+            throw new WebTransportException(
+                WebTransportProtocol.FlowControlError,
+                "Peer exceeded the advertised WebTransport data limit."
+            );
         }
 
         // The application consumed received bytes; advertise more credit once half
@@ -245,14 +378,20 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void ReleaseIncomingData(long count)
         {
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed || !FlowControlEnabled) return;
+
                 _consumedData += count;
                 var target = _consumedData + _initialLocalMaxData;
+
                 if (target - _localMaxData < Math.Max(1, _initialLocalMaxData / 2)) return;
+
                 _localMaxData = Math.Min(target, long.MaxValue >> 2);
-                _outgoingCapsules.Enqueue(WebTransportCapsuleCodec.EncodeLimit(WebTransportProtocol.MaxDataCapsule, _localMaxData));
+                _outgoingCapsules.Enqueue(
+                    WebTransportCapsuleCodec.EncodeLimit(WebTransportProtocol.MaxDataCapsule, _localMaxData)
+                );
             }
         }
 
@@ -261,18 +400,24 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal bool TryReserveOutgoingData(long count)
         {
             if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed) return false;
+
                 if (FlowControlEnabled && _outgoingData + count > _peerMaxData)
                 {
                     if (_blockedDataAt != _peerMaxData)
                     {
                         _blockedDataAt = _peerMaxData;
-                        _outgoingCapsules.Enqueue(WebTransportCapsuleCodec.EncodeLimit(WebTransportProtocol.DataBlockedCapsule, _peerMaxData));
+                        _outgoingCapsules.Enqueue(
+                            WebTransportCapsuleCodec.EncodeLimit(WebTransportProtocol.DataBlockedCapsule, _peerMaxData)
+                        );
                     }
+
                     return false;
                 }
+
                 _outgoingData += count;
                 return true;
             }
@@ -283,20 +428,36 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void StreamFinished(WebTransportStreamHandle stream)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
+
             lock (_gate)
             {
-                if (!_streams.Remove(stream.Id) || !FlowControlEnabled || State == WebTransportSessionState.Closed) return;
+                if (!_streams.Remove(stream.Id) || !FlowControlEnabled || State == WebTransportSessionState.Closed)
+                    return;
+
                 var incoming = (stream.Id & 1) == 0;
+
                 if (!incoming) return;
+
                 if (stream.Bidirectional)
                 {
                     _finishedIncomingBidirectional++;
-                    Advertise(ref _localMaxStreamsBidirectional, _finishedIncomingBidirectional, _initialLocalMaxStreamsBidirectional, WebTransportProtocol.MaxStreamsBidirectionalCapsule);
+                    Advertise(
+                        ref _localMaxStreamsBidirectional,
+                        _finishedIncomingBidirectional,
+                        _initialLocalMaxStreamsBidirectional,
+                        WebTransportProtocol.MaxStreamsBidirectionalCapsule
+                    );
                 }
+
                 else
                 {
                     _finishedIncomingUnidirectional++;
-                    Advertise(ref _localMaxStreamsUnidirectional, _finishedIncomingUnidirectional, _initialLocalMaxStreamsUnidirectional, WebTransportProtocol.MaxStreamsUnidirectionalCapsule);
+                    Advertise(
+                        ref _localMaxStreamsUnidirectional,
+                        _finishedIncomingUnidirectional,
+                        _initialLocalMaxStreamsUnidirectional,
+                        WebTransportProtocol.MaxStreamsUnidirectionalCapsule
+                    );
                 }
             }
         }
@@ -304,7 +465,9 @@ namespace EmbedIO.Net.Internal.WebTransport
         private void Advertise(ref long advertised, long finished, long initial, long capsuleType)
         {
             var target = Math.Min(finished + initial, WebTransportProtocol.MaximumStreamCount);
+
             if (target - advertised < Math.Max(1, initial / 2)) return;
+
             advertised = target;
             _outgoingCapsules.Enqueue(WebTransportCapsuleCodec.EncodeLimit(capsuleType, advertised));
         }
@@ -315,13 +478,20 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal bool AcceptDatagram(byte[] bytes, int offset, int count)
         {
             WebTransportProtocol.ValidateBuffer(bytes, offset, count);
+
             lock (_gate)
             {
                 switch (State)
                 {
-                    case WebTransportSessionState.Closed: return false;
+                    case WebTransportSessionState.Closed:
+                        return false;
+
                     case WebTransportSessionState.Pending:
-                        if (_bufferedDatagrams.Count >= _limits.MaximumBufferedDatagrams || _bufferedDatagramBytes + count > _limits.MaximumBufferedDatagramBytes) return false;
+                        if (
+                            _bufferedDatagrams.Count >= _limits.MaximumBufferedDatagrams
+                            || _bufferedDatagramBytes + count > _limits.MaximumBufferedDatagramBytes
+                        ) return false;
+
                         var copy = new byte[count];
                         Array.Copy(bytes, offset, copy, 0, count);
                         _bufferedDatagrams.Enqueue(copy);
@@ -329,6 +499,7 @@ namespace EmbedIO.Net.Internal.WebTransport
                         return true;
                 }
             }
+
             _datagramHandler(this, bytes, offset, count);
             return true;
         }
@@ -340,13 +511,19 @@ namespace EmbedIO.Net.Internal.WebTransport
             List<WebTransportStreamHandle>? aborted = null;
             WebTransportException? failure = null;
             var effect = WebTransportCapsuleEffect.None;
+
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed)
                 {
                     // Section 6: stream data after WT_CLOSE_SESSION resets the CONNECT stream.
-                    if (ClosedByPeer) failure = new WebTransportException(WebTransportProtocol.H3MessageError, "Data after WT_CLOSE_SESSION.");
+                    if (ClosedByPeer)
+                        failure = new WebTransportException(
+                            WebTransportProtocol.H3MessageError,
+                            "Data after WT_CLOSE_SESSION."
+                        );
                 }
+
                 else
                 {
                     try
@@ -360,34 +537,59 @@ namespace EmbedIO.Net.Internal.WebTransport
                                 aborted = TerminateCore(null);
                                 effect = WebTransportCapsuleEffect.SessionClosed;
                                 break;
+
                             case WebTransportProtocol.DrainSessionCapsule:
                                 WebTransportCapsuleCodec.ValidateDrain(capsule.Payload);
                                 DrainRequested = true;
                                 effect = WebTransportCapsuleEffect.DrainRequested;
                                 break;
+
                             case WebTransportProtocol.ProhibitedMaxStreamDataCapsule:
                             case WebTransportProtocol.ProhibitedStreamDataBlockedCapsule:
                                 if (!FlowControlEnabled) break;
-                                throw new WebTransportException(WebTransportProtocol.FlowControlError, "Per-stream flow control capsules are prohibited over HTTP/3.");
+
+                                throw new WebTransportException(
+                                    WebTransportProtocol.FlowControlError,
+                                    "Per-stream flow control capsules are prohibited over HTTP/3."
+                                );
+
                             case WebTransportProtocol.MaxDataCapsule:
                                 effect = Raise(ref _peerMaxData, capsule, "WT_MAX_DATA did not increase the limit.");
                                 break;
+
                             case WebTransportProtocol.MaxStreamsBidirectionalCapsule:
-                                effect = Raise(ref _peerMaxStreamsBidirectional, capsule, "WT_MAX_STREAMS did not increase the limit.");
+                                effect = Raise(
+                                    ref _peerMaxStreamsBidirectional,
+                                    capsule,
+                                    "WT_MAX_STREAMS did not increase the limit."
+                                );
                                 break;
+
                             case WebTransportProtocol.MaxStreamsUnidirectionalCapsule:
-                                effect = Raise(ref _peerMaxStreamsUnidirectional, capsule, "WT_MAX_STREAMS did not increase the limit.");
+                                effect = Raise(
+                                    ref _peerMaxStreamsUnidirectional,
+                                    capsule,
+                                    "WT_MAX_STREAMS did not increase the limit."
+                                );
                                 break;
+
                             case WebTransportProtocol.DataBlockedCapsule:
                             case WebTransportProtocol.StreamsBlockedBidirectionalCapsule:
                             case WebTransportProtocol.StreamsBlockedUnidirectionalCapsule:
                                 // Informational: validated for shape and bounds, then ignored.
-                                if (FlowControlEnabled) WebTransportCapsuleCodec.DecodeLimit(capsule.Type, capsule.Payload);
+                                if (FlowControlEnabled)
+                                    WebTransportCapsuleCodec.DecodeLimit(capsule.Type, capsule.Payload);
+
                                 break;
+
                             default:
-                                throw new ArgumentOutOfRangeException(nameof(capsule), "Not a WebTransport session capsule.");
+                                throw new ArgumentOutOfRangeException(
+                                    nameof(capsule),
+                                    "Not a WebTransport session capsule."
+                                );
                         }
                     }
+
                     catch (WebTransportException error)
                     {
                         failure = error;
@@ -395,16 +597,22 @@ namespace EmbedIO.Net.Internal.WebTransport
                     }
                 }
             }
+
             if (aborted != null) AbortAll(aborted, WebTransportProtocol.SessionGone);
+
             if (failure != null) throw failure;
+
             return effect;
         }
 
         private WebTransportCapsuleEffect Raise(ref long limit, WebTransportCapsule capsule, string message)
         {
             var value = WebTransportCapsuleCodec.DecodeLimit(capsule.Type, capsule.Payload);
+
             if (!FlowControlEnabled) return WebTransportCapsuleEffect.None;
+
             if (value <= limit) throw new WebTransportException(WebTransportProtocol.FlowControlError, message);
+
             limit = value;
             return WebTransportCapsuleEffect.CreditIncreased;
         }
@@ -414,12 +622,15 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void PeerFinished()
         {
             List<WebTransportStreamHandle>? aborted = null;
+
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed) return;
+
                 ClosedByPeer = true;
                 aborted = TerminateCore(null);
             }
+
             AbortAll(aborted, WebTransportProtocol.SessionGone);
         }
 
@@ -427,12 +638,15 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void PeerAborted()
         {
             List<WebTransportStreamHandle>? aborted = null;
+
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed) return;
+
                 ClosedByPeer = true;
                 aborted = TerminateCore(null);
             }
+
             AbortAll(aborted, WebTransportProtocol.SessionGone);
         }
 
@@ -441,16 +655,20 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal bool Close(uint applicationErrorCode, string message)
         {
             if (message == null) throw new ArgumentNullException(nameof(message));
+
             List<WebTransportStreamHandle>? aborted;
+
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed) return false;
+
                 CloseErrorCode = applicationErrorCode;
                 CloseMessage = WebTransportCapsuleCodec.TruncateCloseMessage(message);
                 _outgoingCapsules.Enqueue(WebTransportCapsuleCodec.EncodeClose(applicationErrorCode, CloseMessage));
                 OutputMustFinish = true;
                 aborted = TerminateCore(null);
             }
+
             AbortAll(aborted, WebTransportProtocol.SessionGone);
             return true;
         }
@@ -461,6 +679,7 @@ namespace EmbedIO.Net.Internal.WebTransport
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed || _drainSent) return false;
+
                 _drainSent = true;
                 _outgoingCapsules.Enqueue(WebTransportCapsuleCodec.EncodeDrain());
                 return true;
@@ -473,11 +692,14 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void Terminate(long? errorCode)
         {
             List<WebTransportStreamHandle>? aborted;
+
             lock (_gate)
             {
                 if (State == WebTransportSessionState.Closed) return;
+
                 aborted = TerminateCore(errorCode);
             }
+
             AbortAll(aborted, WebTransportProtocol.SessionGone);
         }
 
@@ -485,7 +707,12 @@ namespace EmbedIO.Net.Internal.WebTransport
         {
             lock (_gate)
             {
-                if (_outgoingCapsules.Count == 0) { capsule = Array.Empty<byte>(); return false; }
+                if (_outgoingCapsules.Count == 0)
+                {
+                    capsule = [];
+                    return false;
+                }
+
                 capsule = _outgoingCapsules.Dequeue();
                 return true;
             }
@@ -494,7 +721,9 @@ namespace EmbedIO.Net.Internal.WebTransport
         private List<WebTransportStreamHandle> TerminateCore(long? faultErrorCode)
         {
             State = WebTransportSessionState.Closed;
+
             if (faultErrorCode.HasValue) FaultErrorCode = faultErrorCode;
+
             var aborted = new List<WebTransportStreamHandle>(_streams.Count + _bufferedStreams.Count);
             aborted.AddRange(_streams.Values);
             aborted.AddRange(_bufferedStreams);
@@ -508,6 +737,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         private static void AbortAll(List<WebTransportStreamHandle>? streams, long errorCode)
         {
             if (streams == null) return;
+
             foreach (var stream in streams) stream.Abort(errorCode);
         }
     }

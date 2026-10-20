@@ -27,6 +27,7 @@ namespace EmbedIO.Net.Internal
         public void Dispose()
         {
             if (Buffer == null) return;
+
             Array.Clear(Buffer, 0, Length);
             ArrayPool<byte>.Shared.Return(Buffer);
         }
@@ -44,14 +45,20 @@ namespace EmbedIO.Net.Internal
             var encoding = WebServer.DefaultEncoding;
             var rawCookies = response.Headers.GetValues(HttpHeaderNames.SetCookie);
             string? cookies = null;
+
             if (response.ExistingCookies != null && response.ExistingCookies.Count > 0)
             {
                 var builder = new StringBuilder();
-                foreach (var cookie in response.ExistingCookies) ResponseCookieFields.AppendLine(builder, cookie, response);
+
+                foreach (var cookie in response.ExistingCookies)
+                    ResponseCookieFields.AppendLine(builder, cookie, response);
+
                 cookies = builder.ToString();
             }
+
             ValidateHead(response, rawCookies);
-            var version = response.ProtocolVersion == HttpVersion.Version11 ? "1.1"
+            var version = response.ProtocolVersion == HttpVersion.Version11
+                ? "1.1"
                 : response.ProtocolVersion == HttpVersion.Version10 ? "1.0" : response.ProtocolVersion.ToString();
             var status = StatusText(response.StatusCode);
             var chunked = response.SendChunked && !response.SuppressesBody;
@@ -64,20 +71,26 @@ namespace EmbedIO.Net.Internal
             Span<char> text = stackalloc char[2048];
             var characters = new HeaderWriter(text);
             WriteHeaderFields(response, ref characters, version, status, cookies, rawCookies);
+
             if (!characters.Overflow)
             {
                 var content = text.Slice(0, characters.Position);
                 size = encoding.GetByteCount(content);
-                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength));
+                buffer = ArrayPool<byte>.Shared.Rent(
+                    size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength)
+                );
                 encoding.GetBytes(content, buffer);
             }
+
             else
 #endif
             {
                 var writer = new HeaderWriter(encoding, null, 0);
                 WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
                 size = writer.Position;
-                buffer = ArrayPool<byte>.Shared.Rent(size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength));
+                buffer = ArrayPool<byte>.Shared.Rent(
+                    size + ResponseStream.FirstSegmentReserve(size, bodyCount, chunked, endingLength)
+                );
                 writer = new HeaderWriter(encoding, buffer, 0);
                 WriteHeaderFields(response, ref writer, version, status, cookies, rawCookies);
             }
@@ -88,6 +101,7 @@ namespace EmbedIO.Net.Internal
         private static string StatusText(int statusCode)
         {
             if ((uint)statusCode >= (uint)StatusTexts.Length) return statusCode.ToString(CultureInfo.InvariantCulture);
+
             return StatusTexts[statusCode] ??= statusCode.ToString(CultureInfo.InvariantCulture);
         }
 
@@ -103,21 +117,32 @@ namespace EmbedIO.Net.Internal
                 throw new InvalidOperationException("The reason phrase carries control characters.");
 
             var headers = response.Headers;
+
             for (var index = 0; index < headers.Count; index++)
             {
                 var value = headers.Get(index);
+
                 if (value != null && !HttpTokenSyntax.IsValidFieldValue(value))
-                    throw new InvalidOperationException($"The {headers.GetKey(index)} response field carries control characters.");
+                    throw new InvalidOperationException(
+                        $"The {headers.GetKey(index)} response field carries control characters."
+                    );
             }
 
             if (rawCookies == null) return;
+
             foreach (var cookie in rawCookies)
                 if (cookie != null && !HttpTokenSyntax.IsValidFieldValue(cookie))
                     throw new InvalidOperationException("A Set-Cookie response field carries control characters.");
         }
 
-        private static void WriteHeaderFields(HttpListenerResponse response, ref HeaderWriter writer, string version, string status,
-            string? cookies, string[]? rawCookies)
+        private static void WriteHeaderFields(
+            HttpListenerResponse response,
+            ref HeaderWriter writer,
+            string version,
+            string status,
+            string? cookies,
+            string[]? rawCookies
+        )
         {
             writer.Append("HTTP/");
             writer.Append(version);
@@ -129,16 +154,21 @@ namespace EmbedIO.Net.Internal
             // Positional access keeps insertion order and the comma-joined value of each
             // field, without the AllKeys array or a second lookup per name.
             var headers = response.Headers;
+
             for (var index = 0; index < headers.Count; index++)
             {
                 var key = headers.GetKey(index);
+
                 if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
+
                 writer.Append(key);
                 writer.Append(": ");
                 writer.Append(headers.Get(index));
                 writer.Append("\r\n");
             }
+
             writer.Append(cookies);
+
             if (rawCookies != null)
                 foreach (var value in rawCookies)
                 {
@@ -146,6 +176,7 @@ namespace EmbedIO.Net.Internal
                     writer.Append(value);
                     writer.Append("\r\n");
                 }
+
             writer.Append("\r\n");
         }
 
@@ -171,7 +202,6 @@ namespace EmbedIO.Net.Internal
                 Overflow = false;
             }
 #endif
-
             internal HeaderWriter(Encoding encoding, byte[]? buffer, int position)
             {
                 _encoding = encoding;
@@ -190,16 +220,25 @@ namespace EmbedIO.Net.Internal
 #if NET10_0_OR_GREATER
                 if (_textMode)
                 {
-                    if (Overflow || text.Length > _characters.Length - Position) { Overflow = true; return; }
-                    text.AsSpan().CopyTo(_characters.Slice(Position));
+                    if (Overflow || text.Length > _characters.Length - Position)
+                    {
+                        Overflow = true;
+                        return;
+                    }
+
+                    text
+                        .AsSpan()
+                        .CopyTo(_characters.Slice(Position));
                     Position += text.Length;
                     return;
                 }
 #endif
-                Position = checked(Position + (_buffer == null ? _encoding.GetByteCount(text)
-                    : _encoding.GetBytes(text, 0, text.Length, _buffer, Position)));
+                Position =
+                    checked(Position
+                        + (_buffer == null
+                            ? _encoding.GetByteCount(text)
+                            : _encoding.GetBytes(text, 0, text.Length, _buffer, Position)));
             }
         }
-
     }
 }

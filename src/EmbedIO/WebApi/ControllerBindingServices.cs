@@ -49,14 +49,16 @@ namespace EmbedIO.WebApi
 
             try
             {
-                if (StringConversion.TryConvert(
-                    typeof(T),
-                    value,
-                    converter,
-                    RequestFieldBinding.ConverterOrThrow,
-                    out var result,
-                    out invalidValue
-                ))
+                if (
+                    StringConversion.TryConvert(
+                        typeof(T),
+                        value,
+                        converter,
+                        RequestFieldBinding.ConverterOrThrow,
+                        out var result,
+                        out invalidValue
+                    )
+                )
                     return (T?)result;
             }
 

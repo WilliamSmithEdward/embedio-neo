@@ -1355,12 +1355,8 @@ namespace EmbedIO.WebApi
 
             else
             {
-                var pending = new List<(
-                    HttpVerbs Verb,
-                    RouteMatcher Matcher,
-                    object Method,
-                    RouteHandlerCallback Handler
-                )>();
+                var pending =
+                    new List<(HttpVerbs Verb, RouteMatcher Matcher, object Method, RouteHandlerCallback Handler)>();
 
                 for (var i = 0; i < routes.Count; i++)
                 {

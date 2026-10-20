@@ -13,17 +13,6 @@ namespace EmbedIO.Cors
     public class CorsModule : WebModuleBase
     {
         /// <summary>
-        /// A string meaning "All" in CORS headers.
-        /// </summary>
-        public const string All = "*";
-
-        private readonly string _origins;
-        private readonly string _headers;
-        private readonly string _methods;
-        private readonly string[] _validOrigins;
-        private readonly string[] _validMethods;
-
-        /// <summary>
         /// Initializes a new instance of the <see cref="CorsModule" /> class.
         /// </summary>
         /// <param name="baseRoute">The base route.</param>
@@ -37,28 +26,38 @@ namespace EmbedIO.Cors
         /// or
         /// methods
         /// </exception>
-        public CorsModule(
-            string baseRoute,
-            string origins = All,
-            string headers = All,
-            string methods = All)
-         : base(baseRoute)
+        public CorsModule(string baseRoute, string origins = All, string headers = All, string methods = All)
+            : base(baseRoute)
         {
             _origins = origins ?? throw new ArgumentNullException(nameof(origins));
             _headers = headers ?? throw new ArgumentNullException(nameof(headers));
             _methods = methods ?? throw new ArgumentNullException(nameof(methods));
 
             _validOrigins =
-                origins.ToUpperInvariant()
+            [
+                .. origins
+                    .ToUpperInvariant()
                     .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim())
-                    .ToArray();
+            ];
             _validMethods =
-                methods.ToUpperInvariant()
+            [
+                .. methods
+                    .ToUpperInvariant()
                     .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim())
-                    .ToArray();
+            ];
         }
+
+        /// <summary>
+        /// A string meaning "All" in CORS headers.
+        /// </summary>
+        public const string All = "*";
+        private readonly string _origins;
+        private readonly string _headers;
+        private readonly string _methods;
+        private readonly string[] _validOrigins;
+        private readonly string[] _validMethods;
 
         /// <inheritdoc />
         public override bool IsFinalHandler => false;
@@ -67,6 +66,7 @@ namespace EmbedIO.Cors
         protected override Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             var isOptions = context.Request.HttpVerb == HttpVerbs.Options;
 
             // If we allow all we don't need to filter
@@ -94,7 +94,10 @@ namespace EmbedIO.Cors
 
             if (_origins == All || _validOrigins.Contains(currentOrigin?.ToUpperInvariant()))
             {
-                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowOrigin, _origins == All ? All : currentOrigin);
+                context.Response.Headers.Set(
+                    HttpHeaderNames.AccessControlAllowOrigin,
+                    _origins == All ? All : currentOrigin
+                );
 
                 if (isOptions)
                 {
@@ -109,17 +112,23 @@ namespace EmbedIO.Cors
         private void ValidateHttpOptions(IHttpContext context)
         {
             var requestHeadersHeader = context.Request.Headers[HttpHeaderNames.AccessControlRequestHeaders];
+
             if (!string.IsNullOrWhiteSpace(requestHeadersHeader))
             {
                 // A restricted configuration advertises only its allowed header names.
-                context.Response.Headers.Set(HttpHeaderNames.AccessControlAllowHeaders, _headers == All ? requestHeadersHeader : _headers);
+                context.Response.Headers.Set(
+                    HttpHeaderNames.AccessControlAllowHeaders,
+                    _headers == All ? requestHeadersHeader : _headers
+                );
             }
 
             var requestMethodHeader = context.Request.Headers[HttpHeaderNames.AccessControlRequestMethod];
+
             if (string.IsNullOrWhiteSpace(requestMethodHeader))
                 return;
 
-            var currentMethods = requestMethodHeader.ToUpperInvariant()
+            var currentMethods = requestMethodHeader
+                .ToUpperInvariant()
                 .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim());
 

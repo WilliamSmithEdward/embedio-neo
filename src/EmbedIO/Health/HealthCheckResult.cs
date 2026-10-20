@@ -12,13 +12,16 @@ namespace EmbedIO.Health
         {
             if (status < HealthStatus.Unhealthy || status > HealthStatus.Healthy)
                 throw new ArgumentOutOfRangeException(nameof(status));
+
             if (description?.Length > 512) throw new ArgumentOutOfRangeException(nameof(description));
+
             Status = status;
             Description = description;
         }
 
         /// <summary>Gets the check outcome.</summary>
         public HealthStatus Status { get; }
+
         /// <summary>Gets optional application diagnostic text.</summary>
         public string? Description { get; }
     }

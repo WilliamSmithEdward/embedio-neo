@@ -9,15 +9,21 @@ namespace EmbedIO.Net.Internal
         internal static bool ContainsContinue(string? value)
         {
             if (value == null) return false;
+
             var start = 0;
             var quoted = false;
+
             for (var i = 0; i <= value.Length; ++i)
             {
                 if (i < value.Length && !EndsMember(value, ref i, ref quoted)) continue;
+
                 if (quoted) return false;
+
                 if (IsContinue(value, start, i)) return true;
+
                 start = i + 1;
             }
+
             return false;
         }
 
@@ -25,8 +31,14 @@ namespace EmbedIO.Net.Internal
         // comma outside quotes, where the member before it ends.
         private static bool EndsMember(string value, ref int i, ref bool quoted)
         {
-            if (quoted && value[i] == '\\') { ++i; return false; }
+            if (quoted && value[i] == '\\')
+            {
+                ++i;
+                return false;
+            }
+
             if (value[i] == '"') quoted = !quoted;
+
             return !quoted && value[i] == ',';
         }
 
@@ -34,8 +46,11 @@ namespace EmbedIO.Net.Internal
         private static bool IsContinue(string value, int start, int end)
         {
             while (start < end && (value[start] == ' ' || value[start] == '\t')) ++start;
+
             while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t')) --end;
-            return end - start == 12 && string.Compare(value, start, "100-continue", 0, 12, StringComparison.OrdinalIgnoreCase) == 0;
+
+            return end - start == 12
+                && string.Compare(value, start, "100-continue", 0, 12, StringComparison.OrdinalIgnoreCase) == 0;
         }
     }
 }

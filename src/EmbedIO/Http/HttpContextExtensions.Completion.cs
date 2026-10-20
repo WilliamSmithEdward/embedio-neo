@@ -7,7 +7,7 @@ namespace EmbedIO
 {
     public static partial class HttpContextExtensions
     {
-        private static readonly object CompletionKey = new object();
+        private static readonly object CompletionKey = new();
 
         /// <summary>
         /// Registers asynchronous cleanup after request handling and response flushing,
@@ -19,9 +19,16 @@ namespace EmbedIO
         public static void OnRequestCompleted(this IHttpContext @this, Func<Task> callback)
         {
             if (@this == null) throw new ArgumentNullException(nameof(@this));
+
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            if (@this is Idempotency.IdempotencyContext) throw new NotSupportedException("Idempotent operations require awaited cleanup before result publication.");
+
+            if (@this is Idempotency.IdempotencyContext)
+                throw new NotSupportedException(
+                    "Idempotent operations require awaited cleanup before result publication."
+                );
+
             if (@this is Caching.OutputCacheCapture capture) capture.Disabled = true;
+
             if (!@this.Items.TryGetValue(CompletionKey, out var value))
             {
                 value = new Stack<Func<Task>>();
@@ -38,18 +45,22 @@ namespace EmbedIO
         {
             // Reading Items creates the dictionary; a context that never used it has no callbacks.
             if (context is ILazyItems { HasItems: false }) return;
-            if (!context.Items.TryGetValue(CompletionKey, out var value)
-                || value is not Stack<Func<Task>> callbacks)
+
+            if (!context.Items.TryGetValue(CompletionKey, out var value) || value is not Stack<Func<Task>> callbacks)
                 return;
 
             // Keep a sentinel so cleanup cannot be registered or executed twice.
             context.Items[CompletionKey] = CompletionKey;
+
             while (callbacks.Count > 0)
             {
                 try
                 {
-                    await callbacks.Pop()().ConfigureAwait(false);
+                    await callbacks
+                        .Pop()()
+                        .ConfigureAwait(false);
                 }
+
                 catch (Exception exception) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                 {
                     exception.Log("HTTP context", "Exception thrown by a request completion callback.");

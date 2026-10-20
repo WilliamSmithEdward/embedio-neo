@@ -14,7 +14,12 @@ namespace EmbedIO.WebApi
         /// <param name="rules">Type validation attributes.</param>
         /// <param name="members">Public property accessors.</param>
         /// <param name="element">Collection element plan, or null.</param>
-        public RequestValidationPlan(Type type, ValidationAttribute[] rules, RequestValidationMember[] members, Func<RequestValidationPlan>? element = null)
+        public RequestValidationPlan(
+            Type type,
+            ValidationAttribute[] rules,
+            RequestValidationMember[] members,
+            Func<RequestValidationPlan>? element = null
+        )
         {
             Type = type ?? throw new ArgumentNullException(nameof(type));
             Rules = (ValidationAttribute[])(rules ?? throw new ArgumentNullException(nameof(rules))).Clone();
@@ -38,7 +43,13 @@ namespace EmbedIO.WebApi
         /// <param name="get">Property accessor.</param>
         /// <param name="rules">Property validation attributes.</param>
         /// <param name="plan">Declared property type's plan.</param>
-        public RequestValidationMember(string name, string? jsonName, Func<object, object?> get, ValidationAttribute[] rules, Func<RequestValidationPlan> plan)
+        public RequestValidationMember(
+            string name,
+            string? jsonName,
+            Func<object, object?> get,
+            ValidationAttribute[] rules,
+            Func<RequestValidationPlan> plan
+        )
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             JsonName = jsonName;

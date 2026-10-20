@@ -9,7 +9,8 @@ namespace EmbedIO
 {
     partial class HttpContextExtensions
     {
-        private const string StandardHtmlHeaderFormat = "<html><head><meta charset=\"{2}\"><title>{0} - {1}</title></head><body><h1>{0} - {1}</h1>";
+        private const string StandardHtmlHeaderFormat =
+            "<html><head><meta charset=\"{2}\"><title>{0} - {1}</title></head><body><h1>{0} - {1}</h1>";
         private const string StandardHtmlFooter = "</body></html>";
 
         /// <summary>
@@ -30,9 +31,11 @@ namespace EmbedIO
             this IHttpContext @this,
             string content,
             string contentType,
-            Encoding encoding)
+            Encoding encoding
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             content = Validate.NotNull(nameof(content), content);
             encoding = Validate.NotNull(nameof(encoding), encoding);
 
@@ -49,8 +52,12 @@ namespace EmbedIO
             using (text)
 #endif
             {
-                await text.WriteAsync(content).ConfigureAwait(false);
-                await text.FlushAsync().ConfigureAwait(false);
+                await text
+                    .WriteAsync(content)
+                    .ConfigureAwait(false);
+                await text
+                    .FlushAsync()
+                    .ConfigureAwait(false);
             }
         }
 
@@ -58,16 +65,19 @@ namespace EmbedIO
         /// <param name="this">The context.</param>
         /// <param name="statusCode">The status code.</param>
         /// <returns>The send task.</returns>
-        public static Task SendStandardHtmlAsync(this IHttpContext @this, HttpStatusCode statusCode)
-            => SendStandardHtmlAsync(@this, (int)statusCode);
+        public static Task SendStandardHtmlAsync(this IHttpContext @this, HttpStatusCode statusCode) =>
+            SendStandardHtmlAsync(@this, (int)statusCode);
 
         /// <summary>Sends standard HTML using an enum status and an additional HTML callback.</summary>
         /// <param name="this">The context.</param>
         /// <param name="statusCode">The status code.</param>
         /// <param name="writeAdditionalHtml">The optional body writer.</param>
         /// <returns>The send task.</returns>
-        public static Task SendStandardHtmlAsync(this IHttpContext @this, HttpStatusCode statusCode, Action<TextWriter>? writeAdditionalHtml)
-            => SendStandardHtmlAsync(@this, (int)statusCode, writeAdditionalHtml);
+        public static Task SendStandardHtmlAsync(
+            this IHttpContext @this,
+            HttpStatusCode statusCode,
+            Action<TextWriter>? writeAdditionalHtml
+        ) => SendStandardHtmlAsync(@this, (int)statusCode, writeAdditionalHtml);
 
         /// <summary>
         /// Asynchronously sends a standard HTML response for the specified status code.
@@ -78,8 +88,8 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException">There is no standard status description for <paramref name="statusCode"/>.</exception>
         /// <seealso cref="SendStandardHtmlAsync(IHttpContext,int,Action{TextWriter})"/>
-        public static Task SendStandardHtmlAsync(this IHttpContext @this, int statusCode)
-            => SendStandardHtmlAsync(@this, statusCode, null);
+        public static Task SendStandardHtmlAsync(this IHttpContext @this, int statusCode) =>
+            SendStandardHtmlAsync(@this, statusCode, null);
 
         /// <summary>
         /// Asynchronously sends a standard HTML response for the specified status code.
@@ -96,9 +106,11 @@ namespace EmbedIO
         public static Task SendStandardHtmlAsync(
             this IHttpContext @this,
             int statusCode,
-            Action<TextWriter>? writeAdditionalHtml)
+            Action<TextWriter>? writeAdditionalHtml
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             if (!HttpStatusDescription.TryGet(statusCode, out var statusDescription))
                 throw new ArgumentException("Status code has no standard description.", nameof(statusCode));
 
@@ -106,6 +118,7 @@ namespace EmbedIO
             @this.Response.StatusDescription = statusDescription;
             @this.Response.ContentType = MimeType.Html;
             @this.Response.ContentEncoding = WebServer.DefaultEncoding;
+
             using (var text = @this.OpenResponseText(WebServer.DefaultEncoding))
             {
                 text.Write(StandardHtmlHeaderFormat, statusCode, statusDescription, WebServer.DefaultEncoding.WebName);
@@ -127,8 +140,8 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <seealso cref="SendDataAsync(IHttpContext,ResponseSerializerCallback,object)"/>
         /// <seealso cref="ResponseSerializer.Default"/>
-        public static Task SendDataAsync(this IHttpContext @this, object? data)
-            => ResponseSerializer.Default(@this, data);
+        public static Task SendDataAsync(this IHttpContext @this, object? data) =>
+            ResponseSerializer.Default(@this, data);
 
         /// <summary>
         /// <para>Asynchronously sends serialized data as a response, using the specified response serializer.</para>
@@ -143,8 +156,11 @@ namespace EmbedIO
         /// <exception cref="ArgumentNullException"><paramref name="serializer"/> is <see langword="null"/>.</exception>
         /// <seealso cref="SendDataAsync(IHttpContext,ResponseSerializerCallback,object)"/>
         /// <seealso cref="ResponseSerializer.Default"/>
-        public static Task SendDataAsync(this IHttpContext @this, ResponseSerializerCallback serializer, object? data)
-            => Validate.NotNull(nameof(serializer), serializer)(@this, data);
+        public static Task SendDataAsync(
+            this IHttpContext @this,
+            ResponseSerializerCallback serializer,
+            object? data
+        ) => Validate.NotNull(nameof(serializer), serializer)(@this, data);
 
         /// <summary>
         /// Asynchronously sends data as a JSON response, using source-generated or otherwise explicit metadata.
@@ -159,11 +175,20 @@ namespace EmbedIO
         /// <exception cref="ArgumentNullException"><paramref name="typeInfo"/> is <see langword="null"/>.</exception>
         /// <remarks>The response is UTF-8 <c>application/json</c>, as with the default serializer. This overload
         /// uses no reflection, so it works in trimmed and Native AOT applications.</remarks>
-        public static Task SendDataWithMetadataAsync<TData>(this IHttpContext @this, TData data, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TData> typeInfo)
+        public static Task SendDataWithMetadataAsync<TData>(
+            this IHttpContext @this,
+            TData data,
+            System.Text.Json.Serialization.Metadata.JsonTypeInfo<TData> typeInfo
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             Validate.NotNull(nameof(typeInfo), typeInfo);
-            return ResponseSerializer.WriteJsonBytesAsync(@this, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, typeInfo), false);
+            return ResponseSerializer.WriteJsonBytesAsync(
+                @this,
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, typeInfo),
+                false
+            );
         }
     }
 }

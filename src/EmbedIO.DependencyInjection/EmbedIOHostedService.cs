@@ -11,14 +11,20 @@ namespace EmbedIO.DependencyInjection
         private readonly WebServer _server;
         private readonly IHostApplicationLifetime _lifetime;
         private readonly ILogger<EmbedIOHostedService> _logger;
-        private readonly CancellationTokenSource _stop = new CancellationTokenSource();
-        private readonly TaskCompletionSource<bool> _listening = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly object _lifecycle = new object();
+        private readonly CancellationTokenSource _stop = new();
+        private readonly TaskCompletionSource<bool> _listening = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        private readonly object _lifecycle = new();
         private bool _disposed;
         private Task? _run;
         private Task? _shutdown;
 
-        internal EmbedIOHostedService(WebServer server, IHostApplicationLifetime lifetime, ILogger<EmbedIOHostedService> logger)
+        internal EmbedIOHostedService(
+            WebServer server,
+            IHostApplicationLifetime lifetime,
+            ILogger<EmbedIOHostedService> logger
+        )
         {
             _server = server;
             _lifetime = lifetime;
@@ -27,13 +33,21 @@ namespace EmbedIO.DependencyInjection
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            if (_run != null || _shutdown != null) throw new InvalidOperationException("The EmbedIO hosted server cannot be restarted.");
+            if (_run != null || _shutdown != null)
+                throw new InvalidOperationException("The EmbedIO hosted server cannot be restarted.");
+
             cancellationToken.ThrowIfCancellationRequested();
             _server.StateChanged += OnStateChanged;
-            _run = Task.Run(RunServerAsync);
+            // Always start the worker so its cleanup runs; startup cancellation is handled below.
+            _run = Task.Run(RunServerAsync, CancellationToken.None);
+
             try
             {
-                var completed = await WaitWithCancellationAsync(Task.WhenAny(_listening.Task, _run), cancellationToken).ConfigureAwait(false);
+                var completed = await WaitWithCancellationAsync(
+                    Task.WhenAny(_listening.Task, _run),
+                    cancellationToken
+                ).ConfigureAwait(false);
+
                 if (completed == _run)
                 {
                     await _run.ConfigureAwait(false);
@@ -42,11 +56,13 @@ namespace EmbedIO.DependencyInjection
 
                 await _listening.Task.ConfigureAwait(false);
             }
+
             catch
             {
                 _stop.Cancel();
                 throw;
             }
+
             finally
             {
                 _server.StateChanged -= OnStateChanged;
@@ -62,23 +78,25 @@ namespace EmbedIO.DependencyInjection
         {
             try
             {
-                await _server.RunAsync(_stop.Token).ConfigureAwait(false);
+                await _server
+                    .RunAsync(_stop.Token)
+                    .ConfigureAwait(false);
             }
+
             catch (Exception exception)
             {
                 _logger.LogError(exception, "EmbedIO server failed.");
                 throw;
             }
+
             finally
             {
                 if (!_stop.IsCancellationRequested) _lifetime.StopApplication();
             }
         }
 
-        public async Task StopAsync(CancellationToken cancellationToken)
-        {
+        public async Task StopAsync(CancellationToken cancellationToken) =>
             await WaitWithCancellationAsync(GetShutdownTask(), cancellationToken).ConfigureAwait(false);
-        }
 
         private Task GetShutdownTask()
         {
@@ -87,13 +105,16 @@ namespace EmbedIO.DependencyInjection
                 return _shutdown ??= Task.Run(ShutdownAsync);
             }
         }
+
         private async Task ShutdownAsync()
         {
             _stop.Cancel();
+
             try
             {
                 if (_run != null) await _run.ConfigureAwait(false);
             }
+
             finally
             {
                 try
@@ -101,9 +122,12 @@ namespace EmbedIO.DependencyInjection
                     foreach (var module in _server.Modules)
                     {
                         if (module is RequestServicesModule requests)
-                            await requests.DrainAsync().ConfigureAwait(false);
+                            await requests
+                                .DrainAsync()
+                                .ConfigureAwait(false);
                     }
                 }
+
                 finally
                 {
                     _server.Dispose();
@@ -111,7 +135,12 @@ namespace EmbedIO.DependencyInjection
             }
         }
 
-        public void Dispose() => DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+        public void Dispose() =>
+            DisposeAsync()
+                .AsTask()
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult();
 
         public async ValueTask DisposeAsync()
         {
@@ -119,6 +148,7 @@ namespace EmbedIO.DependencyInjection
             {
                 await GetShutdownTask().ConfigureAwait(false);
             }
+
             finally
             {
                 lock (_lifecycle)
@@ -135,9 +165,12 @@ namespace EmbedIO.DependencyInjection
         private static async Task WaitWithCancellationAsync(Task task, CancellationToken token)
         {
             var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
             using (token.Register(() => canceled.TrySetCanceled(token)))
             {
-                var completed = await Task.WhenAny(task, canceled.Task).ConfigureAwait(false);
+                var completed = await Task
+                    .WhenAny(task, canceled.Task)
+                    .ConfigureAwait(false);
                 await completed.ConfigureAwait(false);
             }
         }

@@ -14,15 +14,28 @@ namespace EmbedIO.Net.Internal
             var version = 0;
             var offset = 0;
             int end;
+
             do
             {
                 end = field.IndexOf(';', offset);
+
                 if (end < 0) end = field.Length;
-                ReadPart(field.Substring(offset, end - offset).Trim(), result, ref cookie, ref version);
+
+                ReadPart(
+                    field
+                        .Substring(offset, end - offset)
+                        .Trim(),
+                    result,
+                    ref cookie,
+                    ref version
+                );
                 offset = end + 1;
             }
+
             while (end < field.Length);
+
             if (cookie != null) result.Add(cookie);
+
             return result;
         }
 
@@ -32,12 +45,25 @@ namespace EmbedIO.Net.Internal
         {
             var equals = StringOperations.IndexOfOrdinal(part, '=');
             var name = (equals < 0 ? part : part.Substring(0, equals)).Trim();
-            var value = equals < 0 ? string.Empty : part.Substring(equals + 1).Trim();
+            var value = equals < 0
+                ? string.Empty
+                : part
+                    .Substring(equals + 1)
+                    .Trim();
+
             if (part.StartsWith("$Version", StringComparison.Ordinal))
-                version = int.Parse(HeaderValueCursor.Unquote(equals < 0 ? part : part.Substring(equals + 1)), CultureInfo.InvariantCulture);
+                version = int.Parse(
+                    HeaderValueCursor.Unquote(equals < 0 ? part : part.Substring(equals + 1)),
+                    CultureInfo.InvariantCulture
+                );
+
             else if (cookie != null && part.StartsWith("$Path", StringComparison.Ordinal)) cookie.Path = value;
+
             else if (cookie != null && part.StartsWith("$Domain", StringComparison.Ordinal)) cookie.Domain = value;
-            else if (cookie != null && part.StartsWith("$Port", StringComparison.Ordinal)) cookie.Port = "\"" + value + "\"";
+
+            else if (cookie != null && part.StartsWith("$Port", StringComparison.Ordinal))
+                cookie.Port = "\"" + value + "\"";
+
             else if (part.Length != 0) cookie = StartCookie(result, cookie, name, value, version);
         }
 
@@ -45,8 +71,16 @@ namespace EmbedIO.Net.Internal
         private static Cookie? StartCookie(CookieList result, Cookie? finished, string name, string value, int version)
         {
             if (finished != null) result.Add(finished);
-            try { return new Cookie(name, value) { Version = version }; }
-            catch (Exception error) when (error is CookieException or ArgumentException) { return null; }
+
+            try
+            {
+                return new Cookie(name, value) { Version = version };
+            }
+
+            catch (Exception error) when (error is CookieException or ArgumentException)
+            {
+                return null;
+            }
         }
     }
 }

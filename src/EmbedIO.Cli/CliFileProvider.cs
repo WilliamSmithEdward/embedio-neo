@@ -11,14 +11,25 @@ namespace EmbedIO.Cli
     internal sealed class CliFileProvider(string root) : IFileProvider, IDisposable
     {
         private readonly FileSystemProvider _inner = new(root, true);
+
         public bool IsImmutable => false;
-        public event Action<string>? ResourceChanged { add { } remove { } }
+
+        public event Action<string>? ResourceChanged
+        {
+            add { }
+            remove { }
+        }
+
         public void Start(CancellationToken cancellationToken) { }
-        public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
-            => _inner.MapUrlPath(requestPath, mimeTypeProvider);
+
+        public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider) =>
+            _inner.MapUrlPath(requestPath, mimeTypeProvider);
+
         public Stream OpenFile(string path) => _inner.OpenFile(path);
-        public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider)
-            => _inner.GetDirectoryEntries(path, mimeTypeProvider);
+
+        public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider) =>
+            _inner.GetDirectoryEntries(path, mimeTypeProvider);
+
         public void Dispose() => _inner.Dispose();
     }
 }

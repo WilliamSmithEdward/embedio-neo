@@ -24,7 +24,11 @@ namespace EmbedIO
         /// <summary>
         /// The signature string included in <c>Server</c> response headers.
         /// </summary>
-        public static readonly string Signature = "EmbedIO/" + Assembly.GetExecutingAssembly().GetCustomAttributes<AssemblyInformationalVersionAttribute>().First().InformationalVersion;
+        public static readonly string Signature = "EmbedIO/"
+            + Assembly
+                .GetExecutingAssembly()
+                .GetCustomAttributes<AssemblyInformationalVersionAttribute>()
+                .First().InformationalVersion;
 
         /// <summary>
         /// <para>An <see cref="Encoding"/> that can be used to send UTF-8 responses without a byte order mark (BOM).</para>

@@ -41,6 +41,7 @@ namespace EmbedIO.Utilities
                 // Skip the initial question mark,
                 // in case source is the Query property of a Uri.
                 var position = source[0] == '?' ? 1 : 0;
+
                 while (position < source.Length)
                     position = ParsePair(source, position, groupFlags, result);
             }
@@ -59,9 +60,11 @@ namespace EmbedIO.Utilities
         {
             var separatorPos = position;
             var equalPos = -1;
+
             while (separatorPos < source.Length)
             {
                 var c = source[separatorPos];
+
                 if (c == '&')
                     break;
 
@@ -78,12 +81,14 @@ namespace EmbedIO.Utilities
                 var token = source.Substring(position, separatorPos - position);
                 AddKeyValuePair(result, groupFlags ? null : token, groupFlags ? token : string.Empty);
             }
+
             else
             {
                 AddKeyValuePair(
                     result,
                     source.Substring(position, equalPos - position),
-                    source.Substring(equalPos + 1, separatorPos - equalPos - 1));
+                    source.Substring(equalPos + 1, separatorPos - equalPos - 1)
+                );
             }
 
             // Edge case: if the last character in source is '&',
@@ -107,6 +112,7 @@ namespace EmbedIO.Utilities
 
                 // Discard bracketed index (used e.g. by PHP)
                 var bracketPos = key.IndexOf("[", StringComparison.Ordinal);
+
                 if (bracketPos > 0)
                     key = key.Substring(0, bracketPos);
             }

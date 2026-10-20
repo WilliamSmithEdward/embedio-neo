@@ -6,7 +6,9 @@ namespace EmbedIO.Files.Internal
     {
         // long is 8 bytes
         // base64 of 8 bytes is 12 chars, but the last one is padding
-        public static string LongToBase64(long value)
-            => Convert.ToBase64String(BitConverter.GetBytes(value)).Substring(0, 11);
+        public static string LongToBase64(long value) =>
+            Convert
+                .ToBase64String(BitConverter.GetBytes(value))
+                .Substring(0, 11);
     }
 }

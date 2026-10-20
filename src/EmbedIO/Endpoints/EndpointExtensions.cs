@@ -7,7 +7,7 @@ namespace EmbedIO.Endpoints
     /// <summary>Registers exact minimal endpoints on an existing server without changing OnGet/controller APIs.</summary>
     public static class EndpointExtensions
     {
-        private static readonly object Gate = new object();
+        private static readonly object Gate = new();
 
         /// <summary>Gets the server's endpoint module, creating it at the current module-order position.</summary>
         public static EndpointModule GetEndpointModule(this IWebServer server)

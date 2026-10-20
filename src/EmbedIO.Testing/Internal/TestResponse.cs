@@ -7,28 +7,17 @@ namespace EmbedIO.Testing.Internal
 {
     internal sealed class TestResponse : IHttpResponse, IDisposable
     {
-        public WebHeaderCollection Headers { get; } = new WebHeaderCollection();
-
+        public WebHeaderCollection Headers { get; } = [];
         public int StatusCode { get; set; } = (int)HttpStatusCode.OK;
-
         public long ContentLength64 { get; set; }
-
         public string? ContentType { get; set; }
-
         public Stream OutputStream { get; } = new MemoryStream();
-
         public ICookieCollection Cookies { get; } = new Net.CookieList();
-
         public Encoding? ContentEncoding { get; set; } = WebServer.DefaultEncoding;
-
         public bool KeepAlive { get; set; }
-
         public bool SendChunked { get; set; }
-
         public Version ProtocolVersion { get; } = HttpVersion.Version11;
-
         public byte[]? Body { get; private set; }
-
         public string? StatusDescription { get; set; }
 
         public void SetCookie(Cookie cookie) => Cookies.Add(cookie);

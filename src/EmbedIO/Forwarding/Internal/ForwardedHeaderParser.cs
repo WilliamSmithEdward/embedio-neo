@@ -19,10 +19,7 @@ namespace EmbedIO.Forwarding.Internal
 
         // Null when the hop names no client, or an "unknown" or obfuscated one.
         internal IPAddress? Client { get; }
-
-
         internal string? Proto { get; }
-
         internal string? Host { get; }
     }
 
@@ -36,13 +33,16 @@ namespace EmbedIO.Forwarding.Internal
         internal static List<ForwardedHop>? ParseForwarded(string header)
         {
             var elements = SplitOutsideQuotes(header, ',');
+
             if (elements == null || elements.Count > MaxHops)
                 return null;
 
             var hops = new List<ForwardedHop>(elements.Count);
+
             foreach (var element in elements)
             {
                 var hop = ParseElement(element);
+
                 if (hop == null)
                     return null;
 
@@ -57,13 +57,16 @@ namespace EmbedIO.Forwarding.Internal
         private static ForwardedHop? ParseElement(string element)
         {
             var pairs = SplitOutsideQuotes(element, ';');
+
             if (pairs == null)
                 return null;
 
             var fields = default(ForwardedElement);
+
             foreach (var rawPair in pairs)
             {
                 var pair = rawPair.Trim();
+
                 if (pair.Length == 0)
                     continue;
 
@@ -80,14 +83,17 @@ namespace EmbedIO.Forwarding.Internal
             name = string.Empty;
             value = string.Empty;
             var equals = EmbedIO.Internal.StringOperations.IndexOfOrdinal(pair, '=');
+
             if (equals <= 0)
                 return false;
 
             name = pair.Substring(0, equals);
+
             if (!EmbedIO.Utilities.Validate.IsRfc2616Token(name))
                 return false;
 
             var unquoted = Unquote(pair.Substring(equals + 1));
+
             if (unquoted == null)
                 return false;
 
@@ -99,33 +105,38 @@ namespace EmbedIO.Forwarding.Internal
         // from the nearest proxy, so a list shorter than the others has nothing for the outermost hops.
         internal static List<ForwardedHop>? ParseXForwarded(string? forHeader, string? protoHeader, string? hostHeader)
         {
-            var fors = forHeader == null ? new List<string>() : SplitList(forHeader);
-            var protos = protoHeader == null ? new List<string>() : SplitList(protoHeader);
-            var hosts = hostHeader == null ? new List<string>() : SplitList(hostHeader);
+            var fors = forHeader == null ? [] : SplitList(forHeader);
+            var protos = protoHeader == null ? [] : SplitList(protoHeader);
+            var hosts = hostHeader == null ? [] : SplitList(hostHeader);
             var count = Math.Max(fors.Count, Math.Max(protos.Count, hosts.Count));
+
             if (count > MaxHops)
                 return null;
 
             var hops = new ForwardedHop[count];
+
             for (var fromEnd = 1; fromEnd <= count; fromEnd++)
             {
                 IPAddress? client = null;
                 var hasFor = fromEnd <= fors.Count;
+
                 if (hasFor && !TryParseNode(fors[fors.Count - fromEnd], true, out client))
                     return null;
 
                 string? proto = null;
+
                 if (fromEnd <= protos.Count && (proto = Scheme(protos[protos.Count - fromEnd])) == null)
                     return null;
 
                 string? host = null;
+
                 if (fromEnd <= hosts.Count && (host = Authority(hosts[hosts.Count - fromEnd])) == null)
                     return null;
 
                 hops[count - fromEnd] = new ForwardedHop(client, proto, host);
             }
 
-            return new List<ForwardedHop>(hops);
+            return [.. hops];
         }
 
         // "http" or "https", lowercased; anything else is not a scheme the module accepts.
@@ -145,37 +156,50 @@ namespace EmbedIO.Forwarding.Internal
 
             string hostPart;
             string? port = null;
+
             if (value[0] == '[')
             {
                 var close = EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ']');
-                if (close < 0 || !IPAddress.TryParse(value.Substring(1, close - 1), out var v6) || v6.AddressFamily != AddressFamily.InterNetworkV6)
+
+                if (
+                    close < 0
+                    || !IPAddress.TryParse(value.Substring(1, close - 1), out var v6)
+                    || v6.AddressFamily != AddressFamily.InterNetworkV6
+                )
                     return null;
 
                 hostPart = value.Substring(0, close + 1);
                 var rest = value.Substring(close + 1);
+
                 if (rest.Length > 0)
                 {
                     if (rest[0] != ':')
                         return null;
+
                     port = rest.Substring(1);
                 }
             }
+
             else
             {
                 var colon = EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ':');
+
                 if (colon >= 0)
                 {
                     if (value.IndexOf(":", colon + 1, StringComparison.Ordinal) >= 0)
                         return null;
+
                     port = value.Substring(colon + 1);
                     hostPart = value.Substring(0, colon);
                 }
+
                 else
                 {
                     hostPart = value;
                 }
 
                 var kind = Uri.CheckHostName(hostPart);
+
                 if (kind != UriHostNameType.Dns && kind != UriHostNameType.IPv4)
                     return null;
             }
@@ -192,12 +216,14 @@ namespace EmbedIO.Forwarding.Internal
         private static bool TryParseNode(string value, bool allowBareIPv6, out IPAddress? address)
         {
             address = null;
+
             if (string.Equals(value, "unknown", StringComparison.OrdinalIgnoreCase) || IsObfuscatedNode(value))
                 return true;
 
             var parsed = value.Length > 0 && value[0] == '['
                 ? TryParseBracketed(value, out address, out var port)
                 : TryParseUnbracketed(value, allowBareIPv6, out address, out port);
+
             if (!parsed || (port != null && !IsPort(port) && !IsObfuscatedNode(port)))
                 return false;
 
@@ -219,15 +245,22 @@ namespace EmbedIO.Forwarding.Internal
         }
 
         // A bare IPv6 address where allowed, or canonical dotted-decimal IPv4 with an optional ":" port.
-        private static bool TryParseUnbracketed(string value, bool allowBareIPv6, out IPAddress? address, out string? port)
+        private static bool TryParseUnbracketed(
+            string value,
+            bool allowBareIPv6,
+            out IPAddress? address,
+            out string? port
+        )
         {
             address = null;
             port = null;
             var colons = Count(value, ':');
+
             if (colons > 1)
                 return allowBareIPv6 && TryParseIPv6(value, out address);
 
             var colon = colons == 1 ? EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ':') : -1;
+
             if (colon >= 0)
                 port = value.Substring(colon + 1);
 
@@ -238,6 +271,7 @@ namespace EmbedIO.Forwarding.Internal
         private static bool TrySplitPort(string rest, out string? port)
         {
             port = null;
+
             if (rest.Length == 0)
                 return true;
 
@@ -251,7 +285,12 @@ namespace EmbedIO.Forwarding.Internal
         private static bool TryParseIPv6(string text, out IPAddress? address)
         {
             address = null;
-            if (EmbedIO.Internal.StringOperations.IndexOfOrdinal(text, '%') >= 0 || !IPAddress.TryParse(text, out var parsed) || parsed.AddressFamily != AddressFamily.InterNetworkV6)
+
+            if (
+                EmbedIO.Internal.StringOperations.IndexOfOrdinal(text, '%') >= 0
+                || !IPAddress.TryParse(text, out var parsed)
+                || parsed.AddressFamily != AddressFamily.InterNetworkV6
+            )
                 return false;
 
             address = parsed;
@@ -262,20 +301,27 @@ namespace EmbedIO.Forwarding.Internal
         private static bool TryParseCanonicalIPv4(string text, out IPAddress? address)
         {
             address = null;
-            if (!IPAddress.TryParse(text, out var parsed) || parsed.AddressFamily != AddressFamily.InterNetwork || parsed.ToString() != text)
+
+            if (
+                !IPAddress.TryParse(text, out var parsed)
+                || parsed.AddressFamily != AddressFamily.InterNetwork
+                || parsed.ToString() != text
+            )
                 return false;
 
             address = parsed;
             return true;
         }
 
-        private static bool IsObfuscatedNode(string value)
-            => value.Length > 1 && value[0] == '_' && IsObfuscated(value);
+        private static bool IsObfuscatedNode(string value) =>
+            value.Length > 1 && value[0] == '_' && IsObfuscated(value);
 
-        private static bool IsPort(string value)
-            => value.Length > 0 && value.Length <= 5
-            && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
-            && port > 0 && port <= 65535;
+        private static bool IsPort(string value) =>
+            value.Length > 0
+                && value.Length <= 5
+                && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
+                && port > 0
+                && port <= 65535;
 
         // obfnode = "_" 1*( ALPHA / DIGIT / "." / "_" / "-" ).
         private static bool IsObfuscated(string value)
@@ -283,7 +329,13 @@ namespace EmbedIO.Forwarding.Internal
             for (var i = 1; i < value.Length; i++)
             {
                 var c = value[i];
-                if (!(c is >= 'a' and <= 'z' || c is >= 'A' and <= 'Z' || c is >= '0' and <= '9' || c == '.' || c == '_' || c == '-'))
+
+                if (
+                    !(c is >= 'a'
+                        and <= 'z' || c is >= 'A'
+                        and <= 'Z' || c is >= '0'
+                        and <= '9' || c == '.' || c == '_' || c == '-')
+                )
                     return false;
             }
 
@@ -303,15 +355,19 @@ namespace EmbedIO.Forwarding.Internal
                 return null;
 
             var result = new StringBuilder(value.Length);
+
             for (var i = 1; i < value.Length - 1; i++)
             {
                 var c = value[i];
+
                 if (c == '\\')
                 {
                     if (++i >= value.Length - 1)
                         return null;
+
                     c = value[i];
                 }
+
                 else if (c == '"')
                 {
                     return null;
@@ -332,9 +388,11 @@ namespace EmbedIO.Forwarding.Internal
             var parts = new List<string>();
             var start = 0;
             var quoted = false;
+
             for (var i = 0; i < value.Length; i++)
             {
                 var c = value[i];
+
                 if (quoted && c == '\\')
                 {
                     i++;
@@ -345,6 +403,7 @@ namespace EmbedIO.Forwarding.Internal
                 {
                     quoted = !quoted;
                 }
+
                 else if (c == separator && !quoted)
                 {
                     parts.Add(value.Substring(start, i - start));
@@ -356,6 +415,7 @@ namespace EmbedIO.Forwarding.Internal
                 return null;
 
             parts.Add(value.Substring(start));
+
             for (var i = 0; i < parts.Count; i++)
                 parts[i] = parts[i].Trim();
 
@@ -365,14 +425,17 @@ namespace EmbedIO.Forwarding.Internal
         private static List<string> SplitList(string value)
         {
             var parts = new List<string>();
+
             foreach (var part in value.Split(','))
                 parts.Add(part.Trim());
+
             return parts;
         }
 
         private static int Count(string value, char c)
         {
             var count = 0;
+
             foreach (var ch in value)
             {
                 if (ch == c)
@@ -424,7 +487,7 @@ namespace EmbedIO.Forwarding.Internal
                 }
             }
 
-            internal readonly ForwardedHop ToHop() => new ForwardedHop(_client, _proto, _host);
+            internal readonly ForwardedHop ToHop() => new(_client, _proto, _host);
         }
     }
 }

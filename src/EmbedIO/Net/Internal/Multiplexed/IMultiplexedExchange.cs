@@ -10,6 +10,7 @@ namespace EmbedIO.Net.Internal
     {
         HttpDatagramChannel? CreateDatagramChannel();
     }
+
     // Application-facing operations shared by the HTTP/2 and HTTP/3 transports.
     // Framing, compression, flow control, and stream ownership stay in each driver.
     internal interface IMultiplexedExchange
@@ -21,8 +22,11 @@ namespace EmbedIO.Net.Internal
         bool InitialBodyComplete { get; }
         bool Ended { get; }
         bool CloseConnectionAfterResponse { get; set; }
+
         Task SendHeadersAsync(HpackField[] fields, bool endStream, CancellationToken token);
+
         Task WriteAsync(byte[] bytes, int offset, int count, bool endStream, CancellationToken token);
+
         Task CompleteAsync(CancellationToken token);
     }
 
@@ -38,6 +42,7 @@ namespace EmbedIO.Net.Internal
     internal interface IMultiplexedResponseTrailers
     {
         void ExpectTrailers();
+
         Task SendTrailersAsync(HpackField[] fields, CancellationToken token);
     }
 
@@ -53,6 +58,13 @@ namespace EmbedIO.Net.Internal
     {
         // True once final headers committed, even if the body write then failed.
         bool FinalHeadersSent { get; }
-        Task SendHeadersAndWriteAsync(HpackField[] fields, byte[] bytes, int offset, int count, CancellationToken token);
+
+        Task SendHeadersAndWriteAsync(
+            HpackField[] fields,
+            byte[] bytes,
+            int offset,
+            int count,
+            CancellationToken token
+        );
     }
 }

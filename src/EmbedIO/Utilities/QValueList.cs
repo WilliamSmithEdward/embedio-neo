@@ -64,8 +64,7 @@ namespace EmbedIO.Utilities
         /// <seealso cref="UseWildcard"/>
         public QValueList(bool useWildcard, params string?[]? headerValues)
             : this(useWildcard, headerValues as IEnumerable<string?>)
-        {
-        }
+        { }
 
         /// <summary>
         /// Gets a dictionary associating values with their relative weight
@@ -96,8 +95,8 @@ namespace EmbedIO.Utilities
         /// <param name="value">The value.</param>
         /// <returns><see langword="true"/>if <paramref name="value"/> is a candidate;
         /// otherwise, <see langword="false"/>.</returns>
-        public bool IsCandidate(string value)
-            => TryGetCandidateValue(Validate.NotNull(nameof(value), value), out var candidate) && candidate.Weight > 0;
+        public bool IsCandidate(string value) =>
+            TryGetCandidateValue(Validate.NotNull(nameof(value), value), out var candidate) && candidate.Weight > 0;
 
         /// <summary>
         /// Attempts to determine whether the weight of a possible candidate.
@@ -120,8 +119,8 @@ namespace EmbedIO.Utilities
         /// <param name="values">The values.</param>
         /// <returns>The value preferred by the client, or <see langword="null"/>
         /// if none of the provided <paramref name="values"/> is accepted.</returns>
-        public string? FindPreferred(IEnumerable<string> values)
-            => FindPreferredCore(values, out var result) >= 0 ? result : null;
+        public string? FindPreferred(IEnumerable<string> values) =>
+            FindPreferredCore(values, out var result) >= 0 ? result : null;
 
         /// <summary>
         /// Finds the index of the value preferred by the client in a list of values.
@@ -139,7 +138,7 @@ namespace EmbedIO.Utilities
         /// if none of the values in <paramref name="values"/> is accepted.</returns>
         public int FindPreferredIndex(params string[] values) => FindPreferredIndex(values as IReadOnlyList<string>);
 
-        private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(string? headerValues)
+        private static Dictionary<string, (int Weight, int Ordinal)> Parse(string? headerValues)
         {
             var result = new Dictionary<string, (int Weight, int Ordinal)>(StringComparer.OrdinalIgnoreCase);
             var ordinal = 0;
@@ -147,7 +146,7 @@ namespace EmbedIO.Utilities
             return result;
         }
 
-        private static IReadOnlyDictionary<string, (int Weight, int Ordinal)> Parse(IEnumerable<string?>? headerValues)
+        private static Dictionary<string, (int Weight, int Ordinal)> Parse(IEnumerable<string?>? headerValues)
         {
             var result = new Dictionary<string, (int Weight, int Ordinal)>(StringComparer.OrdinalIgnoreCase);
 
@@ -163,6 +162,7 @@ namespace EmbedIO.Utilities
                 foreach (var headerValue in array)
                     ParseCore(headerValue, result, ref ordinal);
             }
+
             else
             {
                 foreach (var headerValue in headerValues)
@@ -172,21 +172,29 @@ namespace EmbedIO.Utilities
             return result;
         }
 
-        private static void ParseCore(string? text, IDictionary<string, (int Weight, int Ordinal)> dictionary, ref int ordinal)
+        private static void ParseCore(
+            string? text,
+            Dictionary<string, (int Weight, int Ordinal)> dictionary,
+            ref int ordinal
+        )
         {
             if (text == null || text.Length == 0)
                 return;
 
             var length = text.Length;
             var position = 0;
+
             while (position < length)
             {
                 var stop = text.IndexOf(',', position);
+
                 if (stop < 0)
                     stop = length;
 
                 FindQuality(text, position, stop, out var nameEnd, out var weight);
-                var name = text.Substring(position, nameEnd - position).Trim();
+                var name = text
+                    .Substring(position, nameEnd - position)
+                    .Trim();
 
                 if (!string.IsNullOrEmpty(name))
                     dictionary[name] = (weight, ordinal);
@@ -196,12 +204,14 @@ namespace EmbedIO.Utilities
             }
         }
 
-
         // Find the first quality field accepted by the legacy grammar.
         private static void FindQuality(string text, int start, int end, out int nameEnd, out int weight)
         {
-            for (var separator = text.IndexOf(';', start, end - start); separator >= 0;
-                separator = text.IndexOf(';', separator + 1, end - separator - 1))
+            for (
+                var separator = text.IndexOf(';', start, end - start);
+                separator >= 0;
+                separator = text.IndexOf(';', separator + 1, end - separator - 1)
+            )
             {
                 if (TryParseQuality(text, separator + 1, end, out weight))
                 {
@@ -220,21 +230,29 @@ namespace EmbedIO.Utilities
         {
             weight = 1000;
             position = SkipBlanks(text, position, end);
+
             // RFC 9110, Section 12.4.2: the weight's name "q" is case-insensitive.
             if (position + 2 >= end || text[position] is not ('q' or 'Q') || text[position + 1] != '=')
                 return false;
 
             position += 2;
             var one = text[position] == '1';
+
             if (!one && text[position] != '0')
                 return false;
 
             position++;
             var candidate = one ? 1000 : 0;
-            if (position < end && text[position] == '.' && !TryParseFraction(text, ref position, end, one, out candidate))
+
+            if (
+                position < end
+                && text[position] == '.'
+                && !TryParseFraction(text, ref position, end, one, out candidate)
+            )
                 return false;
 
             position = SkipBlanks(text, position, end);
+
             // The original regex's end anchor also accepted a single final LF.
             if (position < end && text[position] != ';' && !(position == end - 1 && text[position] == '\n'))
                 return false;
@@ -250,6 +268,7 @@ namespace EmbedIO.Utilities
             weight = 0;
             var digits = 0;
             position++;
+
             while (position < end && digits < 3 && (one ? text[position] == '0' : char.IsDigit(text[position])))
             {
                 weight = 10 * weight + text[position++] - '0';
@@ -261,6 +280,7 @@ namespace EmbedIO.Utilities
 
             if (one)
                 weight = 1000;
+
             else
                 while (digits++ < 3) weight *= 10;
 
@@ -300,15 +320,24 @@ namespace EmbedIO.Utilities
             var best = -1;
 
             // Set initial values such as a weight of 0 can never win over them
-            (int Weight, int Ordinal) bestValue = (0, int.MinValue);
+            (
+                int Weight,
+                int Ordinal
+            ) bestValue = (0, int.MinValue);
+
             // The candidate lists are arrays; index them without an enumerator.
             if (values is IReadOnlyList<string> list)
             {
                 for (var index = 0; index < list.Count; index++)
                 {
                     var value = list[index];
+
                     if (value == null) continue;
-                    if (TryGetCandidateValue(value, out var candidateValue) && CompareQualities(candidateValue, bestValue) > 0)
+
+                    if (
+                        TryGetCandidateValue(value, out var candidateValue)
+                        && CompareQualities(candidateValue, bestValue) > 0
+                    )
                     {
                         result = value;
                         best = index;
@@ -320,6 +349,7 @@ namespace EmbedIO.Utilities
             }
 
             var i = 0;
+
             foreach (var value in values)
             {
                 if (value == null)
@@ -328,7 +358,10 @@ namespace EmbedIO.Utilities
                     continue;
                 }
 
-                if (TryGetCandidateValue(value, out var candidateValue) && CompareQualities(candidateValue, bestValue) > 0)
+                if (
+                    TryGetCandidateValue(value, out var candidateValue)
+                    && CompareQualities(candidateValue, bestValue) > 0
+                )
                 {
                     result = value;
                     best = i;
@@ -341,8 +374,7 @@ namespace EmbedIO.Utilities
             return best;
         }
 
-        private bool TryGetCandidateValue(string value, out (int Weight, int Ordinal) candidate)
-            => QValues.TryGetValue(value, out candidate)
-            || (UseWildcard && QValues.TryGetValue(Wildcard, out candidate));
+        private bool TryGetCandidateValue(string value, out (int Weight, int Ordinal) candidate) =>
+            QValues.TryGetValue(value, out candidate) || (UseWildcard && QValues.TryGetValue(Wildcard, out candidate));
     }
 }

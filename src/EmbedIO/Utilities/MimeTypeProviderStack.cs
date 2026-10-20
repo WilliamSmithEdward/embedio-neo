@@ -10,7 +10,7 @@ namespace EmbedIO.Utilities
     /// <seealso cref="IMimeTypeProvider" />
     public sealed class MimeTypeProviderStack : IMimeTypeProvider
     {
-        private readonly Stack<IMimeTypeProvider> _providers = new Stack<IMimeTypeProvider>();
+        private readonly Stack<IMimeTypeProvider> _providers = new();
 
         /// <summary>
         /// <para>Pushes the specified MIME type provider on the stack.</para>
@@ -18,8 +18,7 @@ namespace EmbedIO.Utilities
         /// </summary>
         /// <param name="provider">The <see cref="IMimeTypeProvider"/> interface to push on the stack.</param>
         /// <exception cref="ArgumentNullException"><paramref name="provider"/>is <see langword="null"/>.</exception>
-        public void Push(IMimeTypeProvider provider)
-            => _providers.Push(Validate.NotNull(nameof(provider), provider));
+        public void Push(IMimeTypeProvider provider) => _providers.Push(Validate.NotNull(nameof(provider), provider));
 
         /// <summary>
         /// <para>Removes the most recently added MIME type provider from the stack.</para>
@@ -33,6 +32,7 @@ namespace EmbedIO.Utilities
             foreach (var provider in _providers)
             {
                 var mimeType = provider.GetMimeType(extension);
+
                 if (mimeType != null) return mimeType;
             }
 

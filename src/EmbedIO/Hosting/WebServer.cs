@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 using EmbedIO.Net.Internal;
 using EmbedIO.Routing;
 using EmbedIO.Utilities;
-using EmbedIO.Diagnostics;
 
 namespace EmbedIO
 {
@@ -18,42 +18,30 @@ namespace EmbedIO
     {
         // How long a stop without a drain waits for the closes drain-aware modules start.
         private static readonly TimeSpan StopCloseBudget = TimeSpan.FromSeconds(1);
-
         private int _disposeStarted;
-
-        private readonly CancellationTokenSource _drainStarted = new CancellationTokenSource();
-
+        private readonly CancellationTokenSource _drainStarted = new();
         private int _drainSignaled;
-
         private int _stopCloseStarted;
-
-        private readonly TaskCompletionSource<bool> _stopClosesEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> _stopClosesEnded = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class,
         /// that will respond on HTTP port 80 on all network interfaces.
         /// </summary>
-        public WebServer()
-            : this(80)
-        {
-        }
+        public WebServer() : this(80) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class,
         /// that will respond on the specified HTTP port on all network interfaces.
         /// </summary>
         /// <param name="port">The port.</param>
-        public WebServer(int port)
-            : this($"http://*:{port}/")
-        {
-        }
+        public WebServer(int port) : this($"http://*:{port}/") { }
 
         /// <summary>Initializes a server with one URI prefix.</summary>
         /// <param name="urlPrefix">The URI prefix to configure.</param>
-        public WebServer(Uri urlPrefix)
-            : this(Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString)
-        {
-        }
+        public WebServer(Uri urlPrefix) : this(Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class
@@ -66,10 +54,7 @@ namespace EmbedIO
         /// <para>- or -</para>
         /// <para>One or more of the elements of <paramref name="urlPrefixes"/> is already registered.</para>
         /// </exception>
-        public WebServer(params string[] urlPrefixes)
-            : this(new WebServerOptions().WithUrlPrefixes(urlPrefixes))
-        {
-        }
+        public WebServer(params string[] urlPrefixes) : this(new WebServerOptions().WithUrlPrefixes(urlPrefixes)) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer" /> class.
@@ -83,9 +68,12 @@ namespace EmbedIO
         /// <para>One or more of the elements of <paramref name="urlPrefixes"/> is already registered.</para>
         /// </exception>
         public WebServer(HttpListenerMode mode, params string[] urlPrefixes)
-            : this(new WebServerOptions().WithMode(mode).WithUrlPrefixes(urlPrefixes))
-        {
-        }
+            : this(
+                new WebServerOptions()
+                    .WithMode(mode)
+                    .WithUrlPrefixes(urlPrefixes)
+            )
+        { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer" /> class.
@@ -100,30 +88,35 @@ namespace EmbedIO
         /// <para>One or more of the elements of <paramref name="urlPrefixes"/> is already registered.</para>
         /// </exception>
         public WebServer(HttpListenerMode mode, X509Certificate2 certificate, params string[] urlPrefixes)
-            : this(new WebServerOptions()
-                .WithMode(mode)
-                .WithCertificate(certificate)
-                .WithUrlPrefixes(urlPrefixes))
-        {
-        }
+            : this(
+                new WebServerOptions()
+                    .WithMode(mode)
+                    .WithCertificate(certificate)
+                    .WithUrlPrefixes(urlPrefixes)
+            )
+        { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class.
         /// </summary>
         /// <param name="options">A <see cref="WebServerOptions"/> object used to configure this instance.</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
-        public WebServer(WebServerOptions options)
-            : base(options)
+        public WebServer(WebServerOptions options) : base(options)
         {
             DrainStarted = _drainStarted.Token;
             Listener = CreateHttpListener();
         }
-        internal WebServer(WebServerOptions options, bool nativeHttp3)
-            : base(options)
+
+        internal WebServer(WebServerOptions options, bool nativeHttp3) : base(options)
         {
             DrainStarted = _drainStarted.Token;
-            if (nativeHttp3 && options.Mode is not HttpListenerMode.EmbedIOHttp3 and not HttpListenerMode.EmbedIOCombined)
+
+            if (
+                nativeHttp3
+                && options.Mode is not HttpListenerMode.EmbedIOHttp3 and not HttpListenerMode.EmbedIOCombined
+            )
                 throw new ArgumentException("Native HTTP/3 requires an HTTP/3 hosting mode.", nameof(options));
+
             Listener = CreateHttpListener(nativeHttp3);
         }
 
@@ -133,8 +126,7 @@ namespace EmbedIO
         /// <param name="configure">A callback that will be used to configure
         /// the server's options.</param>
         /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
-        public WebServer(Action<WebServerOptions> configure)
-            : base(configure)
+        public WebServer(Action<WebServerOptions> configure) : base(configure)
         {
             DrainStarted = _drainStarted.Token;
             Listener = CreateHttpListener();
@@ -173,9 +165,12 @@ namespace EmbedIO
         {
             if (timeout <= TimeSpan.Zero || timeout.TotalMilliseconds > uint.MaxValue - 1)
                 throw new ArgumentOutOfRangeException(nameof(timeout));
+
             cancellationToken.ThrowIfCancellationRequested();
+
             if (Listener is not IGracefulHttpListener graceful)
                 throw new NotSupportedException("The selected listener does not support graceful drain.");
+
             SignalDrainStarted();
             return graceful.DrainAsync(timeout, cancellationToken);
         }
@@ -187,11 +182,17 @@ namespace EmbedIO
             if (Interlocked.Exchange(ref _drainSignaled, 1) != 0)
                 return;
 
-            VisitDrainAwareModules(Modules, aware => aware.OnDrainStarted(), "A module failed to prepare for the drain; the drain continues.");
+            VisitDrainAwareModules(
+                Modules,
+                aware => aware.OnDrainStarted(),
+                "A module failed to prepare for the drain; the drain continues."
+            );
+
             try
             {
                 _drainStarted.Cancel();
             }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(LogSource, "A DrainStarted callback threw; the drain continues.");
@@ -214,14 +215,23 @@ namespace EmbedIO
             try
             {
                 var closing = new List<Task>();
-                VisitDrainAwareModules(Modules, aware => closing.Add(aware.CloseForStopAsync()), "A module failed to start closing its connections; the stop continues.");
+                VisitDrainAwareModules(
+                    Modules,
+                    aware => closing.Add(aware.CloseForStopAsync()),
+                    "A module failed to start closing its connections; the stop continues."
+                );
+
                 if (closing.Count > 0)
-                    _ = Task.WhenAll(closing).Wait(StopCloseBudget);
+                    _ = Task
+                        .WhenAll(closing)
+                        .Wait(StopCloseBudget);
             }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(LogSource, "A module failed to close its connections before the stop; the stop continues.");
             }
+
             finally
             {
                 _stopClosesEnded.TrySetResult(true);
@@ -230,7 +240,11 @@ namespace EmbedIO
 
         // Visits every drain-aware module, including those in module groups. A module that throws is
         // logged with the failure message, and the others are still visited.
-        private void VisitDrainAwareModules(IEnumerable<IWebModule> modules, Action<EmbedIO.Internal.IDrainAwareModule> visit, string failure)
+        private void VisitDrainAwareModules(
+            IEnumerable<IWebModule> modules,
+            Action<EmbedIO.Internal.IDrainAwareModule> visit,
+            string failure
+        )
         {
             foreach (var module in modules)
             {
@@ -240,6 +254,7 @@ namespace EmbedIO
                     {
                         visit(aware);
                     }
+
                     catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                     {
                         ex.Log(LogSource, failure);
@@ -258,10 +273,12 @@ namespace EmbedIO
             {
                 Interlocked.Exchange(ref _disposeStarted, 1);
                 CloseModulesBeforeStop();
+
                 try
                 {
                     Listener.Dispose();
                 }
+
                 catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
                 {
                     ex.Log(LogSource, "Exception thrown while disposing HTTP listener.");
@@ -299,21 +316,43 @@ namespace EmbedIO
             // installed. It ends when the listener stops.
             if (Listener is IDispatchingHttpListener dispatching)
                 dispatching.SetDispatcher(context => DispatchAsync(context, cancellationToken));
+
             while (!cancellationToken.IsCancellationRequested && (Listener?.IsListening ?? false))
             {
                 IHttpContextImpl context;
-                try { context = await Listener.GetContextAsync(cancellationToken).ConfigureAwait(false); }
-                catch (ListenerDrainedException) { return; }
+
+                try
+                {
+                    context = await Listener
+                        .GetContextAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                catch (ListenerDrainedException)
+                {
+                    return;
+                }
+
                 // Explicit disposal may win after the listening snapshot but
                 // before accept starts. Only expected stop failures end this loop.
-                catch (ObjectDisposedException) when (Volatile.Read(ref _disposeStarted) != 0) { return; }
+                catch (ObjectDisposedException) when (Volatile.Read(ref _disposeStarted) != 0)
+                {
+                    return;
+                }
+
                 // An application stopping the listener, directly or through disposal,
                 // ends the run normally; other listener failures still propagate.
-                catch (System.Net.HttpListenerException error) when (error.ErrorCode == 995 && (Volatile.Read(ref _disposeStarted) != 0 || !(Listener?.IsListening ?? false))) { return; }
+                catch (System.Net.HttpListenerException error) when (
+                    error.ErrorCode == 995
+                    && (Volatile.Read(ref _disposeStarted) != 0 || !(Listener?.IsListening ?? false))
+                )
+                {
+                    return;
+                }
 
                 // Once accepted, the context must reach the handler's cleanup even
                 // if shutdown wins before dispatch. The context still carries cancellation.
-                _ = Task.Run(() => DispatchAsync(context, cancellationToken));
+                _ = Task.Run(() => DispatchAsync(context, cancellationToken), CancellationToken.None);
             }
         }
 
@@ -325,25 +364,36 @@ namespace EmbedIO
         private Task DispatchAsync(IHttpContextImpl context, CancellationToken cancellationToken)
         {
             Task handling;
+
             try
             {
                 context.CancellationToken = cancellationToken;
                 context.Route = RouteMatch.UnsafeFromRoot(UrlPath.Normalize(context.Request.Url.AbsolutePath, false));
                 handling = DoHandleContextAsync(context);
             }
+
             catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
             {
                 return AnswerDispatchFailureAsync(context, error);
             }
+
             // The connection waits for the response, not for the handler, which may
             // outlive it. This server therefore owns the handler's task: a fault the
             // handler did not catch is observed and logged here instead of going
             // unobserved, whether it surfaced at once or later. A handler that
             // completed inline without fault needs no continuation.
             if (handling.IsFaulted) ObserveHandlingFault(handling);
+
             else if (!handling.IsCompleted)
-                _ = handling.ContinueWith(static (task, state) => ((WebServer)(state ?? throw new InvalidOperationException("Missing dispatch owner."))).ObserveHandlingFault(task),
-                    this, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                _ = handling.ContinueWith(
+                    static (task, state) => ((WebServer)(state
+                        ?? throw new InvalidOperationException("Missing dispatch owner."))).ObserveHandlingFault(task),
+                    this,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default
+                );
+
             return handling;
         }
 
@@ -356,6 +406,7 @@ namespace EmbedIO
         private async Task AnswerDispatchFailureAsync(IHttpContextImpl context, Exception error)
         {
             LogObserved(error, $"[{context.Id}] Request dispatch failed before handling.");
+
             try
             {
                 try
@@ -366,16 +417,32 @@ namespace EmbedIO
                         context.Response.KeepAlive = false;
                     }
                 }
+
                 finally
                 {
-                    if (context is MultiplexedContext multiplexed) await multiplexed.CloseAsync().ConfigureAwait(false);
+                    if (context is MultiplexedContext multiplexed)
+                        await multiplexed
+                            .CloseAsync()
+                            .ConfigureAwait(false);
+
                     else context.Close();
                 }
             }
+
             catch (Exception closing) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(closing))
             {
-                LogObserved(closing, $"[{context.Id}] Closing the failed request's context failed; aborting its response.");
-                try { await EmbedIO.Internal.ResponseCommitment.AbortAsync(context, closing).ConfigureAwait(false); }
+                LogObserved(
+                    closing,
+                    $"[{context.Id}] Closing the failed request's context failed; aborting its response."
+                );
+
+                try
+                {
+                    await EmbedIO.Internal.ResponseCommitment
+                        .AbortAsync(context, closing)
+                        .ConfigureAwait(false);
+                }
+
                 catch (Exception aborting) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(aborting))
                 {
                     LogObserved(aborting, $"[{context.Id}] Aborting the failed request's response failed.");
@@ -391,26 +458,39 @@ namespace EmbedIO
         // A failing trace listener cannot turn an observed failure into another.
         private void LogObserved(Exception error, string message)
         {
-            try { error.Log(LogSource, message); }
-            catch (Exception logging) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(logging))
+            try
             {
+                error.Log(LogSource, message);
             }
+
+            catch (Exception logging) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(logging)) { }
         }
 
         /// <inheritdoc />
         protected override void OnFatalException() => Listener?.Dispose();
 
-        private static IHttpListener CreateHttp3Listener(X509Certificate2? certificate, Net.ServerCertificateSource? certificateSource,
-            bool combined = false, bool native = false, EmbedIO.Internal.RequestPolicyResolver? bodyPolicy = null)
+        private static IHttpListener CreateHttp3Listener(
+            X509Certificate2? certificate,
+            Net.ServerCertificateSource? certificateSource,
+            bool combined = false,
+            bool native = false,
+            EmbedIO.Internal.RequestPolicyResolver? bodyPolicy = null
+        )
         {
 #if NET10_0_OR_GREATER
-            if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                && System.Net.Quic.QuicListener.IsSupported)
+            if (
+                (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                && System.Net.Quic.QuicListener.IsSupported
+            )
             {
                 if (certificateSource != null)
-                    return combined ? new CombinedHttpListener(certificateSource, native, bodyPolicy) : new Net.Internal.Http3.Http3Listener(certificateSource, native, bodyPolicy);
+                    return combined
+                        ? new CombinedHttpListener(certificateSource, native, bodyPolicy)
+                        : new Net.Internal.Http3.Http3Listener(certificateSource, native, bodyPolicy);
 
-                return combined ? new CombinedHttpListener(certificate, native, bodyPolicy) : new Net.Internal.Http3.Http3Listener(certificate, native, bodyPolicy);
+                return combined
+                    ? new CombinedHttpListener(certificate, native, bodyPolicy)
+                    : new Net.Internal.Http3.Http3Listener(certificate, native, bodyPolicy);
             }
 #endif
             throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset and native QUIC support.");
@@ -419,20 +499,36 @@ namespace EmbedIO
         private IHttpListener CreateHttpListener(bool nativeHttp3 = false)
         {
             var bodyPolicy = EmbedIO.Internal.RequestPolicyResolver.Create(Options);
+
             // QUIC connections are not governed by the TCP connection limits.
             if (Options.Mode == HttpListenerMode.EmbedIOHttp3 && Options.HasConnectionLimits)
                 throw new NotSupportedException(
-                    "MaximumConnections, RequestHeadersTimeout and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode.");
+                    "MaximumConnections, RequestHeadersTimeout and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode."
+                );
 
             // A source replaces the fixed certificate settings, whose getter would otherwise load or register one.
             X509Certificate2? CertificateOrNull() => Options.CertificateSource != null ? null : Options.Certificate;
 
             IHttpListener DoCreate() => Options.Mode switch
             {
-                HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(CertificateOrNull(), Options.CertificateSource, false, nativeHttp3, bodyPolicy),
-                HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(CertificateOrNull(), Options.CertificateSource, true, nativeHttp3, bodyPolicy),
-                _ when (int)Options.Mode == 1 => throw new NotSupportedException(
-                    "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."),
+                HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(
+                    CertificateOrNull(),
+                    Options.CertificateSource,
+                    false,
+                    nativeHttp3,
+                    bodyPolicy
+                ),
+                HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(
+                    CertificateOrNull(),
+                    Options.CertificateSource,
+                    true,
+                    nativeHttp3,
+                    bodyPolicy
+                ),
+                _ when (int)Options.Mode == 1 =>
+                    throw new NotSupportedException(
+                        "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."
+                    ),
                 _ => Options.CertificateSource != null
                     ? new Net.HttpListener(Options.CertificateSource, bodyPolicy)
                     : new Net.HttpListener(Options.Certificate, bodyPolicy)
@@ -440,7 +536,10 @@ namespace EmbedIO
 
             // Refuse TLS settings the selected listener cannot honor before creating it.
             var tlsPolicy = Options.TlsPolicy;
-            tlsPolicy?.EnsureSupported(Options.Mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined, nativeHttp3);
+            tlsPolicy?.EnsureSupported(
+                Options.Mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined,
+                nativeHttp3
+            );
             var listener = DoCreate();
             $"Running HTTPListener: {listener.Name}".Info(LogSource);
 
@@ -448,6 +547,7 @@ namespace EmbedIO
             // request refused before dispatch never invites its upload.
             var deferContinue = Options.HasBodyLimits;
             var connections = Options.CreateConnectionPolicy();
+
             if (listener is Net.HttpListener tcp)
             {
                 tcp.DeferContinue = deferContinue;
@@ -465,6 +565,7 @@ namespace EmbedIO
                     combined.TlsPolicy = tlsPolicy;
                     combined.Telemetry = Telemetry;
                 }
+
                 else if (listener is Net.Internal.Http3.Http3Listener quic)
                 {
                     quic.DeferContinue = deferContinue;
@@ -473,7 +574,6 @@ namespace EmbedIO
                 }
             }
 #endif
-
             foreach (var prefix in Options.UrlPrefixes)
             {
                 var urlPrefix = new string(prefix?.ToCharArray());

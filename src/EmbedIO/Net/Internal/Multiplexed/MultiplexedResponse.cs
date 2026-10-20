@@ -153,11 +153,13 @@ namespace EmbedIO.Net.Internal
             EnsureHeaders();
             _cookies ??= [];
 
-            if (_cookies.Any(
-                existing => existing.Name == cookie.Name
-                    && existing.Domain == cookie.Domain
-                    && existing.Path == cookie.Path
-            )) throw new ArgumentException("The cookie already exists.", nameof(cookie));
+            if (
+                _cookies.Any(
+                    existing => existing.Name == cookie.Name
+                        && existing.Domain == cookie.Domain
+                        && existing.Path == cookie.Path
+                )
+            ) throw new ArgumentException("The cookie already exists.", nameof(cookie));
 
             _cookies.Add(cookie);
         }

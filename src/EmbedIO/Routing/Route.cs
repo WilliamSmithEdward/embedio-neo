@@ -16,8 +16,7 @@ namespace EmbedIO.Routing
     public static class Route
     {
         // Characters in ValidParameterNameChars MUST be in ascending ordinal order!
-        private static readonly char[] ValidParameterNameChars =
-            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz".ToCharArray();
+        private static readonly char[] ValidParameterNameChars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz".ToCharArray();
 
         /// <summary>
         /// <para>Determines whether a string is a valid route parameter name.</para>
@@ -33,10 +32,10 @@ namespace EmbedIO.Routing
         /// <param name="value">The value.</param>
         /// <returns><see langword="true"/> if <paramref name="value"/> is a valid route parameter;
         /// otherwise, <see langword="false"/>.</returns>
-        public static bool IsValidParameterName(string value)
-            => !string.IsNullOrEmpty(value)
-            && value[0] > '9'
-            && !value.Any(c => c < '0' || c > 'z' || Array.BinarySearch(ValidParameterNameChars, c) < 0);
+        public static bool IsValidParameterName(string value) =>
+            !string.IsNullOrEmpty(value)
+                && value[0] > '9'
+                && !value.Any(c => c < '0' || c > 'z' || Array.BinarySearch(ValidParameterNameChars, c) < 0);
 
         /// <summary>
         /// <para>Determines whether a string is a valid route.</para>
@@ -67,11 +66,16 @@ namespace EmbedIO.Routing
         /// otherwise, <see langword="false"/>.</param>
         /// <returns><see langword="true"/> if <paramref name="route"/> is a valid route;
         /// otherwise, <see langword="false"/>.</returns>
-        public static bool IsValid(string route, bool isBaseRoute) => ValidateInternal(nameof(route), route, isBaseRoute) == null;
+        public static bool IsValid(string route, bool isBaseRoute) =>
+            ValidateInternal(nameof(route), route, isBaseRoute) == null;
 
         // Check the validity of a route by parsing it without storing the results.
         // Returns: ArgumentNullException, ArgumentException, null if OK
-        internal static Exception? ValidateInternal(string argumentName, string value, bool isBaseRoute) => ParseInternal(value, isBaseRoute, null) switch
+        internal static Exception? ValidateInternal(
+            string argumentName,
+            string value,
+            bool isBaseRoute
+        ) => ParseInternal(value, isBaseRoute, null) switch
         {
             ArgumentNullException _ => new ArgumentNullException(argumentName),
             FormatException formatException => new ArgumentException(formatException.Message, argumentName),
@@ -82,7 +86,12 @@ namespace EmbedIO.Routing
         // Validate and parse a route, constructing a Regex pattern.
         // setResult will be called at the end with the isBaseRoute flag, parameter names and the constructed pattern.
         // Returns: ArgumentNullException, FormatException, null if OK
-        internal static Exception? ParseInternal(string route, bool isBaseRoute, Action<bool, IEnumerable<string>, string>? setResult, bool ignoreCase = false)
+        internal static Exception? ParseInternal(
+            string route,
+            bool isBaseRoute,
+            Action<bool, IEnumerable<string>, string>? setResult,
+            bool ignoreCase = false
+        )
         {
             if (route == null)
                 return new ArgumentNullException(nameof(route));
@@ -107,11 +116,13 @@ namespace EmbedIO.Routing
 
             // If setResult is null we only validate; no pattern text is built.
             var pattern = new RoutePattern(isBaseRoute, setResult != null);
+
             if (route.Length == 1)
             {
                 // If the route consists of a single slash, only a single slash will match.
                 pattern.AppendRoot();
             }
+
             else
             {
                 // Divide the route in segments, separated by slashes. The route is not
@@ -119,6 +130,7 @@ namespace EmbedIO.Routing
                 foreach (var segment in GetSegments(route))
                 {
                     var error = pattern.AppendSegment(segment);
+
                     if (error != null)
                         return error;
                 }
@@ -148,8 +160,7 @@ namespace EmbedIO.Routing
                 _text = buildText ? new StringBuilder("^") : null;
             }
 
-            internal List<string> ParameterNames { get; } = new();
-
+            internal List<string> ParameterNames { get; } = [];
             internal string? Text => _text?.ToString();
 
             internal void AppendRoot() => _text?.Append(_isBaseRoute ? "/" : "/$");
@@ -168,9 +179,11 @@ namespace EmbedIO.Routing
                 _segmentCount++;
                 var position = 0;
                 var afterParameter = false;
+
                 while (true)
                 {
                     var openPosition = segment.IndexOf('{', position);
+
                     if (openPosition < 0)
                     {
                         // No more parameter specs: escape the remainder of the segment.
@@ -198,6 +211,7 @@ namespace EmbedIO.Routing
                     // Otherwise the parameter spec decides, because an optional segment owns its slash.
                     AppendLiteral(segment, position, openPosition, position == 0 && openPosition > 0);
                     var error = AppendParameter(segment, openPosition + 1, out position);
+
                     if (error != null)
                         return error;
 
@@ -223,6 +237,7 @@ namespace EmbedIO.Routing
 
                 // Look for end of spec, bail out if not found.
                 var closePosition = segment.IndexOf('}', start);
+
                 if (closePosition < 0)
                     return new FormatException("Route syntax error: unclosed parameter specification.");
 
@@ -240,8 +255,11 @@ namespace EmbedIO.Routing
                     return new FormatException("Route syntax error: missing parameter name.");
 
                 var parameterName = segment.Substring(start, nameEndPosition - start);
+
                 if (!IsValidParameterName(parameterName))
-                    return new FormatException("Route syntax error: parameter name contains one or more invalid characters.");
+                    return new FormatException(
+                        "Route syntax error: parameter name contains one or more invalid characters."
+                    );
 
                 if (ParameterNames.Contains(parameterName))
                     return new FormatException("Route syntax error: duplicate parameter name.");
@@ -259,16 +277,25 @@ namespace EmbedIO.Routing
                     // If the segment consists only of an optional parameter, then the slash
                     // preceding the segment is optional as well. The parameter must then match
                     // only when not empty, because it's (slash + parameter) that is optional.
-                    _text?.Append("(/(?<").Append(parameterName).Append(">[^/]+?))?");
+                    _text
+                        ?.Append("(/(?<")
+                        .Append(parameterName)
+                        .Append(">[^/]+?))?");
                     _optionalSegmentCount++;
                 }
+
                 else
                 {
                     // If at the start of a segment, don't forget the slash!
                     if (start == 1)
                         _text?.Append('/');
 
-                    _text?.Append("(?<").Append(parameterName).Append(">[^/]").Append(allowEmpty ? '*' : '+').Append("?)");
+                    _text
+                        ?.Append("(?<")
+                        .Append(parameterName)
+                        .Append(">[^/]")
+                        .Append(allowEmpty ? '*' : '+')
+                        .Append("?)");
                 }
 
                 next = closePosition + 1;
@@ -281,7 +308,9 @@ namespace EmbedIO.Routing
 
                 // If all segments are optional segments, "/" must match too.
                 if (_optionalSegmentCount == _segmentCount)
-                    _text?.Insert(0, "(/$)|(").Append(')');
+                    _text
+                        ?.Insert(0, "(/$)|(")
+                        .Append(')');
             }
         }
 
@@ -290,11 +319,13 @@ namespace EmbedIO.Routing
         {
             var length = route.Length;
             var position = 0;
+
             for (; ; )
             {
                 while (route[position] == '/')
                 {
                     position++;
+
                     if (position >= length)
                         break;
                 }
@@ -303,6 +334,7 @@ namespace EmbedIO.Routing
                     break;
 
                 var slashPosition = route.IndexOf('/', position);
+
                 if (slashPosition < 0)
                 {
                     yield return route.Substring(position);

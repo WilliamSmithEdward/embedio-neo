@@ -16,8 +16,10 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
         /// <seealso cref="IWebModule.OnHttpException" />
         /// <seealso cref="HttpExceptionHandler" />
-        public static TWebModule HandleHttpException<TWebModule>(this TWebModule @this, HttpExceptionHandlerCallback handler)
-            where TWebModule : IWebModule
+        public static TWebModule HandleHttpException<TWebModule>(
+            this TWebModule @this,
+            HttpExceptionHandlerCallback handler
+        ) where TWebModule : IWebModule
         {
             @this.OnHttpException = handler;
             return @this;
@@ -35,8 +37,10 @@ namespace EmbedIO
         /// <exception cref="InvalidOperationException">The module's configuration is locked.</exception>
         /// <seealso cref="IWebModule.OnUnhandledException" />
         /// <seealso cref="ExceptionHandler" />
-        public static TWebModule HandleUnhandledException<TWebModule>(this TWebModule @this, ExceptionHandlerCallback handler)
-            where TWebModule : IWebModule
+        public static TWebModule HandleUnhandledException<TWebModule>(
+            this TWebModule @this,
+            ExceptionHandlerCallback handler
+        ) where TWebModule : IWebModule
         {
             @this.OnUnhandledException = handler;
             return @this;

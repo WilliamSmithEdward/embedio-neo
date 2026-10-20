@@ -10,7 +10,7 @@ namespace EmbedIO.WebApi
         /// <summary>Runs only the named hook.</summary>
         Replace = 1,
         /// <summary>Skips controller preprocessing and any class attribute hook.</summary>
-        Skip = 2,
+        Skip = 2
     }
 
     /// <summary>Configures preprocessing before a controller action's parameters are bound.</summary>

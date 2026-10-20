@@ -17,6 +17,6 @@
         /// <summary>
         /// Equivalent to numeric value 1. Indicates non-zero.
         /// </summary>
-        On = 0x1,
+        On = 0x1
     }
 }

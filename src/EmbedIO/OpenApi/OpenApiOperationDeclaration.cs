@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Net;
 using System.Collections.Generic;
+using System.Net;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.OpenApi
@@ -14,9 +14,7 @@ namespace EmbedIO.OpenApi
     /// </summary>
     public sealed class OpenApiOperationDeclaration
     {
-        internal OpenApiOperationDeclaration()
-        {
-        }
+        internal OpenApiOperationDeclaration() { }
 
         /// <summary>Gets or sets a short summary of the operation.</summary>
         public string? Summary { get; set; }
@@ -32,12 +30,9 @@ namespace EmbedIO.OpenApi
 
         /// <summary>Gets or sets a value indicating whether the operation is deprecated.</summary>
         public bool Deprecated { get; set; }
-
-        internal List<DeclaredParameter> Parameters { get; } = new();
-
+        internal List<DeclaredParameter> Parameters { get; } = [];
         internal DeclaredBody? Body { get; private set; }
-
-        internal List<DeclaredResponse> Responses { get; } = new();
+        internal List<DeclaredResponse> Responses { get; } = [];
 
         /// <summary>
         /// Declares a parameter. Route parameters need no declaration unless they are not strings,
@@ -51,14 +46,23 @@ namespace EmbedIO.OpenApi
         /// <returns>This declaration.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="type"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty.</exception>
-        public OpenApiOperationDeclaration Parameter(string name, OpenApiParameterLocation location, Type type, bool required = false, string? description = null)
+        public OpenApiOperationDeclaration Parameter(
+            string name,
+            OpenApiParameterLocation location,
+            Type type,
+            bool required = false,
+            string? description = null
+        )
         {
-            Parameters.Add(new DeclaredParameter(
-                Validate.NotNullOrEmpty(nameof(name), name),
-                location,
-                Validate.NotNull(nameof(type), type),
-                required,
-                description));
+            Parameters.Add(
+                new DeclaredParameter(
+                    Validate.NotNullOrEmpty(nameof(name), name),
+                    location,
+                    Validate.NotNull(nameof(type), type),
+                    required,
+                    description
+                )
+            );
             return this;
         }
 
@@ -74,9 +78,14 @@ namespace EmbedIO.OpenApi
         /// <exception cref="ArgumentNullException"><paramref name="contentType"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="contentType"/> is empty.</exception>
         /// <exception cref="InvalidOperationException">A body is already declared.</exception>
-        public OpenApiOperationDeclaration RequestBody(Type? type, string contentType = "application/json", bool required = true)
+        public OpenApiOperationDeclaration RequestBody(
+            Type? type,
+            string contentType = "application/json",
+            bool required = true
+        )
         {
             contentType = Validate.NotNullOrEmpty(nameof(contentType), contentType);
+
             if (Body != null)
                 throw new InvalidOperationException("The operation's request body is already declared.");
 
@@ -91,7 +100,12 @@ namespace EmbedIO.OpenApi
         /// <param name="contentType">The body's media type; by default <c>application/json</c> when
         /// <paramref name="type"/> is given.</param>
         /// <returns>This declaration.</returns>
-        public OpenApiOperationDeclaration Response(int statusCode, string? description = null, Type? type = null, string? contentType = null)
+        public OpenApiOperationDeclaration Response(
+            int statusCode,
+            string? description = null,
+            Type? type = null,
+            string? contentType = null
+        )
         {
             Responses.Add(new DeclaredResponse(statusCode, description, type, contentType));
             return this;
@@ -103,12 +117,22 @@ namespace EmbedIO.OpenApi
         /// <param name="type">The optional body type.</param>
         /// <param name="contentType">The optional body media type.</param>
         /// <returns>This declaration.</returns>
-        public OpenApiOperationDeclaration Response(HttpStatusCode statusCode, string? description = null, Type? type = null, string? contentType = null)
-            => Response((int)statusCode, description, type, contentType);
+        public OpenApiOperationDeclaration Response(
+            HttpStatusCode statusCode,
+            string? description = null,
+            Type? type = null,
+            string? contentType = null
+        ) => Response((int)statusCode, description, type, contentType);
 
         internal sealed class DeclaredParameter
         {
-            internal DeclaredParameter(string name, OpenApiParameterLocation location, Type type, bool required, string? description)
+            internal DeclaredParameter(
+                string name,
+                OpenApiParameterLocation location,
+                Type type,
+                bool required,
+                string? description
+            )
             {
                 Name = name;
                 Location = location;
@@ -118,13 +142,9 @@ namespace EmbedIO.OpenApi
             }
 
             internal string Name { get; }
-
             internal OpenApiParameterLocation Location { get; }
-
             internal Type Type { get; }
-
             internal bool Required { get; }
-
             internal string? Description { get; }
         }
 
@@ -138,9 +158,7 @@ namespace EmbedIO.OpenApi
             }
 
             internal Type? Type { get; }
-
             internal string ContentType { get; }
-
             internal bool Required { get; }
         }
 
@@ -155,11 +173,8 @@ namespace EmbedIO.OpenApi
             }
 
             internal int StatusCode { get; }
-
             internal string? Description { get; }
-
             internal Type? Type { get; }
-
             internal string? ContentType { get; }
         }
     }

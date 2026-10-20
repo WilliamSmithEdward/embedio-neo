@@ -9,7 +9,7 @@ namespace EmbedIO.Utilities
     public static class HttpDate
     {
         // https://github.com/dotnet/corefx/blob/master/src/Common/src/System/Net/HttpDateParser.cs
-        private static readonly string[] DateFormats = {
+        private static readonly string[] DateFormats = [
             // "r", // RFC 1123, required output format but too strict for input
             "ddd, d MMM yyyy H:m:s 'GMT'", // RFC 1123 (r, except it allows both 1 and 01 for date and time)
             "ddd, d MMM yyyy H:m:s 'UTC'", // RFC 1123, UTC
@@ -23,16 +23,14 @@ namespace EmbedIO.Utilities
             "d MMM yy H:m:s 'GMT'", // RFC 1123, no day-of-week, short year
             "d MMM yy H:m:s 'UTC'", // RFC 1123, UTC, no day-of-week, short year
             "d MMM yy H:m:s", // RFC 1123, no day-of-week, short year, no zone
-
             "dddd, d'-'MMM'-'yy H:m:s 'GMT'", // RFC 850
             "dddd, d'-'MMM'-'yy H:m:s 'UTC'", // RFC 850, UTC
             "dddd, d'-'MMM'-'yy H:m:s zzz", // RFC 850, offset
             "dddd, d'-'MMM'-'yy H:m:s", // RFC 850 no zone
             "ddd MMM d H:m:s yyyy", // ANSI C's asctime() format
-
             "ddd, d MMM yyyy H:m:s zzz", // RFC 5322
-            "d MMM yyyy H:m:s zzz", // RFC 5322 no day-of-week
-        };
+            "d MMM yyyy H:m:s zzz" // RFC 5322 no day-of-week
+        ];
 
         /// <summary>
         /// Attempts to parse a string containing a date and time, and possibly a time zone offset,
@@ -53,7 +51,8 @@ namespace EmbedIO.Utilities
                 DateFormats,
                 DateTimeFormatInfo.InvariantInfo,
                 DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal,
-                out result);
+                out result
+            );
 
         /// <summary>
         /// Formats the specified <see cref="DateTimeOffset"/>
@@ -61,8 +60,10 @@ namespace EmbedIO.Utilities
         /// </summary>
         /// <param name="dateTimeOffset">The <see cref="DateTimeOffset"/> to format.</param>
         /// <returns>A string containing the formatted <paramref name="dateTimeOffset"/>.</returns>
-        public static string Format(DateTimeOffset dateTimeOffset)
-            => dateTimeOffset.ToUniversalTime().ToString("r", DateTimeFormatInfo.InvariantInfo);
+        public static string Format(DateTimeOffset dateTimeOffset) =>
+            dateTimeOffset
+                .ToUniversalTime()
+                .ToString("r", DateTimeFormatInfo.InvariantInfo);
 
         /// <summary>
         /// Formats the specified <see cref="DateTime"/>
@@ -70,7 +71,9 @@ namespace EmbedIO.Utilities
         /// </summary>
         /// <param name="dateTime">The <see cref="DateTime"/> to format.</param>
         /// <returns>A string containing the formatted <paramref name="dateTime"/>.</returns>
-        public static string Format(DateTime dateTime)
-            => dateTime.ToUniversalTime().ToString("r", DateTimeFormatInfo.InvariantInfo);
+        public static string Format(DateTime dateTime) =>
+            dateTime
+                .ToUniversalTime()
+                .ToString("r", DateTimeFormatInfo.InvariantInfo);
     }
 }

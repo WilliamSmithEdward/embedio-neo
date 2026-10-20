@@ -38,7 +38,8 @@ namespace EmbedIO.WebApi
         public Task<MultipartReader?> GetRequestDataAsync(WebApiController controller, string parameterName)
         {
             if (controller == null) throw new ArgumentNullException(nameof(controller));
-            MultipartReader reader = controller.HttpContext.OpenMultipartReader(new MultipartOptions
+
+            var reader = controller.HttpContext.OpenMultipartReader(new MultipartOptions
             {
                 MaxTotalBytes = MaxTotalBytes,
                 MaxFileBytes = MaxFileBytes,
@@ -47,7 +48,7 @@ namespace EmbedIO.WebApi
                 MaxFiles = MaxFiles,
                 MaxFields = MaxFields,
                 MaxHeaderBytes = MaxHeaderBytes,
-                MaxHeaders = MaxHeaders,
+                MaxHeaders = MaxHeaders
             });
             return Task.FromResult<MultipartReader?>(reader);
         }

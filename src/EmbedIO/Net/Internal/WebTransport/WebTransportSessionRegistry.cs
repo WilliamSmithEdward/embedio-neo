@@ -12,7 +12,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         // H3_REQUEST_REJECTED or answer 429 (section 5.2); the caller chooses.
         TooManySessions,
         // Section 3.1 requirements are not met for this connection.
-        NotNegotiated,
+        NotNegotiated
     }
 
     // Connection-wide bounds. Buffers hold streams and datagrams that name a
@@ -39,66 +39,99 @@ namespace EmbedIO.Net.Internal.WebTransport
         private readonly WebTransportRegistryLimits _limits;
         private readonly WebTransportStreamHandler _streamHandler;
         private readonly WebTransportDatagramHandler _datagramHandler;
-        private readonly Dictionary<long, WebTransportSession> _sessions = new();
-        private readonly Dictionary<long, Queue<WebTransportStreamHandle>> _bufferedStreams = new();
-        private readonly Dictionary<long, Queue<byte[]>> _bufferedDatagrams = new();
+        private readonly Dictionary<long, WebTransportSession> _sessions = [];
+        private readonly Dictionary<long, Queue<WebTransportStreamHandle>> _bufferedStreams = [];
+        private readonly Dictionary<long, Queue<byte[]>> _bufferedDatagrams = [];
         private int _bufferedStreamCount;
         private int _bufferedDatagramCount;
         private int _bufferedDatagramBytes;
-        private readonly List<RequestRange> _unavailable = new();
+        private readonly List<RequestRange> _unavailable = [];
+
         private readonly struct RequestRange
         {
             internal readonly long First;
             internal readonly long Last;
-            internal RequestRange(long first, long last) { First = first; Last = last; }
+
+            internal RequestRange(long first, long last)
+            {
+                First = first;
+                Last = last;
+            }
         }
+
         private int FindRange(long ordinal)
         {
-            var low = 0; var high = _unavailable.Count;
+            var low = 0;
+            var high = _unavailable.Count;
+
             while (low < high)
             {
                 var middle = low + (high - low) / 2;
+
                 if (_unavailable[middle].Last < ordinal) low = middle + 1;
+
                 else high = middle;
             }
+
             return low;
         }
+
         private bool IsUnavailable(long streamId)
         {
             var ordinal = streamId >> 2;
             var index = FindRange(ordinal);
             return index < _unavailable.Count && _unavailable[index].First <= ordinal;
         }
+
         private void MarkUnavailable(long streamId)
         {
             var ordinal = streamId >> 2;
             var index = FindRange(ordinal);
+
             if (index < _unavailable.Count && _unavailable[index].First <= ordinal) return;
+
             var left = index > 0 && _unavailable[index - 1].Last == ordinal - 1;
             var right = index < _unavailable.Count && _unavailable[index].First == ordinal + 1;
+
             if (left && right)
             {
                 _unavailable[index - 1] = new RequestRange(_unavailable[index - 1].First, _unavailable[index].Last);
                 _unavailable.RemoveAt(index);
             }
+
             else if (left) _unavailable[index - 1] = new RequestRange(_unavailable[index - 1].First, ordinal);
+
             else if (right) _unavailable[index] = new RequestRange(ordinal, _unavailable[index].Last);
+
             else
             {
                 if (_unavailable.Count >= _limits.MaximumTrackedRequestRanges)
-                    throw new Http3ProtocolException(WebTransportProtocol.H3ExcessiveLoad, "Too many disjoint classified request ranges.");
+                    throw new Http3ProtocolException(
+                        WebTransportProtocol.H3ExcessiveLoad,
+                        "Too many disjoint classified request ranges."
+                    );
+
                 _unavailable.Insert(index, new RequestRange(ordinal, ordinal));
             }
         }
+
         private bool _shutdown;
 
-        internal WebTransportSessionRegistry(WebTransportSettings local, WebTransportSettings peer, bool transportParametersMet,
-            WebTransportRegistryLimits limits, WebTransportStreamHandler streamHandler, WebTransportDatagramHandler datagramHandler)
+        internal WebTransportSessionRegistry(
+            WebTransportSettings local,
+            WebTransportSettings peer,
+            bool transportParametersMet,
+            WebTransportRegistryLimits limits,
+            WebTransportStreamHandler streamHandler,
+            WebTransportDatagramHandler datagramHandler
+        )
         {
             _local = local ?? throw new ArgumentNullException(nameof(local));
             _peer = peer ?? throw new ArgumentNullException(nameof(peer));
             _limits = limits ?? throw new ArgumentNullException(nameof(limits));
+
             if (limits.MaximumTrackedRequestRanges <= 0) throw new ArgumentOutOfRangeException(nameof(limits));
+
             _streamHandler = streamHandler ?? throw new ArgumentNullException(nameof(streamHandler));
             _datagramHandler = datagramHandler ?? throw new ArgumentNullException(nameof(datagramHandler));
             Negotiated = local.Enabled && peer.SettingsRequirementsMet && transportParametersMet;
@@ -107,9 +140,30 @@ namespace EmbedIO.Net.Internal.WebTransport
 
         public bool Negotiated { get; }
         public bool FlowControlEnabled { get; }
-        public int ActiveSessionCount { get { lock (_gate) return _sessions.Count; } }
-        public int BufferedStreamCount { get { lock (_gate) return _bufferedStreamCount; } }
-        public int BufferedDatagramCount { get { lock (_gate) return _bufferedDatagramCount; } }
+
+        public int ActiveSessionCount
+        {
+            get
+            {
+                lock (_gate) return _sessions.Count;
+            }
+        }
+
+        public int BufferedStreamCount
+        {
+            get
+            {
+                lock (_gate) return _bufferedStreamCount;
+            }
+        }
+
+        public int BufferedDatagramCount
+        {
+            get
+            {
+                lock (_gate) return _bufferedDatagramCount;
+            }
+        }
 
         // Call only after this exact request is classified as non-WebTransport
         // or its CONNECT is rejected. Seeing a higher request says nothing about
@@ -117,50 +171,90 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void NoteRequestStream(long streamId)
         {
             if (!WebTransportProtocol.IsSessionId(streamId)) throw new ArgumentOutOfRangeException(nameof(streamId));
+
             Queue<WebTransportStreamHandle>? streams = null;
+
             lock (_gate)
             {
-                if (_sessions.ContainsKey(streamId)) throw new InvalidOperationException("An active WebTransport session owns this request.");
+                if (_sessions.ContainsKey(streamId))
+                    throw new InvalidOperationException("An active WebTransport session owns this request.");
+
                 MarkUnavailable(streamId);
+
                 if (_bufferedStreams.TryGetValue(streamId, out streams))
-                { _bufferedStreams.Remove(streamId); _bufferedStreamCount -= streams.Count; }
+                {
+                    _bufferedStreams.Remove(streamId);
+                    _bufferedStreamCount -= streams.Count;
+                }
+
                 if (_bufferedDatagrams.TryGetValue(streamId, out var datagrams))
                 {
-                    _bufferedDatagrams.Remove(streamId); _bufferedDatagramCount -= datagrams.Count;
+                    _bufferedDatagrams.Remove(streamId);
+                    _bufferedDatagramCount -= datagrams.Count;
+
                     foreach (var datagram in datagrams) _bufferedDatagramBytes -= datagram.Length;
                 }
             }
+
             if (streams != null) foreach (var stream in streams) stream.Abort(WebTransportProtocol.SessionGone);
         }
 
         // An extended CONNECT with :protocol=webtransport-h3 arrived on connectStreamId.
         internal WebTransportAdmission TryCreateSession(long connectStreamId, out WebTransportSession? session)
         {
-            if (!WebTransportProtocol.IsSessionId(connectStreamId)) throw new ArgumentOutOfRangeException(nameof(connectStreamId));
+            if (!WebTransportProtocol.IsSessionId(connectStreamId))
+                throw new ArgumentOutOfRangeException(nameof(connectStreamId));
+
             session = null;
             Queue<WebTransportStreamHandle>? streams = null;
             Queue<byte[]>? datagrams = null;
+
             lock (_gate)
             {
                 if (!Negotiated || _shutdown) return WebTransportAdmission.NotNegotiated;
-                if (IsUnavailable(connectStreamId)) throw new InvalidOperationException("This request was already classified or its session ended.");
-                if (_sessions.ContainsKey(connectStreamId)) throw new InvalidOperationException("A session already uses this CONNECT stream.");
+
+                if (IsUnavailable(connectStreamId))
+                    throw new InvalidOperationException("This request was already classified or its session ended.");
+
+                if (_sessions.ContainsKey(connectStreamId))
+                    throw new InvalidOperationException("A session already uses this CONNECT stream.");
+
                 var bound = FlowControlEnabled ? _limits.MaximumSessions : 1;
+
                 if (_sessions.Count >= bound) return WebTransportAdmission.TooManySessions;
-                session = new WebTransportSession(connectStreamId, FlowControlEnabled, _local, _peer, _limits.Session, _streamHandler, _datagramHandler);
+
+                session = new WebTransportSession(
+                    connectStreamId,
+                    FlowControlEnabled,
+                    _local,
+                    _peer,
+                    _limits.Session,
+                    _streamHandler,
+                    _datagramHandler
+                );
                 _sessions.Add(connectStreamId, session);
+
                 if (_bufferedStreams.TryGetValue(connectStreamId, out streams))
-                { _bufferedStreams.Remove(connectStreamId); _bufferedStreamCount -= streams.Count; }
+                {
+                    _bufferedStreams.Remove(connectStreamId);
+                    _bufferedStreamCount -= streams.Count;
+                }
+
                 if (_bufferedDatagrams.TryGetValue(connectStreamId, out datagrams))
                 {
                     _bufferedDatagrams.Remove(connectStreamId);
                     _bufferedDatagramCount -= datagrams.Count;
+
                     foreach (var datagram in datagrams) _bufferedDatagramBytes -= datagram.Length;
                 }
             }
+
             // The session is still pending, so these land in its own bounded buffers.
             if (streams != null) foreach (var stream in streams) session.AttachIncomingStream(stream);
-            if (datagrams != null) foreach (var datagram in datagrams) session.AcceptDatagram(datagram, 0, datagram.Length);
+
+            if (datagrams != null)
+                foreach (var datagram in datagrams) session.AcceptDatagram(datagram, 0, datagram.Length);
+
             return WebTransportAdmission.Accepted;
         }
 
@@ -169,10 +263,14 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void SessionEnded(WebTransportSession session)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
+
             lock (_gate)
             {
                 if (!_sessions.TryGetValue(session.Id, out var owned)) return;
-                if (!ReferenceEquals(owned, session)) throw new InvalidOperationException("Another session owns this identifier.");
+
+                if (!ReferenceEquals(owned, session))
+                    throw new InvalidOperationException("Another session owns this identifier.");
+
                 MarkUnavailable(session.Id);
                 _sessions.Remove(session.Id);
             }
@@ -183,23 +281,42 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal bool RouteIncomingStream(long sessionId, WebTransportStreamHandle stream)
         {
             if (stream == null) throw new ArgumentNullException(nameof(stream));
-            if (!WebTransportProtocol.IsSessionId(sessionId)) throw new Http3ProtocolException(WebTransportProtocol.H3IdError, "WebTransport session identifier is not a client-initiated bidirectional stream.");
+
+            if (!WebTransportProtocol.IsSessionId(sessionId))
+                throw new Http3ProtocolException(
+                    WebTransportProtocol.H3IdError,
+                    "WebTransport session identifier is not a client-initiated bidirectional stream."
+                );
+
             WebTransportSession? session = null;
             long? reset = null;
+
             lock (_gate)
             {
                 if (_sessions.TryGetValue(sessionId, out var found)) session = found;
+
                 else if (_shutdown || IsUnavailable(sessionId)) reset = WebTransportProtocol.SessionGone;
-                else if (_bufferedStreamCount >= _limits.MaximumBufferedStreams) reset = WebTransportProtocol.BufferedStreamRejected;
+
+                else if (_bufferedStreamCount >= _limits.MaximumBufferedStreams)
+                    reset = WebTransportProtocol.BufferedStreamRejected;
+
                 else
                 {
-                    if (!_bufferedStreams.TryGetValue(sessionId, out var queue)) _bufferedStreams.Add(sessionId, queue = new Queue<WebTransportStreamHandle>());
+                    if (!_bufferedStreams.TryGetValue(sessionId, out var queue))
+                        _bufferedStreams.Add(sessionId, queue = new Queue<WebTransportStreamHandle>());
+
                     queue.Enqueue(stream);
                     _bufferedStreamCount++;
                     return true;
                 }
             }
-            if (reset.HasValue) { stream.Abort(reset.Value); return false; }
+
+            if (reset.HasValue)
+            {
+                stream.Abort(reset.Value);
+                return false;
+            }
+
             return session != null && session.AttachIncomingStream(stream);
         }
 
@@ -208,16 +325,31 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal bool RouteDatagram(long sessionId, byte[] bytes, int offset, int count)
         {
             WebTransportProtocol.ValidateBuffer(bytes, offset, count);
-            if (!WebTransportProtocol.IsSessionId(sessionId)) throw new Http3ProtocolException(WebTransportProtocol.H3IdError, "HTTP datagram names a stream that is not a client-initiated bidirectional stream.");
+
+            if (!WebTransportProtocol.IsSessionId(sessionId))
+                throw new Http3ProtocolException(
+                    WebTransportProtocol.H3IdError,
+                    "HTTP datagram names a stream that is not a client-initiated bidirectional stream."
+                );
+
             WebTransportSession? session = null;
+
             lock (_gate)
             {
                 if (_sessions.TryGetValue(sessionId, out var found)) session = found;
+
                 else if (_shutdown || IsUnavailable(sessionId)) return false;
-                else if (_bufferedDatagramCount >= _limits.MaximumBufferedDatagrams || count > _limits.MaximumBufferedDatagramBytes - _bufferedDatagramBytes) return false;
+
+                else if (
+                    _bufferedDatagramCount >= _limits.MaximumBufferedDatagrams
+                    || count > _limits.MaximumBufferedDatagramBytes - _bufferedDatagramBytes
+                ) return false;
+
                 else
                 {
-                    if (!_bufferedDatagrams.TryGetValue(sessionId, out var queue)) _bufferedDatagrams.Add(sessionId, queue = new Queue<byte[]>());
+                    if (!_bufferedDatagrams.TryGetValue(sessionId, out var queue))
+                        _bufferedDatagrams.Add(sessionId, queue = new Queue<byte[]>());
+
                     var copy = new byte[count];
                     Array.Copy(bytes, offset, copy, 0, count);
                     queue.Enqueue(copy);
@@ -226,6 +358,7 @@ namespace EmbedIO.Net.Internal.WebTransport
                     return true;
                 }
             }
+
             return session != null && session.AcceptDatagram(bytes, offset, count);
         }
 
@@ -234,21 +367,27 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal void Shutdown()
         {
             List<WebTransportSession> sessions;
-            List<WebTransportStreamHandle> streams = new();
+            List<WebTransportStreamHandle> streams = [];
+
             lock (_gate)
             {
                 if (_shutdown) return;
+
                 _shutdown = true;
-                sessions = new List<WebTransportSession>(_sessions.Values);
+                sessions = [.. _sessions.Values];
                 _sessions.Clear();
+
                 foreach (var queue in _bufferedStreams.Values) streams.AddRange(queue);
+
                 _bufferedStreams.Clear();
                 _bufferedDatagrams.Clear();
                 _bufferedStreamCount = 0;
                 _bufferedDatagramCount = 0;
                 _bufferedDatagramBytes = 0;
             }
+
             foreach (var session in sessions) session.Terminate(null);
+
             foreach (var stream in streams) stream.Abort(WebTransportProtocol.SessionGone);
         }
     }

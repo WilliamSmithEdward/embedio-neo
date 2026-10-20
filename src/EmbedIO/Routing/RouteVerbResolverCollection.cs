@@ -1,11 +1,11 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System;
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
-using EmbedIO.Utilities;
 using EmbedIO.Diagnostics;
+using EmbedIO.Utilities;
 
 namespace EmbedIO.Routing
 {
@@ -19,10 +19,7 @@ namespace EmbedIO.Routing
     {
         private readonly string _logSource;
 
-        internal RouteVerbResolverCollection(string logSource)
-        {
-            _logSource = logSource;
-        }
+        internal RouteVerbResolverCollection(string logSource) => _logSource = logSource;
 
         /// <summary>
         /// <para>Adds handlers, associating them with HTTP method / route pairs by means
@@ -68,27 +65,34 @@ namespace EmbedIO.Routing
         public int AddFrom(object target) => Validate.NotNull(nameof(target), target) switch
         {
             Type type => AddFrom(null, type),
-            Assembly assembly => assembly.GetExportedTypes().Sum(t => AddFrom(null, t)),
+            Assembly assembly => assembly
+                .GetExportedTypes()
+                .Sum(t => AddFrom(null, t)),
             MethodInfo method => method.IsStatic ? Add(null, method) : 0,
             Delegate callback => Add(callback.Target, callback.Method),
             _ => AddFrom(target, target.GetType())
         };
 
         /// <inheritdoc />
-        protected override RouteVerbResolver CreateResolver(RouteMatcher matcher) => new RouteVerbResolver(matcher);
+        protected override RouteVerbResolver CreateResolver(RouteMatcher matcher) => new(matcher);
 
         /// <inheritdoc />
-        protected override void OnResolverCalled(IHttpContext context, RouteVerbResolver resolver, RouteResolutionResult result)
-            => $"[{context.Id}] Route {resolver.Route} : {result}".Trace(_logSource);
+        protected override void OnResolverCalled(
+            IHttpContext context,
+            RouteVerbResolver resolver,
+            RouteResolutionResult result
+        ) => $"[{context.Id}] Route {resolver.Route} : {result}".Trace(_logSource);
 
         private static bool IsHandlerCompatibleMethod(MethodInfo method, out bool isSynchronous)
         {
             isSynchronous = false;
             var returnType = method.ReturnType;
+
             if (returnType == typeof(void))
             {
                 isSynchronous = true;
             }
+
             else if (returnType != typeof(Task))
             {
                 return false;
@@ -105,13 +109,14 @@ namespace EmbedIO.Routing
 
         // Call Add with all suitable methods of a Type, return sum of results.
         [RequiresUnreferencedCode(RouteVerbResolverCollection.ScanMessage)]
-        private int AddFrom(object? target, Type type)
-            => type.GetMethods(target == null
-                    ? BindingFlags.Public | BindingFlags.Static
-                    : BindingFlags.Public | BindingFlags.Instance)
-                .Where(method => method.IsPublic
-                              && !method.IsAbstract
-                              && !method.ContainsGenericParameters)
+        private int AddFrom(object? target, Type type) =>
+            type
+                .GetMethods(
+                    target == null
+                        ? BindingFlags.Public | BindingFlags.Static
+                        : BindingFlags.Public | BindingFlags.Instance
+                )
+                .Where(method => method.IsPublic && !method.IsAbstract && !method.ContainsGenericParameters)
                 .Sum(m => Add(target, m));
 
         private int Add(object? target, MethodInfo method)
@@ -119,23 +124,36 @@ namespace EmbedIO.Routing
             if (!IsHandlerCompatibleMethod(method, out var isSynchronous))
                 return 0;
 
-            var attributes = method.GetCustomAttributes(true).OfType<RouteAttribute>().ToArray();
+            var attributes = method
+                .GetCustomAttributes(true)
+                .OfType<RouteAttribute>()
+                .ToArray();
+
             if (attributes.Length == 0)
                 return 0;
 
-            var parameters = new[] {
+            var parameters = new[]
+            {
                 Expression.Parameter(typeof(IHttpContext), "context"),
-                Expression.Parameter(typeof(RouteMatch), "route"),
+                Expression.Parameter(typeof(RouteMatch), "route")
             };
 
-            Expression body = Expression.Call(method.IsStatic ? null : Expression.Constant(target), method, parameters.Cast<Expression>());
+            Expression body = Expression.Call(
+                method.IsStatic ? null : Expression.Constant(target),
+                method,
+                parameters.Cast<Expression>()
+            );
+
             if (isSynchronous)
             {
                 // Convert void to Task by evaluating Task.CompletedTask
                 body = Expression.Block(typeof(Task), body, Expression.Constant(Task.CompletedTask));
             }
 
-            var handler = Expression.Lambda<RouteHandlerCallback>(body, parameters).Compile();
+            var handler = Expression
+                .Lambda<RouteHandlerCallback>(body, parameters)
+                .Compile();
+
             foreach (var attribute in attributes)
             {
                 Add(attribute.Verb, attribute.Matcher, handler);

@@ -7,12 +7,21 @@ namespace EmbedIO.WebSockets.Internal
     // No finite limit is configured by default.
     internal sealed class WebSocketDeliveryLimits
     {
-        internal WebSocketDeliveryLimits(int? connectionMessages, long? connectionBytes, int? moduleMessages, long? moduleBytes)
+        internal WebSocketDeliveryLimits(
+            int? connectionMessages,
+            long? connectionBytes,
+            int? moduleMessages,
+            long? moduleBytes
+        )
         {
             if (connectionMessages < 1) throw new ArgumentOutOfRangeException(nameof(connectionMessages));
+
             if (connectionBytes < 0) throw new ArgumentOutOfRangeException(nameof(connectionBytes));
+
             if (moduleMessages < 1) throw new ArgumentOutOfRangeException(nameof(moduleMessages));
+
             if (moduleBytes < 0) throw new ArgumentOutOfRangeException(nameof(moduleBytes));
+
             ConnectionMessages = connectionMessages;
             ConnectionBytes = connectionBytes;
             ModuleMessages = moduleMessages;
@@ -34,15 +43,27 @@ namespace EmbedIO.WebSockets.Internal
         private long _messages;
         private long _bytes;
 
-        internal WebSocketDeliveryBudget(WebSocketDeliveryLimits limits)
-            => _limits = limits ?? throw new ArgumentNullException(nameof(limits));
+        internal WebSocketDeliveryBudget(WebSocketDeliveryLimits limits) =>
+            _limits = limits ?? throw new ArgumentNullException(nameof(limits));
 
         internal Connection CreateConnection() => new(this);
-        internal Snapshot Outstanding { get { lock (_gate) return new Snapshot(_messages, _bytes); } }
+
+        internal Snapshot Outstanding
+        {
+            get
+            {
+                lock (_gate) return new Snapshot(_messages, _bytes);
+            }
+        }
 
         internal readonly struct Snapshot
         {
-            internal Snapshot(long messages, long bytes) { Messages = messages; Bytes = bytes; }
+            internal Snapshot(long messages, long bytes)
+            {
+                Messages = messages;
+                Bytes = bytes;
+            }
+
             internal long Messages { get; }
             internal long Bytes { get; }
         }
@@ -55,15 +76,27 @@ namespace EmbedIO.WebSockets.Internal
             private bool _stopped;
 
             internal Connection(WebSocketDeliveryBudget owner) => _owner = owner;
-            internal Snapshot Outstanding { get { lock (_owner._gate) return new Snapshot(_messages, _bytes); } }
+
+            internal Snapshot Outstanding
+            {
+                get
+                {
+                    lock (_owner._gate) return new Snapshot(_messages, _bytes);
+                }
+            }
 
             internal bool TryReserve(out Lease? lease)
             {
                 lock (_owner._gate)
                 {
                     lease = null;
-                    if (_stopped || _messages >= (_owner._limits.ConnectionMessages ?? long.MaxValue)
-                        || _owner._messages >= (_owner._limits.ModuleMessages ?? long.MaxValue)) return false;
+
+                    if (
+                        _stopped
+                        || _messages >= (_owner._limits.ConnectionMessages ?? long.MaxValue)
+                        || _owner._messages >= (_owner._limits.ModuleMessages ?? long.MaxValue)
+                    ) return false;
+
                     // Allocate before publishing counters so allocation failure
                     // cannot consume admission without an owner to release it.
                     lease = new Lease(_owner, this);
@@ -75,10 +108,18 @@ namespace EmbedIO.WebSockets.Internal
 
             // Closing admission does not mean callbacks or queued delivery ended.
             // The queue owner separately disposes messages it will not deliver.
-            internal void StopAdmission() { lock (_owner._gate) _stopped = true; }
+            internal void StopAdmission()
+            {
+                lock (_owner._gate) _stopped = true;
+            }
 
             internal void AddBytes(long bytes) => _bytes += bytes;
-            internal void Release(long bytes) { _messages--; _bytes -= bytes; }
+
+            internal void Release(long bytes)
+            {
+                _messages--;
+                _bytes -= bytes;
+            }
         }
 
         internal sealed class Lease : IDisposable
@@ -90,19 +131,28 @@ namespace EmbedIO.WebSockets.Internal
             private int _state;
 
             internal Lease(WebSocketDeliveryBudget owner, Connection connection)
-            { _owner = owner; _connection = connection; }
+            {
+                _owner = owner;
+                _connection = connection;
+            }
 
             // Call before allocating/copying the next fragment. Failed growth
             // changes neither ledger; the caller owns rejection and disposal.
             internal bool TryGrow(long bytes)
             {
                 if (bytes < 0) throw new ArgumentOutOfRangeException(nameof(bytes));
+
                 lock (_owner._gate)
                 {
                     if (_state != Assembling) throw new InvalidOperationException("Message assembly has ended.");
+
                     var connection = _connection.Outstanding;
-                    if (bytes > (_owner._limits.ConnectionBytes ?? long.MaxValue) - connection.Bytes
-                        || bytes > (_owner._limits.ModuleBytes ?? long.MaxValue) - _owner._bytes) return false;
+
+                    if (
+                        bytes > (_owner._limits.ConnectionBytes ?? long.MaxValue) - connection.Bytes
+                        || bytes > (_owner._limits.ModuleBytes ?? long.MaxValue) - _owner._bytes
+                    ) return false;
+
                     _bytes += bytes;
                     _connection.AddBytes(bytes);
                     _owner._bytes += bytes;
@@ -115,6 +165,7 @@ namespace EmbedIO.WebSockets.Internal
                 lock (_owner._gate)
                 {
                     if (_state != Assembling) throw new InvalidOperationException("Message assembly has ended.");
+
                     _state = Queued;
                 }
             }
@@ -125,15 +176,22 @@ namespace EmbedIO.WebSockets.Internal
             internal async Task DeliverAsync(Func<Task> callback)
             {
                 if (callback == null) throw new ArgumentNullException(nameof(callback));
+
                 lock (_owner._gate)
                 {
                     if (_state != Queued) throw new InvalidOperationException("Message is not queued for delivery.");
+
                     _state = CallbackOwned;
                 }
+
                 try
                 {
-                    await (callback() ?? throw new InvalidOperationException("Message callback returned no Task.")).ConfigureAwait(false);
+                    await (callback()
+                        ?? throw new InvalidOperationException("Message callback returned no Task.")).ConfigureAwait(
+                        false
+                    );
                 }
+
                 finally
                 {
                     lock (_owner._gate) ReleaseUnderGate();
@@ -153,6 +211,7 @@ namespace EmbedIO.WebSockets.Internal
             private void ReleaseUnderGate()
             {
                 if (_state == Released) return;
+
                 _state = Released;
                 _connection.Release(_bytes);
                 _owner._messages--;

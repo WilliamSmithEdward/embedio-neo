@@ -20,6 +20,6 @@ namespace EmbedIO.Files
         Brotli = 2,
 
         /// <summary>Serve both kinds.</summary>
-        All = Gzip | Brotli,
+        All = Gzip | Brotli
     }
 }

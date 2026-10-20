@@ -63,8 +63,13 @@ namespace EmbedIO.Files
         /// <param name="size">The length of the file, expressed in bytes.</param>
         /// <param name="contentType">A MIME type describing the kind of contents of the file.</param>
         /// <returns>A newly-constructed instance of <see cref="MappedResourceInfo"/>.</returns>
-        public static MappedResourceInfo ForFile(string path, string name, DateTime lastModifiedUtc, long size, string? contentType)
-            => new MappedResourceInfo(path, name, lastModifiedUtc, size, contentType ?? MimeType.Default);
+        public static MappedResourceInfo ForFile(
+            string path,
+            string name,
+            DateTime lastModifiedUtc,
+            long size,
+            string? contentType
+        ) => new(path, name, lastModifiedUtc, size, contentType ?? MimeType.Default);
 
         /// <summary>
         /// Creates and returns a new instance of the <see cref="MappedResourceInfo"/> class,
@@ -74,7 +79,7 @@ namespace EmbedIO.Files
         /// <param name="name">The name of the directory, as it would appear in a directory listing.</param>
         /// <param name="lastModifiedUtc">The UTC date and time of the last modification made to the directory.</param>
         /// <returns>A newly-constructed instance of <see cref="MappedResourceInfo"/>.</returns>
-        public static MappedResourceInfo ForDirectory(string path, string name, DateTime lastModifiedUtc)
-            => new MappedResourceInfo(path, name, lastModifiedUtc, 0, null);
+        public static MappedResourceInfo ForDirectory(string path, string name, DateTime lastModifiedUtc) =>
+            new(path, name, lastModifiedUtc, 0, null);
     }
 }

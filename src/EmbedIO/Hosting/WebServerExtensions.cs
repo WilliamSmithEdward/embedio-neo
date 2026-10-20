@@ -20,8 +20,10 @@ namespace EmbedIO
         public static void Start(this IWebServer @this, CancellationToken cancellationToken = default)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             // Listen before dispatching RunAsync so synchronous readiness cannot be missed.
             var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
             void OnStateChanged(object sender, WebServerStateChangedEventArgs e)
             {
                 if (e.NewState >= WebServerState.Listening)
@@ -29,21 +31,32 @@ namespace EmbedIO
             }
 
             @this.StateChanged += OnStateChanged;
+
             try
             {
-                var running = Task.Run(() => @this.RunAsync(cancellationToken));
-                _ = running.ContinueWith(task =>
-                {
-                    // Start has historically returned on startup failure. RunAsync carries the error.
-                    _ = task.Exception;
-                    ready.TrySetResult(true);
-                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                var running = Task.Run(() => @this.RunAsync(cancellationToken), CancellationToken.None);
+                _ = running.ContinueWith(
+                    task =>
+                    {
+                        // Start has historically returned on startup failure. RunAsync carries the error.
+                        _ = task.Exception;
+                        ready.TrySetResult(true);
+                    },
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default
+                );
+
                 using (cancellationToken.Register(() => ready.TrySetCanceled(cancellationToken)))
                 {
                     if (@this.State < WebServerState.Listening)
-                        ready.Task.ConfigureAwait(false).GetAwaiter().GetResult();
+                        ready.Task
+                            .ConfigureAwait(false)
+                            .GetAwaiter()
+                            .GetResult();
                 }
             }
+
             finally
             {
                 @this.StateChanged -= OnStateChanged;

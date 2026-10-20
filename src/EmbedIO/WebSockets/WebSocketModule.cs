@@ -7,9 +7,9 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using EmbedIO.Utilities;
-using EmbedIO.Internal;
 using EmbedIO.Diagnostics;
+using EmbedIO.Internal;
+using EmbedIO.Utilities;
 
 namespace EmbedIO.WebSockets
 {
@@ -38,24 +38,25 @@ namespace EmbedIO.WebSockets
     public abstract class WebSocketModule : WebModuleBase, IDisposable, IDrainAwareModule
     {
         private const string DrainCloseReason = "Server is draining";
-
         private const int ReceiveBufferSize = 2048;
 
         // A finite default bounds what one client can make the server buffer per message.
         private const int DefaultMaxMessageSize = 4 * 1024 * 1024;
-
         private readonly bool _enableConnectionWatchdog;
-        private readonly List<string> _protocols = new List<string>();
-        private readonly ConcurrentDictionary<string, IWebSocketContext> _contexts = new ConcurrentDictionary<string, IWebSocketContext>();
+        private readonly List<string> _protocols = [];
+        private readonly ConcurrentDictionary<string, IWebSocketContext> _contexts = new();
         private bool _isDisposing;
         private bool _closeOnDrain;
         private int _draining;
+
         // Contexts already sent the drain close; each is closed once.
-        private readonly ConcurrentDictionary<string, byte> _drainClosed = new ConcurrentDictionary<string, byte>();
+        private readonly ConcurrentDictionary<string, byte> _drainClosed = new();
         private int _maxMessageSize;
         private Internal.WebSocketDeliveryBudget? _deliveryBudget;
         private WebSocketReceiveLimits? _receiveLimits;
+
         internal Internal.WebSocketDeliveryBudget? DeliveryBudget => _deliveryBudget;
+
         /// <summary>Gets or sets optional outstanding-delivery limits; null preserves existing behavior.</summary>
         /// <remarks>
         /// Configure before the module starts. Exhaustion rejects a new message with close status 1008.
@@ -69,12 +70,18 @@ namespace EmbedIO.WebSockets
             {
                 EnsureConfigurationNotLocked();
                 var limits = value?.Limits;
-                var budget = limits != null && (limits.ConnectionMessages.HasValue || limits.ConnectionBytes.HasValue
-                    || limits.ModuleMessages.HasValue || limits.ModuleBytes.HasValue) ? new Internal.WebSocketDeliveryBudget(limits) : null;
+                var budget = limits != null
+                    && (limits.ConnectionMessages.HasValue
+                        || limits.ConnectionBytes.HasValue
+                        || limits.ModuleMessages.HasValue
+                        || limits.ModuleBytes.HasValue)
+                    ? new Internal.WebSocketDeliveryBudget(limits)
+                    : null;
                 _receiveLimits = value;
                 _deliveryBudget = budget;
             }
         }
+
         private TimeSpan _keepAliveInterval;
         private Encoding _encoding;
         private PeriodicTask? _connectionWatchdog;
@@ -86,8 +93,12 @@ namespace EmbedIO.WebSockets
         /// <param name="enableConnectionWatchdog">If set to <see langword="true"/>,
         /// contexts representing closed connections will automatically be purged
         /// from <see cref="ActiveContexts"/> every 30 seconds..</param>
-        protected WebSocketModule(string requestPath, bool enableConnectionWatchdog)
-            : base(requestPath)
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Style",
+            "IDE0290:Use primary constructor",
+            Justification = "Preserve the protected constructor; a primary constructor on this public class would be public."
+        )]
+        protected WebSocketModule(string requestPath, bool enableConnectionWatchdog) : base(requestPath)
         {
             _enableConnectionWatchdog = enableConnectionWatchdog;
             _maxMessageSize = DefaultMaxMessageSize;
@@ -159,8 +170,12 @@ namespace EmbedIO.WebSockets
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value != Timeout.InfiniteTimeSpan && value < TimeSpan.Zero)
-                    throw new ArgumentOutOfRangeException(nameof(value), "The specified keep-alive interval is too small.");
+                    throw new ArgumentOutOfRangeException(
+                        nameof(value),
+                        "The specified keep-alive interval is too small."
+                    );
 
                 _keepAliveInterval = value;
             }
@@ -196,9 +211,7 @@ namespace EmbedIO.WebSockets
                 // https://github.com/mono/mono/blob/master/mcs/class/referencesource/mscorlib/system/collections/Concurrent/ConcurrentDictionary.cs#L1961
                 // However there is no formal guarantee, so be ready to convert to a list, just in case.
                 var values = _contexts.Values;
-                return values is IReadOnlyList<IWebSocketContext> list
-                    ? list
-                    : values.ToList();
+                return values is IReadOnlyList<IWebSocketContext> list ? list : [.. values];
             }
         }
 
@@ -213,6 +226,7 @@ namespace EmbedIO.WebSockets
         protected sealed override async Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             // The WebSocket endpoint must match exactly, giving a RequestedPath of "/".
             // In all other cases the path is longer, so there's no need to compare strings here.
             if (context.RequestedPath.Length > 1)
@@ -220,22 +234,29 @@ namespace EmbedIO.WebSockets
 
             // A generic CONNECT carrier routed here is not a WebSocket handshake.
             // Reject it as an unsupported route before attempting socket acceptance.
-            if (context is IHttpTunnelContext && context.Request.HttpMethod == "CONNECT"
-                && !context.Request.IsWebSocketRequest)
+            if (
+                context is IHttpTunnelContext
+                    && context.Request.HttpMethod == "CONNECT"
+                    && !context.Request.IsWebSocketRequest
+            )
                 throw HttpException.NotFound("This endpoint serves WebSocket connections only.");
-            var requestedProtocols = context.Request.Headers.GetValues(HttpHeaderNames.SecWebSocketProtocol)
-                                         ?.SelectMany(s => s.SplitByComma(StringSplitOptions.RemoveEmptyEntries))
-                                         .Select(s => s.Trim())
-                                         .Where(s => s.Length > 0)
-                                         .ToArray()
-                                  ?? Array.Empty<string>();
+
+            var requestedProtocols = context.Request.Headers
+                .GetValues(HttpHeaderNames.SecWebSocketProtocol)
+                ?.SelectMany(s => s.SplitByComma(StringSplitOptions.RemoveEmptyEntries))
+                .Select(s => s.Trim())
+                .Where(s => s.Length > 0)
+                .ToArray()
+                ?? [];
             string acceptedProtocol;
             bool acceptConnection;
+
             if (_protocols.Count > 0)
             {
                 acceptedProtocol = requestedProtocols.FirstOrDefault(p => _protocols.Contains(p)) ?? string.Empty;
                 acceptConnection = acceptedProtocol.Length > 0;
             }
+
             else
             {
                 acceptedProtocol = string.Empty;
@@ -244,7 +265,10 @@ namespace EmbedIO.WebSockets
 
             if (!acceptConnection)
             {
-                $"{BaseRoute} - Rejecting WebSocket connection: no subprotocol was accepted.".Debug(nameof(WebSocketModule));
+                $"{BaseRoute} - Rejecting WebSocket connection: no subprotocol was accepted.".Debug(
+                    nameof(WebSocketModule)
+                );
+
                 foreach (var protocol in _protocols)
                     context.Response.Headers.Add(HttpHeaderNames.SecWebSocketProtocol, protocol);
 
@@ -255,7 +279,9 @@ namespace EmbedIO.WebSockets
             }
 
             var contextImpl = context.GetImplementation();
-            $"{BaseRoute} - Accepting WebSocket connection with subprotocol \"{acceptedProtocol}\"".Debug(nameof(WebSocketModule));
+            $"{BaseRoute} - Accepting WebSocket connection with subprotocol \"{acceptedProtocol}\"".Debug(
+                nameof(WebSocketModule)
+            );
             // The managed socket enforces the limit from its first frame.
             Internal.WebSocket.SetAcceptedMaxMessageSize(_maxMessageSize);
             Internal.WebSocket.SetAcceptedMessageConsumerPending(true);
@@ -263,16 +289,26 @@ namespace EmbedIO.WebSockets
             // Every acceptance has its own policy, including an unlimited one.
             Internal.WebSocket.SetAcceptedDeliveryBudget(delivery);
             IWebSocketContext webSocketContext;
+
             try
             {
-                webSocketContext = await contextImpl.AcceptWebSocketAsync(
-                    requestedProtocols,
-                    acceptedProtocol,
-                    ReceiveBufferSize,
-                    KeepAliveInterval,
-                    context.CancellationToken).ConfigureAwait(false);
+                webSocketContext = await contextImpl
+                    .AcceptWebSocketAsync(
+                        requestedProtocols,
+                        acceptedProtocol,
+                        ReceiveBufferSize,
+                        KeepAliveInterval,
+                        context.CancellationToken
+                    )
+                    .ConfigureAwait(false);
             }
-            catch { delivery?.StopAdmission(); throw; }
+
+            catch
+            {
+                delivery?.StopAdmission();
+                throw;
+            }
+
             finally
             {
                 // Keep this async method's initialization callbacks outside the
@@ -287,26 +323,30 @@ namespace EmbedIO.WebSockets
             // Accepted while a drain was starting: the drain's close may have missed this one.
             if (_closeOnDrain && Volatile.Read(ref _draining) != 0)
                 CloseForDrain(webSocketContext);
+
             var request = EmbedIO.Internal.RequestTelemetry.Of(context);
             var session = request?.Owner?.WebSocketStarted(request);
 
-            $"{BaseRoute} - WebSocket connection accepted - There are now {_contexts.Count} sockets connected."
-                .Debug(nameof(WebSocketModule));
+            $"{BaseRoute} - WebSocket connection accepted - There are now {_contexts.Count} sockets connected.".Debug(
+                nameof(WebSocketModule)
+            );
 
             try
             {
                 await OnClientConnectedAsync(webSocketContext).ConfigureAwait(false);
-                await ProcessEmbedIOContext(webSocketContext, context.CancellationToken)
-                    .ConfigureAwait(false);
+                await ProcessEmbedIOContext(webSocketContext, context.CancellationToken).ConfigureAwait(false);
             }
+
             catch (TaskCanceledException)
             {
                 // ignore
             }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(nameof(WebSocketModule));
             }
+
             finally
             {
                 session?.Stop();
@@ -336,14 +376,17 @@ namespace EmbedIO.WebSockets
         Task IDrainAwareModule.CloseForStopAsync()
         {
             var closing = new List<Task>();
+
             foreach (var context in _contexts.Values)
             {
                 if (context.WebSocket is Internal.WebSocket managed)
                 {
                     if (managed.State == WebSocketState.Open)
                         _ = CloseGoingAwayAsync(context, string.Empty);
+
                     closing.Add(managed.Released);
                 }
+
                 else if (context.WebSocket?.State == WebSocketState.Open)
                 {
                     closing.Add(CloseGoingAwayAsync(context, string.Empty));
@@ -366,10 +409,16 @@ namespace EmbedIO.WebSockets
             try
             {
                 if (context.WebSocket is Internal.WebSocket managed)
-                    await managed.CloseAfterPendingSendAsync(CloseStatusCode.Away, reason).ConfigureAwait(false);
+                    await managed
+                        .CloseAfterPendingSendAsync(CloseStatusCode.Away, reason)
+                        .ConfigureAwait(false);
+
                 else if (context.WebSocket.State == WebSocketState.Open)
-                    await context.WebSocket.CloseAsync(CloseStatusCode.Away, reason, CancellationToken.None).ConfigureAwait(false);
+                    await context.WebSocket
+                        .CloseAsync(CloseStatusCode.Away, reason, CancellationToken.None)
+                        .ConfigureAwait(false);
             }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 // The connection may already be closing or gone; the drain deadline or the stop budget still bounds it.
@@ -389,7 +438,8 @@ namespace EmbedIO.WebSockets
                         PurgeDisconnectedContexts();
                         return Task.CompletedTask;
                     },
-                    cancellationToken);
+                    cancellationToken
+                );
             }
         }
 
@@ -493,7 +543,12 @@ namespace EmbedIO.WebSockets
             protocols = Validate.NotNull(nameof(protocols), protocols);
 
             var names = new HashSet<string>(_protocols, StringComparer.Ordinal);
-            if (protocols.Select(p => Validate.Rfc2616Token(nameof(protocols), p)).Any(protocol => !names.Add(protocol)))
+
+            if (
+                protocols
+                    .Select(p => Validate.Rfc2616Token(nameof(protocols), p))
+                    .Any(protocol => !names.Add(protocol))
+            )
                 throw new ArgumentException("Duplicate WebSocket protocol name.", nameof(protocols));
 
             EnsureConfigurationNotLocked();
@@ -510,12 +565,16 @@ namespace EmbedIO.WebSockets
         protected async Task SendAsync(IWebSocketContext context, string payload)
         {
             if (context is null) throw new System.NullReferenceException();
+
             try
             {
                 var buffer = _encoding.GetBytes(payload ?? string.Empty);
 
-                await context.WebSocket.SendAsync(buffer, true, context.CancellationToken).ConfigureAwait(false);
+                await context.WebSocket
+                    .SendAsync(buffer, true, context.CancellationToken)
+                    .ConfigureAwait(false);
             }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(nameof(WebSocketModule));
@@ -531,11 +590,14 @@ namespace EmbedIO.WebSockets
         protected async Task SendAsync(IWebSocketContext context, byte[] payload)
         {
             if (context is null) throw new System.NullReferenceException();
+
             try
             {
-                await context.WebSocket.SendAsync(payload ?? Array.Empty<byte>(), false, context.CancellationToken)
+                await context.WebSocket
+                    .SendAsync(payload ?? [], false, context.CancellationToken)
                     .ConfigureAwait(false);
             }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(nameof(WebSocketModule));
@@ -547,8 +609,8 @@ namespace EmbedIO.WebSockets
         /// </summary>
         /// <param name="payload">The payload.</param>
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
-        protected Task BroadcastAsync(byte[] payload)
-            => Task.WhenAll(_contexts.Values.Select(c => SendAsync(c, payload)));
+        protected Task BroadcastAsync(byte[] payload) =>
+            Task.WhenAll(_contexts.Values.Select(c => SendAsync(c, payload)));
 
         /// <summary>
         /// Broadcasts the specified payload to selected WebSocket clients.
@@ -557,16 +619,20 @@ namespace EmbedIO.WebSockets
         /// <param name="selector">A callback function that must return <see langword="true"/>
         /// for each context to be included in the broadcast.</param>
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
-        protected Task BroadcastAsync(byte[] payload, Func<IWebSocketContext, bool> selector)
-            => Task.WhenAll(_contexts.Values.Where(Validate.NotNull(nameof(selector), selector)).Select(c => SendAsync(c, payload)));
+        protected Task BroadcastAsync(byte[] payload, Func<IWebSocketContext, bool> selector) =>
+            Task.WhenAll(
+                _contexts.Values
+                    .Where(Validate.NotNull(nameof(selector), selector))
+                    .Select(c => SendAsync(c, payload))
+            );
 
         /// <summary>
         /// Broadcasts the specified payload to all connected WebSocket clients.
         /// </summary>
         /// <param name="payload">The payload.</param>
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
-        protected Task BroadcastAsync(string payload)
-            => Task.WhenAll(_contexts.Values.Select(c => SendAsync(c, payload)));
+        protected Task BroadcastAsync(string payload) =>
+            Task.WhenAll(_contexts.Values.Select(c => SendAsync(c, payload)));
 
         /// <summary>
         /// Broadcasts the specified payload to selected WebSocket clients.
@@ -575,8 +641,12 @@ namespace EmbedIO.WebSockets
         /// <param name="selector">A callback function that must return <see langword="true"/>
         /// for each context to be included in the broadcast.</param>
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
-        protected Task BroadcastAsync(string payload, Func<IWebSocketContext, bool> selector)
-            => Task.WhenAll(_contexts.Values.Where(Validate.NotNull(nameof(selector), selector)).Select(c => SendAsync(c, payload)));
+        protected Task BroadcastAsync(string payload, Func<IWebSocketContext, bool> selector) =>
+            Task.WhenAll(
+                _contexts.Values
+                    .Where(Validate.NotNull(nameof(selector), selector))
+                    .Select(c => SendAsync(c, payload))
+            );
 
         /// <summary>
         /// Closes the specified web socket, removes it and disposes it.
@@ -590,12 +660,16 @@ namespace EmbedIO.WebSockets
 
             try
             {
-                await context.WebSocket.CloseAsync(context.CancellationToken).ConfigureAwait(false);
+                await context.WebSocket
+                    .CloseAsync(context.CancellationToken)
+                    .ConfigureAwait(false);
             }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(nameof(WebSocketModule));
             }
+
             finally
             {
                 RemoveWebSocket(context);
@@ -609,7 +683,11 @@ namespace EmbedIO.WebSockets
         /// <param name="buffer">The buffer.</param>
         /// <param name="result">The result.</param>
         /// <returns>A <see cref="Task"/> representing the ongoing operation.</returns>
-        protected abstract Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result);
+        protected abstract Task OnMessageReceivedAsync(
+            IWebSocketContext context,
+            byte[] buffer,
+            IWebSocketReceiveResult result
+        );
 
         /// <summary>
         /// Called when this WebSocket server receives a message frame regardless if the frame represents the EndOfMessage.
@@ -621,8 +699,8 @@ namespace EmbedIO.WebSockets
         protected virtual Task OnFrameReceivedAsync(
             IWebSocketContext context,
             byte[] buffer,
-            IWebSocketReceiveResult result)
-            => Task.CompletedTask;
+            IWebSocketReceiveResult result
+        ) => Task.CompletedTask;
 
         /// <summary>
         /// Called when this WebSocket server accepts a new client.
@@ -652,7 +730,11 @@ namespace EmbedIO.WebSockets
             if (disposing)
             {
                 _connectionWatchdog?.Dispose();
-                Task.WhenAll(_contexts.Values.Select(CloseAsync)).ConfigureAwait(false).GetAwaiter().GetResult();
+                Task
+                    .WhenAll(_contexts.Values.Select(CloseAsync))
+                    .ConfigureAwait(false)
+                    .GetAwaiter()
+                    .GetResult();
                 PurgeDisconnectedContexts();
             }
         }
@@ -662,9 +744,12 @@ namespace EmbedIO.WebSockets
             // Disposed while still listed: a server stop that runs meanwhile waits for its release.
             if (!_contexts.ContainsKey(context.Id))
                 return;
+
             context.WebSocket?.Dispose();
+
             if (!_contexts.TryRemove(context.Id, out _))
                 return;
+
             _ = _drainClosed.TryRemove(context.Id, out _);
 
             // OnClientDisconnectedAsync is better called in its own task,
@@ -676,10 +761,12 @@ namespace EmbedIO.WebSockets
                 {
                     await OnClientDisconnectedAsync(context).ConfigureAwait(false);
                 }
+
                 catch (OperationCanceledException)
                 {
                     $"[{context.Id}] OnClientDisconnectedAsync was canceled.".Debug(nameof(WebSocketModule));
                 }
+
                 catch (Exception e) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(e))
                 {
                     e.Log(nameof(WebSocketModule), $"[{context.Id}] Exception in OnClientDisconnectedAsync.");
@@ -692,10 +779,12 @@ namespace EmbedIO.WebSockets
             var contexts = _contexts.Values;
             var totalCount = _contexts.Count;
             var purgedCount = 0;
+
             foreach (var context in contexts)
             {
                 if (context.WebSocket == null || context.WebSocket.State == WebSocketState.Open)
                     continue;
+
                 // Transport closure can precede initialization and the delivery of
                 // already received messages. Leave that context to its handler.
                 if (context.WebSocket is Internal.WebSocket managed && !managed.IsApplicationCloseCompleted)
@@ -705,8 +794,7 @@ namespace EmbedIO.WebSockets
                 purgedCount++;
             }
 
-            $"{BaseRoute} - Purged {purgedCount} of {totalCount} sockets."
-                .Debug(nameof(WebSocketModule));
+            $"{BaseRoute} - Purged {purgedCount} of {totalCount} sockets.".Debug(nameof(WebSocketModule));
         }
 
         private async Task ProcessEmbedIOContext(IWebSocketContext context, CancellationToken cancellationToken)
@@ -717,30 +805,48 @@ namespace EmbedIO.WebSockets
                 {
                     if (e.Opcode == Opcode.Close)
                     {
-                        await context.WebSocket.CloseAsync(context.CancellationToken).ConfigureAwait(false);
+                        await context.WebSocket
+                            .CloseAsync(context.CancellationToken)
+                            .ConfigureAwait(false);
                     }
+
                     else
                     {
-                        if (e.DeliveryLease == null) await OnMessageReceivedAsync(
+                        if (e.DeliveryLease == null)
+                            await OnMessageReceivedAsync(
                                 context,
                                 e.RawData,
-                                new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode))
-                            .ConfigureAwait(false);
+                                new Internal.WebSocketReceiveResult(e.RawData.Length, e.Opcode)
+                            ).ConfigureAwait(false);
+
                         else await DeliverLimitedMessageAsync(context, e).ConfigureAwait(false);
                     }
                 }
+
                 catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { }
-                catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)) { ex.Log(nameof(WebSocketModule)); }
+
+                catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+                {
+                    ex.Log(nameof(WebSocketModule));
+                }
             };
 
-            await ((Internal.WebSocket)context.WebSocket).WaitForCloseAsync(cancellationToken).ConfigureAwait(false);
+            await ((Internal.WebSocket)context.WebSocket)
+                .WaitForCloseAsync(cancellationToken)
+                .ConfigureAwait(false);
         }
 
         private Task DeliverLimitedMessageAsync(IWebSocketContext context, Internal.MessageEventArgs message)
         {
-            var lease = message.DeliveryLease ?? throw new InvalidOperationException("Missing message delivery reservation.");
-            return lease.DeliverAsync(() => OnMessageReceivedAsync(context, message.RawData,
-                new Internal.WebSocketReceiveResult(message.RawData.Length, message.Opcode)));
+            var lease = message.DeliveryLease
+                ?? throw new InvalidOperationException("Missing message delivery reservation.");
+            return lease.DeliverAsync(
+                () => OnMessageReceivedAsync(
+                    context,
+                    message.RawData,
+                    new Internal.WebSocketReceiveResult(message.RawData.Length, message.Opcode)
+                )
+            );
         }
     }
 }

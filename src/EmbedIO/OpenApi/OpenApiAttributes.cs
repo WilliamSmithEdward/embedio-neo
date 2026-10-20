@@ -33,24 +33,19 @@ namespace EmbedIO.OpenApi
     /// Declares a response of a Web API controller method in OpenAPI documents. Declaring a
     /// 2xx response replaces the success response described from the method's return type.
     /// </summary>
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="OpenApiResponseAttribute"/> class.
+    /// </remarks>
+    /// <param name="statusCode">The HTTP status code, from 100 to 599.</param>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
-    public sealed class OpenApiResponseAttribute : Attribute
+    public sealed class OpenApiResponseAttribute(int statusCode) : Attribute
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="OpenApiResponseAttribute"/> class.
-        /// </summary>
-        /// <param name="statusCode">The HTTP status code, from 100 to 599.</param>
-        public OpenApiResponseAttribute(int statusCode)
-        {
-            StatusCode = statusCode;
-        }
-
         /// <summary>Declares a response using the standard status enumeration.</summary>
         /// <param name="statusCode">The status code.</param>
         public OpenApiResponseAttribute(HttpStatusCode statusCode) : this((int)statusCode) { }
 
         /// <summary>Gets the HTTP status code.</summary>
-        public int StatusCode { get; }
+        public int StatusCode { get; } = statusCode;
 
         /// <summary>Gets or sets the response description. The default is the status code's reason phrase.</summary>
         public string? Description { get; set; }
@@ -66,7 +61,5 @@ namespace EmbedIO.OpenApi
 
     /// <summary>Excludes a Web API controller, or one of its methods, from OpenAPI documents.</summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = true)]
-    public sealed class OpenApiIgnoreAttribute : Attribute
-    {
-    }
+    public sealed class OpenApiIgnoreAttribute : Attribute { }
 }

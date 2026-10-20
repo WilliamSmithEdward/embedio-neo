@@ -2,7 +2,6 @@
 #if NET10_0_OR_GREATER
 using System.Diagnostics.CodeAnalysis;
 #endif
-
 namespace EmbedIO.WebApi
 {
     // Whether request-data attributes may convert values to a runtime Type, which looks up
@@ -21,9 +20,10 @@ namespace EmbedIO.WebApi
 #else
         internal static bool IsSupported => true;
 #endif
-
-        internal static NotSupportedException Disabled() => new(
-            "Converting request data to a runtime type needs reflection, which is disabled in this application. "
-            + "Register controllers through a generated binding (GeneratedControllerBindingAttribute) instead.");
+        internal static NotSupportedException Disabled() =>
+            new(
+                "Converting request data to a runtime type needs reflection, which is disabled in this application. "
+                    + "Register controllers through a generated binding (GeneratedControllerBindingAttribute) instead."
+            );
     }
 }

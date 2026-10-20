@@ -22,6 +22,7 @@ namespace EmbedIO.WebApi
         public async Task<object?> GetRequestDataAsync(WebApiController controller, Type type, string parameterName)
         {
             if (controller is null) throw new System.NullReferenceException();
+
             if (type is null) throw new System.NullReferenceException();
 
             // EmbedIO's default JSON options need reflection; generated bindings with a
@@ -30,15 +31,19 @@ namespace EmbedIO.WebApi
                 throw EmbedIO.Serialization.ReflectionSerialization.Disabled();
 
             string body;
+
             using (var reader = controller.HttpContext.OpenRequestText())
             {
-                body = await reader.ReadToEndAsync().ConfigureAwait(false);
+                body = await reader
+                    .ReadToEndAsync()
+                    .ConfigureAwait(false);
             }
 
             try
             {
                 return EmbedIO.Serialization.Json.Deserialize(body, type);
             }
+
             catch (System.Text.Json.JsonException)
             {
                 throw HttpException.BadRequest($"Expected request body to be deserializable to {type.FullName}.");

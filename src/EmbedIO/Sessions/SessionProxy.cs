@@ -17,7 +17,6 @@ namespace EmbedIO.Sessions
     {
         private readonly IHttpContext _context;
         private readonly ISessionManager? _sessionManager;
-
         private ISession? _session;
         private bool _onCloseRegistered;
 
@@ -154,6 +153,7 @@ namespace EmbedIO.Sessions
         private void EnsureSessionExists()
         {
             EnsureSessionManagerExists();
+
             if (_session != null)
                 return;
 
@@ -165,6 +165,7 @@ namespace EmbedIO.Sessions
         {
             EnsureSessionManagerExists();
             _session = _sessionManager.Create(_context);
+
             if (_onCloseRegistered)
                 return;
 

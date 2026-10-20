@@ -33,14 +33,31 @@ namespace EmbedIO
         /// <exception cref="ArgumentNullException">Data is null.</exception>
         /// <exception cref="ArgumentException">An event name or ID contains CR, LF or NUL.</exception>
         /// <exception cref="InvalidOperationException">Another write is in progress.</exception>
-        public Task WriteAsync(string? data, string? eventName = null, string? id = null, CancellationToken cancellationToken = default)
+        public Task WriteAsync(
+            string? data,
+            string? eventName = null,
+            string? id = null,
+            CancellationToken cancellationToken = default
+        )
         {
             if (data == null) throw new ArgumentNullException(nameof(data));
+
             ValidateField(eventName, nameof(eventName));
             ValidateField(id, nameof(id));
             var frame = new StringBuilder();
-            if (eventName != null) frame.Append("event: ").Append(eventName).Append('\n');
-            if (id != null) frame.Append("id: ").Append(id).Append('\n');
+
+            if (eventName != null)
+                frame
+                    .Append("event: ")
+                    .Append(eventName)
+                    .Append('\n');
+
+            if (id != null)
+                frame
+                    .Append("id: ")
+                    .Append(id)
+                    .Append('\n');
+
             AppendLines(frame, "data: ", data);
             frame.Append('\n');
             return SendAsync(frame.ToString(), cancellationToken);
@@ -53,6 +70,7 @@ namespace EmbedIO
         public Task WriteCommentAsync(string? comment = "keep-alive", CancellationToken cancellationToken = default)
         {
             if (comment == null) throw new ArgumentNullException(nameof(comment));
+
             var frame = new StringBuilder();
             AppendLines(frame, ": ", comment);
             frame.Append('\n');
@@ -67,14 +85,21 @@ namespace EmbedIO
 
         private static void AppendLines(StringBuilder frame, string prefix, string text)
         {
-            foreach (var line in EmbedIO.Internal.StringOperations.ReplaceOrdinal(text, "\r\n", "\n").Replace('\r', '\n').Split('\n'))
-                frame.Append(prefix).Append(line).Append('\n');
+            foreach (var line in EmbedIO.Internal.StringOperations
+                .ReplaceOrdinal(text, "\r\n", "\n")
+                .Replace('\r', '\n')
+                .Split('\n'))
+                frame
+                    .Append(prefix)
+                    .Append(line)
+                    .Append('\n');
         }
 
         private async Task SendAsync(string frame, CancellationToken cancellationToken)
         {
             if (Interlocked.CompareExchange(ref _writing, 1, 0) != 0)
                 throw new InvalidOperationException("Await the previous event write before starting another.");
+
             try
             {
                 using var linked = cancellationToken.CanBeCanceled
@@ -83,9 +108,14 @@ namespace EmbedIO
                 var token = linked?.Token ?? _serverToken;
                 token.ThrowIfCancellationRequested();
                 var bytes = Encoding.UTF8.GetBytes(frame);
-                await _stream.WriteAsync(bytes, 0, bytes.Length, token).ConfigureAwait(false);
-                await _stream.FlushAsync(token).ConfigureAwait(false);
+                await _stream
+                    .WriteAsync(bytes, 0, bytes.Length, token)
+                    .ConfigureAwait(false);
+                await _stream
+                    .FlushAsync(token)
+                    .ConfigureAwait(false);
             }
+
             finally
             {
                 Volatile.Write(ref _writing, 0);

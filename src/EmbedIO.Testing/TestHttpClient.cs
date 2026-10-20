@@ -13,15 +13,13 @@ namespace EmbedIO.Testing
     /// </summary>
     public sealed class TestHttpClient : HttpClient
     {
-        private TestHttpClient(TestMessageHandler handler, string baseUrl)
-            : base(handler, true)
+        private TestHttpClient(TestMessageHandler handler, string baseUrl) : base(handler, true)
         {
             BaseAddress = new Uri(baseUrl);
             CookieContainer = handler.CookieContainer;
         }
 
-        private TestHttpClient(HttpClientHandler handler, string baseUrl)
-            : base(handler, true)
+        private TestHttpClient(HttpClientHandler handler, string baseUrl) : base(handler, true)
         {
             BaseAddress = new Uri(baseUrl);
             CookieContainer = handler.CookieContainer;
@@ -59,7 +57,7 @@ namespace EmbedIO.Testing
         }
 
         /// <inheritdoc cref="Create(string)"/>
-        public static TestHttpClient Create(Uri baseUrl)
-            => Create(Validate.NotNull(nameof(baseUrl), baseUrl).OriginalString);
+        public static TestHttpClient Create(Uri baseUrl) =>
+            Create(Validate.NotNull(nameof(baseUrl), baseUrl).OriginalString);
     }
 }

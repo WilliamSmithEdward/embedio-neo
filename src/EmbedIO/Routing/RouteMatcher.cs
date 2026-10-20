@@ -11,48 +11,71 @@ namespace EmbedIO.Routing
     /// </summary>
     public sealed class RouteMatcher : IEquatable<RouteMatcher>
     {
-        private static readonly object SyncRoot = new object();
-        private static readonly Dictionary<(bool, string), RouteMatcher> Cache = new Dictionary<(bool, string), RouteMatcher>();
-
+        private static readonly object SyncRoot = new();
+        private static readonly Dictionary<(bool, string), RouteMatcher> Cache = [];
+        private static readonly string[] EscapedBraceSeparator = ["{{"];
         private readonly Regex? _regex;
         private readonly Lazy<Regex>? _fallbackRegex;
         private readonly bool _caseInsensitive;
         private readonly string? _literalPath;
 
-        private RouteMatcher(bool isBaseRoute, string route, string pattern, IReadOnlyList<string> parameterNames, bool caseInsensitive = false)
+        private RouteMatcher(
+            bool isBaseRoute,
+            string route,
+            string pattern,
+            IReadOnlyList<string> parameterNames,
+            bool caseInsensitive = false
+        )
         {
             IsBaseRoute = isBaseRoute;
             Route = route;
             ParameterNames = parameterNames;
             _caseInsensitive = caseInsensitive;
+
             // Case-sensitive literal routes need no regex compilation, including on their first match.
             // Retain the fallback for callers that mutate the legacy concrete parameter-name list.
             if (parameterNames.Count == 0 && !caseInsensitive)
             {
                 _fallbackRegex = CreateRegexFallback(pattern);
-                if (!isBaseRoute) _literalPath = route.IndexOf("{{", StringComparison.Ordinal) < 0 ? route : string.Join("{", route.Split(new[] { "{{" }, StringSplitOptions.None));
+
+                if (!isBaseRoute)
+                    _literalPath = route.IndexOf("{{", StringComparison.Ordinal) < 0
+                        ? route
+                        : string.Join("{", route.Split(EscapedBraceSeparator, StringSplitOptions.None));
             }
+
             else
                 _regex = new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant);
         }
 
-        private static Lazy<Regex> CreateRegexFallback(string pattern)
-            => new Lazy<Regex>(() => new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant));
+        private static Lazy<Regex> CreateRegexFallback(string pattern) =>
+            new(() => new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant));
 
         // Module-local copies never modify the public parser's case-sensitive cache.
         internal RouteMatcher WithCaseInsensitiveLiterals()
         {
             RouteMatcher? result = null;
-            var error = Routing.Route.ParseInternal(Route, IsBaseRoute, (_, names, pattern) =>
-                result = new RouteMatcher(IsBaseRoute, Route, pattern, new List<string>(names), true), true);
+            var error = Routing.Route.ParseInternal(
+                Route,
+                IsBaseRoute,
+                (_, names, pattern) =>
+                    result = new RouteMatcher(IsBaseRoute, Route, pattern, (List<string>)[.. names], true),
+                true
+            );
+
             if (error != null)
                 throw error;
+
             return result ?? throw new InvalidOperationException("The route parser did not produce a matcher.");
         }
 
-        internal bool HasCaseEquivalentTemplate(RouteMatcher other)
-            => IsBaseRoute == other.IsBaseRoute
-            && Regex.IsMatch(Route, "\\A" + Regex.Escape(other.Route) + "\\z", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        internal bool HasCaseEquivalentTemplate(RouteMatcher other) =>
+            IsBaseRoute == other.IsBaseRoute
+                && Regex.IsMatch(
+                    Route,
+                    "\\A" + Regex.Escape(other.Route) + "\\z",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+                );
 
         /// <summary>
         /// Gets a value indicating whether the <see cref="Route"/> property
@@ -87,6 +110,7 @@ namespace EmbedIO.Routing
         public static RouteMatcher Parse(string? route, bool isBaseRoute)
         {
             var exception = TryParseInternal(route, isBaseRoute, out var result);
+
             if (exception != null)
                 throw exception;
 
@@ -107,8 +131,8 @@ namespace EmbedIO.Routing
         /// <returns><see langword="true"/> if parsing was successful; otherwise, <see langword="false"/>.</returns>
         /// <seealso cref="Parse"/>
         /// <seealso cref="ClearCache"/>
-        public static bool TryParse(string? route, bool isBaseRoute, out RouteMatcher? result)
-            => TryParseInternal(route, isBaseRoute, out result) == null;
+        public static bool TryParse(string? route, bool isBaseRoute, out RouteMatcher? result) =>
+            TryParseInternal(route, isBaseRoute, out result) == null;
 
         /// <summary>
         /// Clears <see cref="RouteMatcher"/>'s internal instance cache.
@@ -128,7 +152,8 @@ namespace EmbedIO.Routing
         /// </summary>
         /// <returns>A hash code for this instance, suitable for use in hashing algorithms
         /// and data structures like a hash table.</returns>
-        public override int GetHashCode() => _caseInsensitive ? (Route, IsBaseRoute, true).GetHashCode() : (Route, IsBaseRoute).GetHashCode();
+        public override int GetHashCode() =>
+            _caseInsensitive ? (Route, IsBaseRoute, true).GetHashCode() : (Route, IsBaseRoute).GetHashCode();
 
         /// <summary>
         /// Determines whether the specified <see cref="object"/> is equal to this instance.
@@ -144,11 +169,11 @@ namespace EmbedIO.Routing
         /// <param name="other">A <see cref="RouteMatcher"/> to compare with this instance.</param>
         /// <returns><see langword="true"/> if this instance is equal to <paramref name="other"/>;
         /// otherwise, <see langword="false"/>.</returns>
-        public bool Equals(RouteMatcher? other)
-            => other != null
-            && other.Route == Route
-            && other.IsBaseRoute == IsBaseRoute
-            && other._caseInsensitive == _caseInsensitive;
+        public bool Equals(RouteMatcher? other) =>
+            other != null
+                && other.Route == Route
+                && other.IsBaseRoute == IsBaseRoute
+                && other._caseInsensitive == _caseInsensitive;
 
         /// <summary>
         /// Matches the specified URL path against <see cref="Route"/>
@@ -178,15 +203,18 @@ namespace EmbedIO.Routing
                 var length = _literalPath.Length;
                 return (path.Length == length || (path.Length == length + 1 && path[length] == '\n'))
                     && string.CompareOrdinal(path, 0, _literalPath, 0, length) == 0
-                    ? new RouteMatch(path, ParameterNames, Array.Empty<string>(), null)
+                    ? new RouteMatch(path, ParameterNames, [], null)
                     : null;
             }
 
-            var match = (_regex ?? _fallbackRegex?.Value ?? throw new InvalidOperationException("The route matcher has no regular expression.")).Match(path);
+            var match = (_regex ?? _fallbackRegex?.Value
+                ?? throw new InvalidOperationException("The route matcher has no regular expression.")).Match(path);
+
             if (!match.Success)
                 return null;
 
             var values = new string[match.Groups.Count - 1];
+
             for (var i = 0; i < values.Length; i++)
                 values[i] = DecodeSegment(match.Groups[i + 1].Value);
 
@@ -194,13 +222,16 @@ namespace EmbedIO.Routing
                 path,
                 ParameterNames,
                 values,
-                IsBaseRoute ? "/" + path.Substring(match.Groups[0].Length) : null);
+                IsBaseRoute ? "/" + path.Substring(match.Groups[0].Length) : null
+            );
         }
 
         // A path segment is percent-decoded only: '+' is a literal there, not form encoding of a space.
         // Every other result, malformed escapes included, stays what WebUtility.UrlDecode produces.
-        private static string DecodeSegment(string value)
-            => WebUtility.UrlDecode(value.IndexOf("+", StringComparison.Ordinal) < 0 ? value : string.Join("%2B", value.Split('+')));
+        private static string DecodeSegment(string value) =>
+            WebUtility.UrlDecode(
+                value.IndexOf("+", StringComparison.Ordinal) < 0 ? value : string.Join("%2B", value.Split('+'))
+            );
 
         private static Exception? TryParseInternal(string? route, bool isBaseRoute, out RouteMatcher? result)
         {
@@ -222,6 +253,7 @@ namespace EmbedIO.Routing
                     parameterNames.AddRange(n);
                     pattern = p;
                 });
+
                 if (exception != null)
                 {
                     result = null;
@@ -229,10 +261,16 @@ namespace EmbedIO.Routing
                 }
 
                 route = UrlPath.UnsafeNormalize(route, isBaseRoute);
+
                 if (Cache.TryGetValue((isBaseRoute, route), out result))
                     return null;
 
-                result = new RouteMatcher(isBaseRoute, route, pattern ?? throw new InvalidOperationException("The route parser did not produce a pattern."), parameterNames);
+                result = new RouteMatcher(
+                    isBaseRoute,
+                    route,
+                    pattern ?? throw new InvalidOperationException("The route parser did not produce a pattern."),
+                    parameterNames
+                );
                 Cache.Add((isBaseRoute, route), result);
                 return null;
             }

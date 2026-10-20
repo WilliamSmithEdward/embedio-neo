@@ -235,9 +235,11 @@ namespace EmbedIO.Idempotency
 
                 // The record must precede delivery. A failed socket write must never make an operation executable
                 // again.
-                if (!await _store
-                    .CompleteAsync(key, owner, response, CancellationToken.None)
-                    .ConfigureAwait(false))
+                if (
+                    !await _store
+                        .CompleteAsync(key, owner, response, CancellationToken.None)
+                        .ConfigureAwait(false)
+                )
                     throw new InvalidOperationException("The idempotency result could not be committed.");
             }
 

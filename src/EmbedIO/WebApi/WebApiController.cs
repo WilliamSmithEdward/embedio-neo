@@ -18,41 +18,57 @@ namespace EmbedIO.WebApi
 
         private IHttpContext? _httpContext;
         private RouteMatch? _route;
+
         // Cache state lives only on explicitly opted-in requests. Ordinary controller
         // instances retain their original size, and unused lazy Items stays unallocated.
-        private static readonly object OutputCacheKey = new object();
+        private static readonly object OutputCacheKey = new();
+
         private sealed class OutputCacheState
         {
             internal readonly OutputCacheRegistration Registration;
             internal bool Disabled;
             internal Func<Task>? Completion;
+
             internal OutputCacheState(OutputCacheRegistration registration) => Registration = registration;
         }
-        private OutputCacheState? CacheState => _httpContext == null || _httpContext is ILazyItems { HasItems: false }
-            ? null : _httpContext.Items.TryGetValue(OutputCacheKey, out var value) ? value as OutputCacheState : null;
+
+        private OutputCacheState? CacheState =>
+            _httpContext == null || _httpContext is ILazyItems { HasItems: false }
+                ? null
+                : _httpContext.Items.TryGetValue(OutputCacheKey, out var value) ? value as OutputCacheState : null;
+
         internal OutputCacheRegistration? OutputCaching
         {
             get => CacheState?.Registration;
             set
             {
                 if (value != null) HttpContext.Items[OutputCacheKey] = new OutputCacheState(value);
+
                 else if (CacheState != null) HttpContext.Items.Remove(OutputCacheKey);
             }
         }
+
         internal bool OutputCacheDisabled
         {
             get => CacheState?.Disabled == true;
-            set { if (CacheState is { } state) state.Disabled = value; }
+            set
+            {
+                if (CacheState is { } state) state.Disabled = value;
+            }
         }
 
         internal Func<Task>? OutputCacheCompletion => CacheState?.Completion;
-        internal Func<Task> ConfigureOutputCacheRelease(Func<IHttpContext, WebApiController, Task> release, IHttpContext context)
+
+        internal Func<Task> ConfigureOutputCacheRelease(
+            Func<IHttpContext, WebApiController, Task> release,
+            IHttpContext context
+        )
         {
             var state = CacheState ?? throw new InvalidOperationException("No output-cache invocation is configured.");
             Task? finished = null;
             // The async wrapper retains synchronous callback faults in the same task,
             // so outer cleanup can await completion without invoking release twice.
-            Func<Task> once = () => finished ??= ReleaseAsync();
+            Task once() => finished ??= ReleaseAsync();
             state.Completion = once;
             return once;
             async Task ReleaseAsync() => await release(context, this).ConfigureAwait(false);
@@ -64,7 +80,11 @@ namespace EmbedIO.WebApi
         /// </summary>
         public IHttpContext HttpContext
         {
-            get => _httpContext ?? throw new System.InvalidOperationException("The controller has not been initialized for a request.");
+            get =>
+                _httpContext
+                    ?? throw new System.InvalidOperationException(
+                        "The controller has not been initialized for a request."
+                    );
             internal set => _httpContext = value;
         }
 
@@ -76,10 +96,13 @@ namespace EmbedIO.WebApi
         /// </summary>
         public RouteMatch Route
         {
-            get => _route ?? throw new System.InvalidOperationException("The controller has not been initialized for a request.");
+            get =>
+                _route
+                    ?? throw new System.InvalidOperationException(
+                        "The controller has not been initialized for a request."
+                    );
             internal set => _route = value;
         }
-
 
         /// <summary>
         /// Gets the <see cref="CancellationToken" /> used to cancel processing of the request.
@@ -104,7 +127,14 @@ namespace EmbedIO.WebApi
         /// <summary>
         /// Gets the session proxy associated with the HTTP context.
         /// </summary>
-        public ISessionProxy Session { get { OutputCacheDisabled = true; return HttpContext.Session; } }
+        public ISessionProxy Session
+        {
+            get
+            {
+                OutputCacheDisabled = true;
+                return HttpContext.Session;
+            }
+        }
 
         /// <summary>
         /// <para>This method is meant to be called internally by EmbedIO.</para>
@@ -121,7 +151,8 @@ namespace EmbedIO.WebApi
         /// </summary>
         protected virtual void OnBeforeHandler()
         {
-            if (OutputCaching == null || !Caching.OutputCache.Eligible(HttpContext)) HttpContext.Response.DisableCaching();
+            if (OutputCaching == null || !Caching.OutputCache.Eligible(HttpContext))
+                HttpContext.Response.DisableCaching();
         }
     }
 }

@@ -11,6 +11,7 @@ namespace EmbedIO.Net.Internal
         internal static byte[] ToByteArray(this ushort value, Endianness order)
         {
             var bytes = BitConverter.GetBytes(value);
+
             if (!order.IsHostOrder())
             {
                 Array.Reverse(bytes);
@@ -22,6 +23,7 @@ namespace EmbedIO.Net.Internal
         internal static byte[] ToByteArray(this ulong value, Endianness order)
         {
             var bytes = BitConverter.GetBytes(value);
+
             if (!order.IsHostOrder())
             {
                 Array.Reverse(bytes);
@@ -32,7 +34,7 @@ namespace EmbedIO.Net.Internal
 
         // true: !(true ^ true) or !(false ^ false)
         // false: !(true ^ false) or !(false ^ true)
-        private static bool IsHostOrder(this Endianness order)
-            => !(BitConverter.IsLittleEndian ^ (order == Endianness.Little));
+        private static bool IsHostOrder(this Endianness order) =>
+            !(BitConverter.IsLittleEndian ^ (order == Endianness.Little));
     }
 }

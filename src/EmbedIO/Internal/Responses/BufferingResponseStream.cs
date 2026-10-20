@@ -9,24 +9,15 @@ namespace EmbedIO.Internal
     // in a MemoryStream.
     // When disposed, sets the response's ContentLength and copies all data
     // to the output stream.
-    internal class BufferingResponseStream : Stream
+    internal class BufferingResponseStream(IHttpResponse response) : Stream
     {
-        private readonly IHttpResponse _response;
-        private readonly MemoryStream _buffer;
+        private readonly IHttpResponse _response = response;
+        private readonly MemoryStream _buffer = new();
         private int _disposed;
 
-        public BufferingResponseStream(IHttpResponse response)
-        {
-            _response = response;
-            _buffer = new MemoryStream();
-        }
-
         public override bool CanRead => false;
-
         public override bool CanSeek => false;
-
         public override bool CanWrite => true;
-
         public override long Length => _buffer.Length;
 
         public override long Position
@@ -43,15 +34,25 @@ namespace EmbedIO.Internal
 
         public override int ReadByte() => throw ReadingNotSupported();
 
-        public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
-            => throw ReadingNotSupported();
+        public override IAsyncResult BeginRead(
+            byte[] buffer,
+            int offset,
+            int count,
+            AsyncCallback? callback,
+            object? state
+        ) => throw ReadingNotSupported();
 
         public override int EndRead(IAsyncResult asyncResult) => throw ReadingNotSupported();
 
-        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => throw ReadingNotSupported();
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken
+        ) => throw ReadingNotSupported();
 
-        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken)
-            => throw ReadingNotSupported();
+        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) =>
+            throw ReadingNotSupported();
 
         public override long Seek(long offset, SeekOrigin origin) => throw SeekingNotSupported();
 
@@ -61,13 +62,18 @@ namespace EmbedIO.Internal
 
         public override void WriteByte(byte value) => _buffer.WriteByte(value);
 
-        public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback? callback, object? state)
-            => _buffer.BeginWrite(buffer, offset, count, callback, state);
+        public override IAsyncResult BeginWrite(
+            byte[] buffer,
+            int offset,
+            int count,
+            AsyncCallback? callback,
+            object? state
+        ) => _buffer.BeginWrite(buffer, offset, count, callback, state);
 
         public override void EndWrite(IAsyncResult asyncResult) => _buffer.EndWrite(asyncResult);
 
-        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-            => _buffer.WriteAsync(buffer, offset, count, cancellationToken);
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            _buffer.WriteAsync(buffer, offset, count, cancellationToken);
 
         protected override void Dispose(bool disposing)
         {
@@ -80,6 +86,7 @@ namespace EmbedIO.Internal
                 _buffer.Position = 0;
                 _buffer.CopyTo(_response.OutputStream);
             }
+
             finally
             {
                 _buffer.Dispose();
@@ -87,8 +94,8 @@ namespace EmbedIO.Internal
             }
         }
 
-        private static Exception ReadingNotSupported() => new NotSupportedException("This stream does not support reading.");
+        private static NotSupportedException ReadingNotSupported() => new("This stream does not support reading.");
 
-        private static Exception SeekingNotSupported() => new NotSupportedException("This stream does not support seeking.");
+        private static NotSupportedException SeekingNotSupported() => new("This stream does not support seeking.");
     }
 }

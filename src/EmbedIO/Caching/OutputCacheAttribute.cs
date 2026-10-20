@@ -6,14 +6,11 @@ namespace EmbedIO.Caching
     /// <remarks>A method attribute overrides the class attribute. A null policy disables caching
     /// for that action. Authorization, browser protection and before-handler hooks always run.
     /// Streaming result types bypass caching. Configure named policies before registering controllers.</remarks>
+    /// <param name="policy">The exact registered name, or null to disable caching for this action.</param>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = true)]
-    public sealed class OutputCacheAttribute : Attribute
+    public sealed class OutputCacheAttribute(string? policy) : Attribute
     {
-        /// <summary>Selects a named policy, or null to disable a class policy for this action.</summary>
-        /// <param name="policy">The exact registered name, or null.</param>
-        public OutputCacheAttribute(string? policy) => Policy = policy;
-
         /// <summary>Gets the selected policy name.</summary>
-        public string? Policy { get; }
+        public string? Policy { get; } = policy;
     }
 }

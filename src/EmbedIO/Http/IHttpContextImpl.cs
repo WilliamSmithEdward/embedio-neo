@@ -83,6 +83,7 @@ namespace EmbedIO
             string acceptedProtocol,
             int receiveBufferSize,
             TimeSpan keepAliveInterval,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken
+        );
     }
 }

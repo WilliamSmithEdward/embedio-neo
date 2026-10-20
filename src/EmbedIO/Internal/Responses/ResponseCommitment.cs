@@ -16,7 +16,7 @@ namespace EmbedIO.Internal
             Caching.OutputCacheCapture capture => IsCommitted(capture.Inner),
             HttpListenerContext http1 => http1.HttpListenerResponse.HeadersSent,
             MultiplexedContext multiplexed => multiplexed.ResponseHeadersSent,
-            _ => false,
+            _ => false
         };
 
         internal static Task AbortAsync(IHttpContext context, Exception cause)
@@ -25,11 +25,14 @@ namespace EmbedIO.Internal
             {
                 case Caching.OutputCacheCapture capture:
                     return AbortAsync(capture.Inner, cause);
+
                 case HttpListenerContext http1:
                     http1.HttpListenerResponse.Abort();
                     return Task.CompletedTask;
+
                 case MultiplexedContext multiplexed:
                     return multiplexed.AbortExchangeAsync(cause);
+
                 default:
                     return Task.CompletedTask;
             }

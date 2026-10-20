@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using EmbedIO.Configuration;
 using EmbedIO.Internal;
 using EmbedIO.Utilities;
-using EmbedIO.Configuration;
 
 namespace EmbedIO.Routing
 {
@@ -16,9 +16,6 @@ namespace EmbedIO.Routing
     /// <seealso cref="ConfiguredObject" />
     public abstract class RouteResolverBase<TData> : ConfiguredObject
     {
-        private readonly List<(TData data, RouteHandlerCallback handler)> _dataHandlerPairs
-            = new List<(TData data, RouteHandlerCallback handler)>();
-
         /// <summary>
         /// Initializes a new instance of the <see cref="RouteResolverBase{TData}"/> class.
         /// </summary>
@@ -26,10 +23,9 @@ namespace EmbedIO.Routing
         /// <exception cref="ArgumentNullException">
         /// <para><paramref name="matcher"/> is <see langword="null"/>.</para>
         /// </exception>
-        protected RouteResolverBase(RouteMatcher matcher)
-        {
-            Matcher = Validate.NotNull(nameof(matcher), matcher);
-        }
+        protected RouteResolverBase(RouteMatcher matcher) => Matcher = Validate.NotNull(nameof(matcher), matcher);
+
+        private readonly List<(TData data, RouteHandlerCallback handler)> _dataHandlerPairs = [];
 
         /// <summary>
         /// Gets the <see cref="RouteMatcher"/> used to match routes.
@@ -90,10 +86,10 @@ namespace EmbedIO.Routing
 
             handler = Validate.NotNull(nameof(handler), handler);
             _dataHandlerPairs.Add((data, (ctx, route) =>
-            {
-                handler(ctx, route);
-                return Task.CompletedTask;
-            }
+                {
+                    handler(ctx, route);
+                    return Task.CompletedTask;
+                }
             ));
         }
 
@@ -118,9 +114,11 @@ namespace EmbedIO.Routing
         public async Task<RouteResolutionResult> ResolveAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             LockConfiguration();
 
             var match = Matcher.Match(context.RequestedPath);
+
             if (match == null)
                 return RouteResolutionResult.RouteNotMatched;
 
@@ -128,21 +126,26 @@ namespace EmbedIO.Routing
             var result = RouteResolutionResult.NoHandlerSelected;
             var telemetry = Internal.RequestTelemetry.Of(context);
             var moduleRoute = telemetry?.Route;
+
             foreach (var (data, handler) in _dataHandlerPairs)
             {
                 if (!MatchContextData(contextData, data))
                     continue;
 
-                if (telemetry != null) telemetry.Route = Internal.RequestTelemetry.Combine(moduleRoute, Route);
+                if (telemetry is { } currentTelemetry)
+                    currentTelemetry.Route = Internal.RequestTelemetry.Combine(moduleRoute, Route);
+
                 try
                 {
                     await handler(context, match).ConfigureAwait(false);
                     return RouteResolutionResult.Success;
                 }
+
                 catch (RequestHandlerPassThroughException)
                 {
                     result = RouteResolutionResult.NoHandlerSuccessful;
-                    if (telemetry != null) telemetry.Route = moduleRoute;
+
+                    if (telemetry is { } previousTelemetry) previousTelemetry.Route = moduleRoute;
                 }
             }
 

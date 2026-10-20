@@ -86,6 +86,24 @@ dotnet build EmbedIO.sln --configuration Release --no-restore
 dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7600
 ```
 
+For every development change, also run the source-quality gates after the final edit:
+
+```sh
+python3 -m venv TestResults/source-quality-venv
+TestResults/source-quality-venv/bin/python -m pip install --require-hashes --only-binary=:all: -r .github/requirements/prettycsharp.txt
+TestResults/source-quality-venv/bin/python scripts/test_source_quality.py
+TestResults/source-quality-venv/bin/python scripts/check_source_quality.py
+```
+
+On Windows use `Scripts/python.exe` instead of `bin/python`. Python 3.11 or newer
+is required. Restore the solution first. These read-only checks fail CI for source
+formatting differences, formatter errors, informational diagnostics and higher
+severities, or incomplete analyzer loads. Hidden hints are retained in the logs
+without failing the gate. Reports are written to `TestResults/source-quality`.
+The pinned formatter has exact output corrections for its multiplication-spacing
+bug and the two existing CA2213 ownership-attribute layouts; other differences
+still fail. Update those corrections only with focused regression coverage.
+
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
 to verified commit SHAs when changing workflows. SDK, test-runtime, and CI
 modernization should be reviewed separately from library behavior changes.

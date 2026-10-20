@@ -9,12 +9,12 @@ namespace EmbedIO.Testing
     public static class HttpClientExtensions
     {
         /// <inheritdoc cref="HeadAsync(HttpClient,string)"/>
-        public static Task<HttpResponseMessage> HeadAsync(this HttpClient @this, System.Uri url)
-            => HeadAsync(@this, url?.OriginalString ?? throw new System.ArgumentNullException(nameof(url)));
+        public static Task<HttpResponseMessage> HeadAsync(this HttpClient @this, System.Uri url) =>
+            HeadAsync(@this, url?.OriginalString ?? throw new System.ArgumentNullException(nameof(url)));
 
         /// <inheritdoc cref="OptionsAsync(HttpClient,string)"/>
-        public static Task<HttpResponseMessage> OptionsAsync(this HttpClient @this, System.Uri url)
-            => OptionsAsync(@this, url?.OriginalString ?? throw new System.ArgumentNullException(nameof(url)));
+        public static Task<HttpResponseMessage> OptionsAsync(this HttpClient @this, System.Uri url) =>
+            OptionsAsync(@this, url?.OriginalString ?? throw new System.ArgumentNullException(nameof(url)));
 
         /// <summary>
         /// Asynchronously sends a <c>HEAD</c> request to a specified URL.
@@ -25,6 +25,7 @@ namespace EmbedIO.Testing
         public static Task<HttpResponseMessage> HeadAsync(this HttpClient @this, string url)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             return @this.SendAsync(new HttpRequestMessage(HttpMethod.Head, url));
         }
 
@@ -37,6 +38,7 @@ namespace EmbedIO.Testing
         public static Task<HttpResponseMessage> OptionsAsync(this HttpClient @this, string url)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             return @this.SendAsync(new HttpRequestMessage(HttpMethod.Options, url));
         }
     }

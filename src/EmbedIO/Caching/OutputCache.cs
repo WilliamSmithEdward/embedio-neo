@@ -288,11 +288,13 @@ namespace EmbedIO.Caching
             {
                 var values = context.Request.Headers.GetValues(name);
 
-                if (!Append(
-                    values == null
-                        ? "missing"
-                        : values.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
-                )) return null;
+                if (
+                    !Append(
+                        values == null
+                            ? "missing"
+                            : values.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    )
+                ) return null;
 
                 if (values != null) foreach (var value in values) if (!Append(value)) return null;
             }
@@ -371,8 +373,8 @@ namespace EmbedIO.Caching
             var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             using (token.Register(
-                state => ((TaskCompletionSource<bool>)(state ?? throw new InvalidOperationException())).TrySetCanceled(
-                ),
+                state => ((TaskCompletionSource<bool>)(state
+                    ?? throw new InvalidOperationException())).TrySetCanceled(),
                 canceled
             ))
                 await (await Task
@@ -416,12 +418,18 @@ namespace EmbedIO.Caching
                 Encoding = encoding;
                 ContentLength = contentLength;
                 StatusDescription = statusDescription;
+                long headerLength = 0;
+
+                foreach (var header in headers)
+                {
+                    headerLength += header.Key.Length;
+
+                    foreach (var value in header.Value)
+                        headerLength += value.Length;
+                }
+
                 Size = body.LongLength
-                    + 2L
-                        * (key.Length
-                            + (contentType?.Length ?? 0)
-                            + (statusDescription?.Length ?? 0)
-                            + headers.Sum(h => (long)h.Key.Length + h.Value.Sum(v => (long)v.Length)));
+                    + 2L * (key.Length + (contentType?.Length ?? 0) + (statusDescription?.Length ?? 0) + headerLength);
             }
 
             [System.Diagnostics.CodeAnalysis.SuppressMessage(

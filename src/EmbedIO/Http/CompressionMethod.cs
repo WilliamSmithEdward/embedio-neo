@@ -20,7 +20,9 @@
         /// </summary>
         Gzip,
 
-        /// <summary>Specifies Brotli compression, supported by the .NET 10 asset.</summary>
-        Brotli,
+        /// <summary>
+        /// Specifies Brotli compression, supported by the .NET 10 asset.
+        /// </summary>
+        Brotli
     }
 }

@@ -9,11 +9,14 @@ namespace EmbedIO.Authorization
     {
         /// <summary>Requires an authenticated user.</summary>
         public AuthorizeAttribute() { }
+
         /// <summary>Requires an authenticated user and the specified policy.</summary>
         /// <param name="policy">The registered policy name.</param>
         public AuthorizeAttribute(string policy) => Policy = policy ?? throw new ArgumentNullException(nameof(policy));
+
         /// <summary>Gets or sets the optional policy name.</summary>
         public string? Policy { get; set; }
+
         /// <summary>Gets or sets comma-separated role names, of which at least one must match.</summary>
         public string? Roles { get; set; }
     }

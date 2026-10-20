@@ -23,39 +23,39 @@ namespace EmbedIO
         /// </summary>
         /// <param name="message">A message to include in the response.</param>
         /// <returns>A <see cref="RequestHandlerCallback" />.</returns>
-        public static RequestHandlerCallback ThrowUnauthorized(string? message = null)
-            => _ => throw HttpException.Unauthorized(message);
+        public static RequestHandlerCallback ThrowUnauthorized(string? message = null) => _ =>
+            throw HttpException.Unauthorized(message);
 
         /// <summary>
         /// <para>Returns a <see cref="RequestHandlerCallback" /> that unconditionally sends a <c>403 Forbidden</c> response.</para>
         /// </summary>
         /// <param name="message">A message to include in the response.</param>
         /// <returns>A <see cref="RequestHandlerCallback" />.</returns>
-        public static RequestHandlerCallback ThrowForbidden(string? message = null)
-            => _ => throw HttpException.Forbidden(message);
+        public static RequestHandlerCallback ThrowForbidden(string? message = null) => _ =>
+            throw HttpException.Forbidden(message);
 
         /// <summary>
         /// <para>Returns a <see cref="RequestHandlerCallback" /> that unconditionally sends a <c>400 Bad Request</c> response.</para>
         /// </summary>
         /// <param name="message">A message to include in the response.</param>
         /// <returns>A <see cref="RequestHandlerCallback" />.</returns>
-        public static RequestHandlerCallback ThrowBadRequest(string? message = null)
-            => _ => throw HttpException.BadRequest(message);
+        public static RequestHandlerCallback ThrowBadRequest(string? message = null) => _ =>
+            throw HttpException.BadRequest(message);
 
         /// <summary>
         /// <para>Returns a <see cref="RequestHandlerCallback" /> that unconditionally sends a <c>404 Not Found</c> response.</para>
         /// </summary>
         /// <param name="message">A message to include in the response.</param>
         /// <returns>A <see cref="RequestHandlerCallback" />.</returns>
-        public static RequestHandlerCallback ThrowNotFound(string? message = null)
-            => _ => throw HttpException.NotFound(message);
+        public static RequestHandlerCallback ThrowNotFound(string? message = null) => _ =>
+            throw HttpException.NotFound(message);
 
         /// <summary>
         /// <para>Returns a <see cref="RequestHandlerCallback" /> that unconditionally sends a <c>405 Method Not Allowed</c> response.</para>
         /// </summary>
         /// <param name="message">A message to include in the response.</param>
         /// <returns>A <see cref="RequestHandlerCallback" />.</returns>
-        public static RequestHandlerCallback ThrowMethodNotAllowed(string? message = null)
-            => _ => throw HttpException.MethodNotAllowed(message);
+        public static RequestHandlerCallback ThrowMethodNotAllowed(string? message = null) => _ =>
+            throw HttpException.MethodNotAllowed(message);
     }
 }

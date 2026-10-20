@@ -19,13 +19,17 @@ namespace EmbedIO.WebSockets.Internal
     internal sealed class MessageEventArgs : EventArgs, IDisposable
     {
         private readonly byte[] _rawData;
+
         internal WebSocketDeliveryBudget.Lease? DeliveryLease { get; set; }
+
         public void Dispose() => DeliveryLease?.Dispose();
 
         internal MessageEventArgs(WebSocketFrame frame)
         {
             Opcode = frame.Opcode;
-            _rawData = (byte[])frame.PayloadData.ToArray().Clone();
+            _rawData = (byte[])frame.PayloadData
+                .ToArray()
+                .Clone();
         }
 
         internal MessageEventArgs(Opcode opcode, byte[] rawData)
@@ -44,7 +48,6 @@ namespace EmbedIO.WebSockets.Internal
         /// An array of <see cref="byte"/> that represents the message data.
         /// </value>
         public byte[] RawData => _rawData;
-
         internal Opcode Opcode { get; }
     }
 }

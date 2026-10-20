@@ -11,8 +11,8 @@ namespace EmbedIO
     public static class WebServerOptionsExtensions
     {
         /// <inheritdoc cref="WithUrlPrefix(WebServerOptions,string)"/>
-        public static WebServerOptions WithUrlPrefix(this WebServerOptions @this, Uri urlPrefix)
-            => WithUrlPrefix(@this, Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString);
+        public static WebServerOptions WithUrlPrefix(this WebServerOptions @this, Uri urlPrefix) =>
+            WithUrlPrefix(@this, Validate.NotNull(nameof(urlPrefix), urlPrefix).OriginalString);
 
         /// <summary>
         /// Adds a URL prefix.
@@ -31,6 +31,7 @@ namespace EmbedIO
         public static WebServerOptions WithUrlPrefix(this WebServerOptions @this, string urlPrefix)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AddUrlPrefix(urlPrefix);
             return @this;
         }
@@ -53,6 +54,7 @@ namespace EmbedIO
         public static WebServerOptions WithUrlPrefixes(this WebServerOptions @this, IEnumerable<string> urlPrefixes)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             foreach (var urlPrefix in Validate.NotNull(nameof(urlPrefixes), urlPrefixes))
                 @this.AddUrlPrefix(urlPrefix);
 
@@ -74,8 +76,8 @@ namespace EmbedIO
         /// <para>- or -</para>
         /// <para>One or more of the elements of <paramref name="urlPrefixes"/> is already registered.</para>
         /// </exception>
-        public static WebServerOptions WithUrlPrefixes(this WebServerOptions @this, params string[] urlPrefixes)
-            => WithUrlPrefixes(@this, urlPrefixes as IEnumerable<string>);
+        public static WebServerOptions WithUrlPrefixes(this WebServerOptions @this, params string[] urlPrefixes) =>
+            WithUrlPrefixes(@this, urlPrefixes as IEnumerable<string>);
 
         /// <summary>
         /// Sets the type of HTTP listener.
@@ -89,6 +91,7 @@ namespace EmbedIO
         public static WebServerOptions WithMode(this WebServerOptions @this, HttpListenerMode value)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.Mode = value;
             return @this;
         }
@@ -104,6 +107,7 @@ namespace EmbedIO
         public static WebServerOptions WithEmbedIOHttpListener(this WebServerOptions @this)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.Mode = HttpListenerMode.EmbedIO;
             return @this;
         }
@@ -120,6 +124,7 @@ namespace EmbedIO
         public static WebServerOptions WithCertificate(this WebServerOptions @this, X509Certificate2? value)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.Certificate = value;
             return @this;
         }
@@ -133,9 +138,13 @@ namespace EmbedIO
         /// set to <paramref name="value"/>.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
-        public static WebServerOptions WithCertificateSource(this WebServerOptions @this, Net.ServerCertificateSource? value)
+        public static WebServerOptions WithCertificateSource(
+            this WebServerOptions @this,
+            Net.ServerCertificateSource? value
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.CertificateSource = value;
             return @this;
         }
@@ -153,6 +162,7 @@ namespace EmbedIO
         public static WebServerOptions WithTlsPolicy(this WebServerOptions @this, Net.ServerTlsPolicy? value)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.TlsPolicy = value;
             return @this;
         }
@@ -169,6 +179,7 @@ namespace EmbedIO
         public static WebServerOptions WithCertificateThumbprint(this WebServerOptions @this, string value)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.CertificateThumbprint = value;
             return @this;
         }
@@ -187,6 +198,7 @@ namespace EmbedIO
         public static WebServerOptions WithAutoLoadCertificate(this WebServerOptions @this, bool value)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AutoLoadCertificate = value;
             return @this;
         }
@@ -203,6 +215,7 @@ namespace EmbedIO
         public static WebServerOptions WithAutoLoadCertificate(this WebServerOptions @this)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AutoLoadCertificate = true;
             return @this;
         }
@@ -218,6 +231,7 @@ namespace EmbedIO
         public static WebServerOptions WithoutAutoLoadCertificate(this WebServerOptions @this)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AutoLoadCertificate = false;
             return @this;
         }
@@ -238,6 +252,7 @@ namespace EmbedIO
         public static WebServerOptions WithAutoRegisterCertificate(this WebServerOptions @this, bool value)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AutoRegisterCertificate = value;
             return @this;
         }
@@ -255,6 +270,7 @@ namespace EmbedIO
         public static WebServerOptions WithAutoRegisterCertificate(this WebServerOptions @this)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AutoRegisterCertificate = true;
             return @this;
         }
@@ -270,6 +286,7 @@ namespace EmbedIO
         public static WebServerOptions WithoutAutoRegisterCertificate(this WebServerOptions @this)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.AutoRegisterCertificate = false;
             return @this;
         }
@@ -287,6 +304,7 @@ namespace EmbedIO
         public static WebServerOptions WithStoreName(this WebServerOptions @this, StoreName value)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.StoreName = value;
             return @this;
         }
@@ -304,6 +322,7 @@ namespace EmbedIO
         public static WebServerOptions WithStoreLocation(this WebServerOptions @this, StoreLocation value)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.StoreLocation = value;
             return @this;
         }
@@ -324,6 +343,7 @@ namespace EmbedIO
         public static WebServerOptions WithStore(this WebServerOptions @this, StoreName name, StoreLocation location)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.StoreName = name;
             @this.StoreLocation = location;
             return @this;
@@ -342,10 +362,15 @@ namespace EmbedIO
         /// <exception cref="NullReferenceException">The options instance is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">A limit is out of range.</exception>
         /// <exception cref="InvalidOperationException">The configuration is locked.</exception>
-        public static WebServerOptions WithConnectionLimits(this WebServerOptions @this, int? maximumConnections,
-            TimeSpan? requestHeadersTimeout = null, TimeSpan? keepAliveTimeout = null)
+        public static WebServerOptions WithConnectionLimits(
+            this WebServerOptions @this,
+            int? maximumConnections,
+            TimeSpan? requestHeadersTimeout = null,
+            TimeSpan? keepAliveTimeout = null
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.MaximumConnections = maximumConnections;
             @this.RequestHeadersTimeout = requestHeadersTimeout;
             @this.KeepAliveTimeout = keepAliveTimeout;

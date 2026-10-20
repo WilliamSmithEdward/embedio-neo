@@ -18,6 +18,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal WebTransportStreamHandle(long id, bool bidirectional, Action<long> abort)
         {
             if (id < 0) throw new ArgumentOutOfRangeException(nameof(id));
+
             Id = id;
             Bidirectional = bidirectional;
             _abort = abort ?? throw new ArgumentNullException(nameof(abort));
@@ -25,13 +26,16 @@ namespace EmbedIO.Net.Internal.WebTransport
 
         public long Id { get; }
         public bool Bidirectional { get; }
+
         // The code of the first abort, or -1 while the stream is intact.
         public long AbortErrorCode => Volatile.Read(ref _abortErrorCode);
 
         internal void Abort(long errorCode)
         {
             if (errorCode < 0) throw new ArgumentOutOfRangeException(nameof(errorCode));
+
             if (Interlocked.CompareExchange(ref _abortErrorCode, errorCode, -1) != -1) return;
+
             _abort(errorCode);
         }
     }

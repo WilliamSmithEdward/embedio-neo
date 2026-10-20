@@ -39,6 +39,7 @@ namespace EmbedIO.Files
                 if (!IsImmutable)
                     _watcher = new FileSystemWatcher(FileSystemPath);
             }
+
             catch (PlatformNotSupportedException)
             {
                 IsImmutable = true;
@@ -48,10 +49,7 @@ namespace EmbedIO.Files
         /// <summary>
         /// Finalizes an instance of the <see cref="FileSystemProvider"/> class.
         /// </summary>
-        ~FileSystemProvider()
-        {
-            Dispose(false);
-        }
+        ~FileSystemProvider() => Dispose(false);
 
         /// <inheritdoc />
         public event Action<string>? ResourceChanged;
@@ -87,6 +85,7 @@ namespace EmbedIO.Files
         public MappedResourceInfo? MapUrlPath(string requestPath, IMimeTypeProvider mimeTypeProvider)
         {
             if (requestPath is null) throw new System.NullReferenceException();
+
             requestPath = requestPath.Substring(1); // Drop the initial slash
             string localPath;
 
@@ -121,7 +120,13 @@ namespace EmbedIO.Files
                 // (e.g. "valid/path/C:\Windows\System.ini")
                 localPath = Path.GetFullPath(localPath);
             }
-            catch (Exception error) when (error is ArgumentException or NotSupportedException or System.Security.SecurityException or IOException)
+
+            catch (Exception error) when (
+                error is ArgumentException
+                    or NotSupportedException
+                    or System.Security.SecurityException
+                    or IOException
+            )
             {
                 // Both IsPathRooted and GetFullPath throw exceptions
                 // if a path contains invalid characters or is otherwise invalid;
@@ -136,10 +141,15 @@ namespace EmbedIO.Files
 
             var baseEndsWithSeparator = FileSystemPath[FileSystemPath.Length - 1] == Path.DirectorySeparatorChar
                 || FileSystemPath[FileSystemPath.Length - 1] == Path.AltDirectorySeparatorChar;
-            if (localPath.Length > FileSystemPath.Length && !baseEndsWithSeparator
+
+            if (
+                localPath.Length > FileSystemPath.Length
+                && !baseEndsWithSeparator
                 && localPath[FileSystemPath.Length] != Path.DirectorySeparatorChar
-                && localPath[FileSystemPath.Length] != Path.AltDirectorySeparatorChar)
+                && localPath[FileSystemPath.Length] != Path.AltDirectorySeparatorChar
+            )
                 return null;
+
             if (File.Exists(localPath))
                 return GetMappedFileInfo(mimeTypeProvider, localPath);
 
@@ -150,11 +160,13 @@ namespace EmbedIO.Files
         }
 
         /// <inheritdoc />
-        public Stream OpenFile(string path) => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        public Stream OpenFile(string path) =>
+            new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 
         /// <inheritdoc />
-        public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider)
-            => new DirectoryInfo(path).EnumerateFileSystemInfos()
+        public IEnumerable<MappedResourceInfo> GetDirectoryEntries(string path, IMimeTypeProvider mimeTypeProvider) =>
+            new DirectoryInfo(path)
+                .EnumerateFileSystemInfos()
                 .Select(fsi => GetMappedResourceInfo(mimeTypeProvider, fsi));
 
         /// <summary>
@@ -178,32 +190,35 @@ namespace EmbedIO.Files
             }
         }
 
-        private static MappedResourceInfo GetMappedFileInfo(IMimeTypeProvider mimeTypeProvider, string localPath)
-            => GetMappedFileInfo(mimeTypeProvider, new FileInfo(localPath));
+        private static MappedResourceInfo GetMappedFileInfo(IMimeTypeProvider mimeTypeProvider, string localPath) =>
+            GetMappedFileInfo(mimeTypeProvider, new FileInfo(localPath));
 
-        private static MappedResourceInfo GetMappedFileInfo(IMimeTypeProvider mimeTypeProvider, FileInfo info)
-            => MappedResourceInfo.ForFile(
+        private static MappedResourceInfo GetMappedFileInfo(IMimeTypeProvider mimeTypeProvider, FileInfo info) =>
+            MappedResourceInfo.ForFile(
                 info.FullName,
                 info.Name,
                 info.LastWriteTimeUtc,
                 info.Length,
-                mimeTypeProvider.GetMimeType(info.Extension));
+                mimeTypeProvider.GetMimeType(info.Extension)
+            );
 
-        private static MappedResourceInfo GetMappedDirectoryInfo(string localPath)
-            => GetMappedDirectoryInfo(new DirectoryInfo(localPath));
+        private static MappedResourceInfo GetMappedDirectoryInfo(string localPath) =>
+            GetMappedDirectoryInfo(new DirectoryInfo(localPath));
 
-        private static MappedResourceInfo GetMappedDirectoryInfo(DirectoryInfo info)
-            => MappedResourceInfo.ForDirectory(info.FullName, info.Name, info.LastWriteTimeUtc);
+        private static MappedResourceInfo GetMappedDirectoryInfo(DirectoryInfo info) =>
+            MappedResourceInfo.ForDirectory(info.FullName, info.Name, info.LastWriteTimeUtc);
 
-        private static MappedResourceInfo GetMappedResourceInfo(IMimeTypeProvider mimeTypeProvider, FileSystemInfo info)
-            => info is DirectoryInfo directoryInfo
+        private static MappedResourceInfo GetMappedResourceInfo(
+            IMimeTypeProvider mimeTypeProvider,
+            FileSystemInfo info
+        ) =>
+            info is DirectoryInfo directoryInfo
                 ? GetMappedDirectoryInfo(directoryInfo)
                 : GetMappedFileInfo(mimeTypeProvider, (FileInfo)info);
 
-        private void Watcher_ChangedOrDeleted(object sender, FileSystemEventArgs e)
-            => ResourceChanged?.Invoke(e.FullPath);
+        private void Watcher_ChangedOrDeleted(object sender, FileSystemEventArgs e) =>
+            ResourceChanged?.Invoke(e.FullPath);
 
-        private void Watcher_Renamed(object sender, RenamedEventArgs e)
-            => ResourceChanged?.Invoke(e.OldFullPath);
+        private void Watcher_Renamed(object sender, RenamedEventArgs e) => ResourceChanged?.Invoke(e.OldFullPath);
     }
 }

@@ -5,7 +5,7 @@ namespace EmbedIO
 {
     partial class HttpContextExtensions
     {
-        private static readonly object MultipartReaderKey = new object();
+        private static readonly object MultipartReaderKey = new();
 
         /// <summary>Opens a streaming multipart/form-data reader, disposed automatically when the context closes.</summary>
         /// <param name="this">The request context.</param>
@@ -17,24 +17,44 @@ namespace EmbedIO
         public static MultipartReader OpenMultipartReader(this IHttpContext @this, MultipartOptions? options = null)
         {
             if (@this == null) throw new NullReferenceException();
-            if (@this.Items.ContainsKey(MultipartReaderKey)) throw new InvalidOperationException("A multipart reader has already been opened for this request.");
+
+            if (@this.Items.ContainsKey(MultipartReaderKey))
+                throw new InvalidOperationException("A multipart reader has already been opened for this request.");
+
             if (!MediaTypeHeaderValue.TryParse(@this.Request.ContentType, out var mediaType) || mediaType == null)
                 throw HttpException.BadRequest("Invalid multipart content type.");
+
             if (!string.Equals(mediaType.MediaType, "multipart/form-data", StringComparison.OrdinalIgnoreCase))
                 throw new HttpException(415, "Expected multipart/form-data.");
+
             string? boundary = null;
+
             foreach (var parameter in mediaType.Parameters)
             {
                 if (!string.Equals(parameter.Name, "boundary", StringComparison.OrdinalIgnoreCase)) continue;
+
                 if (boundary != null) throw HttpException.BadRequest("Duplicate multipart boundary.");
-                boundary = MultipartReader.Unquote(parameter.Value) ?? throw HttpException.BadRequest("Missing multipart boundary value.");
+
+                boundary = MultipartReader.Unquote(parameter.Value)
+                    ?? throw HttpException.BadRequest("Missing multipart boundary value.");
             }
+
             if (boundary == null) throw HttpException.BadRequest("Missing multipart boundary.");
-            try { MultipartReader.ValidateBoundary(boundary); }
-            catch (ArgumentException) { throw HttpException.BadRequest("Invalid multipart boundary."); }
+
+            try
+            {
+                MultipartReader.ValidateBoundary(boundary);
+            }
+
+            catch (ArgumentException)
+            {
+                throw HttpException.BadRequest("Invalid multipart boundary.");
+            }
+
             var limits = (options ?? new MultipartOptions()).Snapshot();
             var stream = @this.OpenRequestStream();
             MultipartReader? reader = null;
+
             try
             {
                 reader = new MultipartReader(stream, boundary, limits, @this.CancellationToken, true);
@@ -42,10 +62,13 @@ namespace EmbedIO
                 @this.Items.Add(MultipartReaderKey, reader);
                 return reader;
             }
+
             catch
             {
                 if (reader == null) stream.Dispose();
+
                 else reader.Dispose();
+
                 throw;
             }
         }

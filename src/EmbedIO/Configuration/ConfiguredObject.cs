@@ -5,7 +5,7 @@ namespace EmbedIO.Configuration
     /// <summary>Base class for configuration that becomes read-only when started.</summary>
     public abstract class ConfiguredObject
     {
-        private readonly object _configurationLock = new object();
+        private readonly object _configurationLock = new();
         private volatile bool _configurationLocked;
 
         /// <summary>Gets whether configuration has been locked.</summary>
@@ -17,6 +17,7 @@ namespace EmbedIO.Configuration
             lock (_configurationLock)
             {
                 if (_configurationLocked) return;
+
                 OnBeforeLockConfiguration();
                 _configurationLocked = true;
             }

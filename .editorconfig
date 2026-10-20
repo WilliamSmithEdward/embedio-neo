@@ -18,8 +18,55 @@ csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_elsewhere = true:suggestion
 
+# Owner-approved 2026-10-19: retain main's explicit constructors for these types
+# until the pinned security scanner can parse their primary-constructor forms.
+# Primary constructors remain preferred elsewhere; no scanner rules are excluded.
+[src/EmbedIO/{Actions/PreRequestModule.cs,Authentication/BearerAuthenticationModule.cs,Cors/CorsModule.cs,OpenApi/OpenApiDocument.cs,Problems/ProblemDetails.cs,RateLimiting/RateLimitingModule.cs,Routing/RouteResolverBase.cs,Routing/RoutingModuleBase.cs,Security/BrowserRequestProtectionModule.cs,WebApi/RequestValidationPlan.cs}]
+csharp_style_prefer_primary_constructors = false:suggestion
+
+[src/EmbedIO.Cli/PluginLoader.cs]
+csharp_style_prefer_primary_constructors = false:suggestion
+
+[*.cs]
+
 # Source folders organize implementation details without requiring matching namespaces.
 dotnet_diagnostic.IDE0130.severity = none
+
+# Owner-approved: preserve object locks shared with .NET Standard 2.0.
+dotnet_diagnostic.IDE0330.severity = none
+
+# Owner-approved: allow Substring without suggesting range syntax.
+dotnet_diagnostic.IDE0057.severity = none
+
+# Owner-approved: allow explicit indexing compatible with .NET Standard 2.0.
+dotnet_diagnostic.IDE0056.severity = none
+
+# Owner-approved: retain byte arrays shared with .NET Standard 2.0 instead of UTF-8 literals.
+dotnet_diagnostic.IDE0230.severity = none
+
+# Owner-approved: allow single-character string arguments without char-overload suggestions.
+dotnet_diagnostic.CA1865.severity = none
+
+# Owner-approved: retain string overloads compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1866.severity = none
+
+# Owner-approved: retain array-based async stream overloads compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1835.severity = none
+
+# Owner-approved: retain explicit null checks compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1510.severity = none
+
+# Owner-approved: retain explicit disposed checks compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1513.severity = none
+
+# Owner-approved: retain explicit range checks compatible with .NET Standard 2.0.
+dotnet_diagnostic.CA1512.severity = none
+
+# Owner-approved: retain Substring calls compatible with .NET Standard 2.0 APIs.
+dotnet_diagnostic.CA1846.severity = none
+
+# Owner-approved: retain runtime regex APIs shared with .NET Standard 2.0.
+dotnet_diagnostic.SYSLIB1045.severity = none
 
 # Preserve explicit inherited .NET analyzer severities.
 dotnet_diagnostic.CA1001.severity = warning
@@ -94,3 +141,112 @@ dotnet_diagnostic.CA2241.severity = warning
 dotnet_diagnostic.CA2242.severity = warning
 dotnet_diagnostic.IDE0003.severity = warning
 dotnet_diagnostic.IDE0055.severity = warning
+
+[src/EmbedIO/Files/ZipFileProvider.cs]
+# Preserve ZipArchive.GetEntry's entryName exception parameter for compatibility.
+dotnet_diagnostic.CA2208.severity = none
+
+[src/Shared/AnalyzerUtilities.cs]
+# Owner-approved: these IndexOf(char) and Replace overloads are ordinal on every target.
+dotnet_diagnostic.CA1307.severity = none
+
+[src/EmbedIO/Http/ServerSentEventWriter.cs]
+# Owner-approved: preserve the simple three-character search rather than rewrite for style.
+dotnet_diagnostic.CA1870.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.IDE0300.severity = none
+
+[src/EmbedIO/Http/HttpExceptionHandler.cs]
+# Owner-approved: the no-op handler must retain its public callback parameters.
+dotnet_diagnostic.IDE0060.severity = none
+
+[src/EmbedIO/Health/HealthCheckService.cs]
+# Preserve the public WaitForReadyAsync parameter order for existing callers.
+dotnet_diagnostic.CA1068.severity = none
+
+[src/EmbedIO/Http/Multipart/MultipartReader.Body.cs]
+# Owner-approved: preserve the shared array-based stream implementation without target-specific overrides.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Http/Multipart/MultipartReader.cs]
+# Preserve the public constructor parameter order for existing callers.
+dotnet_diagnostic.CA1068.severity = none
+
+[src/EmbedIO/Http/ServerSentEventHub.cs]
+# Preserve the explicit constructor and simple event-name validation implementation.
+dotnet_diagnostic.IDE0290.severity = none
+dotnet_diagnostic.IDE0300.severity = none
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1870.severity = none
+
+[src/EmbedIO/Http/ServerSentEventStream.cs]
+# Preserve both the response failure and cleanup failure in the intentional AggregateException.
+dotnet_diagnostic.CA2219.severity = none
+
+[src/EmbedIO/Idempotency/IdempotencyPolicy.cs]
+# Preserve the explicit attribute constructor rather than restructure for a style suggestion.
+dotnet_diagnostic.IDE0290.severity = none
+
+[src/EmbedIO/Internal/Compression/CompressionStream.cs]
+# Owner-approved: retain shared array-based stream overrides without target-specific branches.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Internal/Diagnostics/ServerTelemetry.cs]
+# The .NET Standard fallback intentionally matches the instance API and parameters of active telemetry.
+dotnet_diagnostic.CA1822.severity = none
+dotnet_diagnostic.IDE0060.severity = none
+
+[src/EmbedIO/Internal/RequestBodies/ReadTimeoutStream.cs]
+# The throw guards continuation state inside a task callback; it does not execute as a finally throw.
+dotnet_diagnostic.CA2219.severity = none
+
+[src/EmbedIO/Internal/Responses/BufferingResponseStream.cs]
+# Owner-approved: retain shared array-based stream overrides without target-specific branches.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Internal/Responses/JsonSequenceWriter.cs]
+# Preserve intentional aggregation of operation failures with producer/stream cleanup failures.
+dotnet_diagnostic.CA2219.severity = none
+
+[src/EmbedIO/Net/Internal/Http1/Http1ResponseOutput.cs]
+# Preserve shared array-based overrides; synchronous=true ValueTask paths perform only synchronous transport I/O.
+dotnet_diagnostic.CA1844.severity = none
+dotnet_diagnostic.CA2012.severity = none
+
+[src/EmbedIO/Net/Internal/Http2/Http2FrameTransport.cs]
+# Preserve the explicit output-write constructor instead of restructuring solely for style.
+dotnet_diagnostic.IDE0290.severity = none
+
+[src/EmbedIO/Net/Internal/Http2/Http2RequestBody.cs]
+# Owner-approved: retain shared array-based stream overrides without target-specific branches.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Net/Internal/Http3/Http3QuicConnection.cs]
+# Preserve coordinated QUIC lifecycle helper signatures; the flagged finally throw is inside a continuation callback.
+dotnet_diagnostic.CA1068.severity = none
+dotnet_diagnostic.CA2219.severity = none
+
+[src/EmbedIO/Net/Internal/Http3/Http3RequestBody.cs]
+# Preserve the existing array-based read implementation without adding an overload solely for this suggestion.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Net/Internal/Http3/QpackEncoder.cs]
+# Dictionary.TryAdd is unavailable on .NET Standard 2.0; preserve first-entry-wins initialization.
+dotnet_diagnostic.CA1864.severity = none
+
+[src/EmbedIO/Net/Internal/Multiplexed/MultiplexedResponse.cs]
+# Preserve shared array-based response stream overrides without target-specific branches.
+dotnet_diagnostic.CA1844.severity = none
+
+[src/EmbedIO/Net/Internal/Transport/ListenerPrefix.cs]
+# Span-based string.Concat is unavailable on .NET Standard 2.0; retain the shared implementation.
+dotnet_diagnostic.CA1845.severity = none
+
+[src/EmbedIO/OpenApi/OpenApiDocumentBuilder.cs]
+# Preserve the explicit validating constructor; span-based Concat is unavailable on .NET Standard 2.0.
+dotnet_diagnostic.IDE0290.severity = none
+dotnet_diagnostic.CA1845.severity = none
+
+[src/EmbedIO/Routing/RouteMatcher.cs]
+# Span-based string.Concat is unavailable on .NET Standard 2.0; retain the shared implementation.
+dotnet_diagnostic.CA1845.severity = none

@@ -25,6 +25,7 @@ namespace EmbedIO.Utilities
         {
             value = NotNull(argumentName, value);
             var exception = Routing.Route.ValidateInternal(argumentName, value, isBaseRoute);
+
             if (exception != null)
                 throw exception;
 

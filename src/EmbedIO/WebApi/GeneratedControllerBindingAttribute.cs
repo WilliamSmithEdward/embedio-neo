@@ -19,22 +19,17 @@ namespace EmbedIO.WebApi
     /// server.WithWebApi("/api", m => m.WithController(ApiControllers.PeopleController));
     /// </code>
     /// </example>
+    /// <remarks>
+    /// Initializes a new instance of the <see cref="GeneratedControllerBindingAttribute"/> class.
+    /// </remarks>
+    /// <param name="controllerType">The controller type, a non-generic subclass of <see cref="WebApiController"/>.</param>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
-    public sealed class GeneratedControllerBindingAttribute : Attribute
+    public sealed class GeneratedControllerBindingAttribute(Type controllerType) : Attribute
     {
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GeneratedControllerBindingAttribute"/> class.
-        /// </summary>
-        /// <param name="controllerType">The controller type, a non-generic subclass of <see cref="WebApiController"/>.</param>
-        public GeneratedControllerBindingAttribute(Type controllerType)
-        {
-            ControllerType = controllerType;
-        }
-
         /// <summary>
         /// Gets the controller type.
         /// </summary>
-        public Type ControllerType { get; }
+        public Type ControllerType { get; } = controllerType;
 
         /// <summary>
         /// <para>Gets or sets a <see cref="System.Text.Json.Serialization.JsonSerializerContext"/> type

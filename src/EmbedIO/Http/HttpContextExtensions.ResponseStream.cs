@@ -22,12 +22,21 @@ namespace EmbedIO
         /// <para>This stream MUST be disposed when finished writing.</para>
         /// </returns>
         /// <seealso cref="OpenResponseText"/>
-        public static Stream OpenResponseStream(this IHttpContext @this, bool buffered = false, bool preferCompression = true)
+        public static Stream OpenResponseStream(
+            this IHttpContext @this,
+            bool buffered = false,
+            bool preferCompression = true
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             // No need to check whether negotiation is successful;
             // the returned callback will throw HttpNotAcceptableException if it was not.
-            _ = @this.Request.TryNegotiateContentEncoding(preferCompression, out var compressionMethod, out var prepareResponse);
+            _ = @this.Request.TryNegotiateContentEncoding(
+                preferCompression,
+                out var compressionMethod,
+                out var prepareResponse
+            );
             prepareResponse(@this.Response);
             var stream = buffered ? new BufferingResponseStream(@this.Response) : @this.Response.OutputStream;
 
@@ -55,9 +64,15 @@ namespace EmbedIO
         /// <para>This writer MUST be disposed when finished writing.</para>
         /// </returns>
         /// <seealso cref="OpenResponseStream"/>
-        public static TextWriter OpenResponseText(this IHttpContext @this, Encoding? encoding = null, bool buffered = false, bool preferCompression = true)
+        public static TextWriter OpenResponseText(
+            this IHttpContext @this,
+            Encoding? encoding = null,
+            bool buffered = false,
+            bool preferCompression = true
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             encoding ??= WebServer.DefaultEncoding;
             @this.Response.ContentEncoding = encoding;
             return new StreamWriter(OpenResponseStream(@this, buffered, preferCompression), encoding);
