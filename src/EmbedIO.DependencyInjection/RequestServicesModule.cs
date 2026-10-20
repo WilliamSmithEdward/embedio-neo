@@ -57,7 +57,7 @@ namespace EmbedIO.DependencyInjection
             context.Items.Add(DependencyInjectionExtensions.ServicesKey, scope.ServiceProvider);
             var accessor = scope.ServiceProvider.GetService<DependencyInjectionExtensions.RequestContext>();
 
-            accessor?.Context = context;
+            if (accessor is { } requestContext) requestContext.Context = context;
 
             return Task.CompletedTask;
         }

@@ -39,7 +39,10 @@ namespace EmbedIO.Internal
                     continue;
 
                 $"[{context.Id}] Processing with {name}.".Debug(_logSource);
-                telemetry?.Route = RequestTelemetry.Combine(prefix, module.BaseRoute);
+
+                if (telemetry is { } activeTelemetry)
+                    activeTelemetry.Route = RequestTelemetry.Combine(prefix, module.BaseRoute);
+
                 context.GetImplementation().Route = routeMatch;
                 await module
                     .HandleRequestAsync(context)

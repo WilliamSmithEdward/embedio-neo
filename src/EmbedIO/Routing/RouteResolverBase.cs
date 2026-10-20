@@ -132,7 +132,8 @@ namespace EmbedIO.Routing
                 if (!MatchContextData(contextData, data))
                     continue;
 
-                telemetry?.Route = Internal.RequestTelemetry.Combine(moduleRoute, Route);
+                if (telemetry is { } currentTelemetry)
+                    currentTelemetry.Route = Internal.RequestTelemetry.Combine(moduleRoute, Route);
 
                 try
                 {
@@ -144,7 +145,7 @@ namespace EmbedIO.Routing
                 {
                     result = RouteResolutionResult.NoHandlerSuccessful;
 
-                    telemetry?.Route = moduleRoute;
+                    if (telemetry is { } previousTelemetry) previousTelemetry.Route = moduleRoute;
                 }
             }
 
