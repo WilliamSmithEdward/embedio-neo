@@ -32,9 +32,7 @@ namespace EmbedIO.Caching
             "Content-Type", "Content-Encoding", "Content-Language", "Content-Disposition", "ETag", "Last-Modified",
             "Vary", "Server"
         };
-        private readonly Dictionary<string, string?> _baseline = new(
-            StringComparer.OrdinalIgnoreCase
-        );
+        private readonly Dictionary<string, string?> _baseline = new(StringComparer.OrdinalIgnoreCase);
 
         protected OutputCacheCapture(IHttpContext context, int limit)
         {
@@ -123,12 +121,7 @@ namespace EmbedIO.Caching
                         && StoredHeaders.Contains(name)
                         && !name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase)
                 )
-                .Select(
-                    name => new KeyValuePair<string, string[]>(
-                        name,
-                        response.Headers.GetValues(name) ?? []
-                    )
-                )
+                .Select(name => new KeyValuePair<string, string[]>(name, response.Headers.GetValues(name) ?? []))
                 .ToArray();
             var body = _stream.Bytes();
 

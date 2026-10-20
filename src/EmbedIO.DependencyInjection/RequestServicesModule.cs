@@ -9,9 +9,7 @@ namespace EmbedIO.DependencyInjection
     {
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly object _sync = new();
-        private readonly TaskCompletionSource<bool> _drained = new(
-            TaskCreationOptions.RunContinuationsAsynchronously
-        );
+        private readonly TaskCompletionSource<bool> _drained = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _active;
         private bool _stopping;
 

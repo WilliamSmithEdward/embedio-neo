@@ -150,8 +150,7 @@ namespace EmbedIO.WebApi
 
                     if (value is IValidatableObject custom && _count < _options.MaxErrors)
                     {
-                        foreach (var result in custom.Validate(Context(value, string.Empty))
-                            ?? [])
+                        foreach (var result in custom.Validate(Context(value, string.Empty)) ?? [])
                         {
                             _token.ThrowIfCancellationRequested();
 

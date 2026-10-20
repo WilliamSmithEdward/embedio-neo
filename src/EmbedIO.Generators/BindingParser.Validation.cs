@@ -9,8 +9,7 @@ namespace EmbedIO.Generators
     {
         private const string ValidationNamespace = "global::EmbedIO.WebApi.";
         private const string RulesType = "global::System.ComponentModel.DataAnnotations.ValidationAttribute";
-        private static readonly string[] ValidationScalarTypes =
-        [
+        private static readonly string[] ValidationScalarTypes = [
             "System.DateTime", "System.DateTimeOffset", "System.TimeSpan", "System.Guid", "System.Uri",
             "System.DateOnly", "System.TimeOnly"
         ];
@@ -255,15 +254,14 @@ namespace EmbedIO.Generators
                                 ))
                         ) continue;
 
-                        var jsonName =
-                            attributes
-                                .FirstOrDefault(
-                                    a => a.AttributeClass?.ToDisplayString()
-                                        == "System.Text.Json.Serialization.JsonPropertyNameAttribute"
-                                )
-                                ?.ConstructorArguments.FirstOrDefault().Value is string propertyJsonName
-                                    ? Literals.String(propertyJsonName)
-                                    : "null";
+                        var jsonName = attributes
+                            .FirstOrDefault(
+                                a => a.AttributeClass?.ToDisplayString()
+                                    == "System.Text.Json.Serialization.JsonPropertyNameAttribute"
+                            )
+                            ?.ConstructorArguments.FirstOrDefault().Value is string propertyJsonName
+                            ? Literals.String(propertyJsonName)
+                            : "null";
                         var child = ValidationPlan(property.Type);
                         members.Add(
                             "new "

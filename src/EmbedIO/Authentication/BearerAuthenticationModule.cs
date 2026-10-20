@@ -13,7 +13,9 @@ namespace EmbedIO.Authentication
     /// <remarks>Creates an authentication module.</remarks>
     /// <param name="baseRoute">The base path on which credentials are processed.</param>
     /// <param name="validator">Application-owned asynchronous token validation.</param>
-    public sealed class BearerAuthenticationModule(string baseRoute, BearerTokenValidator validator) : WebModuleBase(baseRoute)
+    public sealed class BearerAuthenticationModule(string baseRoute, BearerTokenValidator validator) : WebModuleBase(
+        baseRoute
+    )
     {
         private static readonly object ChallengeKey = new();
         private readonly BearerTokenValidator _validator = Validate.NotNull(nameof(validator), validator);

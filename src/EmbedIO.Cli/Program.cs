@@ -48,11 +48,13 @@ namespace EmbedIO.Cli
             }
 
             using var stop = new CancellationTokenSource();
+
             void cancel(object? _, ConsoleCancelEventArgs e)
             {
                 e.Cancel = true;
                 stop.Cancel();
             }
+
             Console.CancelKeyPress += cancel;
             Task? keyboard = null;
 

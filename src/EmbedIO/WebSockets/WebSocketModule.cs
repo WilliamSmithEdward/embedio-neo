@@ -44,8 +44,7 @@ namespace EmbedIO.WebSockets
         private const int DefaultMaxMessageSize = 4 * 1024 * 1024;
         private readonly bool _enableConnectionWatchdog;
         private readonly List<string> _protocols = [];
-        private readonly ConcurrentDictionary<string, IWebSocketContext> _contexts =
-            new();
+        private readonly ConcurrentDictionary<string, IWebSocketContext> _contexts = new();
         private bool _isDisposing;
         private bool _closeOnDrain;
         private int _draining;

@@ -11,7 +11,6 @@ namespace EmbedIO.Caching
     public sealed class OutputCachePolicy
     {
         private static readonly string[] DefaultHeaders = ["Accept", "Accept-Encoding", "Accept-Language", "Origin"];
-
         internal readonly string Identity = Guid
             .NewGuid()
             .ToString("N");
@@ -32,9 +31,12 @@ namespace EmbedIO.Caching
                 throw new ArgumentOutOfRangeException(nameof(duration));
 
             Duration = duration;
-            Headers = [.. DefaultHeaders
-                .Concat(varyByHeaders ?? [])
-                .Distinct(StringComparer.OrdinalIgnoreCase)];
+            Headers =
+            [
+                .. DefaultHeaders
+                    .Concat(varyByHeaders ?? [])
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+            ];
 
             if (
                 Headers.Length > 32

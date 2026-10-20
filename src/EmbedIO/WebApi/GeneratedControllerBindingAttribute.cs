@@ -26,7 +26,6 @@ namespace EmbedIO.WebApi
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public sealed class GeneratedControllerBindingAttribute(Type controllerType) : Attribute
     {
-
         /// <summary>
         /// Gets the controller type.
         /// </summary>

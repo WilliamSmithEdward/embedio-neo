@@ -1,4 +1,4 @@
-namespace EmbedIO.Utilities
+﻿namespace EmbedIO.Utilities
 {
     /// <summary>
     /// Provides extension methods for <see cref="QValueList"/>.

@@ -122,9 +122,7 @@ namespace EmbedIO.Generators
                 var call = CallExpression(
                     controller,
                     hook,
-                    hook.Parameters.Length == 0
-                        ? []
-                        : ["__context.CancellationToken"]
+                    hook.Parameters.Length == 0 ? [] : ["__context.CancellationToken"]
                 );
 
                 if (hook.ReturnsVoid)

@@ -41,9 +41,12 @@ namespace EmbedIO.WebApi
                         attribute.Policy,
                         attribute.Roles == null
                             ? []
-                            : [.. attribute.Roles
-                                .Split(',')
-                                .Select(role => role.Trim())]
+                            :
+                            [
+                                .. attribute.Roles
+                                    .Split(',')
+                                    .Select(role => role.Trim())
+                            ]
                     )
                 )
                 .ToArray();

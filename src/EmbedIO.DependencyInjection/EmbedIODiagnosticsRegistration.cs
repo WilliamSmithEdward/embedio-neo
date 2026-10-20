@@ -192,18 +192,15 @@ namespace EmbedIO.DependencyInjection
                 }
             }
 
-            private static LogLevel Map(TraceEventType type)
+            private static LogLevel Map(TraceEventType type) => type switch
             {
-                return type switch
-                {
-                    TraceEventType.Critical => LogLevel.Critical,
-                    TraceEventType.Error => LogLevel.Error,
-                    TraceEventType.Warning => LogLevel.Warning,
-                    TraceEventType.Information => LogLevel.Information,
-                    TraceEventType.Verbose => LogLevel.Debug,
-                    _ => LogLevel.None,
-                };
-            }
+                TraceEventType.Critical => LogLevel.Critical,
+                TraceEventType.Error => LogLevel.Error,
+                TraceEventType.Warning => LogLevel.Warning,
+                TraceEventType.Information => LogLevel.Information,
+                TraceEventType.Verbose => LogLevel.Debug,
+                _ => LogLevel.None
+            };
         }
     }
 }

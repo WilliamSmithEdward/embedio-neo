@@ -17,11 +17,13 @@ namespace EmbedIO.WebApi
         ValidationAttribute[] rules,
         RequestValidationMember[] members,
         Func<RequestValidationPlan>? element = null
-        )
+    )
     {
         internal Type Type { get; } = type ?? throw new ArgumentNullException(nameof(type));
-        internal ValidationAttribute[] Rules { get; } = (ValidationAttribute[])(rules ?? throw new ArgumentNullException(nameof(rules))).Clone();
-        internal RequestValidationMember[] Members { get; } = (RequestValidationMember[])(members ?? throw new ArgumentNullException(nameof(members))).Clone();
+        internal ValidationAttribute[] Rules { get; } = (ValidationAttribute[])(rules
+            ?? throw new ArgumentNullException(nameof(rules))).Clone();
+        internal RequestValidationMember[] Members { get; } = (RequestValidationMember[])(members
+            ?? throw new ArgumentNullException(nameof(members))).Clone();
         internal Func<RequestValidationPlan>? Element { get; } = element;
     }
 
@@ -39,12 +41,13 @@ namespace EmbedIO.WebApi
         Func<object, object?> get,
         ValidationAttribute[] rules,
         Func<RequestValidationPlan> plan
-        )
+    )
     {
         internal string Name { get; } = name ?? throw new ArgumentNullException(nameof(name));
         internal string? JsonName { get; } = jsonName;
         internal Func<object, object?> Get { get; } = get ?? throw new ArgumentNullException(nameof(get));
-        internal ValidationAttribute[] Rules { get; } = (ValidationAttribute[])(rules ?? throw new ArgumentNullException(nameof(rules))).Clone();
+        internal ValidationAttribute[] Rules { get; } = (ValidationAttribute[])(rules
+            ?? throw new ArgumentNullException(nameof(rules))).Clone();
         internal Func<RequestValidationPlan> Plan { get; } = plan ?? throw new ArgumentNullException(nameof(plan));
     }
 }

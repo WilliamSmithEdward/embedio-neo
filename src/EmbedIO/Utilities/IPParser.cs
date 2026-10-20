@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -215,12 +215,14 @@ namespace EmbedIO.Utilities
                     {
                         for (int i3 = beginIP[3]; i3 <= endIP[3]; i3++)
                         {
-                            yield return new IPAddress([
-                                (byte)i0,
-                                (byte)i1,
-                                (byte)i2,
-                                (byte)i3
-                            ]);
+                            yield return new IPAddress(
+                                [
+                                    (byte)i0,
+                                    (byte)i1,
+                                    (byte)i2,
+                                    (byte)i3
+                                ]
+                            );
                         }
                     }
                 }

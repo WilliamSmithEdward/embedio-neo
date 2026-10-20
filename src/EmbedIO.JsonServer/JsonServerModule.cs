@@ -144,6 +144,7 @@
                         foreach (var item in (IEnumerable<object>)table)
                         {
                             var row = (IDictionary<string, object>)item;
+
                             if (row["id"].ToString() != parts[1]) continue;
 
                             switch (verb)

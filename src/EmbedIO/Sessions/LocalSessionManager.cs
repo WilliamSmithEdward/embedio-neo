@@ -44,9 +44,7 @@ namespace EmbedIO.Sessions
         /// The default interval between automatic purges of expired and empty sessions, i.e. 30 seconds.
         /// </summary>
         public static readonly TimeSpan DefaultPurgeInterval = TimeSpan.FromSeconds(30);
-        private readonly ConcurrentDictionary<string, SessionImpl> _sessions = new(
-            Session.KeyComparer
-        );
+        private readonly ConcurrentDictionary<string, SessionImpl> _sessions = new(Session.KeyComparer);
         private string _cookieName = DefaultCookieName;
         private string _cookiePath = DefaultCookiePath;
         private TimeSpan _cookieDuration = DefaultCookieDuration;

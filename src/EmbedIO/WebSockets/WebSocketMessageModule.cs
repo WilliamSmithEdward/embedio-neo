@@ -24,8 +24,7 @@ namespace EmbedIO.WebSockets
             "IDE0028:Simplify collection initialization",
             Justification = "The shared implementation targets netstandard2.0, whose ConditionalWeakTable does not support collection expressions."
         )]
-        private readonly ConditionalWeakTable<IWebSocketContext, DispatchState> _dispatch =
-            new();
+        private readonly ConditionalWeakTable<IWebSocketContext, DispatchState> _dispatch = new();
 
         /// <summary>Initializes a message-oriented WebSocket endpoint.</summary>
         /// <param name="requestPath">The endpoint URL path.</param>

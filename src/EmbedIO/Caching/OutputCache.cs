@@ -429,11 +429,7 @@ namespace EmbedIO.Caching
                 }
 
                 Size = body.LongLength
-                    + 2L
-                        * (key.Length
-                            + (contentType?.Length ?? 0)
-                            + (statusDescription?.Length ?? 0)
-                            + headerLength);
+                    + 2L * (key.Length + (contentType?.Length ?? 0) + (statusDescription?.Length ?? 0) + headerLength);
             }
 
             [System.Diagnostics.CodeAnalysis.SuppressMessage(
