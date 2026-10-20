@@ -166,9 +166,9 @@ namespace EmbedIO.WebApi
                 owner.Name,
                 method.Name,
                 result == typeof(void) || result == typeof(Task) || result == typeof(ValueTask) ? null : result,
-                parameters.ToArray(),
+                [.. parameters],
                 method.GetCustomAttribute<OpenApiOperationAttribute>(true),
-                responses.ToArray(),
+                [.. responses],
                 method.IsDefined(typeof(OpenApiIgnoreAttribute), true)
                     || owner.IsDefined(typeof(OpenApiIgnoreAttribute), true),
                 ReadAuthorization(owner, method)

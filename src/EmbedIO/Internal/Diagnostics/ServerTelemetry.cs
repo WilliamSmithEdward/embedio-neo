@@ -23,9 +23,9 @@ namespace EmbedIO.Internal
         private static readonly ActivitySource Source = new(SourceName, Version);
 
         // Bucket boundaries recommended by the HTTP semantic conventions.
-        private static readonly double[] DurationBuckets = {
+        private static readonly double[] DurationBuckets = [
             0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10
-        };
+        ];
         private static readonly Histogram<double> Duration = Meter.CreateHistogram<double>(
             "http.server.request.duration",
             "s",
@@ -282,7 +282,7 @@ namespace EmbedIO.Internal
         {
             DistributedContextPropagator.Current.ExtractTraceIdAndState(
                 request,
-                static (object? carrier, string name, out string? value, out IEnumerable<string>? values) =>
+                static (carrier, name, out value, out values) =>
                 {
                     values = null;
                     value = carrier is IHttpRequest source ? source.Headers[name] : null;

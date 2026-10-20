@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -7,6 +7,7 @@ namespace EmbedIO.Net.Internal.Http2
 {
     // A WebSocket owns this stream, not the connection or sibling HTTP/2 streams.
     // Context completion performs the HTTP/2 END_STREAM/reset transition.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1844:Override memory-based stream operations", Justification = "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.")]
     internal sealed class Http2DuplexStream : Stream
     {
         private readonly EmbedIO.Internal.BorrowedResource<Stream> _input;

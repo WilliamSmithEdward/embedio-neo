@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 namespace EmbedIO.Net.Internal.Http2
 {
     // Replays protocol-sniffing bytes once; the socket owner retains stream ownership.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1844:Override memory-based stream operations", Justification = "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.")]
     internal sealed class PrefixReadStream : Stream
     {
         private readonly EmbedIO.Internal.BorrowedResource<Stream> _inner;

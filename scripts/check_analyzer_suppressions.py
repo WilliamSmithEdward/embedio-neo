@@ -30,6 +30,25 @@ NULL_FORGIVING = re.compile(r'(?P<previous>\b\w+|[\]\)])\s*!(?!=)')
 # netstandard2.0. Match the exact file, diagnostic, reason AND following member.
 # Errors/warnings and other diagnostics retain the existing rejection policy.
 COMPATIBILITY_SUPPRESSIONS = (
+    ("src/EmbedIO/Internal/Diagnostics/RequestTelemetry.cs", "Performance", "CA1845:Use span-based string.Concat",
+     "The shared implementation targets netstandard2.0, which has no span-based string.Concat overloads.",
+     r"internal\s+static\s+string\s+Combine\s*\("),
+    ("src/EmbedIO/Net/Internal/Http2/PrefixReadStream.cs", "Performance", "CA1844:Override memory-based stream operations",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"(?:(?:private|internal|sealed|partial)\s+)*class\s+PrefixReadStream\b"),
+
+    ("src/EmbedIO/Net/Internal/Http2/Http2DuplexStream.cs", "Performance", "CA1844:Override memory-based stream operations",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"(?:(?:private|internal|sealed|partial)\s+)*class\s+Http2DuplexStream\b"),
+
+    ("src/EmbedIO/Net/Internal/Http1/Http1TunnelStream.cs", "Performance", "CA1844:Override memory-based stream operations",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"(?:(?:private|internal|sealed|partial)\s+)*class\s+Http1TunnelStream\b"),
+
+    ("src/EmbedIO/Internal/RequestBodies/DeflateRequestStream.cs", "Performance", "CA1844:Override memory-based stream operations",
+     "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.",
+     r"(?:(?:private|internal|sealed|partial)\s+)*class\s+FramedInput\b"),
+
     ("src/EmbedIO/WebSockets/WebSocketModule.cs", "Style", "IDE0290:Use primary constructor",
      "Preserve the protected constructor; a primary constructor on this public class would be public.",
      r"protected\s+WebSocketModule\s*\("),

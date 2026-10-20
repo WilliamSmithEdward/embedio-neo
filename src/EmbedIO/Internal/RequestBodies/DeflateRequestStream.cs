@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.IO.Compression;
 using System.Threading;
@@ -343,6 +343,8 @@ namespace EmbedIO.Internal
 
             base.Dispose(disposing);
         }
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1844:Override memory-based stream operations", Justification = "The shared implementation targets netstandard2.0, which has no memory-based Stream async overloads.")]
 
         private sealed class FramedInput(Stream source, bool zlib) : Stream
         {

@@ -17,6 +17,11 @@
             context is ITelemetryContext owner ? owner.Telemetry : null;
 
         // Joins a base route ("/api/") and a route relative to it ("/items/{id}").
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Performance",
+            "CA1845:Use span-based string.Concat",
+            Justification = "The shared implementation targets netstandard2.0, which has no span-based string.Concat overloads."
+        )]
         internal static string Combine(string? prefix, string route)
         {
             if (prefix == null || prefix.Length == 0 || prefix == "/") return route;

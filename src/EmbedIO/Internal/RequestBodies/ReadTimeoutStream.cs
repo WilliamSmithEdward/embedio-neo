@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Buffers;
 using System.IO;
 using System.Threading;
@@ -255,9 +255,7 @@ namespace EmbedIO.Internal
 
             try
             {
-                if (result.Buffer != null)
-                    result.Buffer
-                        .AsSpan(0, result.Count)
+                result.Buffer?.AsSpan(0, result.Count)
                         .CopyTo(buffer);
 
                 return result.Count;
@@ -278,9 +276,7 @@ namespace EmbedIO.Internal
 
             try
             {
-                if (result.Buffer != null)
-                    result.Buffer
-                        .AsMemory(0, result.Count)
+                result.Buffer?.AsMemory(0, result.Count)
                         .CopyTo(buffer);
 
                 return result.Count;
