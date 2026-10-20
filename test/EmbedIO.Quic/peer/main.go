@@ -134,7 +134,11 @@ func run() error {
 	if !roots.AppendCertsFromPEM(pem) {
 		return errors.New("invalid CA")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	budget := 8 * time.Second
+	if *mode == "endurance" {
+		budget = 20 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	config := &quic.Config{EnableDatagrams: true, EnableStreamResetPartialDelivery: *mode != "missing-reset", MaxIncomingStreams: 16, MaxIncomingUniStreams: 16}
 	if *mode == "idle" {
@@ -298,8 +302,12 @@ func run() error {
 			return ctx.Err()
 		}
 	}
-	if *mode == "sustained" || *mode == "sustained-credit" {
-		return sustained(ctx, conn, session, unis)
+	if *mode == "sustained" || *mode == "sustained-credit" || *mode == "endurance" {
+		size := 262144
+		if *mode == "endurance" {
+			size = 4194304
+		}
+		return sustained(ctx, conn, session, unis, size)
 	}
 	if *mode == "outbound-reset" {
 		upload, e := conn.OpenUniStreamSync(ctx)
@@ -463,9 +471,8 @@ func run() error {
 	}
 	return nil
 }
-func sustained(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis <-chan *quic.ReceiveStream) error {
+func sustained(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis <-chan *quic.ReceiveStream, streamSize int) error {
 	const chunkSize = 16384
-	const streamSize = 262144
 	maximum := uint64(65536)
 	sent := uint64(0)
 	consumed := uint64(0)

@@ -385,7 +385,9 @@ loss recovery, NewReno congestion control and an H3/WebTransport echo adapter wi
 current reliable-reset framing, reusable receive windows and explicit connection
 closing/draining. Receive packet history advances with bounded ACK ranges and a
 permanent duplicate-rejection floor. Retired send records and acknowledgement
-history also compact within fixed bounds. A bounded shared listener adds destination-ID routing, admission
+history also compact within fixed bounds. Per-key AES-GCM usage limits and
+ACK-confirmed local/peer key generations replace the cumulative send-packet quota.
+A bounded shared listener adds destination-ID routing, admission
 limits, handshake deadlines and cancellation across multiple connections. It has
 no public application API; the intended fully validated
 replacement will remove MsQuic from the production transport, but the current

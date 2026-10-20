@@ -48,7 +48,7 @@ packaging decision. The independent test client reuses the existing, hash-pinned
 ## Feasibility profile
 
 The executable always binds IPv4 loopback on an ephemeral port. Each process
-uses a ten-second process deadline. The single-connection modes are:
+uses a ten-second process deadline by default. The single-connection modes are:
 
 - `serve` keeps the original `embedio-quic-probe` ALPN, one bidirectional stream
   and 8192-byte exact echo.
@@ -56,6 +56,8 @@ uses a ten-second process deadline. The single-connection modes are:
   with dynamic capacity zero, and accepts `CONNECT :protocol=webtransport-h3` at
   `https://localhost/echo`. It links the existing repository codecs and session
   core into this test executable; production files are not copied or modified.
+- `serve-h3-updates` uses the same H3 profile with frequent local key updates and
+  a separate bounded endurance deadline, described below.
 
 The H3 profile requires the current reset parameter, QUIC/HTTP datagrams,
 WebTransport settings, the exact loopback Origin and a fresh per-process bearer
@@ -76,8 +78,8 @@ observes the two-packet minimum, detects persistent congestion and paces sends.
 Application-limited ACKs do not increase the congestion window. QUIC datagrams
 consume congestion credit but are not retransmitted.
 
-Bounds remain deliberate: 64 KiB CRYPTO reassembly per encryption level, 4096 sent
-packet numbers per space, 4096 active recovery records, bounded ACK/loss history
+Bounds remain deliberate: 64 KiB CRYPTO reassembly per encryption level,
+4096 active recovery records, bounded ACK/loss history
 and 512 queued packets. H3 permits 16 incoming streams of each direction, 64 KiB
 per stream receive window and an initial 256 KiB connection window. Both windows
 advance as the application consumes or discards input; buffered gaps retain their
@@ -86,14 +88,15 @@ gaps, after any required reliable prefix arrives. The engine waits for the relia
 partial reset and preserves the header when a local reset waits for send credit.
 Stream reassembly reuses a fixed ring, and the H3 parser compacts consumed input.
 Retired duplicate bytes are ignored; overlap still buffered in the ring must agree,
-and final-size history is retained. The packet/session/stream-count budgets and
+and final-size history is retained. The active-record/session/stream-count budgets and
 process deadline still bound each validation process; this is not indefinite service.
 Receive packet history now uses at most 128 ACK ranges within a sliding
 4096-number window. A monotonic acceptance floor prevents processing retired
 duplicates again. Large jumps and sparse ranges retire old history without ending
 the connection. This removes the cumulative receive-packet limit; outbound packet
-numbers still retain their separate development quota; active recovery records
-remain bounded independently of cumulative traffic.
+numbers can advance to the QUIC 62-bit limit; active recovery records remain
+bounded independently of cumulative traffic. Four-byte packet numbers carry the
+low bits and reconstruct across 32-bit boundaries.
 Pre-validation sends obey the three-times-received byte allowance.
 
 Lost-packet metadata retains the most recent 4096 retirement entries, while
@@ -104,10 +107,21 @@ acknowledged-packet barrier. Loss history before that barrier retires with them,
 so compaction does not join persistent-loss intervals across a forgotten ACK.
 These are bounded histories, rather than cumulative connection quotas.
 
-Peer-initiated key updates derive fresh packet secrets while preserving header
-protection, mirror the peer's send phase, and retain the previous receive keys for
-reordering during three PTO durations. The larger peer cases require a recorded
-key update and complete exact-byte transfer.
+Key updates derive fresh packet secrets while preserving header protection. Read
+and write generations are tracked separately through phase-bit wraparound; a local
+update can advance the writer once before the peer responds. Current-generation
+ACK confirmation and a three-PTO wait gate subsequent local updates. The default
+local interval is 1,048,576 encryptions; per-key AES-GCM protection stops at the
+RFC 9001 limit of 2^23, reserving capacity for AEAD_LIMIT_REACHED closure if an
+update cannot proceed. Packet encryption occurs after pacing/amplification checks.
+Previous receive keys are retained for reordering during three PTO durations.
+Next receive keys are prepared after TLS setup and authenticated transitions;
+unauthenticated phase changes do not trigger derivation. Header protection is
+removed once before selecting the current, previous or next payload key. The
+larger peer cases require a recorded key update and complete exact-byte transfer.
+The per-connection failed-authentication counter stops packet processing at the
+AES-GCM integrity limit of 2^52 failures, with AEAD_LIMIT_REACHED closure. Native
+regressions use smaller test-only budgets to verify both limit paths on the wire.
 
 Connections now distinguish active, closing, draining and closed states. Local
 protocol/TLS errors send bounded CONNECTION_CLOSE responses; peer close enters
@@ -115,7 +129,7 @@ silent draining for three PTO durations. Negotiated idle expiry is silent, and
 repeated local sends cannot keep an unresponsive peer alive. Authenticated traffic
 can trigger a rate-limited close retry; closing/draining deadlines are not extended.
 The Windows harness tolerates ICMP connection-reset notifications while finishing
-those states. The hard ten-second process deadline remains independent.
+those states. The hard process deadline remains independent.
 
 The shared `serve-many` / `serve-many-h3` host routes by destination connection ID,
 checks the existing peer endpoint, admits at most 16 resident owners and 16 new
@@ -124,8 +138,8 @@ seconds. Those host limits are independent of each established connection's idle
 state. Cancellation owns the pending receive/timer operations and every connection;
 retired IDs and endpoint aliases are removed. Migration remains unsupported.
 
-The current transport profile has no Retry, migration, locally initiated
-key updates, resumption, 0-RTT, complete post-handshake TLS processing,
+The current transport profile has no Retry, migration, resumption, 0-RTT,
+complete post-handshake TLS processing,
 complete transport-error classification, stateless reset
 or production provider interface. It supports a bounded H3 echo profile,
 not a general request dispatcher, public application facade or browser release.
@@ -166,7 +180,7 @@ checks. Run receipts retain exact assembly/source/native-library identities.
 - Fifteen aioquic 1.6.0 cases cover the original ten interoperability cases plus
   Initial/handshake/response loss, ACK loss and reordering. The designated reliable
   loss cases require actual retransmitted packets as well as an exact response.
-- Nineteen quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
+- Twenty-one quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
   datagrams, two sessions and quota rejection, authorization/Origin rejection,
   missing current-reset negotiation, incoming and outgoing partial resets,
   a malformed capsule followed by a healthy sibling, larger transfers, withheld
@@ -174,6 +188,9 @@ checks. Run receipts retain exact assembly/source/native-library identities.
   transfer 512 KiB per session beyond the initial stream and connection windows,
   including small peer windows and packet loss. Three cases verify transport/application
   closing and silent idle expiry; every wire case requires completed shutdown.
+  Two endurance cases transfer 8 MiB over bidi/uni streams, require more than
+  4096 sent packets and multiple local and peer key transitions; the loss case
+  also requires actual retransmission.
 - The original 10,076 primitive assertions remain. Additional deterministic
   recovery and bridge regressions cover packet spaces, RTT/ACK delay, PTO backoff,
   late/duplicate ACKs, persistent congestion, blocked credit, sparse reliable
@@ -217,8 +234,8 @@ coverage. The production provider remains unchanged.
 ## Next acceptance boundaries
 
 1. Extend the bounded shared-listener/stream machinery to production lifetimes,
-   replenished stream counts, bounded retirement of packet history, complete error
-   classification/stateless reset, and repeated/locally initiated key updates.
+   replenished stream counts, complete error classification/stateless reset,
+   and longer transfer/loss/endurance coverage.
    Broaden loss/congestion and close-retry campaigns before treating the recovery
    and lifecycle algorithms as production transport acceptance.
 2. Exercise outbound partial reset, withheld credit, concurrent session termination
@@ -248,3 +265,10 @@ quic-go WebTransport clients, and cancellation while an established connection i
 still active. Every case checks that the shared host retains zero owners at exit.
 The native mutation entry point also exercises admission, endpoint/CID isolation,
 capacity, handshake deadlines and once-only disposal without sockets.
+
+The `serve-h3-updates` development command uses a 128-packet local update interval
+and a bounded 30-second process lifetime for the 8 MiB endurance case. Its peer
+has a separate 20-second operation deadline. Ordinary hosts and existing peer cases
+retain their ten-second and eight-second bounds. This case verifies exact bidi/uni
+echo bytes, packet count beyond 4096, repeated updates, post-transfer datagrams,
+complete session shutdown and zero remaining physical flight.

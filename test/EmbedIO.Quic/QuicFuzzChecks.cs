@@ -27,6 +27,7 @@ namespace EmbedIO.Quic
                     break;
 
                 case 1:
+                    KeyUpdateTests.Mutate(data);
                     Protection(data);
                     break;
 

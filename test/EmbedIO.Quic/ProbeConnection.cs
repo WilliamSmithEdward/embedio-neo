@@ -21,12 +21,16 @@ namespace EmbedIO.Quic
         private bool _peerReset;
         private PacketKeys? _previousRead;
         private PacketKeys? _nextRead;
-        private bool _readPhase;
-        private bool _writePhase;
-        private ulong _phaseBoundary;
+        private readonly KeyUpdateState _keyUpdates;
+        private ulong _failedAuthentications;
+        private readonly int _encryptionLimit;
+        private readonly ulong _authenticationLimit;
+        private bool _authenticationLimitReached;
         private double _previousExpires;
 
         internal int KeyUpdates { get; private set; }
+        internal int LocalKeyUpdates { get; private set; }
+        internal ulong SentPackets => _sentNumbers[0] + _sentNumbers[1] + _sentNumbers[2];
         internal int OutboundResets => _streams?.OutboundResets ?? 0;
         internal int ReceiveCreditUpdates => _streams?.ReceiveCreditUpdates ?? 0;
         internal ulong StreamBytesReceived => _streams?.ReceivedData ?? 0;
@@ -91,9 +95,19 @@ namespace EmbedIO.Quic
             string key,
             bool webTransport = false,
             string authorization = "",
-            double now = 0
+            double now = 0,
+            int keyUpdateInterval = KeyUpdateState.DefaultInterval,
+            int encryptionLimit = PacketKeys.MaximumEncryptions,
+            ulong authenticationLimit = 1UL << 52
         )
         {
+            ArgumentOutOfRangeException.ThrowIfLessThan(encryptionLimit, 16);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(encryptionLimit, PacketKeys.MaximumEncryptions);
+            ArgumentOutOfRangeException.ThrowIfLessThan(authenticationLimit, 1UL);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(authenticationLimit, 1UL << 52);
+            _authenticationLimit = authenticationLimit;
+            _encryptionLimit = encryptionLimit;
+            _keyUpdates = new KeyUpdateState(keyUpdateInterval);
             _now = now;
             _lifetime.Authenticated(now);
             _webTransport = webTransport;
@@ -170,6 +184,12 @@ namespace EmbedIO.Quic
                 return Drain();
             }
 
+            catch (KeyUpdateException)
+            {
+                BeginClose(2, Wire.Frame(0x1c, 0x0e, 0, 0));
+                return Drain();
+            }
+
             catch (InvalidDataException)
             {
                 BeginClose(
@@ -184,7 +204,7 @@ namespace EmbedIO.Quic
         {
             _lifetime.Tick(now, _recovery.KeyRetention);
 
-            if (Closed || Phase == ConnectionPhase.Draining) return [];
+            if (Closed || Phase == ConnectionPhase.Draining || _authenticationLimitReached) return [];
 
             _now = now;
             ReceivedBytes += datagram.Length;
@@ -208,7 +228,7 @@ namespace EmbedIO.Quic
 
                 var keys = level == 0 ? _initialRead : _tls.ReadKeys[level];
 
-                if (keys == null)
+                if (keys == null || (level == 2 && !_tls.Established))
                 {
                     RejectedPackets++;
                     position += length;
@@ -228,6 +248,14 @@ namespace EmbedIO.Quic
                 catch (CryptographicException)
                 {
                     RejectedPackets++;
+
+                    if (++_failedAuthentications >= _authenticationLimit)
+                    {
+                        _authenticationLimitReached = true;
+                        BeginClose(level, Wire.Frame(0x1c, 0x0f, 0, 0));
+                        break;
+                    }
+
                     position += length;
                     continue;
                 }
@@ -275,7 +303,7 @@ namespace EmbedIO.Quic
 
                 if (fresh)
                 {
-                    var acknowledge = Frames(level, plaintext);
+                    var acknowledge = Frames(level, plaintext, number >= _keyUpdates.ReadMinimum);
 
                     if (acknowledge && Phase == ConnectionPhase.Active) AcknowledgeReceived(level);
 
@@ -300,6 +328,8 @@ namespace EmbedIO.Quic
                     {
                         if (!_parametersValidated) throw new InvalidDataException("Missing peer transport parameters.");
 
+                        _nextRead ??= (_tls.ReadKeys[2]
+                            ?? throw new InvalidOperationException("Missing application keys.")).Next();
                         _handshakeDone = true;
                         _recovery.HandshakeConfirmed = true;
                         _recovery.Discard(1);
@@ -340,47 +370,45 @@ namespace EmbedIO.Quic
         private byte[] UnprotectApplication(ReadOnlySpan<byte> packet, int offset, out ulong number)
         {
             var current = _tls.ReadKeys[2] ?? throw new InvalidOperationException("Missing application keys.");
-            var phase = current.Phase(packet, offset);
+            var decoded = current.Decode(packet, offset, _nextReceived[2]);
+            number = decoded.Number;
+            var phase = decoded.Phase;
 
-            if (phase == _readPhase) return current.Unprotect(packet, offset, _nextReceived[2], out number, phase);
-
-            if (_previousRead != null && _now <= _previousExpires)
+            if (phase == _keyUpdates.ReadPhase)
             {
-                try
-                {
-                    var previous = _previousRead.Unprotect(packet, offset, _nextReceived[2], out number, phase);
-
-                    if (number >= _phaseBoundary)
-                        throw new InvalidDataException("Old key phase above update boundary.");
-
-                    return previous;
-                }
-
-                catch (CryptographicException) { }
+                var currentPayload = current.Unprotect(decoded, phase);
+                _keyUpdates.ReadCurrent(number);
+                return currentPayload;
             }
 
-            _nextRead ??= current.Next();
-            var plaintext = _nextRead.Unprotect(packet, offset, _nextReceived[2], out number, phase);
+            if (number < _keyUpdates.ReadMinimum)
+            {
+                if (_previousRead == null || _now > _previousExpires)
+                    throw new CryptographicException("Previous packet keys expired.");
+
+                var previous = _previousRead.Unprotect(decoded, phase);
+                _keyUpdates.ReadPrevious(number);
+                return previous;
+            }
+
+            // Next keys are prepared when TLS installs the application keys and
+            // after an authenticated transition, not on a forged phase change.
+            var next = _nextRead ?? throw new CryptographicException("Next packet keys unavailable.");
+            var plaintext = next.Unprotect(decoded, phase);
 
             if (!_recovery.HandshakeConfirmed || number < _nextReceived[2])
-                throw new InvalidDataException("Invalid key update ordering.");
+                throw new KeyUpdateException("Invalid key update ordering.");
 
+            var mirrorWrite = _keyUpdates.PeerUpdated(number, _sentNumbers[2]);
             _previousRead?.Dispose();
             _previousRead = current;
             _previousExpires = _now + _recovery.KeyRetention;
-            _phaseBoundary = number;
-            _readPhase = phase;
             _tls.ReadKeys[2] = _nextRead;
             _nextRead = null;
 
-            if (_writePhase != phase)
-            {
-                var write = _tls.WriteKeys[2] ?? throw new InvalidOperationException("Missing application write keys.");
-                _tls.WriteKeys[2] = write.Next();
-                write.Dispose();
-                _writePhase = phase;
-            }
+            if (mirrorWrite) UpdateWriteKeys();
 
+            _nextRead = next.Next();
             KeyUpdates++;
             return plaintext;
         }
@@ -480,6 +508,14 @@ namespace EmbedIO.Quic
                     && _lifetime.TakeCloseResponse(_now)
                 )
                 {
+                    var keys = _closeLevel == 0 ? _initialWrite : _tls.WriteKeys[_closeLevel];
+
+                    if (keys == null || !keys.CanEncrypt || _sentNumbers[_closeLevel] > PacketNumberWindow.Maximum)
+                    {
+                        _lifetime.Drain(_now, _recovery.KeyRetention);
+                        return output;
+                    }
+
                     var packet = Protect(new Delivery(_closeLevel, _closePayload, false, false));
                     _sentNumbers[_closeLevel]++;
                     SentBytes += packet.Length;
@@ -503,11 +539,22 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
-                var packet = Protect(delivery);
+                if (!PrepareKeys(level, delivery.Eliciting))
+                {
+                    output.AddRange(Drain());
+                    return output;
+                }
 
-                if (!_addressValidated && SentBytes + packet.Length > ReceivedBytes * 3) break;
+                var (header, numberOffset, payload) = Prepare(delivery);
+                var size = header.Length + payload.Length + 16;
 
-                if (delivery.Eliciting && !_recovery.CanSend(packet.Length, _now, queue == _urgent)) break;
+                if (!_addressValidated && SentBytes + size > ReceivedBytes * 3) break;
+
+                if (delivery.Eliciting && !_recovery.CanSend(size, _now, queue == _urgent)) break;
+
+                var keys = (level == 0 ? _initialWrite : _tls.WriteKeys[level])
+                    ?? throw new InvalidOperationException("Packet keys unavailable.");
+                var packet = keys.Protect(header, numberOffset, _sentNumbers[level], payload);
 
                 queue.Dequeue();
                 delivery.Queued = false;
@@ -534,7 +581,7 @@ namespace EmbedIO.Quic
         private bool TryHeader(ReadOnlySpan<byte> packet, out int level, out int length, out int numberOffset) =>
             PacketHeader.TryRead(packet, _originalId, _serverId, _clientId, out level, out length, out numberOffset);
 
-        private bool Frames(int level, ReadOnlySpan<byte> plaintext)
+        private bool Frames(int level, ReadOnlySpan<byte> plaintext, bool currentReadKeys)
         {
             var reader = new WireReader(plaintext);
             var acknowledge = false;
@@ -555,6 +602,8 @@ namespace EmbedIO.Quic
                     );
 
                     _recovery.Acknowledge(level, acknowledged, delay, _now);
+
+                    if (level == 2) _keyUpdates.Acknowledge(acknowledged[0].High, currentReadKeys, _now);
 
                     if (type == 3)
                     {
@@ -847,13 +896,54 @@ namespace EmbedIO.Quic
         private void Send(int level, byte[] payload, bool reliable = true, bool eliciting = true) =>
             QueueRepeat(new Delivery(level, payload, reliable, eliciting), false);
 
+        private void UpdateWriteKeys()
+        {
+            var current = _tls.WriteKeys[2] ?? throw new InvalidOperationException("Missing application write keys.");
+            _tls.WriteKeys[2] = current.Next();
+            current.Dispose();
+        }
+
+        private bool PrepareKeys(int level, bool eliciting)
+        {
+            var keys = (level == 0 ? _initialWrite : _tls.WriteKeys[level])
+                ?? throw new InvalidOperationException("Packet keys unavailable.");
+
+            if (
+                level == 2
+                && eliciting
+                && _keyUpdates.TryInitiate(
+                    _sentNumbers[2],
+                    keys.Encryptions,
+                    _recovery.HandshakeConfirmed,
+                    _now,
+                    _recovery.KeyRetention
+                )
+            )
+            {
+                UpdateWriteKeys();
+                LocalKeyUpdates++;
+                keys = _tls.WriteKeys[2] ?? throw new InvalidOperationException("Missing updated write keys.");
+            }
+
+            if (keys.Encryptions < _encryptionLimit - 8 && _sentNumbers[level] < PacketNumberWindow.Maximum - 8)
+                return true;
+
+            BeginClose(level, Wire.Frame(0x1c, 0x0f, 0, 0));
+            return false;
+        }
+
         private byte[] Protect(Delivery delivery)
+        {
+            var (header, numberOffset, payload) = Prepare(delivery);
+            var keys = (delivery.Level == 0 ? _initialWrite : _tls.WriteKeys[delivery.Level])
+                ?? throw new InvalidOperationException("Packet keys are unavailable.");
+            return keys.Protect(header, numberOffset, _sentNumbers[delivery.Level], payload);
+        }
+
+        private (byte[] Header, int NumberOffset, byte[] Payload) Prepare(Delivery delivery)
         {
             var level = delivery.Level;
             var payload = delivery.Bytes;
-
-            if (_sentNumbers[level] >= 4096)
-                throw new InvalidDataException("Outbound probe budget exceeded.");
 
             using var header = new MemoryStream();
 
@@ -878,18 +968,16 @@ namespace EmbedIO.Quic
 
             else
             {
-                header.WriteByte(_writePhase ? (byte)0x47 : (byte)0x43);
+                header.WriteByte(_keyUpdates.WritePhase ? (byte)0x47 : (byte)0x43);
                 header.Write(_clientId);
             }
 
             var numberOffset = (int)header.Length;
             var number = _sentNumbers[level];
             Span<byte> encoded = stackalloc byte[4];
-            BinaryPrimitives.WriteUInt32BigEndian(encoded, checked((uint)number));
+            BinaryPrimitives.WriteUInt32BigEndian(encoded, unchecked((uint)number));
             header.Write(encoded);
-            var keys = (level == 0 ? _initialWrite : _tls.WriteKeys[level])
-                ?? throw new InvalidOperationException("Packet keys are unavailable.");
-            return keys.Protect(header.ToArray(), numberOffset, number, payload);
+            return (header.ToArray(), numberOffset, payload);
         }
 
         public void Dispose()

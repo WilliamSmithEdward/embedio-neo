@@ -12,9 +12,21 @@ namespace EmbedIO.Quic
         private readonly byte[] _iv;
         private readonly byte[] _secret;
         private bool _disposed;
+        internal const int MaximumEncryptions = 1 << 23;
+        private readonly int _encryptionLimit;
 
-        internal PacketKeys(ReadOnlySpan<byte> secret, byte[]? retainedHeaderKey = null)
+        internal int Encryptions { get; private set; }
+        internal bool CanEncrypt => Encryptions < _encryptionLimit;
+
+        internal PacketKeys(
+            ReadOnlySpan<byte> secret,
+            byte[]? retainedHeaderKey = null,
+            int encryptionLimit = MaximumEncryptions
+        )
         {
+            ArgumentOutOfRangeException.ThrowIfLessThan(encryptionLimit, 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(encryptionLimit, MaximumEncryptions);
+            _encryptionLimit = encryptionLimit;
             _secret = secret.ToArray();
             var key = Expand(secret, "quic key", 16);
             var headerKey = retainedHeaderKey ?? Expand(secret, "quic hp", 16);
@@ -59,6 +71,10 @@ namespace EmbedIO.Quic
 
         internal byte[] Protect(byte[] header, int numberOffset, ulong number, ReadOnlySpan<byte> plaintext)
         {
+            if (!CanEncrypt || number > PacketNumberWindow.Maximum)
+                throw new InvalidOperationException("Packet encryption limit reached.");
+
+            Encryptions++;
             var packet = new byte[header.Length + plaintext.Length + 16];
             header.CopyTo(packet, 0);
             Span<byte> nonce = stackalloc byte[12];
@@ -74,13 +90,13 @@ namespace EmbedIO.Quic
             return packet;
         }
 
-        internal byte[] Unprotect(
-            ReadOnlySpan<byte> protectedPacket,
-            int numberOffset,
-            ulong expected,
-            out ulong number,
-            bool phase = false
-        )
+        internal readonly record struct ProtectedPacket(byte[] Bytes, int HeaderLength, ulong Number)
+        {
+            internal bool LongHeader => (Bytes[0] & 128) != 0;
+            internal bool Phase => (Bytes[0] & 4) != 0;
+        }
+
+        internal ProtectedPacket Decode(ReadOnlySpan<byte> protectedPacket, int numberOffset, ulong expected)
         {
             if (numberOffset < 0 || numberOffset + 20 > protectedPacket.Length)
                 throw new InvalidDataException("Short protected packet.");
@@ -99,21 +115,41 @@ namespace EmbedIO.Quic
                 truncated = (truncated << 8) | packet[numberOffset + i];
             }
 
-            number = Reconstruct(truncated, length, expected);
-            var headerLength = numberOffset + length;
-            var plaintext = new byte[packet.Length - headerLength - 16];
+            return new ProtectedPacket(packet, numberOffset + length, Reconstruct(truncated, length, expected));
+        }
+
+        internal byte[] Unprotect(
+            ReadOnlySpan<byte> protectedPacket,
+            int numberOffset,
+            ulong expected,
+            out ulong number,
+            bool phase = false
+        )
+        {
+            var packet = Decode(protectedPacket, numberOffset, expected);
+            number = packet.Number;
+            return Unprotect(packet, phase);
+        }
+
+        internal byte[] Unprotect(ProtectedPacket packet, bool phase)
+        {
+            var plaintext = new byte[packet.Bytes.Length - packet.HeaderLength - 16];
             Span<byte> nonce = stackalloc byte[12];
-            Nonce(number, nonce);
+            Nonce(packet.Number, nonce);
             _aead.Decrypt(
                 nonce,
-                packet.AsSpan(headerLength, plaintext.Length),
-                packet.AsSpan(packet.Length - 16),
+                packet.Bytes.AsSpan(packet.HeaderLength, plaintext.Length),
+                packet.Bytes.AsSpan(packet.Bytes.Length - 16),
                 plaintext,
-                packet.AsSpan(0, headerLength)
+                packet.Bytes.AsSpan(0, packet.HeaderLength)
             );
 
-            if ((packet[0] & (longHeader ? 12 : 24)) != 0 || (!longHeader && ((packet[0] & 4) != 0) != phase))
-                throw new InvalidDataException("Invalid reserved bits or key phase.");
+            if (
+                (packet.Bytes[0] & (packet.LongHeader ? 12 : 24)) != 0
+                || (!packet.LongHeader && packet.Phase != phase)
+                || packet.Number > PacketNumberWindow.Maximum
+            )
+                throw new InvalidDataException("Invalid reserved bits, key phase or packet number.");
 
             return plaintext;
         }

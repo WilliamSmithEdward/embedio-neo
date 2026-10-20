@@ -9,7 +9,7 @@ import subprocess
 from verify import DatagramRelay, provenance
 
 async def case(args, mode, relay=None):
-    server = await asyncio.create_subprocess_exec(args.dotnet, args.assembly, "serve-h3", args.openssl,
+    server = await asyncio.create_subprocess_exec(args.dotnet, args.assembly, "serve-h3-updates" if mode == "endurance" else "serve-h3", args.openssl,
         str(args.output / "certificate.pem"), str(args.output / "key.pem"),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     relay_transport = None
@@ -29,7 +29,7 @@ async def case(args, mode, relay=None):
         peer = await asyncio.create_subprocess_exec(args.peer, "-port", str(port), "-ca",
             str(args.output / "certificate.pem"), "-mode", mode, env=environment,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        peer_out, peer_err = await asyncio.wait_for(peer.communicate(), 12)
+        peer_out, peer_err = await asyncio.wait_for(peer.communicate(), 24 if mode == "endurance" else 12)
     except (TimeoutError, ValueError, OSError) as error:
         failure = str(error)
     finally:
@@ -37,7 +37,7 @@ async def case(args, mode, relay=None):
             peer.kill()
             peer_out, peer_err = await peer.communicate()
         try:
-            stdout, stderr = await asyncio.wait_for(server.communicate(), 12)
+            stdout, stderr = await asyncio.wait_for(server.communicate(), 32 if mode == "endurance" else 12)
         except TimeoutError:
             server.kill()
             stdout, stderr = await server.communicate()
@@ -74,6 +74,8 @@ async def case(args, mode, relay=None):
         passed = passed and report.get("keyUpdates", 0) >= 1
     if mode in ("sustained", "sustained-credit"):
         passed = passed and report.get("receiveCreditUpdates", 0) >= 10 and report.get("streamBytesReceived", 0) > 524288
+    if mode == "endurance":
+        passed = passed and report.get("sentPackets", 0) > 4096 and report.get("localKeyUpdates", 0) >= 2 and report.get("keyUpdates", 0) >= 2 and report.get("streamBytesReceived", 0) > 8388608
     if mode == "reset":
         passed = passed and report.get("resetsDelivered", 0) == 1
     if relay in ("loss-handshake", "loss-stream"):
@@ -88,14 +90,14 @@ async def main(args):
     results = []
     for mode, relay in [("echo", None), ("siblings", None), ("reset", None), ("outbound-reset", None), ("session-fault", None), ("unauthorized", None), ("origin", None),
                         ("missing-reset", None), ("large", None), ("credit", None),
-                        ("connection-fault", None), ("datagram-fault", None), ("idle", None), ("sustained", None), ("sustained-credit", None), ("sustained", "loss-stream"),
+                        ("connection-fault", None), ("datagram-fault", None), ("idle", None), ("sustained", None), ("sustained-credit", None), ("sustained", "loss-stream"), ("endurance", None), ("endurance", "loss-stream"),
                         ("echo", "loss-handshake"), ("echo", "loss-stream"), ("large", "loss-stream")]:
         result = await case(args, mode, relay)
         results.append(result)
         print(json.dumps(result), flush=True)
         if not result["passed"]:
             break
-    receipt = {"passed": len(results) == 19 and all(r["passed"] for r in results), "cases": results,
+    receipt = {"passed": len(results) == 21 and all(r["passed"] for r in results), "cases": results,
                **provenance(args),
                "peerSha256": hashlib.sha256(Path(args.peer).read_bytes()).hexdigest()}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")

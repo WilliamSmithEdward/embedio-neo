@@ -35,6 +35,8 @@ namespace EmbedIO.Quic
             {
                 CheckCloseLevels(library, certificate, key, keys, original, client);
                 CheckReceiveHistory(library, certificate, key, keys, original, client);
+                CheckEncryptionBudget(library, certificate, key, keys, original, client);
+                CheckAuthenticationBudget(library, certificate, key, keys, original, client);
                 ConnectionSetTests.Run(library, certificate, key);
                 ConnectionSetTests.Mutate(library, certificate, key, seed, Math.Min(count, 10000));
 
@@ -98,6 +100,86 @@ namespace EmbedIO.Quic
             });
             File.WriteAllText(Path.Combine(output, "receipt.json"), report);
             Console.WriteLine(report);
+        }
+
+        private static void CheckAuthenticationBudget(
+            string library,
+            string certificate,
+            string key,
+            PacketKeys keys,
+            byte[] original,
+            byte[] client
+        )
+        {
+            var first = Initial(keys, original, client, 0, [1]);
+            using var connection = new ProbeConnection(first, library, certificate, key, authenticationLimit: 2);
+            connection.Receive(first, 0);
+            var forged = Initial(keys, original, client, 1, [1]);
+            forged[^1] ^= 1;
+            connection.Receive(forged, 1);
+            QuicFuzzChecks.Require(
+                connection.RejectedPackets == 1 && connection.Phase == ConnectionPhase.Active,
+                "authentication-budget-tolerates-first-failure"
+            );
+            var responses = connection.Receive(forged, 2);
+            QuicFuzzChecks.Require(
+                connection.RejectedPackets == 2 && connection.Phase == ConnectionPhase.Closing && responses.Count == 1,
+                "authentication-budget-closes"
+            );
+            var reader = new WireReader(UnprotectInitial(responses[0], original));
+            QuicFuzzChecks.Require(
+                reader.Integer() == 0x1c && reader.Integer() == 0x0f,
+                "authentication-limit-wire-error"
+            );
+            QuicFuzzChecks.Require(
+                connection.Receive(Initial(keys, original, client, 2, [1]), 3).Count == 0
+                    && connection.RejectedPackets == 2
+                    && connection.ClosePackets == 1,
+                "authentication-budget-stops-receiving"
+            );
+            connection.Tick(100000);
+            QuicFuzzChecks.Require(connection.Closed, "authentication-budget-retired");
+        }
+
+        private static void CheckEncryptionBudget(
+            string library,
+            string certificate,
+            string key,
+            PacketKeys keys,
+            byte[] original,
+            byte[] client
+        )
+        {
+            var first = Initial(keys, original, client, 0, [1]);
+            using var connection = new ProbeConnection(first, library, certificate, key, encryptionLimit: 16);
+            var responses = connection.Receive(first, 0);
+
+            for (uint number = 1; number <= 8; number++)
+                responses = connection.Receive(
+                    Initial(
+                        keys,
+                        original,
+                        client,
+                        number,
+                        [
+                            .. Wire.Frame(2, number - 1, 0, 0, 0),
+                            1
+                        ]
+                    ),
+                    number
+                );
+
+            QuicFuzzChecks.Require(
+                connection.Phase == ConnectionPhase.Closing
+                    && connection.ClosePackets == 1
+                    && connection.SentPackets == 9
+                    && responses.Count == 1,
+                "aead-budget-closes-with-reserve"
+            );
+            var reader = new WireReader(UnprotectInitial(responses[0], original));
+            QuicFuzzChecks.Require(reader.Integer() == 0x1c && reader.Integer() == 0x0f, "aead-limit-wire-error");
+            connection.Tick(100000);
+            QuicFuzzChecks.Require(connection.Closed, "aead-budget-owner-retired");
         }
 
         private static void CheckReceiveHistory(

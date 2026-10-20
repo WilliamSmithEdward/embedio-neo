@@ -59,19 +59,21 @@ namespace EmbedIO.Quic
             var busy = new IPEndPoint(IPAddress.Loopback, 15000);
             var healthy = new IPEndPoint(IPAddress.Loopback, 15001);
             owners.Receive(first, busy, 0);
-            owners.Receive(first, healthy, 0);
 
             for (uint number = 1; number <= 4096; number++)
                 owners.Receive(NativeFuzz.Initial(keys, original, client, number, [1]), busy, 1);
 
+            QuicFuzzChecks.Require(owners.Active == 1 && owners.FailedOwners == 0, "recovery-budget-closes-owner");
+            owners.Receive(first, healthy, 1000);
+            owners.Tick(3100);
             QuicFuzzChecks.Require(
-                owners.Retired == 1 && owners.Active == 1 && owners.FailedOwners == 1,
-                "packet-budget-retires-only-owner"
+                owners.Retired == 1 && owners.Active == 1 && owners.FailedOwners == 0,
+                "recovery-budget-retires-only-owner"
             );
-            var response = owners.Receive(NativeFuzz.Initial(keys, original, client, 1, [1]), healthy, 2);
+            var response = owners.Receive(NativeFuzz.Initial(keys, original, client, 1, [1]), healthy, 3101);
             QuicFuzzChecks.Require(
                 response.Count == 1 && response[0].Peer.Equals(healthy),
-                "packet-budget-healthy-sibling"
+                "recovery-budget-healthy-sibling"
             );
         }
 

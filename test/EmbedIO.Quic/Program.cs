@@ -63,10 +63,14 @@ namespace EmbedIO.Quic
                         )
                         .ConfigureAwait(false);
 
-                if (arguments is ["serve" or "serve-h3", var library, var certificate, var key])
-                    return await ServeAsync(library, certificate, key, arguments[0] == "serve-h3").ConfigureAwait(
-                        false
-                    );
+                if (arguments is ["serve" or "serve-h3" or "serve-h3-updates", var library, var certificate, var key])
+                    return await ServeAsync(
+                        library,
+                        certificate,
+                        key,
+                        arguments[0] != "serve",
+                        arguments[0] == "serve-h3-updates"
+                    ).ConfigureAwait(false);
 
                 Console.Error.WriteLine(
                     "Usage: self-test | certificate <output-directory> | serve[-h3] <absolute-openssl-directory> <certificate.pem> <key.pem>"
@@ -123,10 +127,16 @@ namespace EmbedIO.Quic
             Console.WriteLine(JsonSerializer.Serialize(new { certificateCreated = true }));
         }
 
-        private static async Task<int> ServeAsync(string library, string certificate, string key, bool webTransport)
+        private static async Task<int> ServeAsync(
+            string library,
+            string certificate,
+            string key,
+            bool webTransport,
+            bool frequentUpdates
+        )
         {
             using var socket = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(frequentUpdates ? 30 : 10));
             var authorization = webTransport ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) : string.Empty;
             var ready = new
             {
@@ -211,7 +221,8 @@ namespace EmbedIO.Quic
                                 certificate,
                                 key,
                                 webTransport,
-                                authorization
+                                authorization,
+                                keyUpdateInterval: frequentUpdates ? 128 : KeyUpdateState.DefaultInterval
                             );
                         }
 
@@ -260,6 +271,8 @@ namespace EmbedIO.Quic
 
                 var result = new
                 {
+                    localKeyUpdates = connection?.LocalKeyUpdates ?? 0,
+                    sentPackets = connection?.SentPackets ?? 0,
                     established = connection?.Established ?? false,
                     phase = connection?.Phase.ToString(),
                     idleExpired = connection?.IdleExpired ?? false,
