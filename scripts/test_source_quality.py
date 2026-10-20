@@ -40,6 +40,18 @@ class SourceQualityTests(unittest.TestCase):
     def test_hidden_only_does_not_fail(self):
         self.assertFalse(scan_failed(2, "src/C.cs(1,2): hidden IDE0011: braces\nFormat complete in 1ms."))
 
+    def test_diagnostics_without_source_locations_fail(self):
+        for diagnostic in (
+            "warning AD0001: Analyzer threw an exception",
+            "CSC : warning AD0001: Analyzer threw an exception",
+            "error CS0006: Metadata file could not be found",
+            "info CA1707: Remove underscores",
+            "  info CUSTOM_RULE: Custom informational diagnostic",
+            "src/C.cs(1): warning CS0168: Unused variable",
+        ):
+            with self.subTest(diagnostic=diagnostic):
+                self.assertTrue(scan_failed(0, diagnostic + "\nFormat complete in 1ms."))
+
     def test_errors_and_incomplete_scans_fail(self):
         for output in ("", "Format complete in 1ms.\nRequired references did not load",
                        "src/C.cs(1,2): warning CA1001: example\nFormat complete in 1ms."):

@@ -11,7 +11,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "1.1.10"
-DIAGNOSTIC = re.compile(r"^.+\(\d+,\d+\): (info|warning|error) [^:]+:", re.MULTILINE)
+DIAGNOSTIC = re.compile(
+    r"^[ \t]*(?:.+?:[ \t]*)?(info|warning|error)[ \t]+[^\s:]+:", re.MULTILINE)
 LOAD_FAILURE = re.compile(
     r"Required references did not load|Exception encountered|Failed to load|Unable to load|"
     r"error MSB\d+|error NETSDK\d+|Unhandled exception", re.IGNORECASE)
