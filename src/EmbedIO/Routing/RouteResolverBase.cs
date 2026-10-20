@@ -14,21 +14,23 @@ namespace EmbedIO.Routing
     /// <typeparam name="TData">The type of the data used to select a suitable handler
     /// for the context.</typeparam>
     /// <seealso cref="ConfiguredObject" />
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="RouteResolverBase{TData}"/> class.
-    /// </remarks>
-    /// <param name="matcher">The <see cref="RouteMatcher"/> to match URL paths against.</param>
-    /// <exception cref="ArgumentNullException">
-    /// <para><paramref name="matcher"/> is <see langword="null"/>.</para>
-    /// </exception>
-    public abstract class RouteResolverBase<TData>(RouteMatcher matcher) : ConfiguredObject
+    public abstract class RouteResolverBase<TData> : ConfiguredObject
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RouteResolverBase{TData}"/> class.
+        /// </summary>
+        /// <param name="matcher">The <see cref="RouteMatcher"/> to match URL paths against.</param>
+        /// <exception cref="ArgumentNullException">
+        /// <para><paramref name="matcher"/> is <see langword="null"/>.</para>
+        /// </exception>
+        protected RouteResolverBase(RouteMatcher matcher) => Matcher = Validate.NotNull(nameof(matcher), matcher);
+
         private readonly List<(TData data, RouteHandlerCallback handler)> _dataHandlerPairs = [];
 
         /// <summary>
         /// Gets the <see cref="RouteMatcher"/> used to match routes.
         /// </summary>
-        public RouteMatcher Matcher { get; } = Validate.NotNull(nameof(matcher), matcher);
+        public RouteMatcher Matcher { get; }
 
         /// <summary>
         /// Gets the route this resolver matches URL paths against.

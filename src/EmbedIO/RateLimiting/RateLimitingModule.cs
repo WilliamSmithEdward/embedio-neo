@@ -18,19 +18,19 @@ namespace EmbedIO.RateLimiting
     /// how long to wait, a <c>Retry-After</c> header.</para>
     /// <para>The module does not own the limiter: dispose it after the server stops.</para>
     /// </summary>
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="RateLimitingModule"/> class.
-    /// </remarks>
-    /// <param name="baseRoute">The base route of the requests to limit.</param>
-    /// <param name="limiter">The limiter, for example from <see cref="PartitionedRateLimiter.Create{TResource, TPartitionKey}"/>
-    /// with a key from <see cref="ClientKey(IHttpContext)"/> or an authenticated identity.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="baseRoute"/> or <paramref name="limiter"/> is <see langword="null"/>.</exception>
-    public sealed class RateLimitingModule(
-        string baseRoute,
-        PartitionedRateLimiter<IHttpContext> limiter
-    ) : WebModuleBase(baseRoute)
+    public sealed class RateLimitingModule : WebModuleBase
     {
-        private readonly PartitionedRateLimiter<IHttpContext> _limiter = Validate.NotNull(nameof(limiter), limiter);
+        /// <summary>
+        /// Initializes a new instance of the <see cref="RateLimitingModule"/> class.
+        /// </summary>
+        /// <param name="baseRoute">The base route of the requests to limit.</param>
+        /// <param name="limiter">The limiter, for example from <see cref="PartitionedRateLimiter.Create{TResource, TPartitionKey}"/>
+        /// with a key from <see cref="ClientKey(IHttpContext)"/> or an authenticated identity.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="baseRoute"/> or <paramref name="limiter"/> is <see langword="null"/>.</exception>
+        public RateLimitingModule(string baseRoute, PartitionedRateLimiter<IHttpContext> limiter) : base(baseRoute) =>
+            _limiter = Validate.NotNull(nameof(limiter), limiter);
+
+        private readonly PartitionedRateLimiter<IHttpContext> _limiter;
         private int _rejectionStatusCode = 429;
         private Func<IHttpContext, RateLimitLease, Task>? _onRejected;
 

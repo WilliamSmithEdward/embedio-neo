@@ -18,6 +18,17 @@ csharp_style_var_for_built_in_types = true:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_elsewhere = true:suggestion
 
+# Owner-approved 2026-10-19: retain main's explicit constructors for these types
+# until the pinned security scanner can parse their primary-constructor forms.
+# Primary constructors remain preferred elsewhere; no scanner rules are excluded.
+[src/EmbedIO/{Actions/PreRequestModule.cs,Authentication/BearerAuthenticationModule.cs,Cors/CorsModule.cs,OpenApi/OpenApiDocument.cs,Problems/ProblemDetails.cs,RateLimiting/RateLimitingModule.cs,Routing/RouteResolverBase.cs,Routing/RoutingModuleBase.cs,Security/BrowserRequestProtectionModule.cs,WebApi/RequestValidationPlan.cs}]
+csharp_style_prefer_primary_constructors = false:suggestion
+
+[src/EmbedIO.Cli/PluginLoader.cs]
+csharp_style_prefer_primary_constructors = false:suggestion
+
+[*.cs]
+
 # Source folders organize implementation details without requiring matching namespaces.
 dotnet_diagnostic.IDE0130.severity = none
 

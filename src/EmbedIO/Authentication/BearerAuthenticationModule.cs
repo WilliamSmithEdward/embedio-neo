@@ -10,15 +10,16 @@ namespace EmbedIO.Authentication
     /// <remarks>Missing credentials are allowed by default so controller authorization can select protected routes.
     /// Invalid supplied credentials are rejected. Register before protected modules and use HTTPS for bearer credentials.
     /// Query strings and request bodies are never searched for tokens.</remarks>
-    /// <remarks>Creates an authentication module.</remarks>
-    /// <param name="baseRoute">The base path on which credentials are processed.</param>
-    /// <param name="validator">Application-owned asynchronous token validation.</param>
-    public sealed class BearerAuthenticationModule(string baseRoute, BearerTokenValidator validator) : WebModuleBase(
-        baseRoute
-    )
+    public sealed class BearerAuthenticationModule : WebModuleBase
     {
+        /// <summary>Creates an authentication module.</summary>
+        /// <param name="baseRoute">The base path on which credentials are processed.</param>
+        /// <param name="validator">Application-owned asynchronous token validation.</param>
+        public BearerAuthenticationModule(string baseRoute, BearerTokenValidator validator) : base(baseRoute) =>
+            _validator = Validate.NotNull(nameof(validator), validator);
+
         private static readonly object ChallengeKey = new();
-        private readonly BearerTokenValidator _validator = Validate.NotNull(nameof(validator), validator);
+        private readonly BearerTokenValidator _validator;
         private int _maximumTokenLength = 16384;
         private bool _requireAuthentication;
         private string? _realm;

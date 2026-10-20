@@ -173,18 +173,18 @@ namespace EmbedIO.Problems
     /// <see cref="ProblemDetailsHandler"/>. Other HTTP exception handlers see an ordinary
     /// <see cref="HttpException"/> whose <see cref="HttpException.DataObject"/> is the problem.
     /// </summary>
-    /// <remarks>
-    /// Initializes a new instance of the <see cref="ProblemDetailsException"/> class.
-    /// </remarks>
-    /// <param name="problem">The problem to send.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="problem"/> is <see langword="null"/>.</exception>
-    public class ProblemDetailsException(ProblemDetails problem) : HttpException(
-        Validate.NotNull(nameof(problem), problem).Status,
-        problem.Detail ?? problem.Title,
-        problem
-    )
+    public class ProblemDetailsException : HttpException
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ProblemDetailsException"/> class.
+        /// </summary>
+        /// <param name="problem">The problem to send.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="problem"/> is <see langword="null"/>.</exception>
+        public ProblemDetailsException(ProblemDetails problem)
+            : base(Validate.NotNull(nameof(problem), problem).Status, problem.Detail ?? problem.Title, problem) =>
+            Problem = problem;
+
         /// <summary>Gets the problem to send.</summary>
-        public ProblemDetails Problem { get; } = problem;
+        public ProblemDetails Problem { get; }
     }
 }

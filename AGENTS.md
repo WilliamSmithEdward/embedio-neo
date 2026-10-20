@@ -62,6 +62,7 @@ High Level Guardrail(s) -->
 # Fork maintenance rules
 
 - William prefers primary constructors (2026-10-19). Preserve that preference when addressing analyzer or scanner compatibility; do not switch to conventional constructors merely to accommodate a scanner parser limitation or disable the preference without discussing it with William.
+- William explicitly authorized reverting the primary constructors that break PR #505's scanner, using `main` as the compatibility reference (2026-10-19). The exact affected files retain conventional-constructor preferences in `.editorconfig`; keep this exception scoped and preserve primary constructors elsewhere.
 
 - For every new development change, run `python scripts/test_source_quality.py` and `python scripts/check_source_quality.py` after the final edit, with `.github/requirements/prettycsharp.txt` installed in an isolated Python 3.11+ environment and the solution restored. The gate checks all `src` C# files with pinned prettyCSharp and all source projects for informational, warning and error diagnostics, including analyzers discovered at hidden severity. Hidden hints remain report-only. Fix failures before committing or updating a PR; parser/load failures are failures, not clean scans. Preserve the documented exact formatter compatibility workarounds; do not add broad exclusions to pass CI.
 

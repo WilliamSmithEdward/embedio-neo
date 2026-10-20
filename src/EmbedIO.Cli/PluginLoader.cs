@@ -100,11 +100,17 @@ namespace EmbedIO.Cli
                 throw RequestHandler.PassThrough();
         }
 
-        private sealed class PluginContext(string path) : AssemblyLoadContext(isCollectible: true)
+        private sealed class PluginContext : AssemblyLoadContext
         {
-            private readonly AssemblyDependencyResolver _resolver = new(path);
-            private readonly string _directory = Path.GetDirectoryName(path)
-                ?? throw new ArgumentException("The plugin path has no directory.", nameof(path));
+            public PluginContext(string path) : base(isCollectible: true)
+            {
+                _resolver = new AssemblyDependencyResolver(path);
+                _directory = Path.GetDirectoryName(path)
+                    ?? throw new ArgumentException("The plugin path has no directory.", nameof(path));
+            }
+
+            private readonly AssemblyDependencyResolver _resolver;
+            private readonly string _directory;
 
             protected override Assembly? Load(AssemblyName name)
             {

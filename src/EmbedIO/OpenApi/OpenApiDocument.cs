@@ -77,19 +77,25 @@ namespace EmbedIO.OpenApi
     /// Serves an OpenAPI document at one path, for <c>GET</c> and <c>HEAD</c> requests, and passes
     /// every other request to the next module.
     /// </summary>
-    /// <remarks>Initializes a new instance of the <see cref="OpenApiDocumentModule"/> class.</remarks>
-    /// <param name="path">The document's URL path, such as <c>/openapi.json</c>.</param>
-    /// <param name="document">The document. Its JSON is written once, here.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="document"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid URL path.</exception>
-    public sealed class OpenApiDocumentModule(string path, OpenApiDocument document) : WebModuleBase("/")
+    public sealed class OpenApiDocumentModule : WebModuleBase
     {
-        private readonly string _path = Validate.Route(nameof(path), path, false);
-        private readonly byte[] _json = Encoding.UTF8.GetBytes(
-            Validate
-                .NotNull(nameof(document), document)
-                .ToJson()
-        );
+        /// <summary>Initializes a new instance of the <see cref="OpenApiDocumentModule"/> class.</summary>
+        /// <param name="path">The document's URL path, such as <c>/openapi.json</c>.</param>
+        /// <param name="document">The document. Its JSON is written once, here.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/> or <paramref name="document"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid URL path.</exception>
+        public OpenApiDocumentModule(string path, OpenApiDocument document) : base("/")
+        {
+            _path = Validate.Route(nameof(path), path, false);
+            _json = Encoding.UTF8.GetBytes(
+                Validate
+                    .NotNull(nameof(document), document)
+                    .ToJson()
+            );
+        }
+
+        private readonly string _path;
+        private readonly byte[] _json;
 
         /// <inheritdoc />
         public override bool IsFinalHandler => false;
