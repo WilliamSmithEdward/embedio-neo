@@ -16,6 +16,7 @@ TLS; .NET cryptography supplies AES-GCM, AES and HKDF. Our code owns the transpo
 | Stage | Implementation and validation |
 | --- | --- |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
+| Receive packet history | A sliding floor and at most 128 ACK ranges retain a 4096-number window. Retired packet numbers are never processed again; bounded history can advance without a connection-wide receive packet quota. |
 | Recovery and congestion | Physical packet records retain logical delivery ownership through retransmission and late ACKs. Monotonic-time tests exercise packet/time loss, RTT, PTO probes, pacing, NewReno, application-limited ACKs and persistent congestion. |
 | HTTP/3 and WebTransport bridge | Existing H3/QPACK/capsule/session code is linked into the prototype. The bridge handles SETTINGS, authorized CONNECT, exact Origin admission, bidi/uni streams, datagrams, independent sessions and reliable partial resets. quic-go provides a separate wire peer. |
 | Sustained transfers | A fixed sliding receive window retains final-size history and compacts consumed H3 input. MAX_DATA/MAX_STREAM_DATA track consumption, including reset gaps after their reliable prefix. Independent cases transfer 512 KiB, with small peer windows and loss. |
@@ -34,7 +35,7 @@ All files in this table are under `test/EmbedIO.Quic` unless stated.
 
 | Surface | Files | Test approach |
 | --- | --- | --- |
-| Bytes and packet boundaries | `Wire.cs`, `PacketHeader.cs`, `AckRanges.cs` | Independent integer decoding, canonical sizes, header bounds, valid token construction, malformed/descending ACK ranges. |
+| Bytes and packet boundaries | `Wire.cs`, `PacketHeader.cs`, `AckRanges.cs`, `PacketNumberWindow.cs` | Independent integer decoding, canonical sizes, header bounds, valid token construction, malformed/descending ACK ranges and independent packet-history set models. |
 | Packet protection | `PacketKeys.cs` | RFC vector self-tests, encrypt/decrypt identity, authenticated tamper rejection, key update separation and retained header protection. |
 | Receive state | `StreamReassembly.cs`, `Wire.cs` | Absolute-position dictionary oracle against the sliding ring; reversed/duplicated CRYPTO fragments; final-size, window, overlap and once-only delivery checks. |
 | Recovery/congestion | `Recovery.cs` | Deterministic algorithm cases, logical/physical accounting, duplicate ACKs, discard, loss/PTO/retransmit traces, resource bounds and independent connection ownership. |
@@ -55,6 +56,8 @@ The seven managed target selectors are integers, packet protection, reassembly,
 recovery, lifetime, WebTransport bridge, and packet headers/ACKs. Raw inputs are
 bounded to 4096 bytes. Stateful byte traces execute at most 128 commands; checked-in
 JSON traces and generated multi-connection campaigns use three actors and 48 steps.
+The receive-history model allows up to 256 commands so coverage-guided inputs can
+exercise retirement beyond the 128-range limit.
 Recovery histories and peer buffers remain bounded by the prototype's limits.
 
 - **FsCheck:** seven additional properties use arbitrary bounded byte arrays with
@@ -185,6 +188,17 @@ full PR changed-file formatter/diagnostic checks and the mandatory whole-source
 gates passed after the final C# edit. The loss relay now selects three larger
 encrypted response packets, retaining exact-byte and retransmission assertions;
 the earlier timing-dependent relay failure is preserved in local evidence.
+
+The receive-history increment passed its before/after native regression with
+10,000 authenticated incoming packet numbers and a checked wire ACK for the
+retired duplicate. Managed tests cover 100,000 sequential numbers, sparse-range
+retirement, merging, jumps and overflow. All 38 wire scenarios, 100,000 native
+cases, 10,000 shared-owner commands and the final build/source gates passed.
+Two additional seeds passed 1,400,000 QUIC properties, 1,200,000 existing
+properties, 200,000 mutations, 40,000 state traces and 10,000 native cases.
+The new sparse-history corpus passed with 400,396 libFuzzer inputs and 31,935
+AFL++ inputs; neither campaign retained a crash or hang. Outbound packet count,
+recovery-history lifetime and broader key updates remain separate work.
 
 CI run 39470892485 on the preceding pushed head passed on attempt 2. Its original
 macOS failure occurred during checkout DNS resolution; the targeted retry passed.

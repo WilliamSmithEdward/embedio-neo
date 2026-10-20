@@ -88,6 +88,11 @@ Stream reassembly reuses a fixed ring, and the H3 parser compacts consumed input
 Retired duplicate bytes are ignored; overlap still buffered in the ring must agree,
 and final-size history is retained. The packet/session/stream-count budgets and
 process deadline still bound each validation process; this is not indefinite service.
+Receive packet history now uses at most 128 ACK ranges within a sliding
+4096-number window. A monotonic acceptance floor prevents processing retired
+duplicates again. Large jumps and sparse ranges retire old history without ending
+the connection. This removes the cumulative receive-packet limit; outbound packet
+numbers and recovery records still retain their separate bounds.
 Pre-validation sends obey the three-times-received byte allowance.
 
 Peer-initiated key updates derive fresh packet secrets while preserving header

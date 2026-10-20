@@ -34,6 +34,7 @@ namespace EmbedIO.Quic
             try
             {
                 CheckCloseLevels(library, certificate, key, keys, original, client);
+                CheckReceiveHistory(library, certificate, key, keys, original, client);
                 ConnectionSetTests.Run(library, certificate, key);
                 ConnectionSetTests.Mutate(library, certificate, key, seed, Math.Min(count, 10000));
 
@@ -99,6 +100,57 @@ namespace EmbedIO.Quic
             Console.WriteLine(report);
         }
 
+        private static void CheckReceiveHistory(
+            string library,
+            string certificate,
+            string key,
+            PacketKeys keys,
+            byte[] original,
+            byte[] client
+        )
+        {
+            var first = Initial(keys, original, client, 0, [1]);
+            using var connection = new ProbeConnection(first, library, certificate, key);
+            connection.Receive(first, 0);
+
+            for (uint number = 1; number <= 10000; number++)
+                connection.Receive(Initial(keys, original, client, number, Wire.Frame(2, 0, 0, 0, 0)), 1);
+
+            QuicFuzzChecks.Require(
+                connection.Phase == ConnectionPhase.Active && connection.ClosePackets == 0,
+                "sustained-receive-history"
+            );
+            var responses = connection.Receive(first, 2);
+            QuicFuzzChecks.Require(
+                responses.Count == 1 && connection.Phase == ConnectionPhase.Active,
+                "retired-duplicate-acknowledgment"
+            );
+            var plaintext = UnprotectInitial(responses[0], original);
+            var reader = new WireReader(plaintext);
+            QuicFuzzChecks.Require(
+                reader.Integer() == 2
+                    && reader.Integer() == 10000
+                    && reader.Integer() == 0
+                    && reader.Integer() == 0
+                    && reader.Integer() == 4095,
+                "bounded-receive-ack-range"
+            );
+        }
+
+        private static byte[] UnprotectInitial(byte[] packet, byte[] original)
+        {
+            var header = new WireReader(packet);
+            QuicFuzzChecks.Require((header.Byte() & 240) == 192, "initial-response-level");
+            header.Take(4);
+            header.Take(header.Byte());
+            header.Take(header.Byte());
+            header.Take(header.Length(4096));
+            var length = header.Length(packet.Length);
+            var offset = packet.Length - header.Remaining;
+            using var serverKeys = PacketKeys.Initial(original, true);
+            return serverKeys.Unprotect(packet.AsSpan(0, offset + length), offset, 0, out _);
+        }
+
         private static void CheckCloseLevels(
             string library,
             string certificate,
@@ -116,17 +168,7 @@ namespace EmbedIO.Quic
                 connection.Phase == ConnectionPhase.Closing && replies.Count == 1,
                 "initial-application-close-rejected"
             );
-            var packet = replies[0];
-            var header = new WireReader(packet);
-            QuicFuzzChecks.Require((header.Byte() & 240) == 192, "initial-close-response-level");
-            header.Take(4);
-            header.Take(header.Byte());
-            header.Take(header.Byte());
-            header.Take(header.Length(4096));
-            var length = header.Length(packet.Length);
-            var offset = packet.Length - header.Remaining;
-            using var serverKeys = PacketKeys.Initial(original, true);
-            var plaintext = serverKeys.Unprotect(packet.AsSpan(0, offset + length), offset, 0, out _);
+            var plaintext = UnprotectInitial(replies[0], original);
             var close = new WireReader(plaintext);
             QuicFuzzChecks.Require(close.Integer() == 0x1c && close.Integer() == 0x0a, "initial-close-protocol-error");
             connection.Receive(Initial(keys, original, client, 2, Wire.Frame(0x1d, 0, 0)), 2);

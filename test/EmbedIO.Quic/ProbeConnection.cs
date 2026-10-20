@@ -41,11 +41,11 @@ namespace EmbedIO.Quic
         private readonly ulong[] _sentNumbers = new ulong[3];
         private readonly ulong[] _nextReceived = new ulong[3];
         private readonly ulong[] _cryptoOffsets = new ulong[3];
-        private readonly HashSet<ulong>[] _received =
+        private readonly PacketNumberWindow[] _received =
         [
-            [],
-            [],
-            []
+            new(),
+            new(),
+            new()
         ];
         private readonly Reassembly _stream = new(StreamBudget);
         private readonly Queue<Delivery> _pending = new();
@@ -264,8 +264,6 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
-                if (_received[level].Count >= 4096) throw new InvalidDataException("Packet budget exceeded.");
-
                 var fresh = _received[level].Add(number);
                 _nextReceived[level] = Math.Max(_nextReceived[level], number + 1);
 
@@ -425,20 +423,7 @@ namespace EmbedIO.Quic
 
         private void AcknowledgeReceived(int level)
         {
-            var numbers = _received[level]
-                .OrderDescending()
-                .ToArray();
-            var ranges = new List<(ulong Low, ulong High)>();
-
-            foreach (var number in numbers)
-            {
-                if (ranges.Count != 0 && ranges[^1].Low != 0 && number == ranges[^1].Low - 1)
-                    ranges[^1] = (number, ranges[^1].High);
-
-                else ranges.Add((number, number));
-            }
-
-            if (ranges.Count > 128) throw new InvalidDataException("ACK range budget exceeded.");
+            var ranges = _received[level].Descending();
 
             using var frame = new MemoryStream();
             Wire.Integer(frame, 2);

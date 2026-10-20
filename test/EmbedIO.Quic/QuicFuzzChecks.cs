@@ -202,6 +202,8 @@ namespace EmbedIO.Quic
 
         private static void HeadersAndAcks(ReadOnlySpan<byte> data)
         {
+            PacketNumberWindowTests.Mutate(data);
+
             if (PacketHeader.TryDestination(data, out var destination, out var initial))
             {
                 Require(destination.Length <= 20 && destination.Length <= data.Length, "destination-bounds");
