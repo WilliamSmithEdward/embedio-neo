@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <AssemblyName>EmbedIO.Quic.Development</AssemblyName>
     <TargetFramework>net10.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/EmbedIO.Quic/EmbedIO.Quic.csproj" />
     <Compile Include="../../src/EmbedIO/Net/Internal/Http2/HpackEncoder.cs" Link="Shared/Http2/HpackEncoder.cs" />
     <Compile Include="../../src/EmbedIO/Net/Internal/Http2/PrefixInteger.cs" Link="Shared/Http2/PrefixInteger.cs" />
     <Compile Include="../../src/EmbedIO/Net/Internal/Tunnels/HttpCapsuleTransport.cs" Link="Shared/HttpCapsuleTransport.cs" />

@@ -1,7 +1,10 @@
 # EmbedIO.Quic implementation
 
-The EmbedIO.Quic development and validation host is in `test/EmbedIO.Quic`. It is
-referenced only by test harnesses and excluded from shipped packages. Its C# packet
+The generic transport core is the `EmbedIO.Quic` assembly under `src/EmbedIO.Quic`.
+The separate `EmbedIO.Quic.Development` executable under `test/EmbedIO.Quic` owns
+the current TLS/console/wire host and HTTP/3 adapters. Both projects are nonpackable
+and excluded from current shipped packages; production does not yet reference
+them. Its C# packet
 and stream handling can use an existing TLS provider and communicate with an
 independent implementation. It adds no public listener mode or application API.
 The production HTTP/3 listener continues to use its existing provider. Public
@@ -19,7 +22,9 @@ The implementation was written from RFC 9000, RFC 9001 and the documented OpenSS
 third-party QUIC TLS API. It does not call MsQuic or `System.Net.Quic`, nor copy their
 transport implementation. Earlier project investigation included reading MsQuic
 source, so this work is described as an independent standards-based implementation,
-not as a formally separated clean-room development process.
+not as a formally separated clean-room development process. William permits
+consulting MsQuic and other open-source QUIC implementations where their licenses
+permit it, but requires original implementation code with no verbatim copying.
 
 References:
 
@@ -191,7 +196,7 @@ $python = 'TestResults/embedio-quic-python/Scripts/python.exe'
 & $python -m pip install --require-hashes --only-binary=:all: -r test/EmbedIO.Conformance/drivers/requirements.txt
 dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
 dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore
-$assembly = 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll'
+$assembly = 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll'
 dotnet $assembly self-test
 & $python test/EmbedIO.Quic/verify.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --output TestResults/embedio-quic-wire
 ```

@@ -21,14 +21,20 @@ grep -F 'EmbedIO.MultipartReader/<ReadBodyCoreAsync>' /results/instrumentation.l
 grep -F 'EmbedIO.MultipartReader/<ReadHeadersAsync>' /results/instrumentation.log
 test "$before" != "$(sha256sum /work/publish/EmbedIO.dll)"
 sha256sum --check /results/ordinary-before.sha256
-sha256sum test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll > /results/quic-ordinary-before.sha256
+sha256sum src/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll > /results/quic-ordinary-before.sha256
 quic_before=$(sha256sum /work/publish/EmbedIO.Quic.dll)
-DOTNET_ROLL_FORWARD=Major SHARPFUZZ_PRINT_INSTRUMENTED_TYPES=1 /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.Quic.dll EmbedIO.Quic.Wire EmbedIO.Quic.PacketHeader EmbedIO.Quic.AckRanges EmbedIO.Quic.PacketNumberWindow EmbedIO.Quic.PacketKeys EmbedIO.Quic.KeyUpdateState EmbedIO.Quic.Reassembly EmbedIO.Quic.StreamReassembly EmbedIO.Quic.StreamCountWindow EmbedIO.Quic.Recovery EmbedIO.Quic.ConnectionLifetime EmbedIO.Quic.ConnectionStreams EmbedIO.Quic.StreamEchoApplication EmbedIO.Quic.AsyncQuicStream EmbedIO.Quic.AsyncStreamApplication EmbedIO.Quic.WebTransportApplication EmbedIO.Net.Internal > /results/quic-instrumentation.log 2>&1
+DOTNET_ROLL_FORWARD=Major SHARPFUZZ_PRINT_INSTRUMENTED_TYPES=1 /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.Quic.dll EmbedIO.Quic.Wire EmbedIO.Quic.PacketHeader EmbedIO.Quic.AckRanges EmbedIO.Quic.PacketNumberWindow EmbedIO.Quic.PacketKeys EmbedIO.Quic.KeyUpdateState EmbedIO.Quic.Reassembly EmbedIO.Quic.StreamReassembly EmbedIO.Quic.StreamCountWindow EmbedIO.Quic.Recovery EmbedIO.Quic.ConnectionLifetime EmbedIO.Quic.ConnectionStreams EmbedIO.Quic.AsyncQuicStream EmbedIO.Quic.AsyncStreamApplication > /results/quic-instrumentation.log 2>&1
+sha256sum test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll > /results/quic-host-ordinary-before.sha256
+quic_host_before=$(sha256sum /work/publish/EmbedIO.Quic.Development.dll)
+DOTNET_ROLL_FORWARD=Major SHARPFUZZ_PRINT_INSTRUMENTED_TYPES=1 /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.Quic.Development.dll EmbedIO.Quic.StreamEchoApplication EmbedIO.Quic.WebTransportApplication EmbedIO.Net.Internal > /results/quic-host-instrumentation.log 2>&1
+cat /results/quic-instrumentation.log /results/quic-host-instrumentation.log > /results/quic-all-instrumentation.log
 for type in PacketHeader AckRanges PacketNumberWindow PacketKeys KeyUpdateState StreamReassembly StreamCountWindow Recovery ConnectionLifetime ConnectionStreams StreamEchoApplication AsyncQuicStream AsyncStreamApplication WebTransportApplication; do
-    grep -F "EmbedIO.Quic.$type" /results/quic-instrumentation.log
+    grep -F "EmbedIO.Quic.$type" /results/quic-all-instrumentation.log
 done
 test "$quic_before" != "$(sha256sum /work/publish/EmbedIO.Quic.dll)"
 sha256sum --check /results/quic-ordinary-before.sha256
+test "$quic_host_before" != "$(sha256sum /work/publish/EmbedIO.Quic.Development.dll)"
+sha256sum --check /results/quic-host-ordinary-before.sha256
 mkdir /work/corpus
 cp test/EmbedIO.SharpFuzz/corpus/* /work/corpus/
 for input in /work/corpus/*; do

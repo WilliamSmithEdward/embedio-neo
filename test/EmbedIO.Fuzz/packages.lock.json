@@ -79,6 +79,12 @@
       "embedio.quic": {
         "type": "Project"
       },
+      "EmbedIO.Quic.Development": {
+        "type": "Project",
+        "dependencies": {
+          "EmbedIO.Quic": "[2.16.0, )"
+        }
+      },
       "Microsoft.IdentityModel.JsonWebTokens": {
         "type": "CentralTransitive",
         "requested": "[8.23.0, )",

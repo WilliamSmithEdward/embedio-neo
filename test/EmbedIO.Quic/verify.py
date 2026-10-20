@@ -218,6 +218,10 @@ def provenance(args):
     root = project.parents[1]
     files = set(project.glob("*.cs")) | set(project.glob("*.py")) | set(project.glob("*.csproj"))
     files.update(project.glob("peer/*"))
+    engine = root / "src/EmbedIO.Quic"
+    files.update(path for path in engine.rglob("*")
+                 if path.is_file() and path.suffix in (".cs", ".csproj", ".json")
+                 and not {"bin", "obj"}.intersection(path.relative_to(engine).parts))
     files = {path for path in files if path.is_file()}
     for item in ET.parse(project / "EmbedIO.Quic.csproj").iter("Compile"):
         included = project / item.attrib["Include"]
@@ -234,6 +238,7 @@ def provenance(args):
             libraries[name] = hashlib.sha256(path.read_bytes()).hexdigest()
     return {"libraries": libraries,
             "assemblySha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
+            "engineAssemblySha256": hashlib.sha256((Path(args.assembly).parent / "EmbedIO.Quic.dll").read_bytes()).hexdigest(),
             "sdk": subprocess.run([args.dotnet, "--version"], check=True, capture_output=True, text=True).stdout.strip(),
             "sourceHashes": {path.resolve().relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                              for path in sorted(files)}}

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>EmbedIO.Quic</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="EmbedIO.Quic.Development" />
+    <!-- This independent core does not use the HTTP compatibility helpers. -->
+    <Compile Remove="$(MSBuildThisFileDirectory)../Shared/AnalyzerUtilities.cs" />
+  </ItemGroup>
+</Project>

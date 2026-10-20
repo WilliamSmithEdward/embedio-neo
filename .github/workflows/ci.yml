@@ -419,7 +419,7 @@ jobs:
         run: |
           dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
           dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore -p:RunAnalyzers=true
-          dotnet test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll self-test
+          dotnet test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll self-test
       - name: Check source formatting and informational diagnostics
         run: |
           python3 -m venv "$RUNNER_TEMP/source-quality-venv"

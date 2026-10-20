@@ -10,6 +10,9 @@ See [the feasibility profile](quic-engine-feasibility.md) for standards referenc
 exact dependency pins, bounds and independent-peer setup. The implementation is
 standards-based, not a formally separated clean-room project. OpenSSL supplies
 TLS; .NET cryptography supplies AES-GCM, AES and HKDF. Our code owns the transport.
+William permits consulting MsQuic and other open-source implementations where
+their licenses permit it; implementation code must be original, with no verbatim
+copying from those projects.
 
 ## Development sequence
 
@@ -33,9 +36,17 @@ full RFC conformance, production provider integration or browser support.
 
 ## Source and responsibility map
 
-The project and namespace are named **EmbedIO.Quic**.
+The generic assembly and namespace are **EmbedIO.Quic**. Fifteen protocol and
+async ownership files live in `src/EmbedIO.Quic`, grouped under `Packets`,
+`Cryptography`, `Recovery`, `Connections` and `Streams`. The core contains no HTTP/3
+linked sources, console commands, native TLS bindings or test helpers.
 
-All files in this table are under `test/EmbedIO.Quic` unless stated.
+Tests, peers, TLS/console ownership and application adapters remain under
+`test/EmbedIO.Quic`, whose executable assembly is `EmbedIO.Quic.Development`.
+A project reference and one explicit friend assembly connect the host to the core;
+both projects remain nonpackable and production packages do not yet reference
+them. The table names implementation files in those source groups and their
+corresponding host/test files.
 
 | Surface | Files | Test approach |
 | --- | --- | --- |
@@ -353,6 +364,20 @@ The final source hashes and all 51 wire receipts are retained under ignored
 `TestResults/quic-feasibility/continuation/final-validation-async-streams-08`;
 earlier intermediate receipts retain their own source hashes and failure history.
 
+The subsequent source split preserves all 15 core files' implementation bytes
+apart from checkout line endings. The independent core and development host each
+pass Debug/Release diagnostics and formatting checks, and the complete split
+passes all 51 wire cases, 10,076 deterministic assertions, all-source quality and
+suppression guards. A fresh two-seed campaign repeats the async workload above
+with source hashes covering every nested engine file and both assembly identities.
+Its receipt is `TestResults/quic-development/6668588f27ce41fba75e7e3d6e409f36/receipt.json`.
+Fresh libFuzzer/AFL++ campaigns complete 177,970 / 29,211 inputs with no retained
+crashes or hangs. Both instrumented modules change while their ordinary build
+outputs retain their original hashes. Workflow path filters include the new core.
+The renamed executable is `EmbedIO.Quic.Development.dll`; earlier receipts retain
+the executable identities belonging to their recorded source. Hosted validation
+of this increment remains required after its next push.
+
 The 373e7df checkpoint's 38 hosted checks are green, including the corrected
 Windows tus recovery fixture. The async increment needs its own exact-head
 hosted results after the next push.
@@ -404,7 +429,7 @@ New-provider failures must never inherit an old MsQuic quarantine.
 | [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278), send-buffer retention/endurance | Verify bounded managed/native memory, handles and retained state after realistic traffic, quiescence and repeated replacement on the new provider. |
 | [#398](https://github.com/WilliamSmithEdward/embedio-neo/issues/398), Windows credentials | Recheck combined TCP+QUIC and first-handshake behavior on the replacement; close when the reported runtime path is removed and the behavior is validated. |
 | [#399](https://github.com/WilliamSmithEdward/embedio-neo/issues/399), macOS accept/lifetime | Recheck the acceptance/parent-child lifetime case on macOS with the new provider before closure. |
-| [#303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303), reliable reset | Close after current-wire reset is integrated and validated in the actual supported provider, beyond this experiment. |
+| [#303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303), reliable reset | Close after current-wire reset is integrated and validated in the actual supported provider, beyond this development host. |
 | [#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414), WebTransport API | Close after production session/stream/datagram application integration and its tests; removing MsQuic alone does not deliver the API. |
 
 The broader [HTTP engine program #181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181)

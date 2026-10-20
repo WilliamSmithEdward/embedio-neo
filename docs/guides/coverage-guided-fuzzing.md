@@ -1,7 +1,8 @@
 # Coverage-guided URL, multipart and QUIC fuzzing
 
 `test/EmbedIO.SharpFuzz` is a nonpackable .NET 10 executable. SharpFuzz 2.3.0
-instruments **copies** of `EmbedIO.dll` and `EmbedIO.Quic.dll`; the native libFuzzer driver uses its
+instruments **copies** of `EmbedIO.dll`, `EmbedIO.Quic.dll` and
+`EmbedIO.Quic.Development.dll`; the native libFuzzer driver uses their
 managed branch counters to retain interesting inputs and guide mutations.
 This complements the deterministic mutation and property harness in `EmbedIO.Fuzz`.
 It exercises URL/multipart parsing and EmbedIO.Quic packet, stream, recovery,

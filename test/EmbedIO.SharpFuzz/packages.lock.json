@@ -31,6 +31,12 @@
       "embedio.quic": {
         "type": "Project"
       },
+      "EmbedIO.Quic.Development": {
+        "type": "Project",
+        "dependencies": {
+          "EmbedIO.Quic": "[2.16.0, )"
+        }
+      },
       "System.Threading.RateLimiting": {
         "type": "CentralTransitive",
         "requested": "[10.0.13, )",

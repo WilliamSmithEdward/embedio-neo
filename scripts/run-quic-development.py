@@ -33,8 +33,9 @@ def main():
                 "workingTree": subprocess.check_output(["git", "status", "--porcelain"], text=True).splitlines(),
                 "configuration": {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()},
                 "runs": runs, "passed": False}
-    files = sorted(path for folder in ("test/EmbedIO.Quic", "test/EmbedIO.Fuzz")
-                   for path in Path(folder).glob("*.cs"))
+    files = sorted(path for folder in ("src/EmbedIO.Quic", "test/EmbedIO.Quic", "test/EmbedIO.Fuzz")
+                   for path in Path(folder).rglob("*.cs")
+                   if not {"bin", "obj"}.intersection(path.parts))
     manifest["sourceHashes"] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
 
     def save():
@@ -76,7 +77,7 @@ def main():
     manifest["assemblyHashes"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in harness.glob("*.dll")}
     save()
     fuzz = [args.dotnet, str(harness / "EmbedIO.Fuzz.dll")]
-    native = [args.dotnet, str(harness / "EmbedIO.Quic.dll")]
+    native = [args.dotnet, str(harness / "EmbedIO.Quic.Development.dll")]
     run("self-test", native + ["self-test"])
     if args.openssl:
         run("certificate", native + ["certificate", str(report / "certificate")])

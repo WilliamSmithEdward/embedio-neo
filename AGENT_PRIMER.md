@@ -22,7 +22,7 @@ half-close before reading. Pass the token to streaming, upload and application
 work; retain deadlines because disconnect detection is best effort. Generated
 bindings support AOT and omit the token from OpenAPI. The in-process testing
 context observes its caller token. See [request-abort cancellation](docs/guides/request-abort.md)
-for completion ownership, HTTP/2–3 resets, TLS/proxy limits and examples.
+for completion ownership, HTTP/2â€“3 resets, TLS/proxy limits and examples.
 Canceled request-abort tokens keep their cancellation source until the token can
 be collected, so retained-token registrations and signaled wait handles remain
 usable. Parent registrations still detach at completion.
@@ -378,9 +378,11 @@ Select with `options.WithMode(HttpListenerMode.X)`:
   available. See the [HTTP/3 guide](docs/guides/http3.md).
 
 WebTransport is not supported by the public listener. The internal session core
-and native experiments do not make it available to applications. The independent
-EmbedIO.Quic development host is test-only, uses OpenSSL 3.5.7 for TLS, and is
-referenced by the fuzz harness and excluded from published packages. It includes
+and native validation hosts do not make it available to applications. The independent
+EmbedIO.Quic generic transport core is under `src/EmbedIO.Quic`. Its separate
+`EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, uses OpenSSL 3.5.7
+for TLS and links the HTTP/3 adapter. Both projects remain nonpackable; current
+shipping packages have no dependency on them. The fuzz harness uses both. It includes
 loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
 current reliable-reset framing, reusable receive windows and explicit connection
 closing/draining. Receive packet history advances with bounded ACK ranges and a
