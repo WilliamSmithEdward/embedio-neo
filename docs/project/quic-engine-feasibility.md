@@ -92,8 +92,17 @@ Receive packet history now uses at most 128 ACK ranges within a sliding
 4096-number window. A monotonic acceptance floor prevents processing retired
 duplicates again. Large jumps and sparse ranges retire old history without ending
 the connection. This removes the cumulative receive-packet limit; outbound packet
-numbers and recovery records still retain their separate bounds.
+numbers still retain their separate development quota; active recovery records
+remain bounded independently of cumulative traffic.
 Pre-validation sends obey the three-times-received byte allowance.
+
+Lost-packet metadata retains the most recent 4096 retirement entries, while
+current in-flight records remain independently owned. Very late ACKs for evicted
+records can be ignored; a current retransmission still requires its own ACK.
+Acknowledged-send timestamps compact from 12,288 to 8192 entries at a known
+acknowledged-packet barrier. Loss history before that barrier retires with them,
+so compaction does not join persistent-loss intervals across a forgotten ACK.
+These are bounded histories, rather than cumulative connection quotas.
 
 Peer-initiated key updates derive fresh packet secrets while preserving header
 protection, mirror the peer's send phase, and retain the previous receive keys for

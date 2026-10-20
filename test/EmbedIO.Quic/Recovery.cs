@@ -14,9 +14,24 @@
         internal int Transmissions { get; set; }
     }
 
-    internal sealed class Recovery
+    internal sealed class Recovery(
+        Action<Delivery, bool> repeat,
+        int acknowledgmentLimit = Recovery.MaximumAcknowledgments,
+        int retiredLimit = Recovery.MaximumRetiredPackets
+    )
     {
         internal const int MaximumPacket = 1200;
+        internal const int MaximumActivePackets = 4096;
+        internal const int MaximumRetiredPackets = 4096;
+        internal const int MaximumAcknowledgments = 12288;
+        private readonly int _acknowledgmentLimit = Bound(
+            acknowledgmentLimit,
+            8,
+            MaximumAcknowledgments,
+            nameof(acknowledgmentLimit)
+        );
+        private readonly int _retainedAcknowledgments = acknowledgmentLimit * 2 / 3;
+        private readonly int _retiredLimit = Bound(retiredLimit, 2, MaximumRetiredPackets, nameof(retiredLimit));
 
         private sealed record Sent(
             int Level,
@@ -30,10 +45,12 @@
 
         private readonly Dictionary<(int Level, ulong Number), Sent> _sent = [];
         private readonly Dictionary<(int Level, ulong Number), Sent> _retired = [];
+        private readonly Queue<(int Level, ulong Number)> _retiredOrder = new();
+        private double _historyFloor = double.NegativeInfinity;
         private readonly ulong?[] _largestAcknowledged = new ulong?[3];
         private readonly bool[] _discarded = new bool[3];
         private readonly double[] _lastEliciting = new double[3];
-        private readonly Action<Delivery, bool> _repeat;
+        private readonly Action<Delivery, bool> _repeat = repeat ?? throw new ArgumentNullException(nameof(repeat));
         private double _minimumRtt = double.PositiveInfinity;
         private double _latestRtt = 333;
         private double _smoothedRtt = 333;
@@ -47,8 +64,6 @@
         private readonly List<Sent> _lostHistory = [];
         private readonly List<double> _acknowledgedTimes = [];
 
-        internal Recovery(Action<Delivery, bool> repeat) => _repeat = repeat;
-
         internal long BytesInFlight { get; private set; }
         internal double CongestionWindow { get; private set; } = 10 * MaximumPacket;
         internal int LostPackets { get; private set; }
@@ -59,6 +74,18 @@
         internal double KeyRetention => 3 * (_smoothedRtt + Math.Max(4 * _variation, 1) + MaximumAckDelay);
         internal double MaximumAckDelay { get; set; } = 25;
         internal bool HandshakeConfirmed { get; set; }
+
+        private static int Bound(int value, int minimum, int maximum, string parameter)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, minimum, parameter);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value, maximum, parameter);
+            return value;
+        }
+
+        internal int ActivePacketCount => _sent.Count;
+        internal int RetiredPacketCount => _retired.Count;
+        internal int AcknowledgmentCount => _acknowledgedTimes.Count;
+        internal int LossHistoryCount => _lostHistory.Count;
 
         internal bool IsDiscarded(int level) => _discarded[level];
 
@@ -79,7 +106,7 @@
 
             var inFlight = delivery.Eliciting || padded;
 
-            if (_sent.Count >= 4096) throw new InvalidDataException("Recovery packet budget exceeded.");
+            if (_sent.Count >= MaximumActivePackets) throw new InvalidDataException("Recovery packet budget exceeded.");
 
             _sent.Add((level, number), new Sent(level, number, now, size, delivery, inFlight, applicationLimited));
 
@@ -156,7 +183,16 @@
                 _lastTimeout = -1;
             }
 
-            if (_acknowledgedTimes.Count > 12288) throw new InvalidDataException("ACK history budget exceeded.");
+            if (_acknowledgedTimes.Count > _acknowledgmentLimit)
+            {
+                _acknowledgedTimes.Sort();
+                var remove = _acknowledgedTimes.Count - _retainedAcknowledgments;
+                // An acknowledged packet breaks every persistent-loss interval
+                // crossing this time. Retire both sides of that known barrier.
+                _historyFloor = Math.Max(_historyFloor, _acknowledgedTimes[remove - 1]);
+                _acknowledgedTimes.RemoveRange(0, remove);
+                _lostHistory.RemoveAll(packet => packet.Time <= _historyFloor);
+            }
 
             DetectLost(now);
         }
@@ -220,11 +256,12 @@
 
                 LostPackets++;
 
-                if (_retired.Count >= 4096) throw new InvalidDataException("Recovery history budget exceeded.");
-
                 _retired.Add((packet.Level, packet.Number), packet);
+                _retiredOrder.Enqueue((packet.Level, packet.Number));
 
-                if (packet.Delivery.Eliciting) _lostHistory.Add(packet);
+                while (_retiredOrder.Count > _retiredLimit) _retired.Remove(_retiredOrder.Dequeue());
+
+                if (packet.Delivery.Eliciting && packet.Time > _historyFloor) _lostHistory.Add(packet);
 
                 if (packet.Delivery.Reliable && !packet.Delivery.Acknowledged) _repeat(packet.Delivery, false);
             }

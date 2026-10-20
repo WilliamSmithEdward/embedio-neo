@@ -140,7 +140,11 @@
             }
 
             QuicFuzzChecks.Require(
-                recovery.BytesInFlight >= 0
+                recovery.ActivePacketCount <= Recovery.MaximumActivePackets
+                    && recovery.RetiredPacketCount <= Recovery.MaximumRetiredPackets
+                    && recovery.AcknowledgmentCount <= Recovery.MaximumAcknowledgments
+                    && recovery.LossHistoryCount <= 4096
+                    && recovery.BytesInFlight >= 0
                     && recovery.BytesInFlight <= actor.Packets.Count * 355L
                     && double.IsFinite(recovery.CongestionWindow)
                     && recovery.CongestionWindow >= 2400

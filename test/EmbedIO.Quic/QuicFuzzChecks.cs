@@ -35,6 +35,7 @@ namespace EmbedIO.Quic
                     break;
 
                 case 3:
+                    RecoveryRetentionTests.Mutate(data);
                     QuicFuzzState.Run(data, false, null);
                     break;
 
@@ -55,8 +56,11 @@ namespace EmbedIO.Quic
             }
         }
 
-        public static void StateMachine(ReadOnlySpan<byte> steps, Action<string>? cover = null) =>
+        public static void StateMachine(ReadOnlySpan<byte> steps, Action<string>? cover = null)
+        {
+            RecoveryRetentionTests.Mutate(steps);
             QuicFuzzState.Run(steps[..Math.Min(steps.Length, MaximumInput)], false, cover);
+        }
 
         public static void Lifecycle(ReadOnlySpan<byte> steps, Action<string>? cover = null) =>
             QuicFuzzState.Run(steps[..Math.Min(steps.Length, MaximumInput)], true, cover);

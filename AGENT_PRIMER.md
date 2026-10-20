@@ -384,7 +384,8 @@ referenced by the fuzz harness and excluded from published packages. It includes
 loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
 current reliable-reset framing, reusable receive windows and explicit connection
 closing/draining. Receive packet history advances with bounded ACK ranges and a
-permanent duplicate-rejection floor. A bounded shared listener adds destination-ID routing, admission
+permanent duplicate-rejection floor. Retired send records and acknowledgement
+history also compact within fixed bounds. A bounded shared listener adds destination-ID routing, admission
 limits, handshake deadlines and cancellation across multiple connections. It has
 no public application API; the intended fully validated
 replacement will remove MsQuic from the production transport, but the current

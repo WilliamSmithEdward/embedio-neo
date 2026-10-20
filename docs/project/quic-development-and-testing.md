@@ -17,7 +17,7 @@ TLS; .NET cryptography supplies AES-GCM, AES and HKDF. Our code owns the transpo
 | --- | --- |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
 | Receive packet history | A sliding floor and at most 128 ACK ranges retain a 4096-number window. Retired packet numbers are never processed again; bounded history can advance without a connection-wide receive packet quota. |
-| Recovery and congestion | Physical packet records retain logical delivery ownership through retransmission and late ACKs. Monotonic-time tests exercise packet/time loss, RTT, PTO probes, pacing, NewReno, application-limited ACKs and persistent congestion. |
+| Recovery and congestion | Bounded retired-packet metadata and acknowledgement barriers permit long-running recovery histories. Physical packet records retain logical delivery ownership through retransmission and late ACKs. Monotonic-time tests exercise packet/time loss, RTT, PTO probes, pacing, NewReno, application-limited ACKs and persistent congestion. |
 | HTTP/3 and WebTransport bridge | Existing H3/QPACK/capsule/session code is linked into the prototype. The bridge handles SETTINGS, authorized CONNECT, exact Origin admission, bidi/uni streams, datagrams, independent sessions and reliable partial resets. quic-go provides a separate wire peer. |
 | Sustained transfers | A fixed sliding receive window retains final-size history and compacts consumed H3 input. MAX_DATA/MAX_STREAM_DATA track consumption, including reset gaps after their reliable prefix. Independent cases transfer 512 KiB, with small peer windows and loss. |
 | Connection lifetime | Active, closing, draining and closed states use injected time. Idle expiry is silent; close replies are bounded; repeated sends or duplicate close traffic do not extend retirement. Windows ICMP reset notifications during retirement are handled explicitly. |
@@ -38,7 +38,7 @@ All files in this table are under `test/EmbedIO.Quic` unless stated.
 | Bytes and packet boundaries | `Wire.cs`, `PacketHeader.cs`, `AckRanges.cs`, `PacketNumberWindow.cs` | Independent integer decoding, canonical sizes, header bounds, valid token construction, malformed/descending ACK ranges and independent packet-history set models. |
 | Packet protection | `PacketKeys.cs` | RFC vector self-tests, encrypt/decrypt identity, authenticated tamper rejection, key update separation and retained header protection. |
 | Receive state | `StreamReassembly.cs`, `Wire.cs` | Absolute-position dictionary oracle against the sliding ring; reversed/duplicated CRYPTO fragments; final-size, window, overlap and once-only delivery checks. |
-| Recovery/congestion | `Recovery.cs` | Deterministic algorithm cases, logical/physical accounting, duplicate ACKs, discard, loss/PTO/retransmit traces, resource bounds and independent connection ownership. |
+| Recovery/congestion | `Recovery.cs`, `RecoveryRetentionTests.cs` | Deterministic algorithm cases, history compaction/late-ACK models, logical/physical accounting, duplicate ACKs, discard, loss/PTO/retransmit traces, resource bounds and independent connection ownership. |
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
 | Connection ownership | `ConnectionSet.cs`, `SharedListener.cs`, `ConnectionSetTests.cs`, `verify_connections.py` | Capacity/deadline/disposal regressions, seeded admission/retirement mutations and simultaneous independent clients on one UDP port. |
@@ -56,6 +56,8 @@ The seven managed target selectors are integers, packet protection, reassembly,
 recovery, lifetime, WebTransport bridge, and packet headers/ACKs. Raw inputs are
 bounded to 4096 bytes. Stateful byte traces execute at most 128 commands; checked-in
 JSON traces and generated multi-connection campaigns use three actors and 48 steps.
+A separate recovery-history model uses up to 64 commands and smaller test-only
+retention bounds to exercise compaction without large per-input workloads.
 The receive-history model allows up to 256 commands so coverage-guided inputs can
 exercise retirement beyond the 128-range limit.
 Recovery histories and peer buffers remain bounded by the prototype's limits.
@@ -197,8 +199,19 @@ cases, 10,000 shared-owner commands and the final build/source gates passed.
 Two additional seeds passed 1,400,000 QUIC properties, 1,200,000 existing
 properties, 200,000 mutations, 40,000 state traces and 10,000 native cases.
 The new sparse-history corpus passed with 400,396 libFuzzer inputs and 31,935
-AFL++ inputs; neither campaign retained a crash or hang. Outbound packet count,
-recovery-history lifetime and broader key updates remain separate work.
+AFL++ inputs; neither campaign retained a crash or hang.
+
+The recovery-retention increment first reproduced the cumulative ACK and retired-
+packet history limits. Its corrected deterministic cases pass 50,000 acknowledged
+sends and 5000 loss cycles, including persistent congestion after compaction and
+late ACKs for evicted records. An additional 100,000 mutations passed. All 38 wire
+scenarios, 100,000 native cases, 10,000 shared-owner commands and final
+Debug/Release, formatter, diagnostic and whole-source gates passed. Two further
+seeds passed 1,400,000 QUIC properties, 1,200,000 existing properties, 200,000
+mutations, 40,000 state traces, 10,000 native cases and 10,000 shared-owner
+commands. Fresh coverage runs completed 395,761 libFuzzer and 32,639 AFL++ inputs
+without crashes or hangs. Outbound packet count, stream-count replenishment and
+broader key updates remain separate work.
 
 CI run 39470892485 on the preceding pushed head passed on attempt 2. Its original
 macOS failure occurred during checkout DNS resolution; the targeted retry passed.
@@ -210,8 +223,9 @@ This is evidence for that head, not for subsequent uncommitted changes.
    interfaces, with application configuration, certificate lifetime and graceful
    shutdown parity. Its current admission limits and ten-second host deadline are
    development-host bounds; the offline actor model is not a listener load test.
-2. Sustainable stream-count replenishment and packet/ACK-history retirement,
-   retransmission under longer transfer/loss patterns, and repeated key updates.
+2. Remove the development outbound packet quota with safe per-key usage limits,
+   replenish stream counts, and validate longer transfer/loss patterns and repeated
+   key updates. Receive and recovery histories already retire within fixed bounds.
 3. Complete transport/application error classification, stateless reset, Retry,
    path handling, post-handshake TLS, resumption and any intentionally supported
    0-RTT policy. Features outside the supported profile must fail explicitly.
