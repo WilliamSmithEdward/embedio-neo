@@ -5,12 +5,9 @@ namespace EmbedIO.Sessions.Internal
 {
     internal sealed class DummySessionProxy : ISessionProxy
     {
-        private DummySessionProxy()
-        {
-        }
+        private DummySessionProxy() { }
 
         public static ISessionProxy Instance { get; } = new DummySessionProxy();
-
         public bool Exists => false;
 
         /// <inheritdoc/>
@@ -36,30 +33,29 @@ namespace EmbedIO.Sessions.Internal
         }
 
         /// <inheritdoc/>
-        public void Delete()
-        {
-        }
+        public void Delete() { }
 
         /// <inheritdoc/>
         public void Regenerate() => throw NoSessionManager();
 
         /// <inheritdoc/>
-        public void Clear()
-        {
-        }
+        public void Clear() { }
 
         /// <inheritdoc/>
         public bool ContainsKey(string key) => throw NoSessionManager();
 
         /// <inheritdoc/>
-        public bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value) => throw NoSessionManager();
+        public bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value) =>
+            throw NoSessionManager();
 
         /// <inheritdoc/>
-        public bool TryRemove(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value) => throw NoSessionManager();
+        public bool TryRemove(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value) =>
+            throw NoSessionManager();
 
         /// <inheritdoc/>
         public IReadOnlyList<KeyValuePair<string, object>> TakeSnapshot() => throw NoSessionManager();
 
-        private InvalidOperationException NoSessionManager() => new InvalidOperationException("No session manager registered in the web server.");
+        private static InvalidOperationException NoSessionManager() =>
+            new("No session manager registered in the web server.");
     }
 }

@@ -122,8 +122,7 @@ namespace EmbedIO.Generators
                                     : p
                                         .GetAttributes()
                                         .Any(
-                                            a => a.AttributeClass?.ToDisplayString(
-                                            ) is "EmbedIO.WebApi.FormFieldAttribute"
+                                            a => a.AttributeClass?.ToDisplayString() is "EmbedIO.WebApi.FormFieldAttribute"
                                                 or "EmbedIO.WebApi.FormDataAttribute"
                                         )
                                         ? 4
@@ -149,10 +148,10 @@ namespace EmbedIO.Generators
                     continue;
                 }
 
-                var security = parser.ReadSecurityHeaders(owner, method);
+                var (Valid, Name) = parser.ReadSecurityHeaders(owner, method);
                 var browser = parser.ReadBrowserProtection(owner, method);
 
-                if (!security.Valid || !browser.Valid)
+                if (!Valid || !browser.Valid)
                 {
                     failed = true;
                     continue;
@@ -218,7 +217,7 @@ namespace EmbedIO.Generators
                     .Append(", ")
                     .Append(idempotency == null ? "null" : Literals.String(idempotency))
                     .Append(", ")
-                    .Append(security.Name == null ? "null" : Literals.String(security.Name))
+                    .Append(Name == null ? "null" : Literals.String(Name))
                     .Append(");\n\n")
                     .Append(invoker);
             }

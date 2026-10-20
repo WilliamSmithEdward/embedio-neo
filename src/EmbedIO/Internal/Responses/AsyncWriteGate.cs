@@ -41,7 +41,8 @@ namespace EmbedIO.Internal
 
             try
             {
-                if (!token.IsCancellationRequested && _semaphore.Wait(0, CancellationToken.None)) return new ValueTask<Scope>(new Scope(this));
+                if (!token.IsCancellationRequested && _semaphore.Wait(0, CancellationToken.None))
+                    return new ValueTask<Scope>(new Scope(this));
             }
 
             catch

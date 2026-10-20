@@ -51,7 +51,7 @@ namespace EmbedIO.Endpoints
             string route,
             HttpVerbs method,
             EndpointHandler handler
-        ) => Add(group, route, new[] { method }, handler);
+        ) => Add(group, route, [method], handler);
 
         internal EndpointBuilder Add(
             EndpointRouteGroup group,
@@ -114,13 +114,14 @@ namespace EmbedIO.Endpoints
         /// <inheritdoc />
         protected override void OnBeforeLockConfiguration()
         {
-            var pending = new List<(
-                EndpointBuilder Endpoint,
-                HttpVerbs Verb,
-                RouteMatcher Matcher,
-                RouteHandlerCallback Handler,
-                WebApiOperation Operation
-            )>();
+            var pending =
+                new List<(
+                    EndpointBuilder Endpoint,
+                    HttpVerbs Verb,
+                    RouteMatcher Matcher,
+                    RouteHandlerCallback Handler,
+                    WebApiOperation Operation
+                )>();
             var declarations = new List<(HttpVerbs Verb, string Shape)>();
             var names = new List<KeyValuePair<string, string>>();
 
@@ -180,12 +181,12 @@ namespace EmbedIO.Endpoints
             var links = new NamedRoutes(names);
 
             // Literal endpoints take precedence even when a parameter route was declared first.
-            foreach (var item in pending.OrderBy(item => item.Matcher.ParameterNames.Count))
+            foreach (var (endpoint, verb, matcher, handler, operation) in pending.OrderBy(item => item.Matcher.ParameterNames.Count))
             {
-                AddHandler(item.Verb, item.Matcher, item.Handler);
-                _compiledMethods.Add((item.Verb, item.Matcher));
+                AddHandler(verb, matcher, handler);
+                _compiledMethods.Add((verb, matcher));
 
-                if (!item.Endpoint.Excluded) Descriptions.Add((item.Verb, item.Endpoint.Route, item.Operation));
+                if (!endpoint.Excluded) Descriptions.Add((verb, endpoint.Route, operation));
             }
 
             _links = links;
@@ -262,9 +263,9 @@ namespace EmbedIO.Endpoints
                 source.ControllerName,
                 source.MethodName,
                 source.ResultType,
-                source.Parameters.ToArray(),
+                [.. source.Parameters],
                 operation,
-                source.Responses
+                [.. source.Responses
                     .Where(r => !endpoint.Responses.Any(x => x.StatusCode == r.StatusCode))
                     .Concat(endpoint.Responses)
                     .Select(r => new OpenApiResponseAttribute(r.StatusCode)
@@ -272,8 +273,7 @@ namespace EmbedIO.Endpoints
                         Type = r.Type,
                         Description = r.Description,
                         ContentType = r.ContentType
-                    })
-                    .ToArray(),
+                    })],
                 source.Ignored,
                 plan.Authorization
             );
@@ -320,7 +320,7 @@ namespace EmbedIO.Endpoints
             Apply(endpoint);
             plan.Authorization = requirements.Count == 0 && anonymous != true
                 ? null
-                : new AuthorizationMetadata(anonymous == true, requirements.ToArray());
+                : new AuthorizationMetadata(anonymous == true, [.. requirements]);
             plan.After.Reverse();
             return plan;
 

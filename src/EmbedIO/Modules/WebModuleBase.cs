@@ -124,8 +124,9 @@ namespace EmbedIO
                 throw; // Let the web server handle it
             }
 
-            catch (Exception exception) when (exception is IHttpException
-                && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+            catch (Exception exception) when (
+                exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception)
+            )
             {
                 // Handle rethrows when this module has no handler; otherwise the module answered.
                 await HttpExceptionHandler

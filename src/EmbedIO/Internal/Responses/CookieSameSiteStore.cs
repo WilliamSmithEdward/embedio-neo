@@ -11,8 +11,13 @@ namespace EmbedIO.Internal
     // Reference keys remain valid when callers mutate cookie values or scopes before commit.
     internal static class CookieSameSiteStore
     {
-        private static readonly ConditionalWeakTable<IHttpResponse, Dictionary<Cookie, CookieSameSiteMode>> Values = new(
-        );
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Style",
+            "IDE0028:Simplify collection initialization",
+            Justification = "The shared implementation targets netstandard2.0, whose ConditionalWeakTable does not support collection expressions."
+        )]
+        private static readonly ConditionalWeakTable<IHttpResponse, Dictionary<Cookie, CookieSameSiteMode>> Values =
+            new();
 
         internal static void ValidateMode(CookieSameSiteMode mode, string parameter)
         {

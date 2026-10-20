@@ -40,14 +40,14 @@ namespace EmbedIO.Cors
         private readonly string _methods = methods ?? throw new ArgumentNullException(nameof(methods));
         private readonly string[] _validOrigins =
         [
-            ..origins
+            .. origins
                 .ToUpperInvariant()
                 .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim())
         ];
         private readonly string[] _validMethods =
         [
-            ..methods
+            .. methods
                 .ToUpperInvariant()
                 .SplitByComma(StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim())

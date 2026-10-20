@@ -16,13 +16,9 @@ namespace EmbedIO.Testing
     public static class StockResource
     {
         private static readonly string Prefix = typeof(TestWebServer).Namespace + ".Resources.";
-
         private static readonly Assembly Assembly;
 
-        static StockResource()
-        {
-            Assembly = Assembly.GetExecutingAssembly();
-        }
+        static StockResource() => Assembly = Assembly.GetExecutingAssembly();
 
         /// <summary>
         /// Gets an enumeration of paths to all the defined stock resources.
@@ -36,10 +32,7 @@ namespace EmbedIO.Testing
         // 3. The property type is IEnumerable<string>, so
         //    enumerating resources dynamically will not be a breaking change
         //    if someone finds a way to do it.
-        public static IEnumerable<string> Paths { get; } = new[] {
-            "/index.html",
-            "/sub/index.html",
-        };
+        public static IEnumerable<string> Paths { get; } = ["/index.html", "/sub/index.html"];
 
         /// <summary>
         /// Determines whether a stock resource exists.
@@ -47,8 +40,10 @@ namespace EmbedIO.Testing
         /// <param name="path">The path to the resource.</param>
         /// <returns><see langword="true"/> if the resource exists;
         /// otherwise, <see langword="false"/>.</returns>
-        public static bool Exists(string path)
-            => Assembly.GetManifestResourceNames().Contains(ConvertPath(path));
+        public static bool Exists(string path) =>
+            Assembly
+                .GetManifestResourceNames()
+                .Contains(ConvertPath(path));
 
         /// <summary>
         /// Attempts to load a resource.
@@ -62,14 +57,18 @@ namespace EmbedIO.Testing
         public static bool TryOpen(string path, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out Stream? stream)
         {
             stream = null;
+
             if (string.IsNullOrEmpty(path))
                 return false;
 
             try
             {
-                stream = Assembly.GetManifestResourceStream(ConvertPath(path) ?? throw new ArgumentException("The resource path is empty.", nameof(path)));
+                stream = Assembly.GetManifestResourceStream(
+                    ConvertPath(path) ?? throw new ArgumentException("The resource path is empty.", nameof(path))
+                );
                 return stream != null;
             }
+
             catch (FileNotFoundException)
             {
                 return false;
@@ -85,8 +84,11 @@ namespace EmbedIO.Testing
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="path"/> is an empty string.</exception>
         /// <exception cref="FileNotFoundException"><paramref name="path"/> is an empty string.</exception>
-        public static Stream? Open(string path)
-            => Assembly.GetManifestResourceStream(ConvertPath(Validate.NotNullOrEmpty(nameof(path), path)) ?? throw new ArgumentException("The resource path is empty.", nameof(path)));
+        public static Stream? Open(string path) =>
+            Assembly.GetManifestResourceStream(
+                ConvertPath(Validate.NotNullOrEmpty(nameof(path), path))
+                    ?? throw new ArgumentException("The resource path is empty.", nameof(path))
+            );
 
         /// <summary>
         /// Gets the length of a resource, expressed in bytes.
@@ -114,8 +116,9 @@ namespace EmbedIO.Testing
         {
             using var stream = Open(path) ?? throw new FileNotFoundException("The resource was not found.", path);
             var length = (int)stream.Length;
+
             if (length == 0)
-                return Array.Empty<byte>();
+                return [];
 
             var buffer = new byte[length];
             ReadExactly(stream, buffer);
@@ -141,6 +144,7 @@ namespace EmbedIO.Testing
         {
             using var stream = Open(path) ?? throw new FileNotFoundException("The resource was not found.", path);
             var length = (int)stream.Length;
+
             if (start < 0 || start >= length || upperBound < start || upperBound >= length)
                 return null;
 
@@ -165,17 +169,26 @@ namespace EmbedIO.Testing
         public static string GetText(string path, Encoding? encoding = null)
         {
             using var stream = Open(path) ?? throw new FileNotFoundException("The resource was not found.", path);
-            using var reader = new StreamReader(stream, encoding ?? WebServer.DefaultEncoding, false, WebServer.StreamCopyBufferSize, true);
+            using var reader = new StreamReader(
+                stream,
+                encoding ?? WebServer.DefaultEncoding,
+                false,
+                WebServer.StreamCopyBufferSize,
+                true
+            );
             return reader.ReadToEnd();
         }
 
         private static void ReadExactly(Stream stream, byte[] buffer)
         {
             var offset = 0;
+
             while (offset < buffer.Length)
             {
                 var read = stream.Read(buffer, offset, buffer.Length - offset);
+
                 if (read == 0) throw new EndOfStreamException();
+
                 offset += read;
             }
         }

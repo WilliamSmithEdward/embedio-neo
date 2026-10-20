@@ -14,11 +14,9 @@ namespace EmbedIO.Utilities
     /// <seealso cref="IComponentCollection{T}" />
     public class ComponentCollection<T> : ConfiguredObject, IComponentCollection<T>
     {
-        private readonly List<T> _components = new List<T>();
-
-        private readonly List<(string, T)> _componentsWithSafeNames = new List<(string, T)>();
-
-        private readonly Dictionary<string, T> _namedComponents = new Dictionary<string, T>();
+        private readonly List<T> _components = [];
+        private readonly List<(string, T)> _componentsWithSafeNames = [];
+        private readonly Dictionary<string, T> _namedComponents = [];
 
         /// <inheritdoc />
         public int Count => _components.Count;
@@ -26,12 +24,14 @@ namespace EmbedIO.Utilities
         /// <inheritdoc />
         // A wrapper, not the dictionary itself: a caller could otherwise cast the view
         // back and add components after the collection is locked.
-        public IReadOnlyDictionary<string, T> Named => _namedView ??= new ReadOnlyDictionary<string, T>(_namedComponents);
+        public IReadOnlyDictionary<string, T> Named =>
+            _namedView ??= new ReadOnlyDictionary<string, T>(_namedComponents);
 
         private ReadOnlyDictionary<string, T>? _namedView;
 
         /// <inheritdoc />
-        public IReadOnlyList<(string SafeName, T Component)> WithSafeNames => _safeNamesView ??= _componentsWithSafeNames.AsReadOnly();
+        public IReadOnlyList<(string SafeName, T Component)> WithSafeNames =>
+            _safeNamesView ??= _componentsWithSafeNames.AsReadOnly();
 
         private ReadOnlyCollection<(string, T)>? _safeNamesView;
 

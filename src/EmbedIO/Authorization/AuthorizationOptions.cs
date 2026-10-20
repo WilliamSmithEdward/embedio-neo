@@ -19,11 +19,17 @@ namespace EmbedIO.Authorization
         private readonly bool _snapshot;
 
         /// <summary>Creates an empty policy configuration.</summary>
-        public AuthorizationOptions() => _policies = new Dictionary<string, Func<IHttpContext, CancellationToken, Task<bool>>>(StringComparer.Ordinal);
+        public AuthorizationOptions() =>
+            _policies = new Dictionary<string, Func<IHttpContext, CancellationToken, Task<bool>>>(
+                StringComparer.Ordinal
+            );
 
         private AuthorizationOptions(AuthorizationOptions source)
         {
-            _policies = new Dictionary<string, Func<IHttpContext, CancellationToken, Task<bool>>>(source._policies, StringComparer.Ordinal);
+            _policies = new Dictionary<string, Func<IHttpContext, CancellationToken, Task<bool>>>(
+                source._policies,
+                StringComparer.Ordinal
+            );
             _snapshot = true;
         }
 
@@ -34,14 +40,17 @@ namespace EmbedIO.Authorization
         public AuthorizationOptions AddPolicy(string name, Func<IHttpContext, CancellationToken, Task<bool>> policy)
         {
             if (_snapshot) throw new InvalidOperationException("The authorization configuration is a snapshot.");
-            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("A policy name is required.", nameof(name));
+
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("A policy name is required.", nameof(name));
+
             _policies.Add(name, Utilities.Validate.NotNull(nameof(policy), policy));
             return this;
         }
 
         internal static AuthorizationOptions Empty { get; } = new AuthorizationOptions().Snapshot();
 
-        internal AuthorizationOptions Snapshot() => new AuthorizationOptions(this);
+        internal AuthorizationOptions Snapshot() => new(this);
 
         internal void Validate(AuthorizationMetadata metadata)
         {
@@ -49,31 +58,47 @@ namespace EmbedIO.Authorization
             // fail at registration rather than become a latent unprotected route.
             foreach (var requirement in metadata.Requirements)
                 if (requirement.Policy != null && !_policies.ContainsKey(requirement.Policy))
-                    throw new ArgumentException("Unknown authorization policy: " + requirement.Policy, nameof(metadata));
+                    throw new ArgumentException(
+                        "Unknown authorization policy: " + requirement.Policy,
+                        nameof(metadata)
+                    );
         }
 
         internal async Task AuthorizeAsync(IHttpContext context, AuthorizationMetadata metadata)
         {
             if (metadata.AllowAnonymous || metadata.Requirements.Count == 0) return;
+
             var cancellation = context.CancellationToken;
             cancellation.ThrowIfCancellationRequested();
             var authenticated = context.User is ClaimsPrincipal claims
                 ? claims.Identities.Any(identity => identity.IsAuthenticated)
                 : context.User.Identity?.IsAuthenticated == true;
+
             if (!authenticated) BearerAuthenticationModule.Challenge(context);
+
             foreach (var requirement in metadata.Requirements)
             {
-                if (requirement.Roles.Count > 0 && !requirement.Roles.Any(role => context.User is ClaimsPrincipal principal
-                    ? principal.Identities.Any(identity => identity.IsAuthenticated && identity.HasClaim(identity.RoleClaimType, role))
-                    : context.User.IsInRole(role)))
+                if (
+                    requirement.Roles.Count > 0
+                    && !requirement.Roles.Any(
+                        role => context.User is ClaimsPrincipal principal
+                            ? principal.Identities.Any(
+                                identity => identity.IsAuthenticated && identity.HasClaim(identity.RoleClaimType, role)
+                            )
+                            : context.User.IsInRole(role)
+                    )
+                )
                     throw HttpException.Forbidden();
+
                 if (requirement.Policy != null)
                 {
                     var permitted = await _policies[requirement.Policy](context, cancellation).ConfigureAwait(false);
                     cancellation.ThrowIfCancellationRequested();
+
                     if (!permitted) throw HttpException.Forbidden();
                 }
             }
+
             cancellation.ThrowIfCancellationRequested();
         }
     }

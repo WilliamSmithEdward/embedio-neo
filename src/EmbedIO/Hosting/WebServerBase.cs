@@ -295,9 +295,9 @@ namespace EmbedIO
                 lifetime.Cancel();
             }
 
-            catch (AggregateException error) when (error.InnerExceptions.All(
-                EmbedIO.Internal.ExceptionPolicy.IsRecoverable
-            ))
+            catch (AggregateException error) when (
+                error.InnerExceptions.All(EmbedIO.Internal.ExceptionPolicy.IsRecoverable)
+            )
             {
                 error.Log(LogSource, "Exception thrown by a server lifetime cancellation callback.");
             }
@@ -569,8 +569,9 @@ namespace EmbedIO
                         exception.Log(LogSource, $"[{context.Id}] Tunnel application failed.");
                     }
 
-                    catch (Exception exception) when (exception is IHttpException
-                        && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
+                    catch (Exception exception) when (
+                        exception is IHttpException && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception)
+                    )
                     {
                         await HttpExceptionHandler
                             .Handle(LogSource, context, exception, _onHttpException)
@@ -747,8 +748,9 @@ namespace EmbedIO
                 ex.Log(LogSource, $"[{context.Id}] HTTP/1 tunnel connection closed.");
             }
 
-            catch (Exception ex) when (context is Net.Internal.MultiplexedContext
-                && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
+            catch (Exception ex) when (
+                context is Net.Internal.MultiplexedContext && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)
+            )
             {
                 // A failed or reset request stream must not dispose the listener
                 // shared by unrelated HTTP/2 and HTTP/3 connections. Terminal
@@ -887,9 +889,11 @@ namespace EmbedIO
         // HTTP/2 and HTTP/3 reset the stream when the response completes before its body.
         private static void StopReuseForUnreadBody(IHttpContext context)
         {
-            if (context is Net.Internal.HttpListenerContext
-                && context.Request.HasEntityBody
-                && !EmbedIO.Internal.ResponseCommitment.IsCommitted(context))
+            if (
+                context is Net.Internal.HttpListenerContext
+                    && context.Request.HasEntityBody
+                    && !EmbedIO.Internal.ResponseCommitment.IsCommitted(context)
+            )
                 context.Response.KeepAlive = false;
         }
 

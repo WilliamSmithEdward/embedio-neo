@@ -434,7 +434,12 @@ namespace EmbedIO
                 return true;
             }
 
-            catch (Exception error) when (error is System.Security.Cryptography.CryptographicException or System.Security.SecurityException or UnauthorizedAccessException or InvalidOperationException)
+            catch (Exception error) when (
+                error is System.Security.Cryptography.CryptographicException
+                    or System.Security.SecurityException
+                    or UnauthorizedAccessException
+                    or InvalidOperationException
+            )
             {
                 return false;
             }

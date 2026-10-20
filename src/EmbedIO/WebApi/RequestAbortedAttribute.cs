@@ -15,7 +15,10 @@ namespace EmbedIO.WebApi
         public Task<object?> GetRequestDataAsync(WebApiController controller, Type type, string parameterName)
         {
             if (controller == null) throw new ArgumentNullException(nameof(controller));
-            if (type != typeof(CancellationToken)) throw new InvalidOperationException("RequestAborted requires a CancellationToken parameter.");
+
+            if (type != typeof(CancellationToken))
+                throw new InvalidOperationException("RequestAborted requires a CancellationToken parameter.");
+
             return Task.FromResult<object?>(controller.HttpContext.GetRequestAbortedToken(CancelOnHttp1InputEnd));
         }
     }

@@ -7,22 +7,17 @@ namespace EmbedIO.WebSockets
     /// </summary>
     public class WebSocketException : Exception
     {
-        internal WebSocketException(string? message = null)
-            : this(CloseStatusCode.Abnormal, message)
+        internal WebSocketException(string? message = null) : this(CloseStatusCode.Abnormal, message)
         {
             // Ignore
         }
 
         internal WebSocketException(CloseStatusCode code, Exception? innerException = null)
             : this(code, null, innerException)
-        {
-        }
+        { }
 
         internal WebSocketException(CloseStatusCode code, string? message, Exception? innerException = null)
-            : base(message ?? GetMessage(code), innerException)
-        {
-            Code = code;
-        }
+            : base(message ?? GetMessage(code), innerException) => Code = code;
 
         /// <summary>
         /// Gets the status code indicating the cause of the exception.

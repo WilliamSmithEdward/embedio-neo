@@ -1,5 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System;
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.Tasks;
 using EmbedIO.Utilities;
 
@@ -19,10 +19,7 @@ namespace EmbedIO.WebApi
         /// <param name="baseRoute">The base URL path served by this module.</param>
         /// <seealso cref="IWebModule.BaseRoute" />
         /// <seealso cref="Validate.RoutePath" />
-        public WebApiModule(string baseRoute)
-            : base(baseRoute)
-        {
-        }
+        public WebApiModule(string baseRoute) : base(baseRoute) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="WebApiModule" /> class,
@@ -35,10 +32,7 @@ namespace EmbedIO.WebApi
         /// <exception cref="ArgumentNullException"><paramref name="serializer"/> is <see langword="null"/>.</exception>
         /// <seealso cref="IWebModule.BaseRoute" />
         /// <seealso cref="Validate.RoutePath" />
-        public WebApiModule(string baseRoute, ResponseSerializerCallback serializer)
-            : base(baseRoute, serializer)
-        {
-        }
+        public WebApiModule(string baseRoute, ResponseSerializerCallback serializer) : base(baseRoute, serializer) { }
 
         /// <summary>
         /// <para>Registers a controller type using a constructor.</para>
@@ -51,9 +45,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WebApiModuleBase.RegisterControllerType{TController}()"/>
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
-        public void RegisterController<TController>()
-            where TController : WebApiController, new()
-            => RegisterControllerType(typeof(TController));
+        public void RegisterController<TController>() where TController : WebApiController, new() =>
+            RegisterControllerType<TController>();
 
         /// <summary>
         /// <para>Registers a controller type using a factory method.</para>
@@ -67,9 +60,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WebApiModuleBase.RegisterControllerType{TController}(Func{TController})"/>
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
-        public void RegisterController<TController>(Func<TController> factory)
-            where TController : WebApiController
-            => RegisterControllerType(typeof(TController), factory);
+        public void RegisterController<TController>(Func<TController> factory) where TController : WebApiController =>
+            RegisterControllerType<TController>(factory);
 
         /// <summary>
         /// <para>Registers a controller type using a constructor.</para>
@@ -82,8 +74,7 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type)"/>
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
-        public void RegisterController(Type controllerType)
-            => RegisterControllerType(controllerType);
+        public void RegisterController(Type controllerType) => RegisterControllerType(controllerType);
 
         /// <summary>
         /// <para>Registers a controller type using a factory method.</para>
@@ -97,8 +88,8 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type,Func{WebApiController})"/>
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
-        public void RegisterController(Type controllerType, Func<WebApiController> factory)
-            => RegisterControllerType(controllerType, factory);
+        public void RegisterController(Type controllerType, Func<WebApiController> factory) =>
+            RegisterControllerType(controllerType, factory);
 
         /// <summary>
         /// Registers a context-aware factory and an explicit asynchronous release callback.
@@ -113,8 +104,8 @@ namespace EmbedIO.WebApi
         public void RegisterControllerWithContext(
             Type controllerType,
             Func<IHttpContext, WebApiController?> factory,
-            Func<IHttpContext, WebApiController, Task> release)
-            => RegisterControllerTypeWithContext(controllerType, factory, release);
+            Func<IHttpContext, WebApiController, Task> release
+        ) => RegisterControllerTypeWithContext(controllerType, factory, release);
 
         /// <summary>
         /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
@@ -126,8 +117,7 @@ namespace EmbedIO.WebApi
         /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
         /// <seealso cref="GeneratedControllerBindingAttribute"/>
         public void RegisterController<TController>(WebApiControllerBinding<TController> binding)
-            where TController : WebApiController, new()
-            => RegisterControllerType(binding);
+            where TController : WebApiController, new() => RegisterControllerType(binding);
 
         /// <summary>
         /// <para>Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
@@ -139,9 +129,10 @@ namespace EmbedIO.WebApi
         /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
         /// <param name="factory">The factory method used to construct instances of <typeparamref name="TController"/>.</param>
         /// <seealso cref="GeneratedControllerBindingAttribute"/>
-        public void RegisterController<TController>(WebApiControllerBinding<TController> binding, Func<TController> factory)
-            where TController : WebApiController
-            => RegisterControllerType(binding, factory);
+        public void RegisterController<TController>(
+            WebApiControllerBinding<TController> binding,
+            Func<TController> factory
+        ) where TController : WebApiController => RegisterControllerType(binding, factory);
 
         /// <summary>
         /// Registers a controller type through a binding produced by the EmbedIO-Neo source generator,
@@ -157,8 +148,7 @@ namespace EmbedIO.WebApi
         public void RegisterControllerWithContext<TController>(
             WebApiControllerBinding<TController> binding,
             Func<IHttpContext, TController?> factory,
-            Func<IHttpContext, TController, Task> release)
-            where TController : WebApiController
-            => RegisterControllerTypeWithContext(binding, factory, release);
+            Func<IHttpContext, TController, Task> release
+        ) where TController : WebApiController => RegisterControllerTypeWithContext(binding, factory, release);
     }
 }

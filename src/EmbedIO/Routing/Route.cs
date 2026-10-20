@@ -16,8 +16,7 @@ namespace EmbedIO.Routing
     public static class Route
     {
         // Characters in ValidParameterNameChars MUST be in ascending ordinal order!
-        private static readonly char[] ValidParameterNameChars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz".ToCharArray(
-        );
+        private static readonly char[] ValidParameterNameChars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz".ToCharArray();
 
         /// <summary>
         /// <para>Determines whether a string is a valid route parameter name.</para>

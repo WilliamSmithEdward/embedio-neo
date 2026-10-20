@@ -7,25 +7,14 @@ namespace EmbedIO.Sessions
 {
     partial class LocalSessionManager
     {
-        private class SessionImpl : ISession
+        private class SessionImpl(string id, TimeSpan duration) : ISession
         {
-            private readonly Dictionary<string, object> _data = new Dictionary<string, object>(Session.KeyComparer);
+            private readonly Dictionary<string, object> _data = new(Session.KeyComparer);
+            private int _usageCount = 1;
 
-            private int _usageCount;
-
-            public SessionImpl(string id, TimeSpan duration)
-            {
-                Id = Validate.NotNullOrEmpty(nameof(id), id);
-                Duration = duration;
-                LastActivity = DateTime.UtcNow;
-                _usageCount = 1;
-            }
-
-            public string Id { get; }
-
-            public TimeSpan Duration { get; }
-
-            public DateTime LastActivity { get; private set; }
+            public string Id { get; } = Validate.NotNullOrEmpty(nameof(id), id);
+            public TimeSpan Duration { get; } = duration;
+            public DateTime LastActivity { get; private set; } = DateTime.UtcNow;
 
             public int Count
             {
@@ -64,6 +53,7 @@ namespace EmbedIO.Sessions
                     {
                         if (value == null)
                             _data.Remove(key);
+
                         else
                             _data[key] = value;
                     }
@@ -102,7 +92,7 @@ namespace EmbedIO.Sessions
             {
                 lock (_data)
                 {
-                    return _data.ToArray();
+                    return [.. _data];
                 }
             }
 
@@ -120,6 +110,7 @@ namespace EmbedIO.Sessions
                 lock (_data)
                 {
                     var now = DateTime.UtcNow;
+
                     if (_usageCount < 1 && now > LastActivity + Duration)
                         return false;
 

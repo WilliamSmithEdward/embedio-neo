@@ -151,11 +151,13 @@ namespace EmbedIO.Tus
                     // Check ownership before reading any supplied body or exposing offset information.
                     _ = _store.Find(id, owner);
 
-                    if (!string.Equals(
-                        Single(context, "Content-Type", true),
-                        "application/offset+octet-stream",
-                        StringComparison.OrdinalIgnoreCase
-                    )) throw new HttpException(415);
+                    if (
+                        !string.Equals(
+                            Single(context, "Content-Type", true),
+                            "application/offset+octet-stream",
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    ) throw new HttpException(415);
 
                     Reject(context, "Content-Encoding");
                     Reject(context, "Upload-Length");

@@ -56,10 +56,12 @@ namespace EmbedIO.Internal
                 return true;
             }
 
-            catch (Exception exception) when (exception is ArgumentException
-                || exception is FormatException
-                || exception is OverflowException
-                || exception is NotSupportedException)
+            catch (Exception exception) when (
+                exception is ArgumentException
+                    || exception is FormatException
+                    || exception is OverflowException
+                    || exception is NotSupportedException
+            )
             {
                 if (exception is NotSupportedException) invalidValue = false;
 

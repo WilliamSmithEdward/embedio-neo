@@ -28,6 +28,7 @@ namespace EmbedIO.Utilities
         public static string RoutePath(string argumentName, string? value, bool isBasePath)
         {
             var exception = Utilities.UrlPath.ValidateInternal(argumentName, value);
+
             if (exception != null)
                 throw exception;
 
@@ -72,7 +73,13 @@ namespace EmbedIO.Utilities
                 {
                     value = Path.GetFullPath(value);
                 }
-                catch (Exception e) when (e is ArgumentException || e is SecurityException || e is NotSupportedException || e is PathTooLongException)
+
+                catch (Exception e) when (
+                    e is ArgumentException
+                        || e is SecurityException
+                        || e is NotSupportedException
+                        || e is PathTooLongException
+                )
                 {
                     throw new ArgumentException("Could not get the full local path.", argumentName, e);
                 }

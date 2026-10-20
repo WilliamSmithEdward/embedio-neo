@@ -330,10 +330,12 @@ namespace EmbedIO.Forwarding.Internal
             {
                 var c = value[i];
 
-                if (!(c is >= 'a' and <= 'z' || c is >= 'A' and <= 'Z' || c is >= '0' and <= '9'
-                    || c == '.'
-                    || c == '_'
-                    || c == '-'))
+                if (
+                    !(c is >= 'a'
+                        and <= 'z' || c is >= 'A'
+                        and <= 'Z' || c is >= '0'
+                        and <= '9' || c == '.' || c == '_' || c == '-')
+                )
                     return false;
             }
 

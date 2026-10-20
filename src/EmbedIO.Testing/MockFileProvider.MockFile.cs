@@ -4,18 +4,13 @@ namespace EmbedIO.Testing
 {
     partial class MockFileProvider
     {
-        private sealed class MockFile : MockDirectoryEntry
+        private sealed class MockFile(byte[] data) : MockDirectoryEntry
         {
-            public MockFile(byte[] data)
-            {
-                Data = data ?? Array.Empty<byte>();
-            }
-
-            public byte[] Data { get; private set; }
+            public byte[] Data { get; private set; } = data ?? [];
 
             public void SetData(byte[] data)
             {
-                Data = data ?? Array.Empty<byte>();
+                Data = data ?? [];
                 Touch();
             }
         }

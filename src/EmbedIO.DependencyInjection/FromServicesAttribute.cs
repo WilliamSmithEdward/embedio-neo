@@ -13,7 +13,12 @@ namespace EmbedIO.DependencyInjection
         public Task<object?> GetRequestDataAsync(WebApiController controller, Type type, string parameterName)
         {
             if (controller is null) throw new System.NullReferenceException();
-            return Task.FromResult<object?>(controller.HttpContext.GetRequestServices().GetRequiredService(type));
+
+            return Task.FromResult<object?>(
+                controller.HttpContext
+                    .GetRequestServices()
+                    .GetRequiredService(type)
+            );
         }
     }
 }

@@ -49,8 +49,8 @@ namespace EmbedIO.Security
         // request ends can still name its client. Retiring oldest first bounds the map; a
         // retired or never-tracked id is charged to nobody rather than to the wrong client.
         private const int MaximumTrackedRequests = 4096;
-        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IPAddress> _requestAddresses = new(
-        );
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IPAddress> _requestAddresses =
+            new();
         private readonly System.Collections.Concurrent.ConcurrentQueue<string> _trackedRequests = new();
 
         /// <summary>
@@ -124,14 +124,15 @@ namespace EmbedIO.Security
         /// </returns>
         /// <exception cref="ArgumentException">baseRoute</exception>
         public static IEnumerable<BanInfo> GetBannedIPs(string baseRoute = "/") =>
-            [.. IPBanningExecutor
+        [
+            .. IPBanningExecutor
                 .WithInstances(baseRoute, instance => instance.BlackList)
                 .SelectMany(list => list)
                 .GroupBy(info => info.IPAddress)
                 .Select(group => group
                     .OrderByDescending(info => info.ExpiresAt)
                     .First())
-            ];
+        ];
 
         /// <summary>
         /// Tries to ban an IP in all live modules registered under the route.

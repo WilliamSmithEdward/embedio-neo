@@ -22,19 +22,23 @@ namespace EmbedIO.Utilities
         public static Dictionary<string, object?> ToDictionary(this NameValueCollection @this)
         {
             if (@this is null) throw new System.NullReferenceException();
-            return @this.Keys.Cast<string>().ToDictionary(key => key, key =>
-            {
-                var values = @this.GetValues(key);
-                if (values == null)
-                    return null;
 
-                return values.Length switch
+            return @this.Keys
+                .Cast<string>()
+                .ToDictionary(key => key, key =>
                 {
-                    0 => null,
-                    1 => (object)values[0],
-                    _ => (object)values
-                };
-            });
+                    var values = @this.GetValues(key);
+
+                    if (values == null)
+                        return null;
+
+                    return values.Length switch
+                    {
+                        0 => null,
+                        1 => (object)values[0],
+                        _ => (object)values
+                    };
+                });
         }
 
         /// <summary>
@@ -47,7 +51,10 @@ namespace EmbedIO.Utilities
         public static Dictionary<string, string?> ToStringDictionary(this NameValueCollection @this)
         {
             if (@this is null) throw new System.NullReferenceException();
-            return @this.Keys.Cast<string>().ToDictionary(key => key, @this.Get);
+
+            return @this.Keys
+                .Cast<string>()
+                .ToDictionary(key => key, @this.Get);
         }
 
         /// <summary>
@@ -60,7 +67,10 @@ namespace EmbedIO.Utilities
         public static Dictionary<string, string[]?> ToArrayDictionary(this NameValueCollection @this)
         {
             if (@this is null) throw new System.NullReferenceException();
-            return @this.Keys.Cast<string>().ToDictionary(key => key, @this.GetValues);
+
+            return @this.Keys
+                .Cast<string>()
+                .ToDictionary(key => key, @this.GetValues);
         }
 
         /// <summary>
@@ -76,7 +86,10 @@ namespace EmbedIO.Utilities
         public static bool ContainsKey(this NameValueCollection @this, string key)
         {
             if (@this is null) throw new System.NullReferenceException();
-            return @this.Keys.Cast<string>().Contains(key);
+
+            return @this.Keys
+                .Cast<string>()
+                .Contains(key);
         }
 
         /// <summary>
@@ -94,8 +107,8 @@ namespace EmbedIO.Utilities
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <remarks>White space is trimmed from the start and end of each value before comparison.</remarks>
         /// <seealso cref="Contains(NameValueCollection,string,string,StringComparison)"/>
-        public static bool Contains(this NameValueCollection @this, string name, string value)
-            => Contains(@this, name, value, StringComparison.OrdinalIgnoreCase);
+        public static bool Contains(this NameValueCollection @this, string name, string value) =>
+            Contains(@this, name, value, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// Determines whether a <see cref="NameValueCollection"/> contains one or more values
@@ -114,23 +127,42 @@ namespace EmbedIO.Utilities
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <remarks>White space is trimmed from the start and end of each value before comparison.</remarks>
         /// <seealso cref="Contains(NameValueCollection,string,string)"/>
-        public static bool Contains(this NameValueCollection @this, string name, string? value, StringComparison comparisonType)
+        public static bool Contains(
+            this NameValueCollection @this,
+            string name,
+            string? value,
+            StringComparison comparisonType
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             value = value?.Trim();
             var header = @this[name];
+
             if (header == null)
                 return false;
 
             var position = 0;
+
             while (true)
             {
                 var comma = header.IndexOf(',', position);
                 var end = comma < 0 ? header.Length : comma;
-                if (string.Equals(header.Substring(position, end - position).Trim(), value, comparisonType))
+
+                if (
+                    string.Equals(
+                        header
+                            .Substring(position, end - position)
+                            .Trim(),
+                        value,
+                        comparisonType
+                    )
+                )
                     return true;
+
                 if (comma < 0)
                     return false;
+
                 position = comma + 1;
             }
         }

@@ -28,7 +28,11 @@ namespace EmbedIO
     /// See the help for the property for more information.</param>
     /// <seealso cref="IWebModule.BaseRoute" />
     /// <seealso cref="IWebModule.IsFinalHandler" />
-    public class ModuleGroup(string baseRoute, bool isFinalHandler) : WebModuleBase(baseRoute), IDisposable, IWebModuleContainer, IMimeTypeCustomizer
+    public class ModuleGroup(string baseRoute, bool isFinalHandler) :
+        WebModuleBase(baseRoute),
+        IDisposable,
+        IWebModuleContainer,
+        IMimeTypeCustomizer
     {
         private readonly WebModuleCollection _modules = new(nameof(ModuleGroup));
         private readonly MimeTypeCustomizer _mimeTypeCustomizer = new();

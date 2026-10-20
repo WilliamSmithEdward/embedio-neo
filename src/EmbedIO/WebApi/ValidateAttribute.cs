@@ -18,7 +18,9 @@ namespace EmbedIO.WebApi
         internal void CheckLimits()
         {
             if (MaxDepth < 1 || MaxDepth > 64 || MaxNodes < 1 || MaxNodes > 100000 || MaxErrors < 1 || MaxErrors > 1024)
-                throw new InvalidOperationException("Validation limits must be positive: depth <= 64, nodes <= 100000, errors <= 1024.");
+                throw new InvalidOperationException(
+                    "Validation limits must be positive: depth <= 64, nodes <= 100000, errors <= 1024."
+                );
         }
     }
 }

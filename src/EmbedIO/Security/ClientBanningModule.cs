@@ -18,9 +18,7 @@ namespace EmbedIO.Security
     {
         private readonly object _gate = new();
         private readonly Func<IHttpContext, string> _clientKeySelector;
-        private readonly Dictionary<string, ClientBanInfo> _bans = new(
-            StringComparer.Ordinal
-        );
+        private readonly Dictionary<string, ClientBanInfo> _bans = new(StringComparer.Ordinal);
         private readonly HashSet<string> _permanentBans = new(StringComparer.Ordinal);
         private PermanentClientBanStore? _store;
         private readonly List<ClientNetwork> _allowed = [];

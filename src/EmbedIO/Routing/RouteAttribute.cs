@@ -25,7 +25,6 @@ namespace EmbedIO.Routing
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
     public class RouteAttribute(HttpVerbs verb, string route, bool isBaseRoute = false) : Attribute
     {
-
         /// <summary>
         /// Gets the HTTP verb handled by a method with this attribute.
         /// </summary>

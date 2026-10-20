@@ -37,10 +37,7 @@ namespace EmbedIO.WebApi
         /// The name of the query field to extract will be equal to the name of the parameter
         /// carrying this attribute.
         /// </summary>
-        public QueryFieldAttribute()
-            : this(false, null)
-        {
-        }
+        public QueryFieldAttribute() : this(false, null) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="QueryFieldAttribute"/> class.
@@ -50,8 +47,7 @@ namespace EmbedIO.WebApi
         /// <exception cref="ArgumentException"><paramref name="fieldName"/> is the empty string (<c>""</c>).</exception>
         public QueryFieldAttribute(string fieldName)
             : this(false, Validate.NotNullOrEmpty(nameof(fieldName), fieldName))
-        {
-        }
+        { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="QueryFieldAttribute" /> class.
@@ -61,10 +57,7 @@ namespace EmbedIO.WebApi
         /// <param name="badRequestIfMissing">If set to <see langword="true" />, a <c>400 Bad Request</c>
         /// response will be sent to the client if no values are found for the field; if set to
         /// <see langword="false" />, a default value will be assumed.</param>
-        public QueryFieldAttribute(bool badRequestIfMissing)
-            : this(badRequestIfMissing, null)
-        {
-        }
+        public QueryFieldAttribute(bool badRequestIfMissing) : this(badRequestIfMissing, null) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="QueryFieldAttribute"/> class.
@@ -77,8 +70,7 @@ namespace EmbedIO.WebApi
         /// <see langword="false" />, a default value will be assumed.</param>
         public QueryFieldAttribute(string fieldName, bool badRequestIfMissing)
             : this(badRequestIfMissing, Validate.NotNullOrEmpty(nameof(fieldName), fieldName))
-        {
-        }
+        { }
 
         private QueryFieldAttribute(bool badRequestIfMissing, string? fieldName)
         {
@@ -108,27 +100,49 @@ namespace EmbedIO.WebApi
 
         Task<string?> IRequestDataAttribute<WebApiController, string>.GetRequestDataAsync(
             WebApiController controller,
-            string parameterName)
-            => Task.FromResult(RequestFieldBinding.GetString(
-                controller.HttpContext.GetRequestQueryData(), FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Query));
+            string parameterName
+        ) =>
+            Task.FromResult(
+                RequestFieldBinding.GetString(
+                    controller.HttpContext.GetRequestQueryData(),
+                    FieldName ?? parameterName,
+                    BadRequestIfMissing,
+                    RequestFieldBinding.Query
+                )
+            );
 
         Task<string[]?> IRequestDataAttribute<WebApiController, string[]>.GetRequestDataAsync(
             WebApiController controller,
-            string parameterName)
-            => Task.FromResult<string[]?>(RequestFieldBinding.GetStrings(
-                controller.HttpContext.GetRequestQueryData(), FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Query));
+            string parameterName
+        ) =>
+            Task.FromResult<string[]?>(
+                RequestFieldBinding.GetStrings(
+                    controller.HttpContext.GetRequestQueryData(),
+                    FieldName ?? parameterName,
+                    BadRequestIfMissing,
+                    RequestFieldBinding.Query
+                )
+            );
 
         Task<object?> IRequestDataAttribute<WebApiController>.GetRequestDataAsync(
             WebApiController controller,
             Type type,
-            string parameterName)
+            string parameterName
+        )
         {
             // Only the reflection-based binder converts to a runtime type; generated bindings do not call this.
             if (!ReflectionBinding.IsSupported)
                 throw ReflectionBinding.Disabled();
 
-            return Task.FromResult(RequestFieldBinding.GetUntyped(
-                controller.HttpContext.GetRequestQueryData(), FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Query, type));
+            return Task.FromResult(
+                RequestFieldBinding.GetUntyped(
+                    controller.HttpContext.GetRequestQueryData(),
+                    FieldName ?? parameterName,
+                    BadRequestIfMissing,
+                    RequestFieldBinding.Query,
+                    type
+                )
+            );
         }
     }
 }

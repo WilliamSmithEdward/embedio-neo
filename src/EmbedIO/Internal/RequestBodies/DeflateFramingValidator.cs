@@ -172,33 +172,21 @@ namespace EmbedIO.Internal
         }
 
         // One step of the current phase. False when more input is needed.
-        private bool Advance() =>
-            _phase switch
-            {
-                Phase.Header => ReadBlockHeader(),
-
-                Phase.StoredLength => ReadStoredLength(),
-
-                Phase.StoredData => SkipBufferedStoredData(),
-
-                Phase.DynamicHeader => ReadDynamicHeader(),
-
-                Phase.CodeLengths => ReadCodeLength(),
-
-                Phase.TreeLengths => ReadTreeLength(),
-
-                Phase.Repeat => ReadRepeat(),
-
-                Phase.Symbol => ReadSymbols(),
-
-                Phase.Length => ReadLength(),
-
-                Phase.Distance => ReadDistance(),
-
-                Phase.DistanceExtra => ReadDistanceExtra(),
-
-                _ => false,
-            };
+        private bool Advance() => _phase switch
+        {
+            Phase.Header => ReadBlockHeader(),
+            Phase.StoredLength => ReadStoredLength(),
+            Phase.StoredData => SkipBufferedStoredData(),
+            Phase.DynamicHeader => ReadDynamicHeader(),
+            Phase.CodeLengths => ReadCodeLength(),
+            Phase.TreeLengths => ReadTreeLength(),
+            Phase.Repeat => ReadRepeat(),
+            Phase.Symbol => ReadSymbols(),
+            Phase.Length => ReadLength(),
+            Phase.Distance => ReadDistance(),
+            Phase.DistanceExtra => ReadDistanceExtra(),
+            _ => false
+        };
 
         private bool ReadBlockHeader()
         {

@@ -16,8 +16,7 @@ namespace EmbedIO.Security
     public class IPBanningConfiguration : ConfiguredObject, IDisposable
     {
         private readonly List<IIPBanningCriterion> _criterions = [];
-        private readonly ConcurrentDictionary<IPAddress, BanInfo> _blacklistDictionary = new(
-        );
+        private readonly ConcurrentDictionary<IPAddress, BanInfo> _blacklistDictionary = new();
         private readonly ConcurrentBag<IPAddress> _whiteListBag = [];
         private readonly int _banTime;
         private bool _disposed;

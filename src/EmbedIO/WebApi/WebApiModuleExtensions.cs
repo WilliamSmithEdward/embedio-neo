@@ -1,5 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System;
+﻿using System;
+using System.Diagnostics.CodeAnalysis;
 
 namespace EmbedIO.WebApi
 {
@@ -25,6 +25,7 @@ namespace EmbedIO.WebApi
             where TController : WebApiController, new()
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RegisterController<TController>();
             return @this;
         }
@@ -47,6 +48,7 @@ namespace EmbedIO.WebApi
             where TController : WebApiController
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RegisterController(factory);
             return @this;
         }
@@ -67,6 +69,7 @@ namespace EmbedIO.WebApi
         public static WebApiModule WithController(this WebApiModule @this, Type controllerType)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RegisterController(controllerType);
             return @this;
         }
@@ -85,9 +88,14 @@ namespace EmbedIO.WebApi
         /// <seealso cref="WebApiModuleBase.RegisterControllerType(Type,Func{WebApiController})"/>
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
-        public static WebApiModule WithController(this WebApiModule @this, Type controllerType, Func<WebApiController> factory)
+        public static WebApiModule WithController(
+            this WebApiModule @this,
+            Type controllerType,
+            Func<WebApiController> factory
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RegisterController(controllerType, factory);
             return @this;
         }
@@ -103,10 +111,13 @@ namespace EmbedIO.WebApi
         /// <param name="binding">The generated binding of <typeparamref name="TController"/>.</param>
         /// <returns><paramref name="this"/> with the controller type registered.</returns>
         /// <seealso cref="GeneratedControllerBindingAttribute"/>
-        public static WebApiModule WithController<TController>(this WebApiModule @this, WebApiControllerBinding<TController> binding)
-            where TController : WebApiController, new()
+        public static WebApiModule WithController<TController>(
+            this WebApiModule @this,
+            WebApiControllerBinding<TController> binding
+        ) where TController : WebApiController, new()
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RegisterController(binding);
             return @this;
         }
@@ -123,10 +134,14 @@ namespace EmbedIO.WebApi
         /// <param name="factory">The factory method used to construct instances of <typeparamref name="TController"/>.</param>
         /// <returns><paramref name="this"/> with the controller type registered.</returns>
         /// <seealso cref="GeneratedControllerBindingAttribute"/>
-        public static WebApiModule WithController<TController>(this WebApiModule @this, WebApiControllerBinding<TController> binding, Func<TController> factory)
-            where TController : WebApiController
+        public static WebApiModule WithController<TController>(
+            this WebApiModule @this,
+            WebApiControllerBinding<TController> binding,
+            Func<TController> factory
+        ) where TController : WebApiController
         {
             if (@this is null) throw new System.NullReferenceException();
+
             @this.RegisterController(binding, factory);
             return @this;
         }

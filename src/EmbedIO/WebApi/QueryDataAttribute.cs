@@ -19,6 +19,7 @@ namespace EmbedIO.WebApi
         public Task<NameValueCollection?> GetRequestDataAsync(WebApiController controller, string parameterName)
         {
             if (controller is null) throw new System.NullReferenceException();
+
             return Task.FromResult<NameValueCollection?>(controller.HttpContext.GetRequestQueryData());
         }
     }

@@ -16,21 +16,41 @@ namespace EmbedIO.WebApi
         internal const string Query = "query";
         internal const string Form = "form";
 
-        internal static string? GetString(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind)
+        internal static string? GetString(
+            NameValueCollection data,
+            string fieldName,
+            bool badRequestIfMissing,
+            string kind
+        )
         {
             EnsurePresent(data, fieldName, badRequestIfMissing, kind);
-            return data.GetValues(fieldName)?.LastOrDefault();
+            return data
+                .GetValues(fieldName)
+                ?.LastOrDefault();
         }
 
-        internal static string[] GetStrings(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind)
+        internal static string[] GetStrings(
+            NameValueCollection data,
+            string fieldName,
+            bool badRequestIfMissing,
+            string kind
+        )
         {
             EnsurePresent(data, fieldName, badRequestIfMissing, kind);
-            return data.GetValues(fieldName) ?? Array.Empty<string>();
+            return data.GetValues(fieldName) ?? [];
         }
 
-        internal static T? Get<T>(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind, string parameterName, TypeConverter? converter)
+        internal static T? Get<T>(
+            NameValueCollection data,
+            string fieldName,
+            bool badRequestIfMissing,
+            string kind,
+            string parameterName,
+            TypeConverter? converter
+        )
         {
             var fieldValue = GetString(data, fieldName, badRequestIfMissing, kind);
+
             if (fieldValue == null)
                 return default;
 
@@ -40,21 +60,33 @@ namespace EmbedIO.WebApi
             return CastResult<T>(parameterName, result);
         }
 
-        internal static TElement?[] GetArray<TElement>(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind, TypeConverter? converter)
+        internal static TElement?[] GetArray<TElement>(
+            NameValueCollection data,
+            string fieldName,
+            bool badRequestIfMissing,
+            string kind,
+            TypeConverter? converter
+        )
         {
             var fieldValues = GetStrings(data, fieldName, badRequestIfMissing, kind);
             var array = new TElement?[fieldValues.Length];
+
             for (var i = 0; i < fieldValues.Length; i++)
             {
                 if (!TryConvert(typeof(TElement), fieldValues[i], converter, out var element))
-                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to an array of {typeof(TElement).Name}.");
+                    throw HttpException.BadRequest(
+                        $"Cannot convert field {fieldName} to an array of {typeof(TElement).Name}."
+                    );
 
                 // Array.SetValue semantics: null stores the default value, another type is an invalid cast.
                 array[i] = element switch
                 {
                     null => default,
                     TElement typed => typed,
-                    _ => throw new InvalidCastException($"Cannot cast {element.GetType().FullName} to {typeof(TElement).FullName}."),
+                    _ =>
+                        throw new InvalidCastException(
+                            $"Cannot cast {element.GetType().FullName} to {typeof(TElement).FullName}."
+                        )
                 };
             }
 
@@ -65,19 +97,32 @@ namespace EmbedIO.WebApi
         // used by the reflection-based binder, which converts to a type known only at run time.
         [RequiresUnreferencedCode(WebApiModuleBase.ReflectionMessage)]
         [RequiresDynamicCode(WebApiModuleBase.ReflectionMessage)]
-        internal static object? GetUntyped(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind, Type type)
+        internal static object? GetUntyped(
+            NameValueCollection data,
+            string fieldName,
+            bool badRequestIfMissing,
+            string kind,
+            Type type
+        )
         {
             EnsurePresent(data, fieldName, badRequestIfMissing, kind);
+
             if (type.IsArray)
             {
-                var fieldValues = data.GetValues(fieldName) ?? Array.Empty<string>();
+                var fieldValues = data.GetValues(fieldName) ?? [];
+
                 if (!FromString.TryConvertTo(type, fieldValues, out var arrayResult))
-                    throw HttpException.BadRequest($"Cannot convert field {fieldName} to an array of {type.GetElementType()?.Name}.");
+                    throw HttpException.BadRequest(
+                        $"Cannot convert field {fieldName} to an array of {type.GetElementType()?.Name}."
+                    );
 
                 return arrayResult;
             }
 
-            var fieldValue = data.GetValues(fieldName)?.LastOrDefault();
+            var fieldValue = data
+                .GetValues(fieldName)
+                ?.LastOrDefault();
+
             if (fieldValue == null)
                 return type.IsValueType ? Activator.CreateInstance(type) : null;
 
@@ -90,19 +135,30 @@ namespace EmbedIO.WebApi
         // The cast the reflection binder applies to IRequestDataAttribute<TController> results.
         internal static T? CastResult<T>(string parameterName, object? result) => result switch
         {
-            null when typeof(T).IsValueType && Nullable.GetUnderlyingType(typeof(T)) == null => throw new InvalidCastException($"Cannot cast null to {typeof(T).FullName} for parameter \"{parameterName}\"."),
+            null when typeof(T).IsValueType && Nullable.GetUnderlyingType(typeof(T)) == null =>
+                throw new InvalidCastException(
+                    $"Cannot cast null to {typeof(T).FullName} for parameter \"{parameterName}\"."
+                ),
             null => default,
             T castResult => castResult,
-            _ => throw new InvalidCastException($"Cannot cast {result.GetType().FullName} to {typeof(T).FullName} for parameter \"{parameterName}\"."),
+            _ =>
+                throw new InvalidCastException(
+                    $"Cannot cast {result.GetType().FullName} to {typeof(T).FullName} for parameter \"{parameterName}\"."
+                )
         };
 
-        internal static bool TryConvert(Type type, string? value, TypeConverter? converter, out object? result)
-            => StringConversion.TryConvert(type, value, converter, ConverterOrThrow, out result, out _);
+        internal static bool TryConvert(Type type, string? value, TypeConverter? converter, out object? result) =>
+            StringConversion.TryConvert(type, value, converter, ConverterOrThrow, out result, out _);
 
-        internal static TypeConverter ConverterOrThrow(TypeConverter? converter, Type type)
-            => converter ?? throw new InvalidOperationException($"No type converter was supplied for {type.FullName}.");
+        internal static TypeConverter ConverterOrThrow(TypeConverter? converter, Type type) =>
+            converter ?? throw new InvalidOperationException($"No type converter was supplied for {type.FullName}.");
 
-        private static void EnsurePresent(NameValueCollection data, string fieldName, bool badRequestIfMissing, string kind)
+        private static void EnsurePresent(
+            NameValueCollection data,
+            string fieldName,
+            bool badRequestIfMissing,
+            string kind
+        )
         {
             // Presence follows the collection's own key comparison, which binding uses to read the value.
             if (badRequestIfMissing && data.GetValues(fieldName) == null && !data.ContainsKey(fieldName))

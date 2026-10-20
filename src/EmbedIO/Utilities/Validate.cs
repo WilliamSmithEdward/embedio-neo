@@ -15,9 +15,8 @@ namespace EmbedIO.Utilities
         /// <param name="value">The value to validate.</param>
         /// <returns><paramref name="value"/> if not <see langword="null"/>.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="value"/> is <see langword="null"/>.</exception>
-        public static T NotNull<T>(string argumentName, T? value)
-            where T : class
-            => value ?? throw new ArgumentNullException(argumentName);
+        public static T NotNull<T>(string argumentName, T? value) where T : class =>
+            value ?? throw new ArgumentNullException(argumentName);
 
         /// <summary>
         /// Ensures that a <see langword="string"/> argument is neither <see langword="null"/> nor the empty string.
@@ -58,13 +57,16 @@ namespace EmbedIO.Utilities
             string argumentName,
             string? value,
             UriKind uriKind = UriKind.RelativeOrAbsolute,
-            bool enforceHttp = false)
+            bool enforceHttp = false
+        )
         {
             Uri uri;
+
             try
             {
                 uri = new Uri(NotNull(argumentName, value), uriKind);
             }
+
             catch (UriFormatException e)
             {
                 throw new ArgumentException("URL is not valid.", argumentName, e);
@@ -107,10 +109,12 @@ namespace EmbedIO.Utilities
                 throw new ArgumentException("Base URI is not an absolute URI.", nameof(baseUri));
 
             Uri uri;
+
             try
             {
                 uri = new Uri(baseUri, new Uri(NotNull(argumentName, value), UriKind.RelativeOrAbsolute));
             }
+
             catch (UriFormatException e)
             {
                 throw new ArgumentException("URL is not valid.", argumentName, e);

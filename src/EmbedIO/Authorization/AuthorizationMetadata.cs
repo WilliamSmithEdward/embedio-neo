@@ -12,17 +12,25 @@ namespace EmbedIO.Authorization
         /// <param name="roles">Allowed role names; an empty array imposes no role restriction.</param>
         public AuthorizationRequirement(string? policy, string[] roles)
         {
-            if (policy != null && string.IsNullOrWhiteSpace(policy)) throw new ArgumentException("A policy name cannot be blank.", nameof(policy));
+            if (policy != null && string.IsNullOrWhiteSpace(policy))
+                throw new ArgumentException("A policy name cannot be blank.", nameof(policy));
+
             if (roles == null) throw new ArgumentNullException(nameof(roles));
-            if (roles.Any(string.IsNullOrWhiteSpace)) throw new ArgumentException("Role names cannot be blank.", nameof(roles));
+
+            if (roles.Any(string.IsNullOrWhiteSpace))
+                throw new ArgumentException("Role names cannot be blank.", nameof(roles));
+
             Policy = policy;
             Roles = Array.AsReadOnly((string[])roles.Clone());
         }
+
         /// <summary>Gets the optional policy name.</summary>
         public string? Policy { get; }
+
         /// <summary>Gets roles, of which at least one must match when nonempty.</summary>
         public IReadOnlyList<string> Roles { get; }
     }
+
     /// <summary>Immutable authorization metadata for runtime handlers and generated OpenAPI descriptions.</summary>
     public sealed class AuthorizationMetadata
     {
@@ -32,12 +40,17 @@ namespace EmbedIO.Authorization
         public AuthorizationMetadata(bool allowAnonymous, params AuthorizationRequirement[] requirements)
         {
             if (requirements == null) throw new ArgumentNullException(nameof(requirements));
-            if (requirements.Any(item => item == null)) throw new ArgumentException("Requirements cannot contain null.", nameof(requirements));
+
+            if (requirements.Any(item => item == null))
+                throw new ArgumentException("Requirements cannot contain null.", nameof(requirements));
+
             AllowAnonymous = allowAnonymous;
             Requirements = Array.AsReadOnly((AuthorizationRequirement[])requirements.Clone());
         }
+
         /// <summary>Gets whether anonymous access overrides requirements.</summary>
         public bool AllowAnonymous { get; }
+
         /// <summary>Gets requirements combined with AND.</summary>
         public IReadOnlyList<AuthorizationRequirement> Requirements { get; }
     }

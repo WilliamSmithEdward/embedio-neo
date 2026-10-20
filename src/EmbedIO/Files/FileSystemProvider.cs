@@ -121,7 +121,12 @@ namespace EmbedIO.Files
                 localPath = Path.GetFullPath(localPath);
             }
 
-            catch (Exception error) when (error is ArgumentException or NotSupportedException or System.Security.SecurityException or IOException)
+            catch (Exception error) when (
+                error is ArgumentException
+                    or NotSupportedException
+                    or System.Security.SecurityException
+                    or IOException
+            )
             {
                 // Both IsPathRooted and GetFullPath throw exceptions
                 // if a path contains invalid characters or is otherwise invalid;

@@ -20,7 +20,10 @@ namespace EmbedIO.WebApi
         public async Task<NameValueCollection?> GetRequestDataAsync(WebApiController controller, string parameterName)
         {
             if (controller is null) throw new System.NullReferenceException();
-            return await controller.HttpContext.GetRequestFormDataAsync().ConfigureAwait(false);
+
+            return await controller.HttpContext
+                .GetRequestFormDataAsync()
+                .ConfigureAwait(false);
         }
     }
 }

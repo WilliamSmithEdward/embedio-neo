@@ -10,15 +10,22 @@ namespace EmbedIO.Cli
     internal sealed class ReloadSocket : WebSocketModule
     {
         internal ReloadSocket() : base("/watcher", true) { }
+
         internal Task NotifyAsync() => BroadcastAsync("{\"Update\":true}");
-        protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
-            => Task.CompletedTask;
+
+        protected override Task OnMessageReceivedAsync(
+            IWebSocketContext context,
+            byte[] buffer,
+            IWebSocketReceiveResult result
+        ) => Task.CompletedTask;
     }
 
     internal sealed class LiveReload : IAsyncDisposable
     {
         private readonly FileSystemWatcher _watcher;
-        private readonly Channel<bool> _changes = Channel.CreateBounded<bool>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite });
+        private readonly Channel<bool> _changes = Channel.CreateBounded<bool>(
+            new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite }
+        );
         private readonly CancellationTokenSource _stop = new();
         private readonly Task _worker;
 
@@ -34,11 +41,13 @@ namespace EmbedIO.Cli
                 Console.Error.WriteLine($"File watcher: {e.GetException().Message}");
                 _changes.Writer.TryWrite(true);
             };
+
             try
             {
                 _watcher.EnableRaisingEvents = true;
                 _worker = RunAsync(socket);
             }
+
             catch
             {
                 _watcher.Dispose();
@@ -64,11 +73,21 @@ namespace EmbedIO.Cli
                 while (await _changes.Reader.WaitToReadAsync(_stop.Token))
                 {
                     await Task.Delay(100, _stop.Token);
+
                     while (_changes.Reader.TryRead(out _)) { }
-                    try { await socket.NotifyAsync(); }
-                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error)) { Console.Error.WriteLine($"Live reload: {error.Message}"); }
+
+                    try
+                    {
+                        await socket.NotifyAsync();
+                    }
+
+                    catch (Exception error) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(error))
+                    {
+                        Console.Error.WriteLine($"Live reload: {error.Message}");
+                    }
                 }
             }
+
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
         }
     }

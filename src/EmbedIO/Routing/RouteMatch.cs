@@ -45,12 +45,7 @@ namespace EmbedIO.Routing
         /// a non-nullable property of type <see cref="RouteMatch"/>, provided that it is subsequently
         /// set to a meaningful value before being used.</para>
         /// </remarks>
-        public static RouteMatch None { get; } = new RouteMatch(
-            string.Empty,
-            [],
-            [],
-            null
-        );
+        public static RouteMatch None { get; } = new RouteMatch(string.Empty, [], [], null);
 
         /// <summary>
         /// Gets the URL path that was successfully matched against the route.

@@ -12,8 +12,7 @@ namespace EmbedIO.DependencyInjection
     /// <summary>Optional Microsoft DI integration for EmbedIO.</summary>
     public static class DependencyInjectionExtensions
     {
-        internal static readonly object ServicesKey = new object();
-
+        internal static readonly object ServicesKey = new();
         private const string ReflectionMessage = "Registering a controller by type binds it through reflection and runtime code generation, "
             + "which trimming and Native AOT do not support. Use the overload that takes a generated WebApiControllerBinding.";
 
@@ -28,7 +27,9 @@ namespace EmbedIO.DependencyInjection
             where TServer : class, IWebServer
         {
             if (server == null) throw new ArgumentNullException(nameof(server));
+
             if (services == null) throw new ArgumentNullException(nameof(services));
+
             foreach (var module in server.Modules)
             {
                 if (module is RequestServicesModule)
@@ -45,9 +46,12 @@ namespace EmbedIO.DependencyInjection
         public static IServiceProvider GetRequestServices(this IHttpContext context)
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
+
             return context.Items.TryGetValue(ServicesKey, out var value) && value is IServiceProvider services
                 ? services
-                : throw new InvalidOperationException("Request services are unavailable. Add WithDependencyInjection before modules that use DI, and do not use request services after request completion.");
+                : throw new InvalidOperationException(
+                    "Request services are unavailable. Add WithDependencyInjection before modules that use DI, and do not use request services after request completion."
+                );
         }
 
         /// <summary>
@@ -61,8 +65,7 @@ namespace EmbedIO.DependencyInjection
         [RequiresUnreferencedCode(ReflectionMessage)]
         [RequiresDynamicCode(ReflectionMessage)]
         public static WebApiModule WithControllerServices<TController>(this WebApiModule module)
-            where TController : WebApiController
-            => WithControllerServices(module, typeof(TController));
+            where TController : WebApiController => WithControllerServices(module, typeof(TController));
 
         /// <summary>Registers a runtime-discovered controller with request-scoped constructor injection.</summary>
         /// <param name="module">The Web API module.</param>
@@ -73,17 +76,27 @@ namespace EmbedIO.DependencyInjection
         public static WebApiModule WithControllerServices(this WebApiModule module, Type controllerType)
         {
             if (module == null) throw new ArgumentNullException(nameof(module));
+
             if (controllerType == null) throw new ArgumentNullException(nameof(controllerType));
-            if (controllerType.IsAbstract || controllerType.ContainsGenericParameters || !controllerType.IsSubclassOf(typeof(WebApiController)))
+
+            if (
+                controllerType.IsAbstract
+                || controllerType.ContainsGenericParameters
+                || !controllerType.IsSubclassOf(typeof(WebApiController))
+            )
                 throw new ArgumentException("A concrete WebApiController type is required.", nameof(controllerType));
 
             var activate = ActivatorUtilities.CreateFactory(controllerType, Type.EmptyTypes);
-            module.RegisterControllerWithContext(controllerType, context =>
-            {
-                var controller = (WebApiController)activate(context.GetRequestServices(), null);
-                context.OnRequestCompleted(() => DisposeAsync(controller));
-                return controller;
-            }, (_, _) => Task.CompletedTask);
+            module.RegisterControllerWithContext(
+                controllerType,
+                context =>
+                {
+                    var controller = (WebApiController)activate(context.GetRequestServices(), null);
+                    context.OnRequestCompleted(() => DisposeAsync(controller));
+                    return controller;
+                },
+                (_, _) => Task.CompletedTask
+            );
             return module;
         }
 
@@ -99,23 +112,29 @@ namespace EmbedIO.DependencyInjection
         /// <returns>The module.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="module"/> or <paramref name="binding"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><typeparamref name="TController"/> is abstract.</exception>
-        public static WebApiModule WithControllerServices<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TController>(
-            this WebApiModule module,
-            WebApiControllerBinding<TController> binding)
+        public static WebApiModule WithControllerServices<[DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicConstructors
+        )] TController>(this WebApiModule module, WebApiControllerBinding<TController> binding)
             where TController : WebApiController
         {
             if (module == null) throw new ArgumentNullException(nameof(module));
+
             if (binding == null) throw new ArgumentNullException(nameof(binding));
+
             if (typeof(TController).IsAbstract)
                 throw new ArgumentException("A concrete WebApiController type is required.", nameof(binding));
 
             var activate = ActivatorUtilities.CreateFactory<TController>(Type.EmptyTypes);
-            module.RegisterControllerWithContext(binding, context =>
-            {
-                var controller = activate(context.GetRequestServices(), null);
-                context.OnRequestCompleted(() => DisposeAsync(controller));
-                return controller;
-            }, (_, _) => Task.CompletedTask);
+            module.RegisterControllerWithContext(
+                binding,
+                context =>
+                {
+                    var controller = activate(context.GetRequestServices(), null);
+                    context.OnRequestCompleted(() => DisposeAsync(controller));
+                    return controller;
+                },
+                (_, _) => Task.CompletedTask
+            );
             return module;
         }
 
@@ -128,9 +147,14 @@ namespace EmbedIO.DependencyInjection
         public static IServiceCollection AddEmbedIORequestContext(this IServiceCollection services)
         {
             if (services == null) throw new ArgumentNullException(nameof(services));
+
             services.TryAddScoped<RequestContext>();
-            services.TryAddScoped<IHttpContext>(provider => provider.GetRequiredService<RequestContext>().Context
-                ?? throw new InvalidOperationException("IHttpContext can only be resolved within an EmbedIO request."));
+            services.TryAddScoped<IHttpContext>(
+                provider => provider.GetRequiredService<RequestContext>().Context
+                    ?? throw new InvalidOperationException(
+                        "IHttpContext can only be resolved within an EmbedIO request."
+                    )
+            );
             return services;
         }
 
@@ -145,23 +169,27 @@ namespace EmbedIO.DependencyInjection
         public static IServiceCollection AddEmbedIO(
             this IServiceCollection services,
             Action<WebServerOptions> options,
-            Action<WebServer, IServiceProvider> configure)
+            Action<WebServer, IServiceProvider> configure
+        )
         {
             if (services == null) throw new ArgumentNullException(nameof(services));
+
             if (options == null) throw new ArgumentNullException(nameof(options));
+
             if (configure == null) throw new ArgumentNullException(nameof(configure));
+
             services.AddEmbedIORequestContext();
             services.AddSingleton<IHostedService>(provider =>
             {
                 var server = new WebServer(options);
+
                 try
                 {
                     server.WithDependencyInjection(provider);
                     configure(server, provider);
-                    return new EmbedIOHostedService(server,
-                        provider.GetRequiredService<IHostApplicationLifetime>(),
-                        provider.GetRequiredService<ILogger<EmbedIOHostedService>>());
+                    return new EmbedIOHostedService(server, provider.GetRequiredService<IHostApplicationLifetime>(), provider.GetRequiredService<ILogger<EmbedIOHostedService>>());
                 }
+
                 catch
                 {
                     server.Dispose();
@@ -180,18 +208,26 @@ namespace EmbedIO.DependencyInjection
         public static async Task DrainDependencyInjectionAsync(this IWebServer server)
         {
             if (server == null) throw new ArgumentNullException(nameof(server));
+
             if (server.State != WebServerState.Stopped)
                 throw new InvalidOperationException("Stop and await the server before draining request services.");
+
             foreach (var module in server.Modules)
             {
                 if (module is RequestServicesModule requests)
-                    await requests.DrainAsync().ConfigureAwait(false);
+                    await requests
+                        .DrainAsync()
+                        .ConfigureAwait(false);
             }
         }
+
         internal static async Task DisposeAsync(object value)
         {
             if (value is IAsyncDisposable asyncDisposable)
-                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+                await asyncDisposable
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+
             else if (value is IDisposable disposable)
                 disposable.Dispose();
         }
@@ -202,4 +238,3 @@ namespace EmbedIO.DependencyInjection
         }
     }
 }
-

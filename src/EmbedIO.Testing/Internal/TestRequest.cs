@@ -20,44 +20,56 @@ namespace EmbedIO.Testing.Internal
 
             ContentLength64 = _content == null ? 0 : _content.Headers.ContentLength ?? -1;
             var headers = new NameValueCollection();
-            foreach (var pair in clientRequest.Content == null ? clientRequest.Headers : clientRequest.Headers.Concat(clientRequest.Content.Headers))
+
+            foreach (var pair in clientRequest.Content == null
+                ? clientRequest.Headers
+                : clientRequest.Headers.Concat(clientRequest.Content.Headers))
             {
                 var values = pair.Value.ToArray();
+
                 switch (values.Length)
                 {
                     case 0:
                         headers.Add(pair.Key, string.Empty);
                         break;
+
                     case 1:
                         headers.Add(pair.Key, values[0]);
                         break;
+
                     default:
                         foreach (var value in values)
                             headers.Add(pair.Key, value);
 
                         break;
                 }
-
-
             }
 
             Headers = headers;
             var cookieHeader = headers[HttpHeaderNames.Cookie];
+
             if (!string.IsNullOrEmpty(containerCookies))
-                cookieHeader = string.IsNullOrEmpty(cookieHeader) ? containerCookies : cookieHeader + "; " + containerCookies;
+                cookieHeader = string.IsNullOrEmpty(cookieHeader)
+                    ? containerCookies
+                    : cookieHeader + "; " + containerCookies;
+
             if (cookieHeader != null) headers[HttpHeaderNames.Cookie] = cookieHeader;
-            Cookies = cookieHeader == null ? new CookieList() : CookieList.Parse(cookieHeader);
+
+            Cookies = cookieHeader == null ? [] : CookieList.Parse(cookieHeader);
 
             ProtocolVersion = clientRequest.Version;
             KeepAlive = !(clientRequest.Headers.ConnectionClose ?? true);
-            var requestUri = clientRequest.RequestUri ?? throw new ArgumentException("The request must have a URL.", nameof(clientRequest));
+            var requestUri = clientRequest.RequestUri
+                ?? throw new ArgumentException("The request must have a URL.", nameof(clientRequest));
             RawTarget = requestUri.PathAndQuery;
             QueryString = UrlEncodedDataParser.Parse(requestUri.Query, true);
             HttpMethod = clientRequest.Method.ToString();
             HttpVerb = HttpMethodToVerb(clientRequest.Method);
             Url = requestUri;
             HasEntityBody = _content != null;
-            ContentEncoding = Encoding.GetEncoding(_content?.Headers.ContentType?.CharSet ?? WebServer.DefaultEncoding.WebName);
+            ContentEncoding = Encoding.GetEncoding(
+                _content?.Headers.ContentType?.CharSet ?? WebServer.DefaultEncoding.WebName
+            );
             RemoteEndPoint = new IPEndPoint(IPAddress.Loopback, 9999);
             UserAgent = clientRequest.Headers.UserAgent?.ToString();
             LocalEndPoint = new IPEndPoint(IPAddress.Loopback, 8080);
@@ -65,47 +77,32 @@ namespace EmbedIO.Testing.Internal
         }
 
         public ICookieCollection Cookies { get; }
-
         public Version ProtocolVersion { get; }
-
         public NameValueCollection Headers { get; }
-
         public bool KeepAlive { get; }
-
         public string RawTarget { get; }
-
         public NameValueCollection QueryString { get; }
-
         public string HttpMethod { get; }
-
         public HttpVerbs HttpVerb { get; }
-
         public Uri Url { get; }
-
         public bool HasEntityBody { get; }
-
-        public Stream InputStream => _content?.ReadAsStreamAsync().ConfigureAwait(false).GetAwaiter().GetResult() ?? Stream.Null;
-
+        public Stream InputStream =>
+            _content
+                ?.ReadAsStreamAsync()
+                .ConfigureAwait(false)
+                .GetAwaiter()
+                .GetResult()
+                ?? Stream.Null;
         public Encoding ContentEncoding { get; }
-
         public IPEndPoint RemoteEndPoint { get; }
-
         public bool IsLocal => true;
-
         public bool IsSecureConnection => false;
-
         public string? UserAgent { get; }
-
         public bool IsWebSocketRequest => false;
-
         public IPEndPoint LocalEndPoint { get; }
-
         public string? ContentType { get; }
-
         public long ContentLength64 { get; }
-
         public bool IsAuthenticated => false;
-
         public Uri? UrlReferrer => null;
 
         private static HttpVerbs HttpMethodToVerb(HttpMethod method)
@@ -121,7 +118,6 @@ namespace EmbedIO.Testing.Internal
 
             if (method == System.Net.Http.HttpMethod.Options)
                 return HttpVerbs.Options;
-
 #if NETSTANDARD2_0
             if (method == AdditionalHttpMethods.Patch)
 #else

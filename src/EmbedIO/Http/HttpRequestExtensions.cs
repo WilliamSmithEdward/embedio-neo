@@ -72,11 +72,13 @@ namespace EmbedIO
 
             var acceptedEncodings = new QValueList(true, @this.Headers.GetValues(HttpHeaderNames.AcceptEncoding));
 
-            if (!acceptedEncodings.TryNegotiateContentEncoding(
-                preferCompression,
-                out compressionMethod,
-                out var compressionMethodName
-            ))
+            if (
+                !acceptedEncodings.TryNegotiateContentEncoding(
+                    preferCompression,
+                    out compressionMethod,
+                    out var compressionMethodName
+                )
+            )
             {
                 prepareResponse = r => throw HttpException.NotAcceptable(HttpHeaderNames.AcceptEncoding);
                 return false;

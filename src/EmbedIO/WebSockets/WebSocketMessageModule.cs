@@ -18,16 +18,26 @@ namespace EmbedIO.WebSockets
     /// </remarks>
     public abstract class WebSocketMessageModule : WebSocketModule
     {
-        private static readonly UTF8Encoding TextEncoding = new UTF8Encoding(false, true);
-        private readonly ConditionalWeakTable<IWebSocketContext, DispatchState> _dispatch = new ConditionalWeakTable<IWebSocketContext, DispatchState>();
+        private static readonly UTF8Encoding TextEncoding = new(false, true);
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Style",
+            "IDE0028:Simplify collection initialization",
+            Justification = "The shared implementation targets netstandard2.0, whose ConditionalWeakTable does not support collection expressions."
+        )]
+        private readonly ConditionalWeakTable<IWebSocketContext, DispatchState> _dispatch =
+            new();
 
         /// <summary>Initializes a message-oriented WebSocket endpoint.</summary>
         /// <param name="requestPath">The endpoint URL path.</param>
         /// <param name="enableConnectionWatchdog">Whether to purge disconnected contexts periodically.</param>
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Style",
+            "IDE0290:Use primary constructor",
+            Justification = "Preserve the protected constructor; a primary constructor on this public class would be public."
+        )]
         protected WebSocketMessageModule(string requestPath, bool enableConnectionWatchdog = true)
             : base(requestPath, enableConnectionWatchdog)
-        {
-        }
+        { }
 
         /// <summary>Handles a complete, valid UTF-8 text message.</summary>
         /// <param name="context">The connection context.</param>
@@ -37,7 +47,12 @@ namespace EmbedIO.WebSockets
         protected virtual Task OnTextMessageReceivedAsync(IWebSocketContext context, string text)
         {
             if (context is null) throw new System.NullReferenceException();
-            return context.WebSocket.CloseAsync(CloseStatusCode.UnsupportedData, "Text messages are not supported.", context.CancellationToken);
+
+            return context.WebSocket.CloseAsync(
+                CloseStatusCode.UnsupportedData,
+                "Text messages are not supported.",
+                context.CancellationToken
+            );
         }
 
         /// <summary>Handles a complete binary message.</summary>
@@ -48,20 +63,33 @@ namespace EmbedIO.WebSockets
         protected virtual Task OnBinaryMessageReceivedAsync(IWebSocketContext context, byte[] data)
         {
             if (context is null) throw new System.NullReferenceException();
-            return context.WebSocket.CloseAsync(CloseStatusCode.UnsupportedData, "Binary messages are not supported.", context.CancellationToken);
+
+            return context.WebSocket.CloseAsync(
+                CloseStatusCode.UnsupportedData,
+                "Binary messages are not supported.",
+                context.CancellationToken
+            );
         }
 
         /// <inheritdoc />
-        protected sealed override async Task OnMessageReceivedAsync(IWebSocketContext context, byte[] buffer, IWebSocketReceiveResult result)
+        protected sealed override async Task OnMessageReceivedAsync(
+            IWebSocketContext context,
+            byte[] buffer,
+            IWebSocketReceiveResult result
+        )
         {
             if (context is null) throw new System.NullReferenceException();
+
             if (buffer is null) throw new System.NullReferenceException();
+
             if (result is null) throw new System.NullReferenceException();
+
             // The managed backend's legacy event callback can overlap asynchronous handlers.
             // Chain completion tasks without retaining disconnected contexts or native wait handles.
             var state = _dispatch.GetValue(context, _ => new DispatchState());
             var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             Task previous;
+
             lock (state)
             {
                 previous = state.Tail;
@@ -71,22 +99,40 @@ namespace EmbedIO.WebSockets
             try
             {
                 await previous.ConfigureAwait(false);
+
                 if (context.CancellationToken.IsCancellationRequested || context.WebSocket.State != WebSocketState.Open)
                     return;
 
                 if (MaxMessageSize > 0 && buffer.Length > MaxMessageSize)
                 {
-                    await context.WebSocket.CloseAsync(CloseStatusCode.TooBig, "Message exceeds the configured limit.", context.CancellationToken).ConfigureAwait(false);
+                    await context.WebSocket
+                        .CloseAsync(
+                            CloseStatusCode.TooBig,
+                            "Message exceeds the configured limit.",
+                            context.CancellationToken
+                        )
+                        .ConfigureAwait(false);
                     return;
                 }
 
                 string? text = null;
+
                 if (result.MessageType == (int)WebSocketMessageType.Text)
                 {
-                    try { text = TextEncoding.GetString(buffer); }
+                    try
+                    {
+                        text = TextEncoding.GetString(buffer);
+                    }
+
                     catch (DecoderFallbackException)
                     {
-                        await context.WebSocket.CloseAsync(CloseStatusCode.InvalidData, "Text is not valid UTF-8.", context.CancellationToken).ConfigureAwait(false);
+                        await context.WebSocket
+                            .CloseAsync(
+                                CloseStatusCode.InvalidData,
+                                "Text is not valid UTF-8.",
+                                context.CancellationToken
+                            )
+                            .ConfigureAwait(false);
                         return;
                     }
                 }
@@ -95,19 +141,35 @@ namespace EmbedIO.WebSockets
                 {
                     if (text != null)
                         await OnTextMessageReceivedAsync(context, text).ConfigureAwait(false);
+
                     else if (result.MessageType == (int)WebSocketMessageType.Binary)
                         await OnBinaryMessageReceivedAsync(context, buffer).ConfigureAwait(false);
+
                     else
-                        await context.WebSocket.CloseAsync(CloseStatusCode.UnsupportedData, "Message type is not supported.", context.CancellationToken).ConfigureAwait(false);
+                        await context.WebSocket
+                            .CloseAsync(
+                                CloseStatusCode.UnsupportedData,
+                                "Message type is not supported.",
+                                context.CancellationToken
+                            )
+                            .ConfigureAwait(false);
                 }
+
                 catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested) { }
+
                 catch (Exception exception) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(exception))
                 {
                     exception.Log(nameof(WebSocketMessageModule));
-                    await context.WebSocket.CloseAsync(CloseStatusCode.ServerError, "Message callback failed.", context.CancellationToken).ConfigureAwait(false);
+                    await context.WebSocket
+                        .CloseAsync(CloseStatusCode.ServerError, "Message callback failed.", context.CancellationToken)
+                        .ConfigureAwait(false);
                 }
             }
-            finally { completed.TrySetResult(true); }
+
+            finally
+            {
+                completed.TrySetResult(true);
+            }
         }
 
         private sealed class DispatchState

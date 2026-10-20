@@ -13,7 +13,6 @@ namespace EmbedIO.Routing
     /// </remarks>
     public class RoutingModule(string baseRoute) : RoutingModuleBase(baseRoute)
     {
-
         /// <summary>
         /// Associates a HTTP method and a route to a handler.
         /// </summary>

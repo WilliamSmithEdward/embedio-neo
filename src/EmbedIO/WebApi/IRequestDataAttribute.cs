@@ -9,8 +9,7 @@ namespace EmbedIO.WebApi
     /// </summary>
     /// <typeparam name="TController">The type of the controller.</typeparam>
     /// <seealso cref="IRequestDataAttribute{TController,TData}"/>
-    public interface IRequestDataAttribute<in TController>
-        where TController : WebApiController
+    public interface IRequestDataAttribute<in TController> where TController : WebApiController
     {
         /// <summary>
         /// Asynchronously obtains data from a controller's context.

@@ -178,7 +178,11 @@ namespace EmbedIO.Problems
     /// </remarks>
     /// <param name="problem">The problem to send.</param>
     /// <exception cref="ArgumentNullException"><paramref name="problem"/> is <see langword="null"/>.</exception>
-    public class ProblemDetailsException(ProblemDetails problem) : HttpException(Validate.NotNull(nameof(problem), problem).Status, problem.Detail ?? problem.Title, problem)
+    public class ProblemDetailsException(ProblemDetails problem) : HttpException(
+        Validate.NotNull(nameof(problem), problem).Status,
+        problem.Detail ?? problem.Title,
+        problem
+    )
     {
         /// <summary>Gets the problem to send.</summary>
         public ProblemDetails Problem { get; } = problem;

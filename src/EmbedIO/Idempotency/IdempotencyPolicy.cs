@@ -7,8 +7,7 @@ namespace EmbedIO.Idempotency
     /// <summary>Immutable settings for explicitly opted-in finite write endpoints.</summary>
     public sealed class IdempotencyPolicy
     {
-        private static readonly string[] DefaultHeaders =
-        [
+        private static readonly string[] DefaultHeaders = [
             "Content-Type", "Content-Encoding", "Accept", "Accept-Encoding", "Accept-Language", "Origin"
         ];
 
@@ -49,10 +48,7 @@ namespace EmbedIO.Idempotency
             if (wait < TimeSpan.Zero || wait > TimeSpan.FromSeconds(30))
                 throw new ArgumentOutOfRangeException(nameof(duplicateWaitTimeout));
 
-            var headers = new HashSet<string>(
-                DefaultHeaders,
-                StringComparer.OrdinalIgnoreCase
-            );
+            var headers = new HashSet<string>(DefaultHeaders, StringComparer.OrdinalIgnoreCase);
 
             foreach (var header in varyByHeaders ?? [])
             {
@@ -90,8 +86,26 @@ namespace EmbedIO.Idempotency
         internal string[] Headers { get; }
 
         internal static bool HeaderToken(char c) =>
-            c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9'
-                || c is '!' or '#' or '$' or '%' or '&' or '\'' or '*' or '+' or '-' or '.' or '^' or '_' or '`' or '|' or '~';
+            c is >= 'a'
+                and <= 'z'
+                or >= 'A'
+                and <= 'Z'
+                or >= '0'
+                and <= '9' || c is '!'
+                or '#'
+                or '$'
+                or '%'
+                or '&'
+                or '\''
+                or '*'
+                or '+'
+                or '-'
+                or '.'
+                or '^'
+                or '_'
+                or '`'
+                or '|'
+                or '~';
     }
 
     /// <summary>Selects a named idempotency policy; null disables an inherited declaration.</summary>

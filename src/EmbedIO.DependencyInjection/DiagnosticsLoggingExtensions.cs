@@ -18,6 +18,7 @@ namespace EmbedIO.DependencyInjection
         public static EmbedIODiagnosticsRegistration ForwardEmbedIODiagnostics(this ILoggerFactory? factory)
         {
             if (factory == null) throw new ArgumentNullException(nameof(factory));
+
             return new EmbedIODiagnosticsRegistration(factory.CreateLogger("EmbedIO"));
         }
     }

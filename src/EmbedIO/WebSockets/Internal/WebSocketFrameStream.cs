@@ -18,7 +18,6 @@ namespace EmbedIO.WebSockets.Internal
         // Longer ones are received into pooled chunks of this size as bytes arrive,
         // so a header announcing a huge length cannot reserve memory never sent.
         internal const int ExactAllocationLimit = 65536;
-
         private static readonly UTF8Encoding StrictUtf8 = new(false, true);
         private readonly EmbedIO.Internal.BorrowedResource<Stream>? _stream;
         private readonly byte[] _input = new byte[InputBufferLength];
@@ -35,6 +34,7 @@ namespace EmbedIO.WebSockets.Internal
         // Frames from a client are always masked and are always unmasked here; the
         // flag is retained for existing callers.
         public WebSocketFrameStream(Stream? stream, bool unmask = false) : this(stream, unmask, null) { }
+
         internal WebSocketFrameStream(Stream? stream, bool unmask, WebSocketDeliveryBudget.Connection? deliveryBudget)
         {
             _stream = stream == null ? null : new EmbedIO.Internal.BorrowedResource<Stream>(stream);
@@ -42,7 +42,8 @@ namespace EmbedIO.WebSockets.Internal
             _deliveryBudget = deliveryBudget;
         }
 
-        private Stream Transport => _stream?.Value ?? throw new InvalidOperationException("The frame reader has no stream.");
+        private Stream Transport =>
+            _stream?.Value ?? throw new InvalidOperationException("The frame reader has no stream.");
 
         // Zero disables the check. Applies to the total payload of a data message.
         internal int MaxMessageSize { get; set; }
@@ -55,11 +56,14 @@ namespace EmbedIO.WebSockets.Internal
         internal async Task<WebSocketFrame?> ReadFrameAsync(WebSocket webSocket)
         {
             if (_stream == null) return null;
+
             Rejected = null;
+
             if (_skip > 0) await SkipAsync().ConfigureAwait(false);
 
             if (!await FillAsync(2).ConfigureAwait(false))
                 throw new WebSocketException("The header of a frame cannot be read from the stream.");
+
             var input = _input;
             var frame = ProcessHeader(input[_start], input[_start + 1]);
             _start += 2;
@@ -69,20 +73,44 @@ namespace EmbedIO.WebSockets.Internal
 
             await ReadExtendedPayloadLengthAsync(frame).ConfigureAwait(false);
             CheckMessageSize(frame);
-            if (_deliveryBudget != null
-                && (frame.Opcode == Opcode.Text || frame.Opcode == Opcode.Binary || frame.Opcode == Opcode.Cont))
+
+            if (
+                _deliveryBudget != null
+                && (frame.Opcode == Opcode.Text || frame.Opcode == Opcode.Binary || frame.Opcode == Opcode.Cont)
+            )
             {
                 if (webSocket.State != WebSocketState.Open)
-                    throw Reject(frame, 4 + (long)frame.FullPayloadLength, CloseStatusCode.PolicyViolation, "Connection is closing; no new delivery is admitted.");
+                    throw Reject(
+                        frame,
+                        4 + (long)frame.FullPayloadLength,
+                        CloseStatusCode.PolicyViolation,
+                        "Connection is closing; no new delivery is admitted."
+                    );
+
                 if (frame.Opcode != Opcode.Cont && !_deliveryBudget.TryReserve(out _delivery))
-                    throw Reject(frame, 4 + (long)frame.FullPayloadLength, CloseStatusCode.PolicyViolation, "Outstanding message count exceeds configured policy.");
-                var delivery = _delivery ?? throw new InvalidOperationException("Missing message delivery reservation.");
+                    throw Reject(
+                        frame,
+                        4 + (long)frame.FullPayloadLength,
+                        CloseStatusCode.PolicyViolation,
+                        "Outstanding message count exceeds configured policy."
+                    );
+
+                var delivery = _delivery
+                    ?? throw new InvalidOperationException("Missing message delivery reservation.");
+
                 // Charge the logical fragment before any payload storage growth.
                 if (!delivery.TryGrow((long)frame.FullPayloadLength))
-                    throw Reject(frame, 4 + (long)frame.FullPayloadLength, CloseStatusCode.PolicyViolation, "Outstanding message bytes exceed configured policy.");
+                    throw Reject(
+                        frame,
+                        4 + (long)frame.FullPayloadLength,
+                        CloseStatusCode.PolicyViolation,
+                        "Outstanding message bytes exceed configured policy."
+                    );
             }
+
             if (!await FillAsync(4).ConfigureAwait(false))
                 throw new WebSocketException("The masking key of a frame cannot be read from the stream.");
+
             var key = new byte[4];
             Buffer.BlockCopy(input, _start, key, 0, 4);
             _start += 4;
@@ -90,9 +118,14 @@ namespace EmbedIO.WebSockets.Internal
             frame.Mask = Mask.Off;
 
             if (frame.Opcode == Opcode.Close) ValidateClosePayload(frame.PayloadData.ToArray());
+
             ValidateTextPayload(frame);
-            if (_delivery != null && frame.Fin == Fin.Final
-                && (frame.Opcode == Opcode.Text || frame.Opcode == Opcode.Binary || frame.Opcode == Opcode.Cont))
+
+            if (
+                _delivery != null
+                && frame.Fin == Fin.Final
+                && (frame.Opcode == Opcode.Text || frame.Opcode == Opcode.Binary || frame.Opcode == Opcode.Cont)
+            )
             {
                 _delivery.CompleteMessage();
                 _completedDelivery = _delivery;
@@ -106,20 +139,35 @@ namespace EmbedIO.WebSockets.Internal
         {
             if (frame.Opcode != Opcode.Text && frame.Opcode != Opcode.Binary && frame.Opcode != Opcode.Cont)
                 return;
+
             // Validate has already rejected continuation/new-message mismatches.
             var total = (frame.Opcode == Opcode.Cont ? _messageLength : 0) + (long)frame.FullPayloadLength;
+
             if (MaxMessageSize > 0 && total > MaxMessageSize)
-                throw Reject(frame, 4 + (long)frame.FullPayloadLength, CloseStatusCode.TooBig, $"Message too big. Maximum is {MaxMessageSize} bytes.");
+                throw Reject(
+                    frame,
+                    4 + (long)frame.FullPayloadLength,
+                    CloseStatusCode.TooBig,
+                    $"Message too big. Maximum is {MaxMessageSize} bytes."
+                );
+
             // A delivered message is one byte[]; refuse before buffering one that cannot be.
             if (total > int.MaxValue)
-                throw Reject(frame, 4 + (long)frame.FullPayloadLength, CloseStatusCode.TooBig, "Message exceeds the supported representation.");
+                throw Reject(
+                    frame,
+                    4 + (long)frame.FullPayloadLength,
+                    CloseStatusCode.TooBig,
+                    "Message exceeds the supported representation."
+                );
+
             _messageLength = frame.Fin == Fin.Final ? 0 : total;
         }
 
         // The rest of the message is discarded, so neither size nor text state carries on.
         private WebSocketException Reject(WebSocketFrame frame, long skip, CloseStatusCode code, string message)
         {
-            _delivery?.Dispose(); _delivery = null;
+            _delivery?.Dispose();
+            _delivery = null;
             Rejected = frame;
             _skip = skip;
             _messageLength = 0;
@@ -136,8 +184,10 @@ namespace EmbedIO.WebSockets.Internal
 
         public void Dispose()
         {
-            _delivery?.Dispose(); _delivery = null;
-            _completedDelivery?.Dispose(); _completedDelivery = null;
+            _delivery?.Dispose();
+            _delivery = null;
+            _completedDelivery?.Dispose();
+            _completedDelivery = null;
         }
 
         private async Task SkipAsync()
@@ -146,12 +196,19 @@ namespace EmbedIO.WebSockets.Internal
             var buffered = Math.Min(_end - _start, _skip);
             _start += (int)buffered;
             _skip -= buffered;
+
             if (_skip == 0) return;
+
             _start = _end = 0;
+
             while (_skip > 0)
             {
-                var read = await Transport.ReadAsync(input, 0, (int)Math.Min(input.Length, _skip)).ConfigureAwait(false);
+                var read = await Transport
+                    .ReadAsync(input, 0, (int)Math.Min(input.Length, _skip))
+                    .ConfigureAwait(false);
+
                 if (read == 0) throw Truncated();
+
                 _skip -= read;
             }
         }
@@ -159,12 +216,25 @@ namespace EmbedIO.WebSockets.Internal
         private void ValidateTextPayload(WebSocketFrame frame)
         {
             // Control and binary bytes never advance the text validator.
-            if (frame.Opcode == Opcode.Text) { _textMessage = true; _textValidator = default; }
-            else if (frame.Opcode == Opcode.Binary) { _textMessage = false; return; }
+            if (frame.Opcode == Opcode.Text)
+            {
+                _textMessage = true;
+                _textValidator = default;
+            }
+
+            else if (frame.Opcode == Opcode.Binary)
+            {
+                _textMessage = false;
+                return;
+            }
+
             else if (frame.Opcode != Opcode.Cont || !_textMessage) return;
+
             var final = frame.Fin == Fin.Final;
+
             if (!_textValidator.Validate(frame.PayloadData.ToArray(), final))
                 throw Reject(frame, 0, CloseStatusCode.InvalidData, "Text message is not valid UTF-8.");
+
             if (final) _textMessage = false;
         }
 
@@ -180,12 +250,15 @@ namespace EmbedIO.WebSockets.Internal
             var mask = (second & 0x80) == 0x80 ? Mask.On : Mask.Off;
             var payloadLen = (byte)(second & 0x7f);
 
-            var err = !IsDefinedOpcode(opcode) ? "An unsupported opcode."
-            : opcode != 0x1 && opcode != 0x2 && rsv1 == Rsv.On ? "A non data frame is compressed."
-            : IsOpcodeControl(opcode) && fin == Fin.More ? "A control frame is fragmented."
-            : IsOpcodeControl(opcode) && payloadLen > 125 ? "A control frame has a long payload length."
-            : opcode == 8 && payloadLen == 1 ? "A close frame cannot contain a one-byte status."
-            : null;
+            var err = !IsDefinedOpcode(opcode)
+                ? "An unsupported opcode."
+                : opcode != 0x1 && opcode != 0x2 && rsv1 == Rsv.On
+                    ? "A non data frame is compressed."
+                    : IsOpcodeControl(opcode) && fin == Fin.More
+                        ? "A control frame is fragmented."
+                        : IsOpcodeControl(opcode) && payloadLen > 125
+                            ? "A control frame has a long payload length."
+                            : opcode == 8 && payloadLen == 1 ? "A close frame cannot contain a one-byte status." : null;
 
             if (err != null)
                 throw new WebSocketException(CloseStatusCode.ProtocolError, err);
@@ -194,19 +267,31 @@ namespace EmbedIO.WebSockets.Internal
         }
 
         // Equivalent to Enum.IsDefined(typeof(Opcode), opcode) without reflection or boxing.
-        private static bool IsDefinedOpcode(byte opcode)
-            => opcode <= 0x2 || (opcode >= 0x8 && opcode <= 0xa);
+        private static bool IsDefinedOpcode(byte opcode) => opcode <= 0x2 || (opcode >= 0x8 && opcode <= 0xa);
 
         private static void ValidateClosePayload(byte[] payload)
         {
             if (payload.Length == 0) return;
+
             // RFC 6455 and the IANA registry as of 2026-10-08. No negotiated
             // extension defines another status in the reserved 1000-2999 range.
             var code = (payload[0] << 8) | payload[1];
-            if (code < 1000 || code >= 5000 || code == 1004 || code == 1005 || code == 1006
-                || (code >= 1015 && code < 3000))
+
+            if (
+                code < 1000
+                || code >= 5000
+                || code == 1004
+                || code == 1005
+                || code == 1006
+                || (code >= 1015 && code < 3000)
+            )
                 throw new WebSocketException(CloseStatusCode.ProtocolError, "Invalid close status on the wire.");
-            try { _ = StrictUtf8.GetCharCount(payload, 2, payload.Length - 2); }
+
+            try
+            {
+                _ = StrictUtf8.GetCharCount(payload, 2, payload.Length - 2);
+            }
+
             catch (DecoderFallbackException error)
             {
                 throw new WebSocketException(CloseStatusCode.InvalidData, "Close reason is not valid UTF-8.", error);
@@ -218,19 +303,27 @@ namespace EmbedIO.WebSockets.Internal
         private async Task<bool> FillAsync(int count)
         {
             var input = _input;
+
             if (_end - _start >= count) return true;
+
             if (_start > 0)
             {
                 Buffer.BlockCopy(input, _start, input, 0, _end - _start);
                 _end -= _start;
                 _start = 0;
             }
+
             while (_end < count)
             {
-                var read = await Transport.ReadAsync(input, _end, input.Length - _end).ConfigureAwait(false);
+                var read = await Transport
+                    .ReadAsync(input, _end, input.Length - _end)
+                    .ConfigureAwait(false);
+
                 if (read == 0) return false;
+
                 _end += read;
             }
+
             return true;
         }
 
@@ -240,14 +333,13 @@ namespace EmbedIO.WebSockets.Internal
 
             if (len == 0)
             {
-                frame.ExtendedPayloadLength = Array.Empty<byte>();
+                frame.ExtendedPayloadLength = [];
                 return;
             }
 
             if (!await FillAsync(len).ConfigureAwait(false))
             {
-                throw new WebSocketException(
-                    "The extended payload length of a frame cannot be read from the stream.");
+                throw new WebSocketException("The extended payload length of a frame cannot be read from the stream.");
             }
 
             var bytes = new byte[len];
@@ -255,18 +347,26 @@ namespace EmbedIO.WebSockets.Internal
             _start += len;
             frame.ExtendedPayloadLength = bytes;
             var length = frame.FullPayloadLength;
-            if ((len == 8 && (bytes[0] & 0x80) != 0)
-                || (len == 2 && length < 126) || (len == 8 && length < 65536))
-                throw new WebSocketException(CloseStatusCode.ProtocolError, "Invalid or nonminimal frame payload length.");
+
+            if ((len == 8 && (bytes[0] & 0x80) != 0) || (len == 2 && length < 126) || (len == 8 && length < 65536))
+                throw new WebSocketException(
+                    CloseStatusCode.ProtocolError,
+                    "Invalid or nonminimal frame payload length."
+                );
+
             // Payloads are represented by byte[] and the stream reader accepts
             // int lengths. Never let an unchecked cast wrap the wire length.
             if (length > int.MaxValue)
-                throw new WebSocketException(CloseStatusCode.TooBig, "Frame payload exceeds the supported representation.");
+                throw new WebSocketException(
+                    CloseStatusCode.TooBig,
+                    "Frame payload exceeds the supported representation."
+                );
         }
 
         private async Task ReadPayloadDataAsync(WebSocketFrame frame, byte[] key)
         {
             var length = (int)frame.FullPayloadLength;
+
             if (length == 0)
             {
                 frame.PayloadData = new PayloadData();
@@ -274,27 +374,36 @@ namespace EmbedIO.WebSockets.Internal
             }
 
             byte[] payload;
+
             if (length <= InputBufferLength)
             {
                 // Small payloads are read ahead with the following headers.
                 if (!await FillAsync(length).ConfigureAwait(false)) throw Truncated();
+
                 payload = new byte[length];
                 Buffer.BlockCopy(_input, _start, payload, 0, length);
                 _start += length;
             }
+
             else if (length <= ExactAllocationLimit)
             {
                 payload = new byte[length];
                 var filled = Math.Min(_end - _start, length);
                 Buffer.BlockCopy(_input, _start, payload, 0, filled);
                 _start += filled;
+
                 while (filled < length)
                 {
-                    var read = await Transport.ReadAsync(payload, filled, length - filled).ConfigureAwait(false);
+                    var read = await Transport
+                        .ReadAsync(payload, filled, length - filled)
+                        .ConfigureAwait(false);
+
                     if (read == 0) throw Truncated();
+
                     filled += read;
                 }
             }
+
             else payload = await ReadLargePayloadAsync(length).ConfigureAwait(false);
 
             PayloadData.Mask(payload, key);
@@ -308,6 +417,7 @@ namespace EmbedIO.WebSockets.Internal
         {
             var chunks = new List<byte[]>();
             var filled = 0;
+
             try
             {
                 while (filled < length)
@@ -318,19 +428,35 @@ namespace EmbedIO.WebSockets.Internal
                     var offset = Math.Min(_end - _start, wanted);
                     Buffer.BlockCopy(_input, _start, chunk, 0, offset);
                     _start += offset;
+
                     while (offset < wanted)
                     {
-                        var read = await Transport.ReadAsync(chunk, offset, wanted - offset).ConfigureAwait(false);
+                        var read = await Transport
+                            .ReadAsync(chunk, offset, wanted - offset)
+                            .ConfigureAwait(false);
+
                         if (read == 0) throw Truncated();
+
                         offset += read;
                     }
+
                     filled += wanted;
                 }
+
                 var payload = new byte[length];
+
                 for (var i = 0; i < chunks.Count; i++)
-                    Buffer.BlockCopy(chunks[i], 0, payload, i * ExactAllocationLimit, Math.Min(ExactAllocationLimit, length - i * ExactAllocationLimit));
+                    Buffer.BlockCopy(
+                        chunks[i],
+                        0,
+                        payload,
+                        i * ExactAllocationLimit,
+                        Math.Min(ExactAllocationLimit, length - i * ExactAllocationLimit)
+                    );
+
                 return payload;
             }
+
             finally
             {
                 // Peer data must not linger in a shared pool.
@@ -342,7 +468,7 @@ namespace EmbedIO.WebSockets.Internal
             }
         }
 
-        private static WebSocketException Truncated()
-            => new("The payload data of a frame cannot be read from the stream.");
+        private static WebSocketException Truncated() =>
+            new("The payload data of a frame cannot be read from the stream.");
     }
 }

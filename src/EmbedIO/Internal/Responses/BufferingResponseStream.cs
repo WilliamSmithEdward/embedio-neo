@@ -94,10 +94,8 @@ namespace EmbedIO.Internal
             }
         }
 
-        private static NotSupportedException ReadingNotSupported() =>
-            new("This stream does not support reading.");
+        private static NotSupportedException ReadingNotSupported() => new("This stream does not support reading.");
 
-        private static NotSupportedException SeekingNotSupported() =>
-            new("This stream does not support seeking.");
+        private static NotSupportedException SeekingNotSupported() => new("This stream does not support seeking.");
     }
 }

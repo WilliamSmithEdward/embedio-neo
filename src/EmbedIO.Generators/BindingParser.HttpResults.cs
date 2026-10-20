@@ -61,7 +61,10 @@ namespace EmbedIO.Generators
         private static bool IsProblemResult(ITypeSymbol? type) =>
             type is INamedTypeSymbol named
                 && named.ContainingNamespace.ToDisplayString() == "EmbedIO"
-                && named.Name is "BadRequestProblemResult" or "NotFoundProblemResult" or "ConflictProblemResult" or "ValidationProblemResult";
+                && named.Name is "BadRequestProblemResult"
+                    or "NotFoundProblemResult"
+                    or "ConflictProblemResult"
+                    or "ValidationProblemResult";
 
         private static IEnumerable<(int Status, ITypeSymbol? Type, bool Problem)> ResultResponses(ITypeSymbol? type)
         {

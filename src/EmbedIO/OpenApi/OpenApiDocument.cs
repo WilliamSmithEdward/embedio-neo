@@ -86,10 +86,10 @@ namespace EmbedIO.OpenApi
     {
         private readonly string _path = Validate.Route(nameof(path), path, false);
         private readonly byte[] _json = Encoding.UTF8.GetBytes(
-                Validate
-                    .NotNull(nameof(document), document)
-                    .ToJson()
-            );
+            Validate
+                .NotNull(nameof(document), document)
+                .ToJson()
+        );
 
         /// <inheritdoc />
         public override bool IsFinalHandler => false;

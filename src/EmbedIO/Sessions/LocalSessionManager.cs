@@ -1,10 +1,10 @@
-﻿using EmbedIO.Internal;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO.Sessions
@@ -44,20 +44,14 @@ namespace EmbedIO.Sessions
         /// The default interval between automatic purges of expired and empty sessions, i.e. 30 seconds.
         /// </summary>
         public static readonly TimeSpan DefaultPurgeInterval = TimeSpan.FromSeconds(30);
-
-        private readonly ConcurrentDictionary<string, SessionImpl> _sessions =
-            new ConcurrentDictionary<string, SessionImpl>(Session.KeyComparer);
-
+        private readonly ConcurrentDictionary<string, SessionImpl> _sessions = new(
+            Session.KeyComparer
+        );
         private string _cookieName = DefaultCookieName;
-
         private string _cookiePath = DefaultCookiePath;
-
         private TimeSpan _cookieDuration = DefaultCookieDuration;
-
         private bool _cookieHttpOnly = DefaultCookieHttpOnly;
-
         private TimeSpan _sessionDuration = DefaultSessionDuration;
-
         private TimeSpan _purgeInterval = DefaultPurgeInterval;
 
         /// <summary>
@@ -70,9 +64,7 @@ namespace EmbedIO.Sessions
         /// <seealso cref="DefaultCookiePath"/>
         /// <seealso cref="DefaultCookieDuration"/>
         /// <seealso cref="DefaultCookieHttpOnly"/>
-        public LocalSessionManager()
-        {
-        }
+        public LocalSessionManager() { }
 
         /// <summary>
         /// Gets or sets the duration of newly-created sessions.
@@ -181,7 +173,11 @@ namespace EmbedIO.Sessions
         public bool CookieSecure
         {
             get => _cookieSecure;
-            set { EnsureConfigurationNotLocked(); _cookieSecure = value; }
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _cookieSecure = value;
+            }
         }
 
         /// <summary>Gets or sets the session cookie's SameSite policy. Null (the default) omits it.</summary>
@@ -194,7 +190,9 @@ namespace EmbedIO.Sessions
             set
             {
                 EnsureConfigurationNotLocked();
+
                 if (value.HasValue) CookieSameSiteStore.ValidateMode(value.Value, nameof(value));
+
                 _cookieSameSite = value;
             }
         }
@@ -209,32 +207,43 @@ namespace EmbedIO.Sessions
         {
             if (CookieSameSite == CookieSameSiteMode.None && !CookieSecure)
                 throw new InvalidOperationException("SameSite=None session cookies require CookieSecure.");
+
             ConfigurationLocked = true;
 
-            Task.Run(async () =>
-            {
-                try
+            Task.Run(
+                async () =>
                 {
-                    while (!cancellationToken.IsCancellationRequested)
+                    try
                     {
-                        PurgeExpiredAndEmptySessions();
-                        await Task.Delay(PurgeInterval, cancellationToken).ConfigureAwait(false);
+                        while (!cancellationToken.IsCancellationRequested)
+                        {
+                            PurgeExpiredAndEmptySessions();
+                            await Task
+                                .Delay(PurgeInterval, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
                     }
-                }
-                catch (TaskCanceledException)
-                {
-                    // ignore
-                }
-            }, cancellationToken);
+
+                    catch (TaskCanceledException)
+                    {
+                        // ignore
+                    }
+                },
+                cancellationToken
+            );
         }
 
         /// <inheritdoc />
         public ISession Create(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
-            var id = context.Request.Cookies.FirstOrDefault(IsSessionCookie)?.Value.Trim();
+
+            var id = context.Request.Cookies
+                .FirstOrDefault(IsSessionCookie)
+                ?.Value.Trim();
 
             SessionImpl? session = null;
+
             lock (_sessions)
             {
                 if (!string.IsNullOrEmpty(id) && _sessions.TryGetValue(id ?? string.Empty, out var existing))
@@ -242,6 +251,7 @@ namespace EmbedIO.Sessions
                     // An expired session the purger has not reached yet must not be revived.
                     if (existing.TryBeginUse())
                         session = existing;
+
                     else
                         _sessions.TryRemove(existing.Id, out _);
                 }
@@ -263,6 +273,7 @@ namespace EmbedIO.Sessions
         public void Delete(IHttpContext context, string id)
         {
             if (context is null) throw new System.NullReferenceException();
+
             lock (_sessions)
             {
                 // Deleting ends the session for every holder of its cookie, even while it has data.
@@ -278,10 +289,12 @@ namespace EmbedIO.Sessions
         public void OnContextClose(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
+
             if (!context.Session.Exists)
                 return;
 
             var id = context.Session.Id;
+
             lock (_sessions)
             {
                 if (_sessions.TryGetValue(id, out var session))
@@ -294,17 +307,19 @@ namespace EmbedIO.Sessions
         private void EnsureConfigurationNotLocked()
         {
             if (ConfigurationLocked)
-                throw new InvalidOperationException($"Cannot configure a {nameof(LocalSessionManager)} once it has been started.");
+                throw new InvalidOperationException(
+                    $"Cannot configure a {nameof(LocalSessionManager)} once it has been started."
+                );
         }
 
-        private bool IsSessionCookie(Cookie cookie)
-            => cookie.Name.Equals(CookieName, StringComparison.OrdinalIgnoreCase)
-             && !cookie.Expired;
+        private bool IsSessionCookie(Cookie cookie) =>
+            cookie.Name.Equals(CookieName, StringComparison.OrdinalIgnoreCase) && !cookie.Expired;
 
         private void AddResponseCookie(IHttpResponse response, string? id)
         {
             var cookie = BuildSessionCookie(id);
             response.Cookies.Add(cookie);
+
             if (CookieSameSite.HasValue) CookieSameSiteStore.Attach(response, cookie, CookieSameSite.Value);
         }
 
@@ -313,7 +328,7 @@ namespace EmbedIO.Sessions
             var cookie = new Cookie(CookieName, id, CookiePath)
             {
                 HttpOnly = CookieHttpOnly,
-                Secure = CookieSecure,
+                Secure = CookieSecure
             };
 
             if (CookieDuration > TimeSpan.Zero)
@@ -327,9 +342,10 @@ namespace EmbedIO.Sessions
         private void PurgeExpiredAndEmptySessions()
         {
             string[] ids;
+
             lock (_sessions)
             {
-                ids = _sessions.Keys.ToArray();
+                ids = [.. _sessions.Keys];
             }
 
             foreach (var id in ids)

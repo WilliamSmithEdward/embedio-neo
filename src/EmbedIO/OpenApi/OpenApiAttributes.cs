@@ -40,7 +40,6 @@ namespace EmbedIO.OpenApi
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
     public sealed class OpenApiResponseAttribute(int statusCode) : Attribute
     {
-
         /// <summary>Declares a response using the standard status enumeration.</summary>
         /// <param name="statusCode">The status code.</param>
         public OpenApiResponseAttribute(HttpStatusCode statusCode) : this((int)statusCode) { }

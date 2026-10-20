@@ -75,10 +75,12 @@ namespace EmbedIO
             var isBinaryResponse = data is byte[];
 
             // Compression preferences are keyed by media type; parameters such as charset are not part of it.
-            if (!context.TryDetermineCompression(
-                MimeType.StripParameters(context.Response.ContentType) ?? MimeType.Default,
-                out var preferCompression
-            ))
+            if (
+                !context.TryDetermineCompression(
+                    MimeType.StripParameters(context.Response.ContentType) ?? MimeType.Default,
+                    out var preferCompression
+                )
+            )
             {
                 preferCompression = true;
             }

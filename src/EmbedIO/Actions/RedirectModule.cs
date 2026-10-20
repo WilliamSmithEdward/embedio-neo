@@ -15,7 +15,8 @@ namespace EmbedIO.Actions
 
         /// <inheritdoc cref="RedirectModule(string,string,HttpStatusCode)"/>
         public RedirectModule(string baseRoute, Uri redirectUrl, HttpStatusCode statusCode = HttpStatusCode.Found)
-            : this(baseRoute, Validate.NotNull(nameof(redirectUrl), redirectUrl).OriginalString, statusCode) { }
+            : this(baseRoute, Validate.NotNull(nameof(redirectUrl), redirectUrl).OriginalString, statusCode)
+        { }
 
         /// <inheritdoc cref="RedirectModule(string,string,Func{IHttpContext,bool},HttpStatusCode)"/>
         public RedirectModule(
@@ -47,7 +48,8 @@ namespace EmbedIO.Actions
         /// </exception>
         /// <seealso cref="WebModuleBase(string)"/>
         public RedirectModule(string baseRoute, string redirectUrl, HttpStatusCode statusCode = HttpStatusCode.Found)
-            : this(baseRoute, redirectUrl, null, statusCode, false) { }
+            : this(baseRoute, redirectUrl, null, statusCode, false)
+        { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RedirectModule"/> class
@@ -75,7 +77,8 @@ namespace EmbedIO.Actions
             string redirectUrl,
             Func<IHttpContext, bool>? shouldRedirect,
             HttpStatusCode statusCode = HttpStatusCode.Found
-        ) : this(baseRoute, redirectUrl, shouldRedirect, statusCode, true) { }
+        ) : this(baseRoute, redirectUrl, shouldRedirect, statusCode, true)
+        { }
 
         private RedirectModule(
             string baseRoute,

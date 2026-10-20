@@ -297,8 +297,7 @@ namespace EmbedIO.Net.Internal.Http3
                     {
                         next?.Dispose();
                         _failedVersion = version;
-                        $"HTTP/3 could not load the published server certificate; new connections keep the previous certificate: {error.Message}".Error(
-                        );
+                        $"HTTP/3 could not load the published server certificate; new connections keep the previous certificate: {error.Message}".Error();
                         return _configuration;
                     }
 

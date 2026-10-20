@@ -15,9 +15,7 @@ namespace EmbedIO.Routing
     /// </remarks>
     public abstract class RoutingModuleBase(string baseRoute) : WebModuleBase(baseRoute)
     {
-        private readonly RouteVerbResolverCollection _resolvers = new(
-            nameof(RoutingModuleBase)
-        );
+        private readonly RouteVerbResolverCollection _resolvers = new(nameof(RoutingModuleBase));
 
         /// <inheritdoc />
         public override bool IsFinalHandler => true;

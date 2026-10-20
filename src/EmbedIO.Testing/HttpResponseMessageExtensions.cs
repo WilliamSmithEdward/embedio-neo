@@ -17,9 +17,14 @@ namespace EmbedIO.Testing
         public static async Task<string?> ReceiveStringAsync(this Task<HttpResponseMessage> @this)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             using var response = await @this.ConfigureAwait(false);
+
             if (response == null) return null;
-            return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            return await response.Content
+                .ReadAsStringAsync()
+                .ConfigureAwait(false);
         }
     }
 }

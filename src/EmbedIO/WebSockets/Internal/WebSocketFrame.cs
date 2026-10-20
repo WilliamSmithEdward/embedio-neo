@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Buffers.Binary;
 using System.Globalization;
-using EmbedIO.Net.Internal;
 using EmbedIO.Internal;
+using EmbedIO.Net.Internal;
 
 namespace EmbedIO.WebSockets.Internal
 {
@@ -10,21 +10,13 @@ namespace EmbedIO.WebSockets.Internal
     {
         internal static readonly byte[] EmptyPingBytes = CreatePingFrame().ToArray();
 
-        internal WebSocketFrame(Opcode opcode, PayloadData payloadData)
-            : this(Fin.Final, opcode, payloadData)
-        {
-        }
+        internal WebSocketFrame(Opcode opcode, PayloadData payloadData) : this(Fin.Final, opcode, payloadData) { }
 
         internal WebSocketFrame(Fin fin, Opcode opcode, byte[] data, bool compressed)
             : this(fin, opcode, new PayloadData(data), compressed)
-        {
-        }
+        { }
 
-        internal WebSocketFrame(
-            Fin fin,
-            Opcode opcode,
-            PayloadData payloadData,
-            bool compressed = false)
+        internal WebSocketFrame(Fin fin, Opcode opcode, PayloadData payloadData, bool compressed = false)
         {
             Fin = fin;
             Rsv1 = IsOpcodeData(opcode) && compressed ? Rsv.On : Rsv.Off;
@@ -33,16 +25,19 @@ namespace EmbedIO.WebSockets.Internal
             Opcode = opcode;
 
             var len = payloadData.Length;
+
             if (len < 126)
             {
                 PayloadLength = (byte)len;
-                ExtendedPayloadLength = Array.Empty<byte>();
+                ExtendedPayloadLength = [];
             }
+
             else if (len < 0x010000)
             {
                 PayloadLength = 126;
                 ExtendedPayloadLength = ((ushort)len).ToByteArray(Endianness.Big);
             }
+
             else
             {
                 PayloadLength = 127;
@@ -50,18 +45,11 @@ namespace EmbedIO.WebSockets.Internal
             }
 
             Mask = Mask.Off;
-            MaskingKey = Array.Empty<byte>();
+            MaskingKey = [];
             PayloadData = payloadData;
         }
 
-        internal WebSocketFrame(
-            Fin fin,
-            Rsv rsv1,
-            Rsv rsv2,
-            Rsv rsv3,
-            Opcode opcode,
-            Mask mask,
-            byte payloadLength)
+        internal WebSocketFrame(Fin fin, Rsv rsv1, Rsv rsv2, Rsv rsv3, Opcode opcode, Mask mask, byte payloadLength)
         {
             Fin = fin;
             Rsv1 = rsv1;
@@ -73,31 +61,18 @@ namespace EmbedIO.WebSockets.Internal
         }
 
         public byte[]? ExtendedPayloadLength { get; internal set; }
-
         public Fin Fin { get; internal set; }
-
         public bool IsCompressed => Rsv1 == Rsv.On;
-
         public bool IsFragment => Fin == Fin.More || Opcode == Opcode.Cont;
-
         public bool IsMasked => Mask == Mask.On;
-
         public Mask Mask { get; internal set; }
-
-        public byte[] MaskingKey { get; internal set; } = Array.Empty<byte>();
-
+        public byte[] MaskingKey { get; internal set; } = [];
         public Opcode Opcode { get; internal set; }
-
         public PayloadData PayloadData { get; internal set; } = new PayloadData();
-
         public byte PayloadLength { get; internal set; }
-
         public Rsv Rsv1 { get; internal set; }
-
         public Rsv Rsv2 { get; internal set; }
-
         public Rsv Rsv3 { get; internal set; }
-
         internal int ExtendedPayloadLengthCount => PayloadLength < 126 ? 0 : (PayloadLength == 126 ? 2 : 8);
 
         internal ulong FullPayloadLength
@@ -119,7 +94,9 @@ namespace EmbedIO.WebSockets.Internal
             var payloadLen = PayloadLength;
 
             // Extended Payload Length
-            var extPayloadLen = payloadLen > 125 ? FullPayloadLength.ToString(CultureInfo.InvariantCulture) : string.Empty;
+            var extPayloadLen = payloadLen > 125
+                ? FullPayloadLength.ToString(CultureInfo.InvariantCulture)
+                : string.Empty;
 
             // Masking Key
             var maskingKey = BitConverter.ToString(MaskingKey);
@@ -130,7 +107,9 @@ namespace EmbedIO.WebSockets.Internal
                 : payloadLen > 125
                     ? "---"
                     : Opcode == Opcode.Text && !(IsFragment || IsMasked || IsCompressed)
-                        ? PayloadData.ApplicationData.ToArray().ToText()
+                        ? PayloadData.ApplicationData
+                            .ToArray()
+                            .ToText()
                         : PayloadData.ToString();
 
             return $@"
@@ -156,27 +135,39 @@ Extended Payload Length: {extPayloadLen}
             header = (header << 4) + (int)Opcode;
             header = (header << 1) + (int)Mask;
             header = (header << 7) + PayloadLength;
-            var bytes = PayloadLength > 0 ? PayloadData.ToArray() : Array.Empty<byte>();
+            var bytes = PayloadLength > 0 ? PayloadData.ToArray() : [];
             var extendedLength = ExtendedPayloadLengthCount;
             var maskLength = Mask == Mask.On ? 4 : 0;
             var result = new byte[2 + extendedLength + maskLength + bytes.Length];
             result[0] = (byte)(header >> 8);
             result[1] = (byte)header;
+
             if (extendedLength > 0)
-                Buffer.BlockCopy(ExtendedPayloadLength ?? throw new InvalidOperationException("The frame has no extended payload length."), 0, result, 2, extendedLength);
+                Buffer.BlockCopy(
+                    ExtendedPayloadLength
+                        ?? throw new InvalidOperationException("The frame has no extended payload length."),
+                    0,
+                    result,
+                    2,
+                    extendedLength
+                );
+
             if (maskLength > 0)
                 Buffer.BlockCopy(MaskingKey, 0, result, 2 + extendedLength, maskLength);
+
             Buffer.BlockCopy(bytes, 0, result, 2 + extendedLength + maskLength, bytes.Length);
             return result;
         }
 
         public override string ToString() => BitConverter.ToString(ToArray());
 
-        internal static WebSocketFrame CreateCloseFrame(PayloadData? payloadData) => new(Fin.Final, Opcode.Close, payloadData ?? new PayloadData());
+        internal static WebSocketFrame CreateCloseFrame(PayloadData? payloadData) =>
+            new(Fin.Final, Opcode.Close, payloadData ?? new PayloadData());
 
         internal static WebSocketFrame CreatePingFrame() => new(Fin.Final, Opcode.Ping, new PayloadData());
 
-        internal static WebSocketFrame CreatePingFrame(byte[] data) => new(Fin.Final, Opcode.Ping, new PayloadData(data));
+        internal static WebSocketFrame CreatePingFrame(byte[] data) =>
+            new(Fin.Final, Opcode.Ping, new PayloadData(data));
 
         internal void Validate(WebSocket webSocket)
         {
@@ -186,30 +177,41 @@ Extended Payload Length: {extPayloadLen}
             }
 
             if (!webSocket.InContinuation && Opcode == Opcode.Cont)
-                throw new WebSocketException(CloseStatusCode.ProtocolError, "A continuation frame has no preceding fragmented message.");
+                throw new WebSocketException(
+                    CloseStatusCode.ProtocolError,
+                    "A continuation frame has no preceding fragmented message."
+                );
 
             if (webSocket.InContinuation && (Opcode == Opcode.Text || Opcode == Opcode.Binary))
             {
-                throw new WebSocketException(CloseStatusCode.ProtocolError,
-                    "A data frame has been received while receiving continuation frames.");
+                throw new WebSocketException(
+                    CloseStatusCode.ProtocolError,
+                    "A data frame has been received while receiving continuation frames."
+                );
             }
 
             if (IsCompressed)
             {
-                throw new WebSocketException(CloseStatusCode.ProtocolError,
-                    "A compressed frame has been received without any agreement for it.");
+                throw new WebSocketException(
+                    CloseStatusCode.ProtocolError,
+                    "A compressed frame has been received without any agreement for it."
+                );
             }
 
             if (Rsv2 == Rsv.On)
             {
-                throw new WebSocketException(CloseStatusCode.ProtocolError,
-                    "The RSV2 of a frame is non-zero without any negotiation for it.");
+                throw new WebSocketException(
+                    CloseStatusCode.ProtocolError,
+                    "The RSV2 of a frame is non-zero without any negotiation for it."
+                );
             }
 
             if (Rsv3 == Rsv.On)
             {
-                throw new WebSocketException(CloseStatusCode.ProtocolError,
-                    "The RSV3 of a frame is non-zero without any negotiation for it.");
+                throw new WebSocketException(
+                    CloseStatusCode.ProtocolError,
+                    "The RSV3 of a frame is non-zero without any negotiation for it."
+                );
             }
         }
 

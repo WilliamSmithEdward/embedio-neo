@@ -16,7 +16,8 @@ namespace EmbedIO.Security
         bool requireToken = true
     ) : WebModuleBase(baseRoute)
     {
-        private readonly BrowserRequestProtection _protection = protection ?? throw new ArgumentNullException(nameof(protection));
+        private readonly BrowserRequestProtection _protection = protection
+            ?? throw new ArgumentNullException(nameof(protection));
         private readonly bool _requireToken = requireToken;
 
         /// <inheritdoc />

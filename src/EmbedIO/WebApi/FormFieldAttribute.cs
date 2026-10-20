@@ -37,10 +37,7 @@ namespace EmbedIO.WebApi
         /// The name of the form field to extract will be equal to the name of the parameter
         /// carrying this attribute.
         /// </summary>
-        public FormFieldAttribute()
-            : this(false, null)
-        {
-        }
+        public FormFieldAttribute() : this(false, null) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FormFieldAttribute"/> class.
@@ -48,10 +45,8 @@ namespace EmbedIO.WebApi
         /// <param name="fieldName">The name of the form field to extract.</param>
         /// <exception cref="ArgumentNullException"><paramref name="fieldName"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="fieldName"/> is the empty string (<c>""</c>).</exception>
-        public FormFieldAttribute(string fieldName)
-            : this(false, Validate.NotNullOrEmpty(nameof(fieldName), fieldName))
-        {
-        }
+        public FormFieldAttribute(string fieldName) : this(false, Validate.NotNullOrEmpty(nameof(fieldName), fieldName))
+        { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FormFieldAttribute" /> class.
@@ -61,10 +56,7 @@ namespace EmbedIO.WebApi
         /// <param name="badRequestIfMissing">If set to <see langword="true" />, a <c>400 Bad Request</c>
         /// response will be sent to the client if no values are found for the field; if set to
         /// <see langword="false" />, a default value will be assumed.</param>
-        public FormFieldAttribute(bool badRequestIfMissing)
-            : this(badRequestIfMissing, null)
-        {
-        }
+        public FormFieldAttribute(bool badRequestIfMissing) : this(badRequestIfMissing, null) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FormFieldAttribute"/> class.
@@ -77,8 +69,7 @@ namespace EmbedIO.WebApi
         /// <see langword="false" />, a default value will be assumed.</param>
         public FormFieldAttribute(string fieldName, bool badRequestIfMissing)
             : this(badRequestIfMissing, Validate.NotNullOrEmpty(nameof(fieldName), fieldName))
-        {
-        }
+        { }
 
         private FormFieldAttribute(bool badRequestIfMissing, string? fieldName)
         {
@@ -108,37 +99,59 @@ namespace EmbedIO.WebApi
 
         async Task<string?> IRequestDataAttribute<WebApiController, string>.GetRequestDataAsync(
             WebApiController controller,
-            string parameterName)
+            string parameterName
+        )
         {
-            var data = await controller.HttpContext.GetRequestFormDataAsync()
+            var data = await controller.HttpContext
+                .GetRequestFormDataAsync()
                 .ConfigureAwait(false);
 
-            return RequestFieldBinding.GetString(data, FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Form);
+            return RequestFieldBinding.GetString(
+                data,
+                FieldName ?? parameterName,
+                BadRequestIfMissing,
+                RequestFieldBinding.Form
+            );
         }
 
         async Task<string[]?> IRequestDataAttribute<WebApiController, string[]>.GetRequestDataAsync(
             WebApiController controller,
-            string parameterName)
+            string parameterName
+        )
         {
-            var data = await controller.HttpContext.GetRequestFormDataAsync()
+            var data = await controller.HttpContext
+                .GetRequestFormDataAsync()
                 .ConfigureAwait(false);
 
-            return RequestFieldBinding.GetStrings(data, FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Form);
+            return RequestFieldBinding.GetStrings(
+                data,
+                FieldName ?? parameterName,
+                BadRequestIfMissing,
+                RequestFieldBinding.Form
+            );
         }
 
         async Task<object?> IRequestDataAttribute<WebApiController>.GetRequestDataAsync(
             WebApiController controller,
             Type type,
-            string parameterName)
+            string parameterName
+        )
         {
             // Only the reflection-based binder converts to a runtime type; generated bindings do not call this.
             if (!ReflectionBinding.IsSupported)
                 throw ReflectionBinding.Disabled();
 
-            var data = await controller.HttpContext.GetRequestFormDataAsync()
+            var data = await controller.HttpContext
+                .GetRequestFormDataAsync()
                 .ConfigureAwait(false);
 
-            return RequestFieldBinding.GetUntyped(data, FieldName ?? parameterName, BadRequestIfMissing, RequestFieldBinding.Form, type);
+            return RequestFieldBinding.GetUntyped(
+                data,
+                FieldName ?? parameterName,
+                BadRequestIfMissing,
+                RequestFieldBinding.Form,
+                type
+            );
         }
     }
 }

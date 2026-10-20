@@ -1,4 +1,4 @@
-﻿namespace EmbedIO.Utilities
+namespace EmbedIO.Utilities
 {
     /// <summary>
     /// Provides extension methods for <see cref="QValueList"/>.
@@ -7,17 +7,34 @@
     {
 #if NET10_0_OR_GREATER
         // Brotli comes first, so it also wins a tie the client leaves to the server, as with "*".
-        private static readonly CompressionMethod[] CompressionFirstMethods = { CompressionMethod.Brotli, CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.None };
-        private static readonly string[] CompressionFirstNames = { CompressionMethodNames.Brotli, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate, CompressionMethodNames.None };
-        private static readonly CompressionMethod[] IdentityFirstMethods = { CompressionMethod.None, CompressionMethod.Brotli, CompressionMethod.Gzip, CompressionMethod.Deflate };
-        private static readonly string[] IdentityFirstNames = { CompressionMethodNames.None, CompressionMethodNames.Brotli, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate };
+        private static readonly CompressionMethod[] CompressionFirstMethods = [
+            CompressionMethod.Brotli, CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.None
+        ];
+        private static readonly string[] CompressionFirstNames = [
+            CompressionMethodNames.Brotli, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate,
+            CompressionMethodNames.None
+        ];
+        private static readonly CompressionMethod[] IdentityFirstMethods = [
+            CompressionMethod.None, CompressionMethod.Brotli, CompressionMethod.Gzip, CompressionMethod.Deflate
+        ];
+        private static readonly string[] IdentityFirstNames = [
+            CompressionMethodNames.None, CompressionMethodNames.Brotli, CompressionMethodNames.Gzip,
+            CompressionMethodNames.Deflate
+        ];
 #else
-        private static readonly CompressionMethod[] CompressionFirstMethods = { CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.None };
-        private static readonly string[] CompressionFirstNames = { CompressionMethodNames.Gzip, CompressionMethodNames.Deflate, CompressionMethodNames.None };
-        private static readonly CompressionMethod[] IdentityFirstMethods = { CompressionMethod.None, CompressionMethod.Gzip, CompressionMethod.Deflate };
-        private static readonly string[] IdentityFirstNames = { CompressionMethodNames.None, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate };
+        private static readonly CompressionMethod[] CompressionFirstMethods = [
+            CompressionMethod.Gzip, CompressionMethod.Deflate, CompressionMethod.None
+        ];
+        private static readonly string[] CompressionFirstNames = [
+            CompressionMethodNames.Gzip, CompressionMethodNames.Deflate, CompressionMethodNames.None
+        ];
+        private static readonly CompressionMethod[] IdentityFirstMethods = [
+            CompressionMethod.None, CompressionMethod.Gzip, CompressionMethod.Deflate
+        ];
+        private static readonly string[] IdentityFirstNames = [
+            CompressionMethodNames.None, CompressionMethodNames.Gzip, CompressionMethodNames.Deflate
+        ];
 #endif
-
         /// <summary>
         /// <para>Attempts to proactively negotiate a compression method for a response,
         /// based on the contents of a <see cref="QValueList"/>.</para>
@@ -42,9 +59,11 @@
             this QValueList @this,
             bool preferCompression,
             out CompressionMethod compressionMethod,
-            out string? compressionMethodName)
+            out string? compressionMethodName
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             if (@this.QValues.Count < 1)
             {
                 compressionMethod = CompressionMethod.None;
@@ -69,6 +88,7 @@
             var acceptableMethodNames = preferCompression ? CompressionFirstNames : IdentityFirstNames;
 
             var acceptableMethodIndex = @this.FindPreferredIndex(acceptableMethodNames);
+
             if (acceptableMethodIndex < 0)
             {
                 // The same rule applies when compression is preferred but no listed coding is acceptable:
@@ -91,10 +111,13 @@
             // At equal weight the client's listing order picks above, and browsers list br last
             // ("gzip, deflate, br"). Brotli wins a tie with another coding, as in ASP.NET Core;
             // a tie with identity still goes the way it did.
-            if (compressionMethod is CompressionMethod.Gzip or CompressionMethod.Deflate
-             && @this.TryGetWeight(CompressionMethodNames.Brotli, out var brotliWeight)
-             && @this.TryGetWeight(compressionMethodName, out var selectedWeight)
-             && brotliWeight == selectedWeight)
+            if (
+                compressionMethod is CompressionMethod.Gzip
+                    or CompressionMethod.Deflate
+                    && @this.TryGetWeight(CompressionMethodNames.Brotli, out var brotliWeight)
+                    && @this.TryGetWeight(compressionMethodName, out var selectedWeight)
+                    && brotliWeight == selectedWeight
+            )
             {
                 compressionMethod = CompressionMethod.Brotli;
                 compressionMethodName = CompressionMethodNames.Brotli;

@@ -19,7 +19,6 @@ namespace EmbedIO.Testing
         /// The base URL that a <see cref="TestWebServer"/>, by default, simulates being bound to.
         /// </summary>
         public const string DefaultBaseUrl = "http://test.example.com:8080/";
-
         private CancellationTokenSource? _internalCancellationTokenSource;
 
         /// <summary>
@@ -33,10 +32,7 @@ namespace EmbedIO.Testing
         }
 
         /// <inheritdoc cref="TestWebServer(string)"/>
-        public TestWebServer(Uri baseUrl)
-            : this(Validate.NotNull(nameof(baseUrl), baseUrl).OriginalString)
-        {
-        }
+        public TestWebServer(Uri baseUrl) : this(Validate.NotNull(nameof(baseUrl), baseUrl).OriginalString) { }
 
         /// <summary>
         /// <para>Gets a <see cref="HttpClient"/> that communicates with this server.</para>
@@ -88,14 +84,18 @@ namespace EmbedIO.Testing
         {
             // Nothing to listen to: wait for the server to stop without blocking the caller of RunAsync.
             // Dispose and fatal errors cancel only the internal source, so its cancellation is a normal stop.
-            var token = (_internalCancellationTokenSource ?? throw new InvalidOperationException("The server has not been prepared.")).Token;
+            var token =
+                (_internalCancellationTokenSource
+                    ?? throw new InvalidOperationException("The server has not been prepared.")).Token;
+
             try
             {
-                await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+                await Task
+                    .Delay(Timeout.Infinite, token)
+                    .ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
-            {
-            }
+
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         }
 
         /// <inheritdoc />

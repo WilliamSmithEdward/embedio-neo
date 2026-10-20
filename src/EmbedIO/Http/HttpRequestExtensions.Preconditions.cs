@@ -49,15 +49,17 @@ namespace EmbedIO
 
             if (ifMatch != null)
             {
-                if (!MatchesEntityTags(
-                    ifMatch,
-                    entityTag,
-                    currentWeak,
-                    currentStart,
-                    currentLength,
-                    true,
-                    representationExists
-                ))
+                if (
+                    !MatchesEntityTags(
+                        ifMatch,
+                        entityTag,
+                        currentWeak,
+                        currentStart,
+                        currentLength,
+                        true,
+                        representationExists
+                    )
+                )
                     return HttpStatusCode.PreconditionFailed;
             }
 
@@ -74,15 +76,17 @@ namespace EmbedIO
 
             if (ifNoneMatch != null)
             {
-                if (MatchesEntityTags(
-                    ifNoneMatch,
-                    entityTag,
-                    currentWeak,
-                    currentStart,
-                    currentLength,
-                    false,
-                    representationExists
-                ))
+                if (
+                    MatchesEntityTags(
+                        ifNoneMatch,
+                        entityTag,
+                        currentWeak,
+                        currentStart,
+                        currentLength,
+                        false,
+                        representationExists
+                    )
+                )
                     return retrieval ? HttpStatusCode.NotModified : HttpStatusCode.PreconditionFailed;
             }
 

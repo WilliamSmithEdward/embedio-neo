@@ -15,7 +15,6 @@ namespace EmbedIO.Routing
     /// </exception>
     public sealed class RouteVerbResolver(RouteMatcher matcher) : RouteResolverBase<HttpVerbs>(matcher)
     {
-
         /// <inheritdoc />
         protected override HttpVerbs GetContextData(IHttpContext context) => context.Request.HttpVerb;
 

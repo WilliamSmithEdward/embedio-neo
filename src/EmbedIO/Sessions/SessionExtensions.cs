@@ -21,9 +21,14 @@ namespace EmbedIO.Sessions
         /// otherwise, <see langword="false"/>.</returns>
         /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
-        public static bool TryGetValue<T>(this ISession @this, string key, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out T value)
+        public static bool TryGetValue<T>(
+            this ISession @this,
+            string key,
+            [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out T value
+        )
         {
             if (@this is null) throw new System.NullReferenceException();
+
             if (@this.TryGetValue(key, out var foundValue) && foundValue is T typedValue)
             {
                 value = typedValue;
@@ -44,6 +49,7 @@ namespace EmbedIO.Sessions
         public static T? GetValue<T>(this ISession @this, string key)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             return @this.TryGetValue(key, out var value) && value is T typedValue ? typedValue : default;
         }
 
@@ -59,6 +65,7 @@ namespace EmbedIO.Sessions
         public static T GetOrDefault<T>(this ISession @this, string key, T defaultValue)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             return @this.TryGetValue(key, out var value) && value is T typedValue ? typedValue : defaultValue;
         }
     }

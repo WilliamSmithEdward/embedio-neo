@@ -31,8 +31,10 @@ namespace EmbedIO
 
             for (var index = 0; index < supportedMediaTypes.Length; index++)
             {
-                if (!MediaTypeHeaderValue.TryParse(supportedMediaTypes[index], out var parsed)
-                    || parsed?.MediaType is null)
+                if (
+                    !MediaTypeHeaderValue.TryParse(supportedMediaTypes[index], out var parsed)
+                        || parsed?.MediaType is null
+                )
                     throw new ArgumentException("Invalid QUERY media range.", nameof(supportedMediaTypes));
 
                 Split(parsed.MediaType, out var type, out var subtype);

@@ -7,7 +7,7 @@ namespace EmbedIO.Utilities
     /// </summary>
     public static class StringExtensions
     {
-        private static readonly char[] CommaSplitChars = { ',' };
+        private static readonly char[] CommaSplitChars = [','];
 
         /// <summary>Splits a string into substrings based on the specified <paramref name="delimiters"/>.
         /// The returned array includes empty array elements if two or more consecutive delimiters are found
@@ -20,6 +20,7 @@ namespace EmbedIO.Utilities
         public static string[] SplitByAny(this string @this, params char[] delimiters)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             return @this.Split(delimiters);
         }
 
@@ -32,6 +33,7 @@ namespace EmbedIO.Utilities
         public static string[] SplitByComma(this string @this)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             return @this.Split(CommaSplitChars);
         }
 
@@ -50,6 +52,7 @@ namespace EmbedIO.Utilities
         public static string[] SplitByComma(this string @this, StringSplitOptions options)
         {
             if (@this is null) throw new System.NullReferenceException();
+
             return @this.Split(CommaSplitChars, options);
         }
 
@@ -60,7 +63,6 @@ namespace EmbedIO.Utilities
         /// <param name="this">The <see cref="string"/> on which this method is called.</param>
         /// <returns>If <paramref name="this"/> is the empty string, <see langword="null"/>;
         /// otherwise, <paramref name="this."/></returns>
-        public static string? NullIfEmpty(this string @this)
-            => string.IsNullOrEmpty(@this) ? null : @this;
+        public static string? NullIfEmpty(this string @this) => string.IsNullOrEmpty(@this) ? null : @this;
     }
 }

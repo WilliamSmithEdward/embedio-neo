@@ -6,10 +6,7 @@ namespace EmbedIO.Testing
     {
         private abstract class MockDirectoryEntry
         {
-            protected MockDirectoryEntry()
-            {
-                LastModifiedUtc = DateTime.UtcNow;
-            }
+            protected MockDirectoryEntry() => LastModifiedUtc = DateTime.UtcNow;
 
             public DateTime LastModifiedUtc { get; private set; }
 

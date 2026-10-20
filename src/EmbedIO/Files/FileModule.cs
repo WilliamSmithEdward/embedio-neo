@@ -564,22 +564,26 @@ namespace EmbedIO.Files
             // (or lack of it) to use for the resource.
             var preferCompression = PrefersCompression(context, mimeType);
 
-            if (!context.Request.TryNegotiateContentEncoding(
-                preferCompression,
-                out var compressionMethod,
-                out var setCompressionInResponse
-            ))
+            if (
+                !context.Request.TryNegotiateContentEncoding(
+                    preferCompression,
+                    out var compressionMethod,
+                    out var setCompressionInResponse
+                )
+            )
             {
                 // The client refuses every coding this module can produce. A precompressed file may still be one it
                 // accepts.
-                if (TrySelectPrecompressedVariant(
-                    context,
-                    info,
-                    urlPath,
-                    CompressionMethod.None,
-                    out var acceptedVariant,
-                    out var acceptedMethod
-                ))
+                if (
+                    TrySelectPrecompressedVariant(
+                        context,
+                        info,
+                        urlPath,
+                        CompressionMethod.None,
+                        out var acceptedVariant,
+                        out var acceptedMethod
+                    )
+                )
                     return HandleVariant(
                         context,
                         info,

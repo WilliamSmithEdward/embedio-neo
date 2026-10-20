@@ -13,8 +13,10 @@ namespace EmbedIO.Utilities
         /// The root URL path value, i.e. <c>"/"</c>.
         /// </summary>
         public const string Root = "/";
-
-        private static readonly Regex MultipleSlashRegex = new Regex("//+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex MultipleSlashRegex = new(
+            "//+",
+            RegexOptions.Compiled | RegexOptions.CultureInvariant
+        );
 
         /// <summary>
         /// Determines whether a string is a valid URL path.
@@ -62,6 +64,7 @@ namespace EmbedIO.Utilities
         public static string Normalize(string? requestPath, bool isBasePath)
         {
             var exception = ValidateInternal(nameof(requestPath), requestPath);
+
             if (exception != null)
                 throw exception;
 
@@ -99,6 +102,7 @@ namespace EmbedIO.Utilities
 
             // The root path needs no further checking.
             var length = requestPath.Length;
+
             if (length == 1)
                 return requestPath;
 
@@ -141,10 +145,11 @@ namespace EmbedIO.Utilities
         /// <seealso cref="Normalize"/>
         /// <seealso cref="StripPrefix"/>
         /// <seealso cref="Validate.RoutePath"/>
-        public static bool HasPrefix(string? requestPath, string? basePath)
-            => UnsafeHasPrefix(
+        public static bool HasPrefix(string? requestPath, string? basePath) =>
+            UnsafeHasPrefix(
                 Validate.RoutePath(nameof(requestPath), requestPath, false),
-                Validate.RoutePath(nameof(basePath), basePath, true));
+                Validate.RoutePath(nameof(basePath), basePath, true)
+            );
 
         /// <summary>
         /// Determines whether the specified URL path is prefixed by the specified base URL path,
@@ -174,9 +179,12 @@ namespace EmbedIO.Utilities
         public static bool UnsafeHasPrefix(string? requestPath, string? basePath)
         {
             if (requestPath is null) throw new System.NullReferenceException();
+
             if (basePath is null) throw new System.NullReferenceException();
+
             return requestPath.StartsWith(basePath, StringComparison.Ordinal)
-            || (requestPath.Length == basePath.Length - 1 && basePath.StartsWith(requestPath, StringComparison.Ordinal));
+                || (requestPath.Length == basePath.Length - 1
+                    && basePath.StartsWith(requestPath, StringComparison.Ordinal));
         }
 
         /// <summary>
@@ -205,10 +213,11 @@ namespace EmbedIO.Utilities
         /// <seealso cref="Normalize"/>
         /// <seealso cref="HasPrefix"/>
         /// <seealso cref="Validate.RoutePath"/>
-        public static string? StripPrefix(string? requestPath, string? basePath)
-            => UnsafeStripPrefix(
+        public static string? StripPrefix(string? requestPath, string? basePath) =>
+            UnsafeStripPrefix(
                 Validate.RoutePath(nameof(requestPath), requestPath, false),
-                Validate.RoutePath(nameof(basePath), basePath, true));
+                Validate.RoutePath(nameof(basePath), basePath, true)
+            );
 
         /// <summary>
         /// Strips a base URL path fom a URL path, obtaining a relative path,
@@ -237,15 +246,15 @@ namespace EmbedIO.Utilities
         public static string? UnsafeStripPrefix(string? requestPath, string? basePath)
         {
             if (requestPath is null) throw new System.NullReferenceException();
+
             if (basePath is null) throw new System.NullReferenceException();
+
             if (!UnsafeHasPrefix(requestPath, basePath))
                 return null;
 
             // The only case where UnsafeHasPrefix returns true for a requestPath shorter than basePath
             // is requestPath == (basePath minus the final slash).
-            return requestPath.Length < basePath.Length
-                ? string.Empty
-                : requestPath.Substring(basePath.Length);
+            return requestPath.Length < basePath.Length ? string.Empty : requestPath.Substring(basePath.Length);
         }
 
         /// <summary>
@@ -265,8 +274,8 @@ namespace EmbedIO.Utilities
         /// <seealso cref="UnsafeSplit"/>
         /// <seealso cref="Normalize"/>
         /// <seealso cref="Validate.RoutePath"/>
-        public static IEnumerable<string> Split(string? requestPath)
-            => UnsafeSplit(Validate.RoutePath(nameof(requestPath), requestPath, false));
+        public static IEnumerable<string> Split(string? requestPath) =>
+            UnsafeSplit(Validate.RoutePath(nameof(requestPath), requestPath, false));
 
         /// <summary>
         /// Splits the specified URL path into segments, assuming it is valid and normalized.
@@ -289,11 +298,14 @@ namespace EmbedIO.Utilities
         public static IEnumerable<string> UnsafeSplit(string? requestPath)
         {
             if (requestPath is null) throw new System.NullReferenceException();
+
             var length = requestPath.Length;
             var position = 1; // Skip initial slash
+
             while (position < length)
             {
                 var slashPosition = requestPath.IndexOf('/', position);
+
                 if (slashPosition < 0)
                 {
                     yield return requestPath.Substring(position);

@@ -12,15 +12,15 @@
     /// </summary>
     public class JsonServerModule : WebModuleBase, IDisposable
     {
-        private readonly SemaphoreSlim _dataLock = new SemaphoreSlim(1, 1);
+        private static readonly char[] PathSeparators = ['/'];
+        private readonly SemaphoreSlim _dataLock = new(1, 1);
 
         /// <summary>
         /// Initializes a new instance of the <see cref="JsonServerModule"/> class.
         /// </summary>
         /// <param name="basePath">The base path.</param>
         /// <param name="jsonPath">The json path.</param>
-        public JsonServerModule(string basePath = "/api/", string? jsonPath = null)
-        : base(basePath)
+        public JsonServerModule(string basePath = "/api/", string? jsonPath = null) : base(basePath)
         {
             JsonPath = jsonPath;
             BasePath = basePath;
@@ -74,10 +74,12 @@
         public void UpdateDataStore()
         {
             _dataLock.Wait();
+
             try
             {
                 PersistDataStore();
             }
+
             finally
             {
                 _dataLock.Release();
@@ -96,11 +98,16 @@
         protected override async Task OnRequestAsync(IHttpContext context)
         {
             if (context is null) throw new System.NullReferenceException();
-            await _dataLock.WaitAsync(context.CancellationToken).ConfigureAwait(false);
+
+            await _dataLock
+                .WaitAsync(context.CancellationToken)
+                .ConfigureAwait(false);
+
             try
             {
                 await ProcessRequestAsync(context).ConfigureAwait(false);
             }
+
             finally
             {
                 _dataLock.Release();
@@ -112,9 +119,10 @@
             if (context.RequestedPath == "/")
                 return context.SendDataAsync((object?)Data);
 
-            var parts = context.RequestedPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+            var parts = context.RequestedPath.Split(PathSeparators, StringSplitOptions.RemoveEmptyEntries);
 
             var database = (IDictionary<string, object>?)(object?)Data;
+
             if (database == null || !database.TryGetValue(parts[0], out var table))
                 throw HttpException.NotFound();
 
@@ -127,20 +135,25 @@
             {
                 case 1 when verb == HttpVerbs.Get:
                     return context.SendDataAsync((object)table);
+
                 case 1 when verb == HttpVerbs.Post:
                     return AddRow(context, table);
+
                 case 2:
                     {
-                        foreach (IDictionary<string, object> row in (IEnumerable<object>)table)
+                        foreach (var item in (IEnumerable<object>)table)
                         {
+                            var row = (IDictionary<string, object>)item;
                             if (row["id"].ToString() != parts[1]) continue;
 
                             switch (verb)
                             {
                                 case HttpVerbs.Get:
                                     return context.SendDataAsync((object)row);
+
                                 case HttpVerbs.Put:
                                     return UpdateRow(context, row);
+
                                 case HttpVerbs.Delete:
                                     RemoveRow(table, row);
                                     return Task.CompletedTask;
@@ -157,7 +170,11 @@
         private async Task AddRow(IHttpContext context, object table)
         {
             var array = (IList<object?>)table;
-            array.Add(await context.GetRequestDataAsync<object>().ConfigureAwait(false));
+            array.Add(
+                await context
+                    .GetRequestDataAsync<object>()
+                    .ConfigureAwait(false)
+            );
             PersistDataStore();
         }
 
@@ -170,7 +187,9 @@
 
         private async Task UpdateRow(IHttpContext context, IDictionary<string, object> row)
         {
-            var update = await context.GetRequestDataAsync<Dictionary<string, object>>().ConfigureAwait(false)
+            var update = await context
+                .GetRequestDataAsync<Dictionary<string, object>>()
+                .ConfigureAwait(false)
                 ?? throw new NullReferenceException("The JSON update body is null.");
 
             foreach (var property in update)

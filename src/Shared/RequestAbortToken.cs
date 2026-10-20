@@ -18,56 +18,104 @@ namespace EmbedIO.Internal
         private bool _completed;
         private bool _callbacksDone;
         private bool _disposed;
+
         internal RequestAbortToken(Action<Exception> report, CancellationToken parent)
         {
             _report = report;
             Token = _source.Token;
             _parentToken = parent;
+
             // Internal parent notification must not capture a tenant's AsyncLocal/Activity
             // or execute its context-change notifications on transport cancellation stacks.
             if (ExecutionContext.IsFlowSuppressed()) _parent = Register(parent);
-            else { using (ExecutionContext.SuppressFlow()) _parent = Register(parent); }
+
+            else
+            {
+                using (ExecutionContext.SuppressFlow()) _parent = Register(parent);
+            }
         }
-        private CancellationTokenRegistration Register(CancellationToken parent)
-            => parent.Register(static state => ((RequestAbortToken)(state ?? throw new InvalidOperationException())).Abort(), this);
+
+        private CancellationTokenRegistration Register(CancellationToken parent) =>
+            parent.Register(
+                static state => ((RequestAbortToken)(state ?? throw new InvalidOperationException())).Abort(),
+                this
+            );
+
         internal CancellationToken Token { get; }
-        internal bool IsAborted { get { lock (_sync) return _aborted; } }
+
+        internal bool IsAborted
+        {
+            get
+            {
+                lock (_sync) return _aborted;
+            }
+        }
+
         internal void Abort()
         {
             lock (_sync)
             {
                 if (_completed || _aborted) return;
+
                 _aborted = true;
             }
+
             if (ExecutionContext.IsFlowSuppressed()) _ = Task.Run(Cancel);
-            else { using (ExecutionContext.SuppressFlow()) _ = Task.Run(Cancel); }
+
+            else
+            {
+                using (ExecutionContext.SuppressFlow()) _ = Task.Run(Cancel);
+            }
         }
+
         private void Cancel()
         {
-            try { _source.Cancel(); }
+            try
+            {
+                _source.Cancel();
+            }
+
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
                 // Callback exceptions must not escape an unobserved worker or interrupt cleanup.
-                try { _report(error); }
+                try
+                {
+                    _report(error);
+                }
+
                 catch (Exception diagnostic) when (ExceptionPolicy.IsRecoverable(diagnostic)) { }
             }
-            finally { lock (_sync) _callbacksDone = true; Release(); }
+
+            finally
+            {
+                lock (_sync) _callbacksDone = true;
+
+                Release();
+            }
         }
+
         internal void Complete()
         {
             if (_parentToken.IsCancellationRequested) Abort();
+
             lock (_sync) _completed = true;
+
             Release();
         }
+
         public void Dispose() => Complete();
+
         private void Release()
         {
             lock (_sync)
             {
                 if (_disposed || !_completed || (_aborted && !_callbacksDone)) return;
+
                 _disposed = true;
             }
+
             _parent.Dispose();
+
             // A retained canceled token may still register callbacks or use its wait handle.
             // Register can observe not-canceled, race Cancel/Dispose, then return without
             // invoking its callback when it observes the disposed source. Keep canceled

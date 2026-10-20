@@ -17,6 +17,6 @@
         /// <summary>
         /// Equivalent to numeric value 1. Indicates the final frame of a message.
         /// </summary>
-        Final = 0x1,
+        Final = 0x1
     }
 }

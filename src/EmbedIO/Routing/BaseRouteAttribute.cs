@@ -21,7 +21,5 @@ namespace EmbedIO.Routing
     /// </exception>
     /// <seealso cref="Routing.Route.IsValid"/>
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
-    public class BaseRouteAttribute(HttpVerbs verb, string route) : RouteAttribute(verb, route, true)
-    {
-    }
+    public class BaseRouteAttribute(HttpVerbs verb, string route) : RouteAttribute(verb, route, true) { }
 }

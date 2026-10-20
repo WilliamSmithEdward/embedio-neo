@@ -163,7 +163,7 @@ namespace EmbedIO
                     (c >= 'a' && c <= 'z')
                     || (c >= 'A' && c <= 'Z')
                     || (c >= '0' && c <= '9')
-                    || "'()+_,-./:=? ".IndexOf(c.ToString(), StringComparison.Ordinal) >= 0
+                    || Internal.StringOperations.IndexOfOrdinal("'()+_,-./:=? ", c) >= 0
                 ) continue;
 
                 throw new ArgumentException("Invalid multipart boundary.", nameof(boundary));
@@ -189,8 +189,7 @@ namespace EmbedIO
 
         private static HttpException Malformed() => HttpException.BadRequest("Malformed multipart form data.");
 
-        private static HttpException Limit() =>
-            new(413, "Multipart form data exceeds a configured limit.");
+        private static HttpException Limit() => new(413, "Multipart form data exceeds a configured limit.");
 
         private async Task<bool> FillAsync(CancellationToken token)
         {
@@ -313,7 +312,7 @@ namespace EmbedIO
                         (c >= 'a' && c <= 'z')
                         || (c >= 'A' && c <= 'Z')
                         || (c >= '0' && c <= '9')
-                        || "!#$%&'*+-.^_`|~".IndexOf(c.ToString(), StringComparison.Ordinal) >= 0
+                        || Internal.StringOperations.IndexOfOrdinal("!#$%&'*+-.^_`|~", c) >= 0
                     ) continue;
 
                     throw Malformed();
@@ -432,10 +431,12 @@ namespace EmbedIO
 
                 else
                 {
-                    if (!((c >= 'a' && c <= 'z')
-                        || (c >= 'A' && c <= 'Z')
-                        || (c >= '0' && c <= '9')
-                        || "!#$&+-.^_`|~".IndexOf(c.ToString(), StringComparison.Ordinal) >= 0)) throw Malformed();
+                    if (
+                        !((c >= 'a' && c <= 'z')
+                            || (c >= 'A' && c <= 'Z')
+                            || (c >= '0' && c <= '9')
+                            || Internal.StringOperations.IndexOfOrdinal("!#$&+-.^_`|~", c) >= 0)
+                    ) throw Malformed();
 
                     bytes.WriteByte((byte)c);
                 }

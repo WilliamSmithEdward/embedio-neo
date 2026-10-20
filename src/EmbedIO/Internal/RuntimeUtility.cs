@@ -8,7 +8,6 @@
 
     internal static class SelfCheck
     {
-        internal static EmbedIOInternalErrorException Failure(string message) =>
-            new(message);
+        internal static EmbedIOInternalErrorException Failure(string message) => new(message);
     }
 }
