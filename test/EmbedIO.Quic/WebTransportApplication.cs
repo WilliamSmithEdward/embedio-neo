@@ -6,7 +6,7 @@ namespace EmbedIO.Quic
 {
     // HTTP/3 adapter, compiled with the existing codecs/session core.
     // All callbacks run on the connection owner. No production listener uses it.
-    internal sealed class WebTransportApplication : IDisposable
+    internal sealed class WebTransportApplication : StreamApplication
     {
         private sealed class Input
         {
@@ -38,6 +38,7 @@ namespace EmbedIO.Quic
         private readonly QpackDecoderTable _qpack = new(0);
         private readonly Action<ulong, byte[], bool> _write;
         private readonly Action<byte[]> _datagram;
+        private readonly Action<ulong, byte[]> _prefix;
         private readonly Action<ulong, long> _abort;
         private readonly Action<ulong, int> _consume;
         private readonly Func<IReadOnlyDictionary<string, string>, bool> _authorize;
@@ -59,18 +60,16 @@ namespace EmbedIO.Quic
 
         internal WebTransportApplication(
             bool parametersMet,
-            Action<ulong, byte[], bool> write,
-            Action<byte[]> datagram,
-            Action<ulong, long> abort,
-            Action<ulong, int> consume,
+            StreamOperations operations,
             Func<IReadOnlyDictionary<string, string>, bool> authorize
         )
         {
             _parametersMet = parametersMet;
-            _write = write;
-            _datagram = datagram;
-            _abort = abort;
-            _consume = consume;
+            _write = operations.Write;
+            _prefix = operations.ReliablePrefix;
+            _datagram = operations.Datagram;
+            _abort = operations.Abort;
+            _consume = operations.Consume;
             _authorize = authorize;
             using var settings = new MemoryStream();
             settings.Write(Wire.Frame(8, 1, 0x33, 1, 6, 8192));
@@ -87,7 +86,7 @@ namespace EmbedIO.Quic
             _write(11, [3], false);
         }
 
-        internal void Stream(ulong id, byte[] bytes, bool fin)
+        internal override void Stream(ulong id, byte[] bytes, bool fin)
         {
             if (!_inputs.TryGetValue(id, out var input))
             {
@@ -420,7 +419,9 @@ namespace EmbedIO.Quic
                     );
                     session.RegisterOutgoingStream(outputHandle);
                     _outputs.Add(input.OutputId.Value, (session, outputHandle));
-                    _write(input.OutputId.Value, Wire.Frame(0x54, (ulong)session.Id), false);
+                    var prefix = Wire.Frame(0x54, (ulong)session.Id);
+                    _prefix(input.OutputId.Value, prefix);
+                    _write(input.OutputId.Value, prefix, false);
                 }
             }
 
@@ -453,7 +454,7 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal void ReceiveDatagram(byte[] payload)
+        internal override void ReceiveDatagram(byte[] payload)
         {
             var session = WebTransportProtocol.ReadDatagramSessionId(payload, 0, payload.Length, out var offset);
             _registry?.RouteDatagram(session, payload, offset, payload.Length - offset);
@@ -527,7 +528,12 @@ namespace EmbedIO.Quic
                 _write((ulong)session.Id, Frame(0, capsule), false);
         }
 
-        internal void Reset(ulong id)
+        internal override void Stop(ulong id, ulong error)
+        {
+            if (id is 3 or 7 or 11) throw new InvalidDataException("Peer stopped a critical HTTP/3 stream.");
+        }
+
+        internal override void Reset(ulong id, ulong error)
         {
             if (_inputs.TryGetValue(id, out var critical) && critical.Type is 0 or 2 or 3)
                 throw new InvalidDataException("Peer reset a critical HTTP/3 stream.");
@@ -560,11 +566,11 @@ namespace EmbedIO.Quic
             Compact(id, input);
         }
 
-        internal bool CanRetire(ulong id) =>
+        internal override bool CanRetire(ulong id) =>
             !_inputs.TryGetValue(id, out var input)
                 || input.Finished && (!input.OutputId.HasValue || !_outputs.ContainsKey(input.OutputId.Value));
 
-        internal void Retire(ulong id)
+        internal override void Retire(ulong id)
         {
             if (_outputs.Remove(id, out var output)) output.Session.StreamFinished(output.Handle);
 
@@ -602,7 +608,7 @@ namespace EmbedIO.Quic
             return stream.ToArray();
         }
 
-        public void Dispose()
+        public override void Dispose()
         {
             try
             {

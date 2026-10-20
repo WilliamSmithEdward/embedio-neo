@@ -63,13 +63,21 @@ namespace EmbedIO.Quic
                         )
                         .ConfigureAwait(false);
 
-                if (arguments is ["serve" or "serve-h3" or "serve-h3-updates", var library, var certificate, var key])
+                if (
+                    arguments is [
+                        "serve" or "serve-streams" or "serve-h3" or "serve-h3-updates",
+                        var library,
+                        var certificate,
+                        var key
+                    ]
+                )
                     return await ServeAsync(
                         library,
                         certificate,
                         key,
-                        arguments[0] != "serve",
-                        arguments[0] == "serve-h3-updates"
+                        arguments[0] is "serve-h3" or "serve-h3-updates",
+                        arguments[0] == "serve-h3-updates",
+                        arguments[0] == "serve-streams"
                     ).ConfigureAwait(false);
 
                 Console.Error.WriteLine(
@@ -132,11 +140,14 @@ namespace EmbedIO.Quic
             string certificate,
             string key,
             bool webTransport,
-            bool frequentUpdates
+            bool frequentUpdates,
+            bool multiplexed
         )
         {
             using var socket = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(frequentUpdates ? 30 : 10));
+            using var deadline = new CancellationTokenSource(
+                TimeSpan.FromSeconds(frequentUpdates || multiplexed ? 30 : 10)
+            );
             var authorization = webTransport ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) : string.Empty;
             var ready = new
             {
@@ -222,7 +233,8 @@ namespace EmbedIO.Quic
                                 key,
                                 webTransport,
                                 authorization,
-                                keyUpdateInterval: frequentUpdates ? 128 : KeyUpdateState.DefaultInterval
+                                keyUpdateInterval: frequentUpdates ? 128 : KeyUpdateState.DefaultInterval,
+                                multiplexed: multiplexed
                             );
                         }
 
@@ -271,6 +283,7 @@ namespace EmbedIO.Quic
 
                 var result = new
                 {
+                    rawStreamsCompleted = connection?.RawStreamsCompleted ?? 0,
                     retiredStreams = connection?.RetiredStreams ?? 0,
                     retainedIncoming = connection?.RetainedIncoming ?? 0,
                     retainedOutgoing = connection?.RetainedOutgoing ?? 0,

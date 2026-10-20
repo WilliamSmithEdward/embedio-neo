@@ -58,7 +58,7 @@ try {
     & (Join-Path $tools 'sharpfuzz') $assembly EmbedIO.Utilities.UrlPath EmbedIO.Utilities.UrlEncodedDataParser EmbedIO.MultipartReader |
         Tee-Object (Join-Path $output 'instrumentation.log')
     if ($LASTEXITCODE) { throw 'Instrumentation failed.' }
-    & (Join-Path $tools 'sharpfuzz') $quicAssembly EmbedIO.Quic.Wire EmbedIO.Quic.PacketHeader EmbedIO.Quic.AckRanges EmbedIO.Quic.PacketNumberWindow EmbedIO.Quic.PacketKeys EmbedIO.Quic.KeyUpdateState EmbedIO.Quic.Reassembly EmbedIO.Quic.StreamReassembly EmbedIO.Quic.StreamCountWindow EmbedIO.Quic.Recovery EmbedIO.Quic.ConnectionLifetime EmbedIO.Quic.ConnectionStreams EmbedIO.Quic.WebTransportApplication EmbedIO.Net.Internal |
+    & (Join-Path $tools 'sharpfuzz') $quicAssembly EmbedIO.Quic.Wire EmbedIO.Quic.PacketHeader EmbedIO.Quic.AckRanges EmbedIO.Quic.PacketNumberWindow EmbedIO.Quic.PacketKeys EmbedIO.Quic.KeyUpdateState EmbedIO.Quic.Reassembly EmbedIO.Quic.StreamReassembly EmbedIO.Quic.StreamCountWindow EmbedIO.Quic.Recovery EmbedIO.Quic.ConnectionLifetime EmbedIO.Quic.ConnectionStreams EmbedIO.Quic.StreamEchoApplication EmbedIO.Quic.WebTransportApplication EmbedIO.Net.Internal |
         Tee-Object (Join-Path $output 'quic-instrumentation.log')
     if ($LASTEXITCODE) { throw 'QUIC instrumentation failed.' }
 } finally {
@@ -74,7 +74,7 @@ if ((Get-FileHash $assembly).Hash -eq $originalHash) { throw 'Instrumentation di
 if ((Get-FileHash $ordinaryAssembly).Hash -ne $ordinaryHash) { throw 'Instrumentation modified the ordinary build output.' }
 
 $quicInstrumentation = Get-Content (Join-Path $output 'quic-instrumentation.log') -Raw
-foreach ($type in @('PacketHeader', 'AckRanges', 'PacketNumberWindow', 'PacketKeys', 'KeyUpdateState', 'StreamReassembly', 'StreamCountWindow', 'Recovery', 'ConnectionLifetime', 'ConnectionStreams', 'WebTransportApplication')) {
+foreach ($type in @('PacketHeader', 'AckRanges', 'PacketNumberWindow', 'PacketKeys', 'KeyUpdateState', 'StreamReassembly', 'StreamCountWindow', 'Recovery', 'ConnectionLifetime', 'ConnectionStreams', 'StreamEchoApplication', 'WebTransportApplication')) {
     if ($quicInstrumentation -notmatch ('EmbedIO\.Quic\.' + $type)) { throw "QUIC type was not instrumented: $type" }
 }
 if ((Get-FileHash $quicAssembly).Hash -eq $quicOriginalHash) { throw 'QUIC instrumentation did not change the copied assembly.' }

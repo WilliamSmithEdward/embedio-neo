@@ -11,6 +11,7 @@ namespace EmbedIO.Quic
     {
         private const int StreamBudget = 8192;
         private readonly bool _webTransport;
+        private readonly bool _streamed;
         private readonly string _authorization;
         private ConnectionStreams? _streams;
         private ulong _peerRemoteStreamData;
@@ -34,11 +35,17 @@ namespace EmbedIO.Quic
         internal int RetiredStreams => _streams?.RetiredStreams ?? 0;
         internal int RetainedIncoming => _streams?.IncomingCount ?? 0;
         internal int RetainedOutgoing => _streams?.OutgoingCount ?? 0;
-        internal int RetainedApplicationInputs => _streams?.Application.RetainedInputs ?? 0;
+        internal int RetainedApplicationInputs => _streams?.Protocol switch
+        {
+            WebTransportApplication application => application.RetainedInputs,
+            StreamEchoApplication application => application.Retained,
+            _ => 0
+        };
         internal int OutboundResets => _streams?.OutboundResets ?? 0;
         internal int ReceiveCreditUpdates => _streams?.ReceiveCreditUpdates ?? 0;
         internal ulong StreamBytesReceived => _streams?.ReceivedData ?? 0;
-        internal WebTransportApplication? WebTransport => _streams?.Application;
+        internal WebTransportApplication? WebTransport => _streams?.Protocol as WebTransportApplication;
+        internal int RawStreamsCompleted => (_streams?.Protocol as StreamEchoApplication)?.Completed ?? 0;
 
         private readonly byte[] _originalId;
         private readonly byte[] _clientId;
@@ -85,7 +92,8 @@ namespace EmbedIO.Quic
 
         internal ReadOnlySpan<byte> ServerId => _serverId;
         internal bool Established => _tls.Established;
-        internal bool Complete => _webTransport ? _streams?.Application.AcceptedSessions > 0 : _responseSent;
+        internal bool Complete =>
+            _webTransport ? WebTransport?.AcceptedSessions > 0 : _streamed ? RawStreamsCompleted > 0 : _responseSent;
         internal bool Closed => Phase == ConnectionPhase.Closed;
         internal int EchoBytes { get; private set; }
         internal long ReceivedBytes { get; private set; }
@@ -102,7 +110,8 @@ namespace EmbedIO.Quic
             double now = 0,
             int keyUpdateInterval = KeyUpdateState.DefaultInterval,
             int encryptionLimit = PacketKeys.MaximumEncryptions,
-            ulong authenticationLimit = 1UL << 52
+            ulong authenticationLimit = 1UL << 52,
+            bool multiplexed = false
         )
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(encryptionLimit, 16);
@@ -115,6 +124,7 @@ namespace EmbedIO.Quic
             _now = now;
             _lifetime.Authenticated(now);
             _webTransport = webTransport;
+            _streamed = webTransport || multiplexed;
             _authorization = authorization;
             _recovery = new Recovery(QueueRepeat);
 
@@ -348,7 +358,7 @@ namespace EmbedIO.Quic
                         _recovery.Discard(1);
                         Send(2, Wire.Frame(0x1e));
 
-                        if (_webTransport)
+                        if (_streamed)
                             _streams = new ConnectionStreams(
                                 (bytes, reliable) =>
                                 {
@@ -364,8 +374,14 @@ namespace EmbedIO.Quic
                                 _peerBidiCount,
                                 _peerDatagram,
                                 _peerReset,
-                                headers => headers.TryGetValue("authorization", out var value)
-                                    && value == "Bearer " + _authorization
+                                createApplication: operations => _webTransport
+                                    ? new WebTransportApplication(
+                                        _peerDatagram > 0 && _peerReset,
+                                        operations,
+                                        headers => headers.TryGetValue("authorization", out var value)
+                                            && value == "Bearer " + _authorization
+                                    )
+                                    : new StreamEchoApplication(operations)
                             );
                     }
 
@@ -670,13 +686,11 @@ namespace EmbedIO.Quic
                 {
                     var id = reader.Integer();
 
-                    if (!_webTransport && id != 0)
+                    if (!_streamed && id != 0)
                         throw new InvalidDataException("Only client bidirectional stream 0 is admitted by the probe.");
 
                     var offset = (type & 4) != 0 ? reader.Integer() : 0;
-                    var length = (type & 2) != 0
-                        ? reader.Length(_webTransport ? 65536 : StreamBudget)
-                        : reader.Remaining;
+                    var length = (type & 2) != 0 ? reader.Length(_streamed ? 65536 : StreamBudget) : reader.Remaining;
                     var bytes = reader.Take(length);
 
                     if (_streams != null) _streams.Receive(id, offset, bytes.ToArray(), (type & 1) != 0);
@@ -773,17 +787,17 @@ namespace EmbedIO.Quic
             Wire.Parameter(output, 0, _originalId);
             Wire.Parameter(output, 1, 10000);
             Wire.Parameter(output, 3, 1472);
-            Wire.Parameter(output, 4, _webTransport ? 262144UL : StreamBudget);
-            Wire.Parameter(output, 5, _webTransport ? 65536UL : StreamBudget);
-            Wire.Parameter(output, 6, _webTransport ? 65536UL : StreamBudget);
-            Wire.Parameter(output, 7, _webTransport ? 65536UL : 0);
-            Wire.Parameter(output, 8, _webTransport ? 16UL : 1);
-            Wire.Parameter(output, 9, _webTransport ? 16UL : 0);
+            Wire.Parameter(output, 4, _streamed ? 262144UL : StreamBudget);
+            Wire.Parameter(output, 5, _streamed ? 65536UL : StreamBudget);
+            Wire.Parameter(output, 6, _streamed ? 65536UL : StreamBudget);
+            Wire.Parameter(output, 7, _streamed ? 65536UL : 0);
+            Wire.Parameter(output, 8, _streamed ? 16UL : 1);
+            Wire.Parameter(output, 9, _streamed ? 16UL : 0);
             Wire.Parameter(output, 12, []);
             Wire.Parameter(output, 14, 2);
             Wire.Parameter(output, 15, _serverId);
 
-            if (_webTransport)
+            if (_streamed)
             {
                 Wire.Parameter(output, 0x20, 1200);
                 Wire.Parameter(output, 0x1d, []);
@@ -887,7 +901,7 @@ namespace EmbedIO.Quic
 
         private void TryEcho()
         {
-            if (_webTransport || _responseSent || !_tls.Established || !_stream.Complete) return;
+            if (_streamed || _responseSent || !_tls.Established || !_stream.Complete) return;
 
             if ((ulong)_stream.Contiguous > Math.Min(_peerMaxData, _peerStreamData)) return;
 

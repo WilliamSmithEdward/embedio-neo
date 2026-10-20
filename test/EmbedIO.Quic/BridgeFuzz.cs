@@ -29,7 +29,11 @@ namespace EmbedIO.Quic
                     16,
                     1200,
                     true,
-                    headers => headers.GetValueOrDefault("authorization") == token
+                    operations => new WebTransportApplication(
+                        true,
+                        operations,
+                        headers => headers.GetValueOrDefault("authorization") == token
+                    )
                 );
                 var settings = Wire.Frame(8, 1, 0x33, 1, 0x2c7cf000, 1, 0x2b61, 65536, 0x2b64, 8, 0x2b65, 8);
                 Streams.Receive(
@@ -55,7 +59,10 @@ namespace EmbedIO.Quic
                     8192
                 );
                 Streams.Receive(0, 0, Frame(1, headers), false);
-                QuicFuzzChecks.Require(Streams.Application.AcceptedSessions == 1, "bridge-admission");
+                QuicFuzzChecks.Require(
+                    ((WebTransportApplication)Streams.Protocol).AcceptedSessions == 1,
+                    "bridge-admission"
+                );
             }
 
             internal string Snapshot() =>
@@ -63,10 +70,10 @@ namespace EmbedIO.Quic
                     '|',
                     Sent.Count,
                     Streams.ReceivedData,
-                    Streams.Application.ActiveSessions,
-                    Streams.Application.StreamsDelivered,
-                    Streams.Application.DatagramsDelivered,
-                    Streams.Application.ResetsDelivered
+                    ((WebTransportApplication)Streams.Protocol).ActiveSessions,
+                    ((WebTransportApplication)Streams.Protocol).StreamsDelivered,
+                    ((WebTransportApplication)Streams.Protocol).DatagramsDelivered,
+                    ((WebTransportApplication)Streams.Protocol).ResetsDelivered
                 );
 
             public void Dispose() => Streams.Dispose();
@@ -106,17 +113,17 @@ namespace EmbedIO.Quic
                         );
                         mutated.Streams.Receive(6, 1, prefix[1..], false);
                         QuicFuzzChecks.Require(
-                            mutated.Streams.Application.ResetsDelivered == 0,
+                            ((WebTransportApplication)mutated.Streams.Protocol).ResetsDelivered == 0,
                             "reset-waits-for-prefix"
                         );
                         mutated.Streams.Receive(6, 0, prefix[..1], false);
                         QuicFuzzChecks.Require(
-                            mutated.Streams.Application.ResetsDelivered == 1,
+                            ((WebTransportApplication)mutated.Streams.Protocol).ResetsDelivered == 1,
                             "reset-delivered-once"
                         );
                         mutated.Streams.Receive(6, 0, prefix, false);
                         QuicFuzzChecks.Require(
-                            mutated.Streams.Application.ResetsDelivered == 1,
+                            ((WebTransportApplication)mutated.Streams.Protocol).ResetsDelivered == 1,
                             "duplicate-reset-prefix"
                         );
                         break;

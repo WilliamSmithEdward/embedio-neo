@@ -67,10 +67,11 @@
 
         private int _queuedBytes;
         private bool _disposed;
+        private bool _disposing;
         private readonly ulong _peerDatagram;
         private readonly bool _resetNegotiated;
 
-        internal WebTransportApplication Application { get; }
+        internal StreamApplication Protocol { get; }
         internal int OutboundResets { get; private set; }
 
         internal ConnectionStreams(
@@ -83,7 +84,7 @@
             ulong maxBidi,
             ulong peerDatagram,
             bool reset,
-            Func<IReadOnlyDictionary<string, string>, bool> authorize
+            Func<StreamOperations, StreamApplication> createApplication
         )
         {
             _transmit = transmit;
@@ -95,25 +96,26 @@
             _maxBidi = maxBidi;
             _peerDatagram = peerDatagram;
             _resetNegotiated = reset;
-            Application = new WebTransportApplication(
-                peerDatagram > 0 && reset,
-                SendStream,
-                SendDatagram,
-                Abort,
-                Release,
-                authorize
+            Protocol = createApplication(
+                new StreamOperations(SendStream, SetReliablePrefix, SendDatagram, Abort, Release)
             );
         }
 
         private Incoming? GetIncoming(ulong id)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if ((id & 1) != 0) throw new TransportException(0x05, "Data on a send-only stream.");
 
             var window = (id & 2) == 0 ? _incomingBidi : _incomingUni;
 
             if (!window.Open(id / 4)) return null;
 
-            if (!_incoming.TryGetValue(id, out var input)) _incoming.Add(id, input = new Incoming());
+            if (!_incoming.TryGetValue(id, out var input))
+            {
+                _incoming.Add(id, input = new Incoming());
+                Protocol.Open(id);
+            }
 
             return input;
         }
@@ -129,6 +131,8 @@
 
         internal void Receive(ulong id, ulong offset, byte[] bytes, bool fin)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (
                 offset > StreamReassembly.MaximumOffset || (ulong)bytes.Length > StreamReassembly.MaximumOffset - offset
             )
@@ -156,11 +160,11 @@
             var bytes = input.Buffer.Consume(maximum);
             var fin = !input.ResetError.HasValue && input.Buffer.Complete;
 
-            if (bytes.Length != 0 || fin) Application.Stream(id, bytes, fin);
+            if (bytes.Length != 0 || fin) Protocol.Stream(id, bytes, fin);
 
             if (input.ResetError.HasValue && input.Buffer.Delivered >= input.ReliableSize)
             {
-                Application.Reset(id);
+                Protocol.Reset(id, input.ResetError.Value);
                 input.Terminal = true;
                 ReleaseTo(id, input, input.Extent);
             }
@@ -170,6 +174,8 @@
 
         internal void Reset(ulong id, ulong error, ulong final, ulong reliable, bool partial)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (partial && !_resetNegotiated) throw new InvalidDataException("Reliable reset was not negotiated.");
 
             if (reliable > final) throw new InvalidDataException("Reliable size exceeds final size.");
@@ -202,6 +208,7 @@
 
         private void Release(ulong id, int count)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             var input = _incoming[id];
 
             if ((ulong)count > input.Buffer.Delivered - input.Released)
@@ -237,12 +244,14 @@
 
         internal void UpdateData(ulong value)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             _peerData = Math.Max(_peerData, value);
             Flush();
         }
 
         internal void UpdateStream(ulong id, ulong value)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             ValidatePeerSendReference(id);
 
             if (IsRetired(id)) return;
@@ -254,6 +263,8 @@
 
         internal void UpdateCount(bool uni, ulong value)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (value > 1UL << 60) throw new InvalidDataException("Invalid stream count.");
 
             if (uni) _maxUni = Math.Max(_maxUni, value);
@@ -265,6 +276,8 @@
 
         private Outgoing GetOutgoing(ulong id)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if ((id & 3) is 1 or 2) throw new TransportException(0x05, "Invalid outbound stream ID.");
 
             ((id & 1) == 0 ? _incomingBidi : _localUni).Open(id / 4);
@@ -283,6 +296,8 @@
 
         private void SendStream(ulong id, byte[] bytes, bool fin)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (IsRetired(id)) return;
 
             var output = GetOutgoing(id);
@@ -292,11 +307,26 @@
             if (_writes.Count >= 128 || bytes.Length > 262144 - _queuedBytes)
                 throw new InvalidDataException("Pending output budget exceeded.");
 
-            if ((id & 3) == 3 && output.Prefix == null && id >= 15) output.Prefix = (byte[])bytes.Clone();
-
             _writes.Add(new Write(id, bytes, fin));
             _queuedBytes += bytes.Length;
             Flush();
+        }
+
+        private void SetReliablePrefix(ulong id, byte[] prefix)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var output = GetOutgoing(id);
+
+            if (
+                output.Offset != 0
+                || output.Prefix != null
+                || output.PendingReset.HasValue
+                || _writes.Any(write => write.Id == id)
+            )
+                throw new InvalidOperationException("Reliable prefix must precede stream writes.");
+
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(prefix.Length, StreamLimit);
+            output.Prefix = (byte[])prefix.Clone();
         }
 
         private void Flush()
@@ -364,17 +394,19 @@
 
         internal void Stop(ulong id, ulong error)
         {
-            if (id is 3 or 7 or 11) throw new InvalidDataException("Peer stopped a critical HTTP/3 stream.");
-
+            ObjectDisposedException.ThrowIf(_disposed, this);
             ValidatePeerSendReference(id);
 
             if (IsRetired(id)) return;
 
+            Protocol.Stop(id, error);
             ResetSend(id, (long)error);
         }
 
         private void Abort(ulong id, long error)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (IsRetired(id)) return;
 
             if ((id & 1) == 0) _transmit(Wire.Frame(5, id, (ulong)error), true);
@@ -456,6 +488,8 @@
 
         internal void Prune()
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             foreach (var pair in _outgoing.ToArray())
             {
                 var output = pair.Value;
@@ -467,7 +501,7 @@
                 {
                     _localUni.Retire(pair.Key / 4);
                     _outgoing.Remove(pair.Key);
-                    Application.Retire(pair.Key);
+                    Protocol.Retire(pair.Key);
                     RetiredStreams++;
                 }
 
@@ -482,7 +516,7 @@
         }
 
         private bool CanRetire(ulong id, Incoming input) =>
-            input.Terminal && input.Released == input.Extent && Application.CanRetire(id);
+            input.Terminal && input.Released == input.Extent && Protocol.CanRetire(id);
 
         private void RetireIncoming(ulong id, Incoming input)
         {
@@ -498,13 +532,14 @@
             _closedOrder.Enqueue(id);
             _incoming.Remove(id);
             _outgoing.Remove(id);
-            Application.Retire(id);
+            Protocol.Retire(id);
             _transmit(Wire.Frame((id & 2) == 0 ? 0x12UL : 0x13UL, window.Maximum), true);
             RetiredStreams++;
         }
 
         private void SendDatagram(byte[] bytes)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             var frame = Wire
                 .Frame(0x31, (ulong)bytes.Length)
                 .Concat(bytes)
@@ -518,24 +553,27 @@
 
         internal void Datagram(byte[] bytes)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             if (bytes.Length > 1100) throw new InvalidDataException("Datagram receive limit exceeded.");
 
-            Application.ReceiveDatagram(bytes);
+            Protocol.ReceiveDatagram(bytes);
         }
 
         public void Dispose()
         {
-            if (_disposed) return;
+            if (_disposed || _disposing) return;
 
-            _disposed = true;
+            _disposing = true;
 
             try
             {
-                Application.Dispose();
+                Protocol.Dispose();
             }
 
             finally
             {
+                _disposed = true;
                 _incoming.Clear();
                 _outgoing.Clear();
                 _writes.Clear();

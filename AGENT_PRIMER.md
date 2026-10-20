@@ -389,6 +389,10 @@ history also compact within fixed bounds. Per-key AES-GCM usage limits and
 ACK-confirmed local/peer key generations replace the cumulative send-packet quota.
 Completed stream records retire after receive/application completion and any required
 send acknowledgement; cumulative stream credit replenishes within resident bounds.
+The stream core accepts an owner-bound application adapter with explicit byte
+consumption and reliable-prefix ownership. The raw multiplexed echo profile
+exercises it without HTTP/3 control-stream or WebTransport session assumptions;
+asynchronous application ownership and production dispatch remain pending.
 A bounded shared listener adds destination-ID routing, admission
 limits, handshake deadlines and cancellation across multiple connections. It has
 no public application API; the intended fully validated

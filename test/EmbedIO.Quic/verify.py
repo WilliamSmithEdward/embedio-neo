@@ -94,12 +94,15 @@ class DatagramRelay(asyncio.DatagramProtocol):
         self.transport.sendto(data, self.server)
 
 
-async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=ALPN, noise=False, relay=False):
+async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=ALPN, noise=False, relay=False, multiplexed=False, rounds=1, parallel=1, unidirectional=False, deadline=6):
     process = await asyncio.create_subprocess_exec(
-        args.dotnet, args.assembly, "serve", args.openssl,
+        args.dotnet, args.assembly, "serve-streams" if multiplexed else "serve", args.openssl,
         str(args.output / "certificate.pem"), str(args.output / "key.pem"),
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     peers = []
+    inbound = asyncio.Queue(maxsize=16)
+    def stream_handler(reader, writer):
+        inbound.put_nowait(reader)
     def create_peer(*positional, **keywords):
         peer = Peer(*positional, **keywords)
         peers.append(peer)
@@ -128,18 +131,36 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
             verify_mode=ssl.CERT_REQUIRED, idle_timeout=3)
         if trusted:
             configuration.load_verify_locations(cafile=str(args.output / "certificate.pem"))
-        async with asyncio.timeout(6):
-            async with connect("127.0.0.1", port, configuration=configuration, create_protocol=create_peer) as peer:
+        async with asyncio.timeout(deadline):
+            async with connect("127.0.0.1", port, configuration=configuration, create_protocol=create_peer, stream_handler=stream_handler) as peer:
                 if peer.negotiated_alpn != ALPN:
                     raise AssertionError("ALPN mismatch")
-                reader, writer = await peer.create_stream()
-                for offset in range(0, len(payload), 113):
-                    writer.write(payload[offset:offset + 113])
-                    await writer.drain()
-                writer.write_eof()
-                received = await reader.read()
-                if received != payload:
-                    raise AssertionError(f"Echo mismatch: {len(received)} != {len(payload)}")
+                async def exchange(index):
+                    expected = index.to_bytes(2, "big") + payload if parallel > 1 else payload
+                    reader, writer = await peer.create_stream(is_unidirectional=unidirectional)
+                    # aioquic reserves the ID on the first write. Reserve it before
+                    # creating upload tasks so concurrent public create_stream calls
+                    # cannot return the same still-unused ID.
+                    writer.write(b"")
+                    async def upload():
+                        chunk = 16384 if len(expected) > 8192 else 113
+                        for offset in range(0, len(expected), chunk):
+                            writer.write(expected[offset:offset + chunk])
+                            await writer.drain()
+                        writer.write_eof()
+                    async def download():
+                        response = await inbound.get() if unidirectional else reader
+                        received = await response.read()
+                        if received != expected:
+                            raise AssertionError(f"Stream {index} echo mismatch: {len(received)} != {len(expected)}")
+                    await asyncio.gather(upload(), download())
+                for iteration in range(rounds):
+                    await asyncio.gather(*(exchange(iteration * parallel + index) for index in range(parallel)))
+                if multiplexed:
+                    # Let the independent peer's normal delayed-ACK timer run, then
+                    # complete a public ping before checking ACK-gated retirement.
+                    await asyncio.sleep(0.1)
+                    await peer.ping()
                 success = True
     except (ConnectionError, TimeoutError, AssertionError, ValueError) as error:
         failure = type(error).__name__ + ": " + str(error)
@@ -164,6 +185,9 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
         and not report.get("complete", False) and termination is not None
         and termination["code"] == expected_code)
     passed = passed and report.get("phase") == "Closed"
+    if multiplexed:
+        passed = passed and report.get("rawStreamsCompleted") == rounds * parallel
+        passed = passed and report.get("retiredStreams") == rounds * parallel * (2 if unidirectional else 1)
     if noise and positive:
         passed = passed and report.get("rejectedPackets", 0) >= 4
     if relay is True:
@@ -231,10 +255,21 @@ async def main(args):
         for mode in ("loss-initial", "loss-handshake", "loss-stream", "loss-ack", "reorder"):
             results.append(await case(args, mode, bytes(i % 251 for i in range(8192)), relay=mode))
             print(json.dumps(results[-1]), flush=True)
+    if all(result["passed"] for result in results):
+        for name, length, options in (
+            ("raw-bidi-256", 64, {"rounds": 256}),
+            ("raw-uni-128", 64, {"rounds": 128, "unidirectional": True}),
+            ("raw-parallel-16", 4096, {"parallel": 16, "rounds": 4}),
+            ("raw-sliding-2m-loss", 2 * 1024 * 1024, {"relay": "loss-stream", "deadline": 20}),
+        ):
+            results.append(await case(args, name, bytes(i % 251 for i in range(length)), multiplexed=True, **options))
+            print(json.dumps(results[-1]), flush=True)
+            if not results[-1]["passed"]:
+                break
     receipt = {"peer": "aioquic", "peerVersion": importlib.metadata.version("aioquic"),
                **provenance(args),
                "cases": results,
-               "passed": len(results) == 15 and all(result["passed"] for result in results)}
+               "passed": len(results) == 19 and all(result["passed"] for result in results)}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     return 0 if receipt["passed"] else 1
 

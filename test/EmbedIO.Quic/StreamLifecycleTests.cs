@@ -41,7 +41,7 @@ namespace EmbedIO.Quic
                     16,
                     1200,
                     true,
-                    _ => authorize
+                    operations => new WebTransportApplication(true, operations, _ => authorize)
                 );
                 var settings = Wire.Frame(8, 1, 0x33, 1, 0x2c7cf000, 1, 0x2b61, 65536, 0x2b64, 1024, 0x2b65, 8);
                 Streams.Receive(
@@ -112,7 +112,7 @@ namespace EmbedIO.Quic
                     QuicFuzzChecks.Require(
                         peer.Streams.IncomingCount == 1
                             && peer.Streams.OutgoingCount == 3
-                            && peer.Streams.Application.RetainedInputs == 1,
+                            && ((WebTransportApplication)peer.Streams.Protocol).RetainedInputs == 1,
                         "completed-request-buffers-retired"
                     );
                     peer.Sent.Clear();
@@ -148,14 +148,14 @@ namespace EmbedIO.Quic
                     peer.Streams.RetiredStreams == 0
                         && peer.Streams.IncomingCount == 3
                         && peer.Streams.OutgoingCount == 5
-                        && peer.Streams.Application.RetainedOutputs == 1,
+                        && ((WebTransportApplication)peer.Streams.Protocol).RetainedOutputs == 1,
                     "echo-retains-receive-capacity-until-send-ack"
                 );
                 peer.Acknowledge();
                 QuicFuzzChecks.Require(
                     peer.Streams.RetiredStreams == 2
                         && peer.Streams.OutgoingCount == 4
-                        && peer.Streams.Application.RetainedOutputs == 0,
+                        && ((WebTransportApplication)peer.Streams.Protocol).RetainedOutputs == 0,
                     "uni-send-fin-ack-releases-handle"
                 );
                 peer.Streams.UpdateStream(15, 100000);
@@ -166,8 +166,8 @@ namespace EmbedIO.Quic
                 QuicFuzzChecks.Require(
                     peer.Streams.IncomingCount == 0
                         && peer.Streams.OutgoingCount == 0
-                        && peer.Streams.Application.RetainedInputs == 0
-                        && peer.Streams.Application.RetainedOutputs == 0,
+                        && ((WebTransportApplication)peer.Streams.Protocol).RetainedInputs == 0
+                        && ((WebTransportApplication)peer.Streams.Protocol).RetainedOutputs == 0,
                     "stream-disposal-releases-all-owned-buffers"
                 );
             }
@@ -257,7 +257,7 @@ namespace EmbedIO.Quic
                 QuicFuzzChecks.Require(
                     peer.Streams.RetiredStreams == 2
                         && peer.Streams.IncomingCount == 2
-                        && peer.Streams.Application.RetainedInputs == 2,
+                        && ((WebTransportApplication)peer.Streams.Protocol).RetainedInputs == 2,
                     "unavailable-session-reference-releases-buffered-input"
                 );
             }
@@ -269,9 +269,9 @@ namespace EmbedIO.Quic
                 peer.Streams.Reset(6, 1, (ulong)prefix.Length, (ulong)prefix.Length, true);
                 peer.Streams.Receive(4, 0, Headers, false);
                 QuicFuzzChecks.Require(
-                    peer.Streams.Application.AcceptedSessions == 1
+                    ((WebTransportApplication)peer.Streams.Protocol).AcceptedSessions == 1
                         && peer.Streams.IncomingCount == 2
-                        && peer.Streams.Application.RetainedInputs == 2,
+                        && ((WebTransportApplication)peer.Streams.Protocol).RetainedInputs == 2,
                     "later-session-admission-tolerates-retired-buffered-stream"
                 );
             }
@@ -353,8 +353,8 @@ namespace EmbedIO.Quic
                 streams.IncomingCount <= 32
                     && streams.OutgoingCount <= 48
                     && streams.ClosedHistoryCount <= 64
-                    && streams.Application.RetainedInputs <= 32
-                    && streams.Application.RetainedOutputs <= 16,
+                    && ((WebTransportApplication)streams.Protocol).RetainedInputs <= 32
+                    && ((WebTransportApplication)streams.Protocol).RetainedOutputs <= 16,
                 "stream-lifecycle-resources-bounded"
             );
 

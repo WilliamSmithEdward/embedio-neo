@@ -24,7 +24,7 @@ namespace EmbedIO.Quic
                     16,
                     1200,
                     true,
-                    _ => true
+                    operations => new WebTransportApplication(true, operations, _ => true)
                 );
 
             using (var connection = Create())
@@ -52,14 +52,18 @@ namespace EmbedIO.Quic
                     8192
                 );
                 connection.Receive(0, 0, Frame(1, headers), false);
-                Check(connection.Application.AcceptedSessions == 1, "linked session admission");
+                Check(((WebTransportApplication)connection.Protocol).AcceptedSessions == 1, "linked session admission");
                 var prefix = Wire.Frame(0x54, 0);
                 connection.Reset(6, 1234, 100, (ulong)prefix.Length, true);
                 connection.Receive(6, 1, prefix[1..], false);
-                Check(connection.Application.ResetsDelivered == 0, "reset waits for reliable gap");
+                Check(
+                    ((WebTransportApplication)connection.Protocol).ResetsDelivered == 0,
+                    "reset waits for reliable gap"
+                );
                 connection.Receive(6, 0, prefix[..1], false);
                 Check(
-                    connection.Application.ResetsDelivered == 1 && connection.Application.StreamsDelivered == 1,
+                    ((WebTransportApplication)connection.Protocol).ResetsDelivered == 1
+                        && ((WebTransportApplication)connection.Protocol).StreamsDelivered == 1,
                     "prefix routed before reset delivery"
                 );
                 Reject(() => connection.Reset(6, 1234, 99, 0, true), "reset final-size conflict", 0x06);

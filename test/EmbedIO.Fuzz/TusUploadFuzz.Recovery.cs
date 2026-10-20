@@ -44,7 +44,11 @@ internal static partial class TusUploadFuzz
                 tail.Flush(true);
             }
 
-            await File.WriteAllTextAsync(args[2], upload.Location);
+            // Publish readiness only after the writer has closed. File.Exists can
+            // otherwise expose an incomplete or exclusively open marker on Windows.
+            var pendingMarker = args[2] + ".pending";
+            await File.WriteAllTextAsync(pendingMarker, upload.Location);
+            File.Move(pendingMarker, args[2]);
             await Task.Delay(Timeout.InfiniteTimeSpan);
             return true;
         }
@@ -67,11 +71,13 @@ internal static partial class TusUploadFuzz
         var processPath = Environment.ProcessPath ?? throw new InvalidOperationException("Missing process path.");
         var start = new ProcessStartInfo(processPath) { UseShellExecute = false };
 
-        if (string.Equals(
-            Path.GetFileNameWithoutExtension(start.FileName),
-            "dotnet",
-            StringComparison.OrdinalIgnoreCase
-        )) start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
+        if (
+            string.Equals(
+                Path.GetFileNameWithoutExtension(start.FileName),
+                "dotnet",
+                StringComparison.OrdinalIgnoreCase
+            )
+        ) start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
 
         start.ArgumentList.Add("--tus-recovery-child");
         start.ArgumentList.Add(root);

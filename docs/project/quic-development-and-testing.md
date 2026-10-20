@@ -21,6 +21,7 @@ TLS; .NET cryptography supplies AES-GCM, AES and HKDF. Our code owns the transpo
 | Recovery and congestion | Bounded retired-packet metadata and acknowledgement barriers permit long-running recovery histories. Physical packet records retain logical delivery ownership through retransmission and late ACKs. Monotonic-time tests exercise packet/time loss, RTT, PTO probes, pacing, NewReno, application-limited ACKs and persistent congestion. |
 | HTTP/3 and WebTransport bridge | Existing H3/QPACK/capsule/session code is linked into the prototype. The bridge handles SETTINGS, authorized CONNECT, exact Origin admission, bidi/uni streams, datagrams, independent sessions and reliable partial resets. quic-go provides a separate wire peer. |
 | Sustained transfers | A fixed sliding receive window retains final-size history and compacts consumed H3 input. MAX_DATA/MAX_STREAM_DATA track consumption, including reset gaps after their reliable prefix. Independent cases transfer 512 KiB, with small peer windows and loss. A separate bounded endurance case transfers 8 MiB over two streams with frequent local key updates. |
+| Application boundary | `StreamApplication` and its owner-bound operations separate raw streams/datagrams from the H3 adapter. Consumption returns receive credit; reliable prefixes and critical-stream rules belong to the application. Async application ownership and production integration remain pending. |
 | Stream lifetime | Cumulative stream credit replenishes after complete receive/application and required send-ACK retirement. Closed-ID ranges prevent reuse; at most 64 recent final sizes retain narrow conflict checks. ACK delays keep echo work within resident stream bounds. |
 | Connection lifetime | Active, closing, draining and closed states use injected time. Idle expiry is silent; close replies are bounded; repeated sends or duplicate close traffic do not extend retirement. Windows ICMP reset notifications during retirement are handled explicitly. |
 | Shared listener | Destination-ID demultiplexing, endpoint-bound original-ID aliases, 16 resident owners, bounded admission attempts and fixed handshake deadlines. One cancellable UDP receive loop retires owners and permits clean port rebinding. |
@@ -41,6 +42,7 @@ All files in this table are under `test/EmbedIO.Quic` unless stated.
 | Packet protection | `PacketKeys.cs`, `KeyUpdateState.cs`, `KeyUpdateTests.cs` | RFC vectors, encrypt/decrypt identity, tamper rejection, per-key encryption limits, packet-number truncation, repeated key generations, ACK/cooldown policy models and retained header protection. |
 | Receive state | `StreamReassembly.cs`, `Wire.cs` | Absolute-position dictionary oracle against the sliding ring; reversed/duplicated CRYPTO fragments; final-size, window, overlap and once-only delivery checks. |
 | Recovery/congestion | `Recovery.cs`, `RecoveryRetentionTests.cs` | Deterministic algorithm cases, history compaction/late-ACK models, logical/physical accounting, duplicate ACKs, discard, loss/PTO/retransmit traces, resource bounds and independent connection ownership. |
+| Generic application ownership | `StreamApplication.cs`, `StreamEchoApplication.cs`, `StreamApplicationTests.cs` | Empty stream admission, original reset codes, deferred consumption/flow credit, raw bidi/uni ACK retirement, independent owners and rejection of operations after disposal. |
 | Stream counts and retirement | `StreamCountWindow.cs`, `StreamCountTests.cs`, `StreamLifecycleTests.cs` | Independent closed-ID sets, 100,000 sequential retirements, implicit stream opening, delayed/late ACKs, repeated requests, closed references, pending session association, final-size checks and buffer disposal. |
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
@@ -264,6 +266,46 @@ and 10,000 shared-owner commands. Fresh libFuzzer and AFL++ runs completed
 332,682 and 29,994 inputs with no crashes or hangs after the final session-ownership
 change. The earlier 311,268 / 32,708 campaigns are retained as intermediate evidence. No production provider switch
 or cross-platform native/browser acceptance is implied by this increment.
+
+The generic-application increment removes HTTP/3 construction and stream-ID
+assumptions from the stream core. The H3 adapter explicitly owns its reliable
+stream prefix and critical control streams. The raw multiplexed profile uses the
+same consumption/retirement rules without HTTP headers or sessions. Its owner-bound
+callbacks transfer write-buffer ownership and reject operations after disposal.
+Reset notification retains the peer's original application code and waits for any
+negotiated reliable prefix. Deterministic and all-engine mutation tests cover
+consumption-driven credit, empty stream admission, raw uni/bidi ACK retirement and
+connection isolation. Production asynchronous stream/connection ownership remains
+a separate acceptance item.
+
+All 46 wire scenarios passed: 19 aioquic, 23 quic-go and four shared-listener
+cases. The added raw cases pass 256 sequential bidi streams, 128 uni streams,
+four groups of 16 concurrent streams with distinct payloads, and a 2 MiB transfer
+with three actual retransmissions and 77 receive-credit updates. Final ACK-gated
+retirement is checked after the independent peer's normal delayed-ACK timer and a
+public ping. An initial check closed the peer before those final ACKs and was
+corrected to observe completion; an early concurrent peer fixture reused IDs
+before its first write and now reserves each ID through the public writer.
+The original six-second probe deadlines remain unchanged. The new larger raw
+case uses a separate 20-second peer/30-second host deadline; the first six-second
+attempt remains retained.
+
+Final Debug/Release, full PR changed-file formatting/diagnostics, mandatory
+whole-source quality, suppression and AnalyzerGuard checks passed. Another
+100,000 native cases and 10,000 shared-owner commands passed. A two-seed run
+passed 1,400,000 QUIC properties, 1,200,000 existing properties, 200,000 mutations,
+40,000 actor traces, 10,000 native cases and 10,000 shared-owner commands. Fresh
+libFuzzer/AFL++ campaigns completed 256,214 / 26,044 inputs with zero retained
+crashes or hangs. The final peer check uses the frozen, hash-verified assemblies
+from the full validation run; the concurrent payload refinement changed only the
+Python peer. These results do not supply production or non-Windows wire acceptance.
+
+The earlier Windows Fuzz run 39497411610 failed in the existing tus killed-process
+fixture when the parent opened its marker before the child closed the write
+handle. Readiness now publishes by moving a closed adjacent file. Twelve repeated
+killed-process recovery trials passed locally, retaining all offset, ownership,
+resume and exact-byte assertions. The failed run is retained; hosted validation
+of the correction is required.
 
 CI run 39470892485 on the preceding pushed head passed on attempt 2. Its original
 macOS failure occurred during checkout DNS resolution; the targeted retry passed.

@@ -52,6 +52,11 @@ uses a ten-second process deadline by default. The single-connection modes are:
 
 - `serve` keeps the original `embedio-quic-probe` ALPN, one bidirectional stream
   and 8192-byte exact echo.
+- `serve-streams` uses the probe ALPN with the generic application boundary,
+  16 incoming streams per direction, bounded reusable receive windows and raw
+  multiplexed bidi/uni echo. It has a 30-second host deadline. It sends no HTTP/3
+  control streams or implicit WebTransport prefixes. The larger 2 MiB loss case
+  has a 20-second peer deadline; existing probe case deadlines are unchanged.
 - `serve-h3` negotiates `h3`, sends HTTP/3 SETTINGS, decodes bounded QPACK headers
   with dynamic capacity zero, and accepts `CONNECT :protocol=webtransport-h3` at
   `https://localhost/echo`. It links the existing repository codecs and session
@@ -188,9 +193,13 @@ the repository's aioquic pin. The temporary certificate is valid for one day.
 Windows x64 with SDK 10.0.402 and OpenSSL 3.5.7 completed the following local
 checks. Run receipts retain exact assembly/source/native-library identities.
 
-- Fifteen aioquic 1.6.0 cases cover the original ten interoperability cases plus
+- Nineteen aioquic 1.6.0 cases cover the original ten interoperability cases plus
   Initial/handshake/response loss, ACK loss and reordering. The designated reliable
   loss cases require actual retransmitted packets as well as an exact response.
+  Four raw multiplexed cases add 256 sequential bidi streams, 128 uni streams,
+  four groups of 16 concurrent streams with distinct payloads and a 2 MiB sliding-window transfer with
+  three dropped response packets. The peer runs its ordinary delayed-ACK timer
+  and completes a public ping before exact ACK-gated retirement is checked.
 - Twenty-three quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
   datagrams, two sessions and quota rejection, authorization/Origin rejection,
   missing current-reset negotiation, incoming and outgoing partial resets,
