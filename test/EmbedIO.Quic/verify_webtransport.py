@@ -76,6 +76,8 @@ async def case(args, mode, relay=None):
         passed = passed and report.get("receiveCreditUpdates", 0) >= 10 and report.get("streamBytesReceived", 0) > 524288
     if mode == "endurance":
         passed = passed and report.get("sentPackets", 0) > 4096 and report.get("localKeyUpdates", 0) >= 2 and report.get("keyUpdates", 0) >= 2 and report.get("streamBytesReceived", 0) > 8388608
+    if mode == "stream-cycle":
+        passed = passed and report.get("streamsDelivered") == 256 and report.get("retiredStreams", 0) >= 384 and report.get("retainedIncoming", -1) == 0 and report.get("retainedOutgoing", -1) == 0 and report.get("retainedApplicationInputs", -1) == 0 and report.get("bytesInFlight", -1) == 0
     if mode == "reset":
         passed = passed and report.get("resetsDelivered", 0) == 1
     if relay in ("loss-handshake", "loss-stream"):
@@ -90,14 +92,14 @@ async def main(args):
     results = []
     for mode, relay in [("echo", None), ("siblings", None), ("reset", None), ("outbound-reset", None), ("session-fault", None), ("unauthorized", None), ("origin", None),
                         ("missing-reset", None), ("large", None), ("credit", None),
-                        ("connection-fault", None), ("datagram-fault", None), ("idle", None), ("sustained", None), ("sustained-credit", None), ("sustained", "loss-stream"), ("endurance", None), ("endurance", "loss-stream"),
+                        ("connection-fault", None), ("datagram-fault", None), ("idle", None), ("sustained", None), ("sustained-credit", None), ("sustained", "loss-stream"), ("endurance", None), ("endurance", "loss-stream"), ("stream-cycle", None), ("stream-cycle", "loss-stream"),
                         ("echo", "loss-handshake"), ("echo", "loss-stream"), ("large", "loss-stream")]:
         result = await case(args, mode, relay)
         results.append(result)
         print(json.dumps(result), flush=True)
         if not result["passed"]:
             break
-    receipt = {"passed": len(results) == 21 and all(r["passed"] for r in results), "cases": results,
+    receipt = {"passed": len(results) == 23 and all(r["passed"] for r in results), "cases": results,
                **provenance(args),
                "peerSha256": hashlib.sha256(Path(args.peer).read_bytes()).hexdigest()}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")

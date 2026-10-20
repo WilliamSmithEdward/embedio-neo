@@ -45,6 +45,8 @@ namespace EmbedIO.Quic
                     break;
 
                 case 5:
+                    StreamCountTests.Mutate(data);
+                    StreamLifecycleTests.Mutate(data);
                     BridgeFuzz.Check(data);
                     break;
 

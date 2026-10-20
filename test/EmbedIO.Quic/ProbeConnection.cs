@@ -31,6 +31,10 @@ namespace EmbedIO.Quic
         internal int KeyUpdates { get; private set; }
         internal int LocalKeyUpdates { get; private set; }
         internal ulong SentPackets => _sentNumbers[0] + _sentNumbers[1] + _sentNumbers[2];
+        internal int RetiredStreams => _streams?.RetiredStreams ?? 0;
+        internal int RetainedIncoming => _streams?.IncomingCount ?? 0;
+        internal int RetainedOutgoing => _streams?.OutgoingCount ?? 0;
+        internal int RetainedApplicationInputs => _streams?.Application.RetainedInputs ?? 0;
         internal int OutboundResets => _streams?.OutboundResets ?? 0;
         internal int ReceiveCreditUpdates => _streams?.ReceiveCreditUpdates ?? 0;
         internal ulong StreamBytesReceived => _streams?.ReceivedData ?? 0;
@@ -181,6 +185,15 @@ namespace EmbedIO.Quic
             catch (WebTransportException error)
             {
                 BeginClose(2, Wire.Frame(0x1d, (ulong)error.ErrorCode, 0));
+                return Drain();
+            }
+
+            catch (TransportException error)
+            {
+                BeginClose(
+                    _tls.WriteKeys[2] != null ? 2 : _tls.WriteKeys[1] != null ? 1 : 0,
+                    Wire.Frame(0x1c, error.ErrorCode, 0, 0)
+                );
                 return Drain();
             }
 
@@ -501,6 +514,11 @@ namespace EmbedIO.Quic
 
             if (Phase != ConnectionPhase.Active)
             {
+                _pending.Clear();
+                _urgent.Clear();
+                _recovery.Abandon();
+                _streams?.Dispose();
+
                 if (
                     Phase == ConnectionPhase.Closing
                     && _closePayload != null
@@ -525,6 +543,8 @@ namespace EmbedIO.Quic
 
                 return output;
             }
+
+            _streams?.Prune();
 
             while (_urgent.Count + _pending.Count != 0)
             {

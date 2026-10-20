@@ -24,6 +24,7 @@
             internal bool Ended;
             internal byte[]? Prefix;
             internal long? PendingReset;
+            internal Delivery? FinalDelivery;
 
             internal List<(Delivery Delivery, ulong End)> Deliveries { get; } = [];
         }
@@ -37,6 +38,11 @@
             internal int Position;
         }
 
+        private readonly StreamCountWindow _incomingBidi = new();
+        private readonly StreamCountWindow _incomingUni = new();
+        private readonly StreamCountWindow _localUni = new(32);
+        private readonly Dictionary<ulong, ulong> _closedSizes = [];
+        private readonly Queue<ulong> _closedOrder = new();
         private readonly Dictionary<ulong, Incoming> _incoming = [];
         private readonly Dictionary<ulong, Outgoing> _outgoing = [];
         private readonly List<Write> _writes = [];
@@ -52,10 +58,15 @@
         private ulong _released;
         private ulong _receiveMaximum = ConnectionLimit;
 
+        internal int RetiredStreams { get; private set; }
+        internal int IncomingCount => _incoming.Count;
+        internal int OutgoingCount => _outgoing.Count;
+        internal int ClosedHistoryCount => _closedSizes.Count;
         internal int ReceiveCreditUpdates { get; private set; }
         internal ulong ReceivedData => _receivedExtent;
 
         private int _queuedBytes;
+        private bool _disposed;
         private readonly ulong _peerDatagram;
         private readonly bool _resetNegotiated;
 
@@ -94,10 +105,13 @@
             );
         }
 
-        private Incoming GetIncoming(ulong id)
+        private Incoming? GetIncoming(ulong id)
         {
-            if ((id & 1) != 0 || id / 4 >= 16)
-                throw new InvalidDataException("Invalid or excessive incoming stream ID.");
+            if ((id & 1) != 0) throw new TransportException(0x05, "Data on a send-only stream.");
+
+            var window = (id & 2) == 0 ? _incomingBidi : _incomingUni;
+
+            if (!window.Open(id / 4)) return null;
 
             if (!_incoming.TryGetValue(id, out var input)) _incoming.Add(id, input = new Incoming());
 
@@ -115,16 +129,23 @@
 
         internal void Receive(ulong id, ulong offset, byte[] bytes, bool fin)
         {
-            var input = GetIncoming(id);
-
             if (
                 offset > StreamReassembly.MaximumOffset || (ulong)bytes.Length > StreamReassembly.MaximumOffset - offset
             )
                 throw new InvalidDataException("QUIC stream limit exceeded.");
 
+            var input = GetIncoming(id);
+
+            if (input == null)
+            {
+                ValidateClosed(id, offset + (ulong)bytes.Length, fin);
+                return;
+            }
+
             Account(input, offset + (ulong)bytes.Length);
             input.Buffer.Add(offset, bytes, fin);
             Deliver(id, input);
+            Prune();
         }
 
         private void Deliver(ulong id, Incoming input)
@@ -154,6 +175,13 @@
             if (reliable > final) throw new InvalidDataException("Reliable size exceeds final size.");
 
             var input = GetIncoming(id);
+
+            if (input == null)
+            {
+                ValidateClosed(id, final, true);
+                return;
+            }
+
             Account(input, final);
             input.Buffer.Add(final, [], true);
 
@@ -169,6 +197,7 @@
             else input.ReliableSize = Math.Min(input.ReliableSize, reliable);
 
             Deliver(id, input);
+            Prune();
         }
 
         private void Release(ulong id, int count)
@@ -214,6 +243,10 @@
 
         internal void UpdateStream(ulong id, ulong value)
         {
+            ValidatePeerSendReference(id);
+
+            if (IsRetired(id)) return;
+
             var output = GetOutgoing(id);
             output.Credit = Math.Max(output.Credit, value);
             Flush();
@@ -232,7 +265,9 @@
 
         private Outgoing GetOutgoing(ulong id)
         {
-            if ((id & 3) == 2 || id / 4 >= 16) throw new InvalidDataException("Invalid outbound stream ID.");
+            if ((id & 3) is 1 or 2) throw new TransportException(0x05, "Invalid outbound stream ID.");
+
+            ((id & 1) == 0 ? _incomingBidi : _localUni).Open(id / 4);
 
             if (!_outgoing.TryGetValue(id, out var output))
                 _outgoing.Add(
@@ -248,6 +283,8 @@
 
         private void SendStream(ulong id, byte[] bytes, bool fin)
         {
+            if (IsRetired(id)) return;
+
             var output = GetOutgoing(id);
 
             if (output.Ended || output.PendingReset.HasValue) return;
@@ -304,7 +341,11 @@
                 Wire.Integer(frame, (ulong)count);
                 frame.Write(write.Bytes, write.Position, count);
                 output.Deliveries.RemoveAll(item => item.Delivery.Acknowledged);
-                output.Deliveries.Add((_transmit(frame.ToArray(), true), output.Offset + (ulong)count));
+                var delivery = _transmit(frame.ToArray(), true);
+                output.Deliveries.Add((delivery, output.Offset + (ulong)count));
+
+                if (end && write.Fin) output.FinalDelivery = delivery;
+
                 output.Offset += (ulong)count;
                 _sentData += (ulong)count;
                 _queuedBytes -= count;
@@ -325,11 +366,17 @@
         {
             if (id is 3 or 7 or 11) throw new InvalidDataException("Peer stopped a critical HTTP/3 stream.");
 
+            ValidatePeerSendReference(id);
+
+            if (IsRetired(id)) return;
+
             ResetSend(id, (long)error);
         }
 
         private void Abort(ulong id, long error)
         {
+            if (IsRetired(id)) return;
+
             if ((id & 1) == 0) _transmit(Wire.Frame(5, id, (ulong)error), true);
 
             if ((id & 3) != 2) ResetSend(id, error);
@@ -379,12 +426,81 @@
             var error = output.PendingReset ?? throw new InvalidOperationException("Missing reset state.");
             output.Ended = true;
             var prefix = (ulong)(output.Prefix?.Length ?? 0);
-            _transmit(
+            output.FinalDelivery = _transmit(
                 _resetNegotiated
                     ? Wire.Frame(0x24, id, (ulong)error, output.Offset, prefix)
                     : Wire.Frame(4, id, (ulong)error, output.Offset),
                 true
             );
+        }
+
+        private bool IsRetired(ulong id) => (id & 3) switch
+        {
+            0 => _incomingBidi.IsClosed(id / 4),
+            2 => _incomingUni.IsClosed(id / 4),
+            3 => _localUni.IsClosed(id / 4),
+            _ => false
+        };
+
+        private void ValidatePeerSendReference(ulong id)
+        {
+            if ((id & 3) is 1 or 2 || ((id & 3) == 3 && id / 4 >= _localUni.Opened))
+                throw new TransportException(0x05, "Peer referenced an unopened or receive-only send stream.");
+        }
+
+        private void ValidateClosed(ulong id, ulong extent, bool final)
+        {
+            if (_closedSizes.TryGetValue(id, out var size) && (extent > size || final && extent != size))
+                throw new TransportException(0x06, "Closed stream final size changed.");
+        }
+
+        internal void Prune()
+        {
+            foreach (var pair in _outgoing.ToArray())
+            {
+                var output = pair.Value;
+                output.Deliveries.RemoveAll(item => item.Delivery.Acknowledged);
+
+                if (!output.Ended || output.FinalDelivery?.Acknowledged != true) continue;
+
+                if ((pair.Key & 3) == 3)
+                {
+                    _localUni.Retire(pair.Key / 4);
+                    _outgoing.Remove(pair.Key);
+                    Application.Retire(pair.Key);
+                    RetiredStreams++;
+                }
+
+                else if (_incoming.TryGetValue(pair.Key, out var input) && CanRetire(pair.Key, input))
+                    RetireIncoming(pair.Key, input);
+            }
+
+            foreach (var pair in _incoming
+                .Where(pair => (pair.Key & 2) != 0)
+                .ToArray())
+                if (CanRetire(pair.Key, pair.Value)) RetireIncoming(pair.Key, pair.Value);
+        }
+
+        private bool CanRetire(ulong id, Incoming input) =>
+            input.Terminal && input.Released == input.Extent && Application.CanRetire(id);
+
+        private void RetireIncoming(ulong id, Incoming input)
+        {
+            var window = (id & 2) == 0 ? _incomingBidi : _incomingUni;
+
+            if (!window.Retire(id / 4)) throw new InvalidOperationException("Stream already retired.");
+
+            // Retain narrow final-size checks for recent streams without retaining
+            // their receive buffers. Older closed IDs remain unavailable by range.
+            if (_closedOrder.Count == 64) _closedSizes.Remove(_closedOrder.Dequeue());
+
+            _closedSizes.Add(id, input.Buffer.FinalSize ?? throw new InvalidOperationException("Missing final size."));
+            _closedOrder.Enqueue(id);
+            _incoming.Remove(id);
+            _outgoing.Remove(id);
+            Application.Retire(id);
+            _transmit(Wire.Frame((id & 2) == 0 ? 0x12UL : 0x13UL, window.Maximum), true);
+            RetiredStreams++;
         }
 
         private void SendDatagram(byte[] bytes)
@@ -407,6 +523,26 @@
             Application.ReceiveDatagram(bytes);
         }
 
-        public void Dispose() => Application.Dispose();
+        public void Dispose()
+        {
+            if (_disposed) return;
+
+            _disposed = true;
+
+            try
+            {
+                Application.Dispose();
+            }
+
+            finally
+            {
+                _incoming.Clear();
+                _outgoing.Clear();
+                _writes.Clear();
+                _closedSizes.Clear();
+                _closedOrder.Clear();
+                _queuedBytes = 0;
+            }
+        }
     }
 }

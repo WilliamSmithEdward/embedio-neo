@@ -25,6 +25,14 @@ namespace EmbedIO.Quic
         }
 
         private readonly Dictionary<ulong, Input> _inputs = [];
+        private readonly Dictionary<ulong, (
+            WebTransportSession Session,
+            WebTransportStreamHandle Handle
+        )> _outputs = [];
+
+        internal int RetainedInputs => _inputs.Count;
+        internal int RetainedOutputs => _outputs.Count;
+
         private readonly Dictionary<long, WebTransportSession> _sessions = [];
         private readonly Dictionary<long, Input> _capsules = [];
         private readonly QpackDecoderTable _qpack = new(0);
@@ -174,7 +182,11 @@ namespace EmbedIO.Quic
 
                     input.SessionId = (long)session;
                     input.Accounted = cursor;
-                    input.Handle = new WebTransportStreamHandle((long)id, (id & 2) == 0, error => _abort(id, error));
+                    input.Handle = new WebTransportStreamHandle(
+                        (long)id,
+                        (id & 2) == 0,
+                        error => AbortInput(id, input, error)
+                    );
                 }
 
                 else if ((id & 2) != 0)
@@ -198,7 +210,8 @@ namespace EmbedIO.Quic
                 {
                     var handle = input.Handle;
                     input.Handle = null;
-                    _registry.RouteIncomingStream(input.SessionId, handle);
+
+                    if (!_registry.RouteIncomingStream(input.SessionId, handle)) input.Finished = true;
                 }
 
                 Deliver(id, input);
@@ -218,6 +231,7 @@ namespace EmbedIO.Quic
             if (input.Type is not (0 or 0x100))
             {
                 input.Cursor = input.Length;
+                input.Finished = input.Fin;
                 return;
             }
 
@@ -362,7 +376,13 @@ namespace EmbedIO.Quic
 
         private void Attach(WebTransportSession session, WebTransportStreamHandle handle)
         {
-            var input = _inputs[(ulong)handle.Id];
+            if (!_inputs.TryGetValue((ulong)handle.Id, out var input))
+            {
+                handle.Abort(WebTransportProtocol.SessionGone);
+                session.StreamFinished(handle);
+                return;
+            }
+
             input.Session = session;
             input.Handle = handle;
             StreamsDelivered++;
@@ -399,6 +419,7 @@ namespace EmbedIO.Quic
                         error => _abort(input.OutputId.Value, error)
                     );
                     session.RegisterOutgoingStream(outputHandle);
+                    _outputs.Add(input.OutputId.Value, (session, outputHandle));
                     _write(input.OutputId.Value, Wire.Frame(0x54, (ulong)session.Id), false);
                 }
             }
@@ -424,7 +445,11 @@ namespace EmbedIO.Quic
             {
                 input.Finished = true;
 
-                if (input.Handle != null) session.StreamFinished(input.Handle);
+                if ((id & 2) != 0 && input.Handle != null)
+                {
+                    session.StreamFinished(input.Handle);
+                    DrainCapsules(session);
+                }
             }
         }
 
@@ -519,10 +544,41 @@ namespace EmbedIO.Quic
 
                 input.Finished = true;
 
-                if (input.Session != null && input.Handle != null) input.Session.StreamFinished(input.Handle);
+                if ((id & 2) != 0 && input.Session != null && input.Handle != null)
+                    input.Session.StreamFinished(input.Handle);
+
+                if (input.OutputId.HasValue) _abort(input.OutputId.Value, WebTransportProtocol.SessionGone);
 
                 Compact(id, input);
             }
+        }
+
+        private void AbortInput(ulong id, Input input, long error)
+        {
+            input.Finished = true;
+            _abort(id, error);
+            Compact(id, input);
+        }
+
+        internal bool CanRetire(ulong id) =>
+            !_inputs.TryGetValue(id, out var input)
+                || input.Finished && (!input.OutputId.HasValue || !_outputs.ContainsKey(input.OutputId.Value));
+
+        internal void Retire(ulong id)
+        {
+            if (_outputs.Remove(id, out var output)) output.Session.StreamFinished(output.Handle);
+
+            if (!_inputs.Remove(id, out var input)) return;
+
+            if (input.Session != null && input.Handle != null)
+            {
+                input.Session.StreamFinished(input.Handle);
+                DrainCapsules(input.Session);
+            }
+
+            _capsules.Remove((long)id);
+
+            if ((id & 3) == 0) _registry?.NoteRequestStream((long)id);
         }
 
         private static bool Integer(Input input, ref int cursor, out ulong value)
@@ -546,6 +602,21 @@ namespace EmbedIO.Quic
             return stream.ToArray();
         }
 
-        public void Dispose() => _registry?.Shutdown();
+        public void Dispose()
+        {
+            try
+            {
+                _registry?.Shutdown();
+            }
+
+            finally
+            {
+                _registry = null;
+                _inputs.Clear();
+                _outputs.Clear();
+                _capsules.Clear();
+                _sessions.Clear();
+            }
+        }
     }
 }

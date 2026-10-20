@@ -21,6 +21,7 @@ TLS; .NET cryptography supplies AES-GCM, AES and HKDF. Our code owns the transpo
 | Recovery and congestion | Bounded retired-packet metadata and acknowledgement barriers permit long-running recovery histories. Physical packet records retain logical delivery ownership through retransmission and late ACKs. Monotonic-time tests exercise packet/time loss, RTT, PTO probes, pacing, NewReno, application-limited ACKs and persistent congestion. |
 | HTTP/3 and WebTransport bridge | Existing H3/QPACK/capsule/session code is linked into the prototype. The bridge handles SETTINGS, authorized CONNECT, exact Origin admission, bidi/uni streams, datagrams, independent sessions and reliable partial resets. quic-go provides a separate wire peer. |
 | Sustained transfers | A fixed sliding receive window retains final-size history and compacts consumed H3 input. MAX_DATA/MAX_STREAM_DATA track consumption, including reset gaps after their reliable prefix. Independent cases transfer 512 KiB, with small peer windows and loss. A separate bounded endurance case transfers 8 MiB over two streams with frequent local key updates. |
+| Stream lifetime | Cumulative stream credit replenishes after complete receive/application and required send-ACK retirement. Closed-ID ranges prevent reuse; at most 64 recent final sizes retain narrow conflict checks. ACK delays keep echo work within resident stream bounds. |
 | Connection lifetime | Active, closing, draining and closed states use injected time. Idle expiry is silent; close replies are bounded; repeated sends or duplicate close traffic do not extend retirement. Windows ICMP reset notifications during retirement are handled explicitly. |
 | Shared listener | Destination-ID demultiplexing, endpoint-bound original-ID aliases, 16 resident owners, bounded admission attempts and fixed handshake deadlines. One cancellable UDP receive loop retires owners and permits clean port rebinding. |
 | Fuzz integration | All existing fuzz engines now have direct QUIC core entry points. Packet-header and ACK-range parsing are shared between the actual connection and fuzz targets. Dedicated native campaigns also exercise fresh OpenSSL contexts through authenticated Initial frames. |
@@ -40,6 +41,7 @@ All files in this table are under `test/EmbedIO.Quic` unless stated.
 | Packet protection | `PacketKeys.cs`, `KeyUpdateState.cs`, `KeyUpdateTests.cs` | RFC vectors, encrypt/decrypt identity, tamper rejection, per-key encryption limits, packet-number truncation, repeated key generations, ACK/cooldown policy models and retained header protection. |
 | Receive state | `StreamReassembly.cs`, `Wire.cs` | Absolute-position dictionary oracle against the sliding ring; reversed/duplicated CRYPTO fragments; final-size, window, overlap and once-only delivery checks. |
 | Recovery/congestion | `Recovery.cs`, `RecoveryRetentionTests.cs` | Deterministic algorithm cases, history compaction/late-ACK models, logical/physical accounting, duplicate ACKs, discard, loss/PTO/retransmit traces, resource bounds and independent connection ownership. |
+| Stream counts and retirement | `StreamCountWindow.cs`, `StreamCountTests.cs`, `StreamLifecycleTests.cs` | Independent closed-ID sets, 100,000 sequential retirements, implicit stream opening, delayed/late ACKs, repeated requests, closed references, pending session association, final-size checks and buffer disposal. |
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
 | Connection ownership | `ConnectionSet.cs`, `SharedListener.cs`, `ConnectionSetTests.cs`, `verify_connections.py` | Capacity/deadline/disposal regressions, seeded admission/retirement mutations and simultaneous independent clients on one UDP port. |
@@ -58,6 +60,8 @@ recovery, lifetime, WebTransport bridge, and packet headers/ACKs. Raw inputs are
 bounded to 4096 bytes. Stateful byte traces execute at most 128 commands; checked-in
 JSON traces and generated multi-connection campaigns use three actors and 48 steps.
 The packet-protection selector also drives a 128-command key-generation model.
+The bridge selector drives an independent 128-command stream-count model with
+smaller resident limits, while the actual bridge still runs its ownership checks.
 A separate recovery-history model uses up to 64 commands and smaller test-only
 retention bounds to exercise compaction without large per-input workloads.
 The receive-history model allows up to 256 commands so coverage-guided inputs can
@@ -93,7 +97,7 @@ Recovery histories and peer buffers remain bounded by the prototype's limits.
 
 Shared-owner regressions also verify that terminal resource limits retire one
 owner while a healthy neighbor continues. These host checks preserve the current
-bounds; production endurance and stream-count replenishment remain separate work.
+bounds; production endurance and the generic application transport boundary remain separate work.
 
 The negative oracle self-checks verify detection of changed/missing/duplicated
 stream bytes and a falsely classified authenticated packet. Existing deterministic
@@ -238,6 +242,29 @@ source hashes; the 21-case peer matrix uses those same frozen binaries. The earl
 validation pass preceded the final key-ordering changes and is retained as
 intermediate evidence, not the final source gate.
 
+The stream-lifetime increment first reproduced the lifetime stream limit after
+15 data streams. Its replacement passes 128 bidi and 128 uni streams on one
+session, with normal traffic and three deliberately dropped response packets.
+All 42 wire cases pass (15 aioquic, 23 quic-go and four shared-listener cases).
+The new cases require exact data, replenished session/transport credit, later
+datagrams, at least 384 retired stream records, completed shutdown, zero retained
+stream/application maps and zero final recovery flight.
+
+Deterministic tests pass 100,000 sequential stream IDs, 2000 completed requests,
+missing FIN ACKs, bounded receive capacity under response backpressure, late
+controls/final sizes, pending session associations and once-only disposal. Session
+ownership persists through the response ACK so closing a session still terminates
+unacknowledged bidi responses; the ACK/close ordering also has a fuzz oracle.
+The independent count model runs through every managed fuzz engine. Final
+Debug/Release, full PR changed-file formatting/diagnostic checks, native 100,000
+cases/10,000 shared-owner commands, whole-source quality, suppression checks and
+AnalyzerGuard passed. Two new seeds passed 1,400,000 QUIC properties, 1,200,000
+existing properties, 200,000 mutations, 40,000 state traces, 10,000 native cases
+and 10,000 shared-owner commands. Fresh libFuzzer and AFL++ runs completed
+332,682 and 29,994 inputs with no crashes or hangs after the final session-ownership
+change. The earlier 311,268 / 32,708 campaigns are retained as intermediate evidence. No production provider switch
+or cross-platform native/browser acceptance is implied by this increment.
+
 CI run 39470892485 on the preceding pushed head passed on attempt 2. Its original
 macOS failure occurred during checkout DNS resolution; the targeted retry passed.
 This is evidence for that head, not for subsequent uncommitted changes.
@@ -248,7 +275,9 @@ This is evidence for that head, not for subsequent uncommitted changes.
    interfaces, with application configuration, certificate lifetime and graceful
    shutdown parity. Its current admission limits and ten-second host deadline are
    development-host bounds; the offline actor model is not a listener load test.
-2. Replenish stream counts and validate longer transfer/loss/endurance patterns.
+2. Validate longer transfer/loss/endurance patterns and expose sustainable stream
+   lifecycle through the production application transport boundary. The development
+   host already replenishes stream counts and retires stream/application buffers.
    Receive and recovery histories retire within fixed bounds; packet encryption
    enforces per-key AES-GCM limits and ACK-confirmed local/peer key generations.
 3. Complete transport/application error classification, stateless reset, Retry,

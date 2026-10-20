@@ -271,6 +271,10 @@ namespace EmbedIO.Quic
 
                 var result = new
                 {
+                    retiredStreams = connection?.RetiredStreams ?? 0,
+                    retainedIncoming = connection?.RetainedIncoming ?? 0,
+                    retainedOutgoing = connection?.RetainedOutgoing ?? 0,
+                    retainedApplicationInputs = connection?.RetainedApplicationInputs ?? 0,
                     localKeyUpdates = connection?.LocalKeyUpdates ?? 0,
                     sentPackets = connection?.SentPackets ?? 0,
                     established = connection?.Established ?? false,

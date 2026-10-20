@@ -62,10 +62,14 @@ namespace EmbedIO.Quic
                     connection.Application.ResetsDelivered == 1 && connection.Application.StreamsDelivered == 1,
                     "prefix routed before reset delivery"
                 );
-                Reject(() => connection.Reset(6, 1234, 99, 0, true), "reset final-size conflict");
-                Reject(() => connection.Receive(6, 100, [1], false), "data beyond final size");
+                Reject(() => connection.Reset(6, 1234, 99, 0, true), "reset final-size conflict", 0x06);
+                Reject(() => connection.Receive(6, 100, [1], false), "data beyond final size", 0x06);
                 Reject(() => connection.Reset(10, 1234, 3, 4, true), "reliable size above final size");
-                Reject(() => connection.Receive(3, 0, [1], false), "peer cannot write server unidirectional stream");
+                Reject(
+                    () => connection.Receive(3, 0, [1], false),
+                    "peer cannot write server unidirectional stream",
+                    0x05
+                );
                 Reject(() => connection.Stop(3, 0), "critical stream stop");
                 Reject(
                     () => connection.Reset(2, 1, (ulong)(1 + Frame(4, settings).Length), 0, true),
@@ -134,14 +138,19 @@ namespace EmbedIO.Quic
             if (!valid) throw new InvalidOperationException("Bridge regression: " + name);
         }
 
-        private static void Reject(Action operation, string name)
+        private static void Reject(Action operation, string name, ulong? errorCode = null)
         {
             try
             {
                 operation();
             }
 
-            catch (InvalidDataException)
+            catch (TransportException error) when (error.ErrorCode == errorCode)
+            {
+                return;
+            }
+
+            catch (InvalidDataException) when (!errorCode.HasValue)
             {
                 return;
             }

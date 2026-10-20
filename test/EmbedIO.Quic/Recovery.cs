@@ -310,6 +310,16 @@
             return true;
         }
 
+        internal void Abandon()
+        {
+            _sent.Clear();
+            _retired.Clear();
+            _retiredOrder.Clear();
+            _lostHistory.Clear();
+            _acknowledgedTimes.Clear();
+            BytesInFlight = 0;
+        }
+
         internal void Discard(int level)
         {
             _discarded[level] = true;

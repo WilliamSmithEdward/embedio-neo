@@ -131,6 +131,8 @@ namespace EmbedIO.Quic
 
             catch (InvalidDataException) { }
 
+            catch (TransportException) { }
+
             catch (WebTransportException) { }
 
             catch (Http3ProtocolException) { }

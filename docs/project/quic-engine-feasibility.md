@@ -80,7 +80,7 @@ consume congestion credit but are not retransmitted.
 
 Bounds remain deliberate: 64 KiB CRYPTO reassembly per encryption level,
 4096 active recovery records, bounded ACK/loss history
-and 512 queued packets. H3 permits 16 incoming streams of each direction, 64 KiB
+and 512 queued packets. H3 permits 16 resident incoming streams of each direction, 64 KiB
 per stream receive window and an initial 256 KiB connection window. Both windows
 advance as the application consumes or discards input; buffered gaps retain their
 credit. Final reset sizes consume and release connection credit once, including
@@ -88,7 +88,7 @@ gaps, after any required reliable prefix arrives. The engine waits for the relia
 partial reset and preserves the header when a local reset waits for send credit.
 Stream reassembly reuses a fixed ring, and the H3 parser compacts consumed input.
 Retired duplicate bytes are ignored; overlap still buffered in the ring must agree,
-and final-size history is retained. The active-record/session/stream-count budgets and
+and final-size history is retained. The active-record/session/resident-stream budgets and
 process deadline still bound each validation process; this is not indefinite service.
 Receive packet history now uses at most 128 ACK ranges within a sliding
 4096-number window. A monotonic acceptance floor prevents processing retired
@@ -122,6 +122,17 @@ larger peer cases require a recorded key update and complete exact-byte transfer
 The per-connection failed-authentication counter stops packet processing at the
 AES-GCM integrity limit of 2^52 failures, with AEAD_LIMIT_REACHED closure. Native
 regressions use smaller test-only budgets to verify both limit paths on the wire.
+
+Stream limits now bound resident work, rather than lifetime stream IDs. Closed
+ranges merge around live or implicitly opened streams; MAX_STREAMS credit advances
+only once per retired incoming stream. Bidirectional streams wait for response
+FIN/reset acknowledgement; the echo adapter also retains receive capacity while
+an associated outgoing uni response is pending. At most 32 local uni records can
+reside, including critical streams and work waiting for peer credit. A 64-entry
+recent final-size cache checks delayed conflicts without retaining receive buffers;
+older closed IDs are ignored and never charged or opened again. Connection close,
+draining and idle expiry release application buffers, pending work and physical
+recovery flight without discarding the RTT estimate used for retirement timers.
 
 Connections now distinguish active, closing, draining and closed states. Local
 protocol/TLS errors send bounded CONNECTION_CLOSE responses; peer close enters
@@ -180,7 +191,7 @@ checks. Run receipts retain exact assembly/source/native-library identities.
 - Fifteen aioquic 1.6.0 cases cover the original ten interoperability cases plus
   Initial/handshake/response loss, ACK loss and reordering. The designated reliable
   loss cases require actual retransmitted packets as well as an exact response.
-- Twenty-one quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
+- Twenty-three quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
   datagrams, two sessions and quota rejection, authorization/Origin rejection,
   missing current-reset negotiation, incoming and outgoing partial resets,
   a malformed capsule followed by a healthy sibling, larger transfers, withheld
@@ -190,7 +201,9 @@ checks. Run receipts retain exact assembly/source/native-library identities.
   closing and silent idle expiry; every wire case requires completed shutdown.
   Two endurance cases transfer 8 MiB over bidi/uni streams, require more than
   4096 sent packets and multiple local and peer key transitions; the loss case
-  also requires actual retransmission.
+  also requires actual retransmission. Two additional cases run 128 bidi and 128 uni
+  data streams on one session, with exact bytes, session/transport credit, later
+  datagrams, complete retirement and a loss/retransmission variant.
 - The original 10,076 primitive assertions remain. Additional deterministic
   recovery and bridge regressions cover packet spaces, RTT/ACK delay, PTO backoff,
   late/duplicate ACKs, persistent congestion, blocked credit, sparse reliable
@@ -234,7 +247,7 @@ coverage. The production provider remains unchanged.
 ## Next acceptance boundaries
 
 1. Extend the bounded shared-listener/stream machinery to production lifetimes,
-   replenished stream counts, complete error classification/stateless reset,
+   complete error classification/stateless reset,
    and longer transfer/loss/endurance coverage.
    Broaden loss/congestion and close-retry campaigns before treating the recovery
    and lifecycle algorithms as production transport acceptance.

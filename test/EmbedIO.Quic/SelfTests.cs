@@ -102,6 +102,8 @@ namespace EmbedIO.Quic
             BridgeTests.Run();
             KeyUpdateTests.Run();
             StreamWindowTests.Run();
+            StreamCountTests.Run();
+            StreamLifecycleTests.Run();
             LifetimeTests.Run();
             QuicFuzzChecks.SelfTest();
             var result = new

@@ -107,6 +107,22 @@
                     "history-model-resource-bounds"
                 );
             }
+
+            if ((data[0] & 128) != 0)
+            {
+                var rtt = recovery.SmoothedRtt;
+                recovery.Abandon();
+                recovery.Abandon();
+                QuicFuzzChecks.Require(
+                    recovery.ActivePacketCount == 0
+                        && recovery.RetiredPacketCount == 0
+                        && recovery.AcknowledgmentCount == 0
+                        && recovery.LossHistoryCount == 0
+                        && recovery.BytesInFlight == 0
+                        && recovery.SmoothedRtt == rtt,
+                    "abandoned-recovery-releases-state-and-retains-timer-estimate"
+                );
+            }
         }
 
         private static void Bounds(Recovery recovery) =>

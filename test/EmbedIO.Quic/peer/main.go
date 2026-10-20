@@ -309,6 +309,9 @@ func run() error {
 		}
 		return sustained(ctx, conn, session, unis, size)
 	}
+	if *mode == "stream-cycle" {
+		return cycles(ctx, conn, session, unis)
+	}
 	if *mode == "outbound-reset" {
 		upload, e := conn.OpenUniStreamSync(ctx)
 		if e != nil {
@@ -590,6 +593,121 @@ func sustained(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis 
 		return err
 	}
 	if err = session.Close(); err != nil {
+		return err
+	}
+	_, err = io.ReadAll(session)
+	return err
+}
+
+func cycles(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis <-chan *quic.ReceiveStream) error {
+	limits := map[uint64]uint64{0x190B4D3D: 65536, 0x190B4D3F: 8, 0x190B4D40: 8}
+	var sent, consumed uint64
+	for _, uni := range []bool{false, true} {
+		kind := uint64(0x190B4D3F)
+		if uni {
+			kind = 0x190B4D40
+		}
+		for index := uint64(0); index < 128; index++ {
+			payload := bytes.Repeat([]byte{byte(index), byte(index >> 8), 7, 11}, 256)
+			for index >= limits[kind] || sent+uint64(len(payload)) > limits[0x190B4D3D] {
+				t, data, err := readFrame(session)
+				if err != nil {
+					return err
+				}
+				if t != 0 {
+					return errors.New("cycle expected capsule DATA")
+				}
+				capsules := bytes.NewReader(data)
+				for capsules.Len() > 0 {
+					t, data, err = readFrame(capsules)
+					if err != nil {
+						return err
+					}
+					if t == 0x190B4D3D || t == 0x190B4D3F || t == 0x190B4D40 {
+						value, err := readInteger(bytes.NewReader(data))
+						if err != nil {
+							return err
+						}
+						if value > limits[t] {
+							limits[t] = value
+						}
+					}
+				}
+			}
+			var reader io.Reader
+			if uni {
+				stream, err := conn.OpenUniStreamSync(ctx)
+				if err != nil {
+					return err
+				}
+				if err = write(stream, append(append(integer(0x54), integer(uint64(session.StreamID()))...), payload...)); err != nil {
+					return err
+				}
+				if err = stream.Close(); err != nil {
+					return err
+				}
+				select {
+				case response := <-unis:
+					id, err := readInteger(response)
+					if err != nil {
+						return err
+					}
+					if id != uint64(session.StreamID()) {
+						return errors.New("cycle stream association")
+					}
+					reader = response
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			} else {
+				stream, err := conn.OpenStreamSync(ctx)
+				if err != nil {
+					return err
+				}
+				if err = write(stream, append(append(integer(0x41), integer(uint64(session.StreamID()))...), payload...)); err != nil {
+					return err
+				}
+				if err = stream.Close(); err != nil {
+					return err
+				}
+				reader = stream
+			}
+			actual, err := io.ReadAll(reader)
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(actual, payload) {
+				return errors.New("cycle echo differs")
+			}
+			sent += uint64(len(payload))
+			consumed += uint64(len(actual))
+			if index%4 == 3 {
+				if err = write(session, frame(0, frame(0x190B4D3D, integer(consumed+65536)))); err != nil {
+					return err
+				}
+			}
+			if uni && index%4 == 3 {
+				if err = write(session, frame(0, frame(0x190B4D40, integer(index+1+8)))); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	datagram := append(integer(uint64(session.StreamID())/4), []byte("after-stream-cycles")...)
+	if err := conn.SendDatagram(datagram); err != nil {
+		return err
+	}
+	received, err := conn.ReceiveDatagram(ctx)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(datagram, received) {
+		return errors.New("cycle datagram differs")
+	}
+	if err := write(session, frame(0, frame(0x2843, []byte{0, 0, 0, 0}))); err != nil {
+		return err
+	}
+	if err := session.Close(); err != nil {
 		return err
 	}
 	_, err = io.ReadAll(session)
