@@ -417,9 +417,9 @@ jobs:
         run: python3 scripts/test_update_dotnet_sdk.py
       - name: Validate isolated QUIC recovery and WebTransport core
         run: |
-          dotnet restore test/EmbedIO.QuicPrototype/EmbedIO.QuicPrototype.csproj --locked-mode
-          dotnet build test/EmbedIO.QuicPrototype/EmbedIO.QuicPrototype.csproj -c Release --no-restore -p:RunAnalyzers=true
-          dotnet test/EmbedIO.QuicPrototype/bin/Release/net10.0/EmbedIO.QuicPrototype.dll self-test
+          dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
+          dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore -p:RunAnalyzers=true
+          dotnet test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll self-test
       - name: Check source formatting and informational diagnostics
         run: |
           python3 -m venv "$RUNNER_TEMP/source-quality-venv"

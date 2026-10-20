@@ -2,9 +2,9 @@
 using EmbedIO.Net.Internal.Http3;
 using EmbedIO.Net.Internal.WebTransport;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
-    // Experimental HTTP/3 adapter, compiled with the existing codecs/session core.
+    // HTTP/3 adapter, compiled with the existing codecs/session core.
     // All callbacks run on the connection owner. No production listener uses it.
     internal sealed class WebTransportApplication : IDisposable
     {
@@ -31,6 +31,7 @@ namespace EmbedIO.QuicPrototype
         private readonly Action<ulong, byte[], bool> _write;
         private readonly Action<byte[]> _datagram;
         private readonly Action<ulong, long> _abort;
+        private readonly Action<ulong, int> _consume;
         private readonly Func<IReadOnlyDictionary<string, string>, bool> _authorize;
         private readonly WebTransportSettings _local = WebTransportSettings.Local(true, 65536, 8, 8);
         private WebTransportSessionRegistry? _registry;
@@ -53,6 +54,7 @@ namespace EmbedIO.QuicPrototype
             Action<ulong, byte[], bool> write,
             Action<byte[]> datagram,
             Action<ulong, long> abort,
+            Action<ulong, int> consume,
             Func<IReadOnlyDictionary<string, string>, bool> authorize
         )
         {
@@ -60,6 +62,7 @@ namespace EmbedIO.QuicPrototype
             _write = write;
             _datagram = datagram;
             _abort = abort;
+            _consume = consume;
             _authorize = authorize;
             using var settings = new MemoryStream();
             settings.Write(Wire.Frame(8, 1, 0x33, 1, 6, 8192));
@@ -117,6 +120,22 @@ namespace EmbedIO.QuicPrototype
                 ))
                     entry.Value.Finished = true;
             }
+
+            Compact(id, input);
+        }
+
+        private void Compact(ulong id, Input input)
+        {
+            var consumed = input.Finished ? input.Length : input.Cursor;
+
+            if (consumed == 0) return;
+
+            Array.Copy(input.Bytes, consumed, input.Bytes, 0, input.Length - consumed);
+            Array.Clear(input.Bytes, input.Length - consumed, consumed);
+            input.Length -= consumed;
+            input.Accounted = Math.Max(0, input.Accounted - consumed);
+            input.Cursor = 0;
+            _consume(id, consumed);
         }
 
         private void Process(ulong id, Input input)
@@ -348,6 +367,7 @@ namespace EmbedIO.QuicPrototype
             input.Handle = handle;
             StreamsDelivered++;
             Deliver((ulong)handle.Id, input);
+            Compact((ulong)handle.Id, input);
         }
 
         private void Deliver(ulong id, Input input)
@@ -383,7 +403,11 @@ namespace EmbedIO.QuicPrototype
                 }
             }
 
-            if (!session.TryReserveOutgoingData(count)) return;
+            if (!session.TryReserveOutgoingData(count))
+            {
+                DrainCapsules(session);
+                return;
+            }
 
             _write(
                 input.OutputId.Value,
@@ -457,7 +481,11 @@ namespace EmbedIO.QuicPrototype
 
             foreach (var item in _inputs
                 .Where(pair => pair.Value.Session == session)
-                .ToArray()) Deliver(item.Key, item.Value);
+                .ToArray())
+            {
+                Deliver(item.Key, item.Value);
+                Compact(item.Key, item.Value);
+            }
 
             DrainCapsules(session);
 
@@ -492,6 +520,8 @@ namespace EmbedIO.QuicPrototype
                 input.Finished = true;
 
                 if (input.Session != null && input.Handle != null) input.Session.StreamFinished(input.Handle);
+
+                Compact(id, input);
             }
         }
 

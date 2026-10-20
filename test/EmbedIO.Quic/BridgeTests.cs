@@ -1,7 +1,7 @@
 ﻿using EmbedIO.Net.Internal.Http2;
 using EmbedIO.Net.Internal.Http3;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
     internal static class BridgeTests
     {
@@ -81,7 +81,36 @@ namespace EmbedIO.QuicPrototype
                     connection.Reset(id, 1, 65536, 0, true);
                 }
 
-                Reject(() => connection.Reset(18, 1, 1, 0, true), "reset final sizes consume connection credit once");
+                Check(
+                    connection.ReceivedData == 262144 && connection.ReceiveCreditUpdates == 2,
+                    "reset final sizes consume and release connection credit once"
+                );
+                connection.Reset(18, 1, 1, 0, true);
+            }
+
+            using (var connection = Create())
+            {
+                for (ulong id = 2; id < 18; id += 4) connection.Reset(id, 1, 65536, 65536, true);
+
+                Reject(() => connection.Reset(18, 1, 1, 0, true), "reliable gaps retain connection credit");
+            }
+
+            using (var connection = Create())
+            {
+                var chunk = new byte[32768];
+                chunk[0] = 0x21; // Unknown unidirectional stream: discard incrementally.
+
+                for (ulong offset = 0; offset < 655360; offset += (ulong)chunk.Length)
+                    connection.Receive(2, offset, chunk, false);
+
+                Check(
+                    connection.ReceivedData == 655360 && connection.ReceiveCreditUpdates >= 20,
+                    "consumption replenishes stream and connection windows"
+                );
+                Reject(
+                    () => connection.Receive(6, 65536, [1], false),
+                    "fresh stream cannot borrow another stream credit"
+                );
             }
 
             sent.Clear();

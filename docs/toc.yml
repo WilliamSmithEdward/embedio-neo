@@ -418,5 +418,8 @@
 - name: Typed HTTP results review
   href: project/typed-results-audit.md
 
-- name: Independent QUIC engine feasibility
+- name: EmbedIO.Quic implementation
   href: project/quic-engine-feasibility.md
+
+- name: QUIC development and testing record
+  href: project/quic-development-and-testing.md

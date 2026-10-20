@@ -2,7 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
     // Only OpenSSL's published third-party QUIC TLS API is used. This class owns
     // native handles and callback buffers; it contains no QUIC transport implementation.

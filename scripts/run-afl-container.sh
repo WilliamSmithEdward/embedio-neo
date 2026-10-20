@@ -8,7 +8,7 @@ mkdir -p /work /results/maps
 # AFL creates private files as container root; preserve readable evidence for
 # the host runner on successful and failed campaigns alike.
 trap 'result=$?; chmod -R a+rX /results; exit "$result"' EXIT
-tar -C /input --exclude=bin --exclude=obj -cf - src test/EmbedIO.SharpFuzz test/EmbedIO.Fuzz/MultipartFuzzChecks.cs .editorconfig Directory.Build.props Directory.Packages.props global.json README.md LICENSE images | tar -xf - -C /work
+tar -C /input --exclude=bin --exclude=obj -cf - src test/EmbedIO.SharpFuzz test/EmbedIO.Quic test/EmbedIO.Fuzz/MultipartFuzzChecks.cs .editorconfig Directory.Build.props Directory.Packages.props global.json README.md LICENSE images | tar -xf - -C /work
 cd /work
 # Match a Linux Git checkout when the read-only source comes from Windows.
 find src test -name '*.cs' -type f -exec sed -i 's/\r$//' {} +
@@ -21,6 +21,14 @@ grep -F 'EmbedIO.MultipartReader/<ReadBodyCoreAsync>' /results/instrumentation.l
 grep -F 'EmbedIO.MultipartReader/<ReadHeadersAsync>' /results/instrumentation.log
 test "$before" != "$(sha256sum /work/publish/EmbedIO.dll)"
 sha256sum --check /results/ordinary-before.sha256
+sha256sum test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll > /results/quic-ordinary-before.sha256
+quic_before=$(sha256sum /work/publish/EmbedIO.Quic.dll)
+DOTNET_ROLL_FORWARD=Major SHARPFUZZ_PRINT_INSTRUMENTED_TYPES=1 /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.Quic.dll EmbedIO.Quic.Wire EmbedIO.Quic.PacketHeader EmbedIO.Quic.AckRanges EmbedIO.Quic.PacketKeys EmbedIO.Quic.Reassembly EmbedIO.Quic.StreamReassembly EmbedIO.Quic.Recovery EmbedIO.Quic.ConnectionLifetime EmbedIO.Quic.ConnectionStreams EmbedIO.Quic.WebTransportApplication EmbedIO.Net.Internal > /results/quic-instrumentation.log 2>&1
+for type in PacketHeader AckRanges PacketKeys StreamReassembly Recovery ConnectionLifetime ConnectionStreams WebTransportApplication; do
+    grep -F "EmbedIO.Quic.$type" /results/quic-instrumentation.log
+done
+test "$quic_before" != "$(sha256sum /work/publish/EmbedIO.Quic.dll)"
+sha256sum --check /results/quic-ordinary-before.sha256
 mkdir /work/corpus
 cp test/EmbedIO.SharpFuzz/corpus/* /work/corpus/
 for input in /work/corpus/*; do
@@ -38,6 +46,11 @@ fi
 test -s /results/maps/multipart-file && test -s /results/maps/multipart-empty-file
 if cmp -s /results/maps/multipart-file /results/maps/multipart-empty-file; then
     echo 'Distinct multipart inputs produced identical coverage maps.' >&2
+    exit 1
+fi
+test -s /results/maps/quic-integers && test -s /results/maps/quic-recovery
+if cmp -s /results/maps/quic-integers /results/maps/quic-recovery; then
+    echo 'Distinct QUIC targets produced identical coverage maps.' >&2
     exit 1
 fi
 printf 'seconds=%s\nseed=%s\nafl_commit=dbaf11913c1b2702dee5b4d3dcfffd52f1defe50\n' "$seconds" "$seed" > /results/campaign.txt

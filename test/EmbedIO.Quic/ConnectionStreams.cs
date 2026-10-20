@@ -1,4 +1,4 @@
-﻿namespace EmbedIO.QuicPrototype
+﻿namespace EmbedIO.Quic
 {
     internal sealed class ConnectionStreams : IDisposable
     {
@@ -7,8 +7,10 @@
 
         private sealed class Incoming
         {
-            internal Reassembly Buffer { get; } = new(StreamLimit);
+            internal StreamReassembly Buffer { get; } = new(StreamLimit);
 
+            internal ulong Maximum = StreamLimit;
+            internal ulong Released;
             internal ulong Extent;
             internal ulong? ResetError;
             internal ulong ReliableSize;
@@ -47,6 +49,12 @@
         private ulong _peerData;
         private ulong _sentData;
         private ulong _receivedExtent;
+        private ulong _released;
+        private ulong _receiveMaximum = ConnectionLimit;
+
+        internal int ReceiveCreditUpdates { get; private set; }
+        internal ulong ReceivedData => _receivedExtent;
+
         private int _queuedBytes;
         private readonly ulong _peerDatagram;
         private readonly bool _resetNegotiated;
@@ -81,6 +89,7 @@
                 SendStream,
                 SendDatagram,
                 Abort,
+                Release,
                 authorize
             );
         }
@@ -97,7 +106,7 @@
 
         private void Account(Incoming input, ulong extent)
         {
-            if (extent > StreamLimit || extent - Math.Min(extent, input.Extent) > ConnectionLimit - _receivedExtent)
+            if (extent > input.Maximum || extent - Math.Min(extent, input.Extent) > _receiveMaximum - _receivedExtent)
                 throw new InvalidDataException("QUIC receive flow control exceeded.");
 
             _receivedExtent += extent - Math.Min(extent, input.Extent);
@@ -108,7 +117,9 @@
         {
             var input = GetIncoming(id);
 
-            if (offset > StreamLimit || (ulong)bytes.Length > StreamLimit - offset)
+            if (
+                offset > StreamReassembly.MaximumOffset || (ulong)bytes.Length > StreamReassembly.MaximumOffset - offset
+            )
                 throw new InvalidDataException("QUIC stream limit exceeded.");
 
             Account(input, offset + (ulong)bytes.Length);
@@ -120,16 +131,17 @@
         {
             if (input.Terminal) return;
 
-            var maximum = input.ResetError.HasValue ? (int)input.ReliableSize : StreamLimit;
+            var maximum = input.ResetError.HasValue ? input.ReliableSize : StreamReassembly.MaximumOffset;
             var bytes = input.Buffer.Consume(maximum);
             var fin = !input.ResetError.HasValue && input.Buffer.Complete;
 
             if (bytes.Length != 0 || fin) Application.Stream(id, bytes, fin);
 
-            if (input.ResetError.HasValue && (ulong)input.Buffer.Contiguous >= input.ReliableSize)
+            if (input.ResetError.HasValue && input.Buffer.Delivered >= input.ReliableSize)
             {
                 Application.Reset(id);
                 input.Terminal = true;
+                ReleaseTo(id, input, input.Extent);
             }
 
             else input.Terminal = fin;
@@ -157,6 +169,41 @@
             else input.ReliableSize = Math.Min(input.ReliableSize, reliable);
 
             Deliver(id, input);
+        }
+
+        private void Release(ulong id, int count)
+        {
+            var input = _incoming[id];
+
+            if ((ulong)count > input.Buffer.Delivered - input.Released)
+                throw new InvalidOperationException("Application released unreceived stream bytes.");
+
+            ReleaseTo(id, input, input.Released + (ulong)count);
+        }
+
+        private void ReleaseTo(ulong id, Incoming input, ulong target)
+        {
+            if (target < input.Released) return;
+
+            _released += target - input.Released;
+            input.Released = target;
+            var connectionTarget = Math.Min(StreamReassembly.MaximumOffset, _released + ConnectionLimit);
+
+            if (connectionTarget - _receiveMaximum >= ConnectionLimit / 2)
+            {
+                _receiveMaximum = connectionTarget;
+                _transmit(Wire.Frame(0x10, _receiveMaximum), true);
+                ReceiveCreditUpdates++;
+            }
+
+            var streamTarget = Math.Min(StreamReassembly.MaximumOffset, input.Released + StreamLimit);
+
+            if (!input.Buffer.FinalSize.HasValue && streamTarget - input.Maximum >= StreamLimit / 2)
+            {
+                input.Maximum = streamTarget;
+                _transmit(Wire.Frame(0x11, id, input.Maximum), true);
+                ReceiveCreditUpdates++;
+            }
         }
 
         internal void UpdateData(ulong value)
@@ -256,6 +303,7 @@
                 Wire.Integer(frame, output.Offset);
                 Wire.Integer(frame, (ulong)count);
                 frame.Write(write.Bytes, write.Position, count);
+                output.Deliveries.RemoveAll(item => item.Delivery.Acknowledged);
                 output.Deliveries.Add((_transmit(frame.ToArray(), true), output.Offset + (ulong)count));
                 output.Offset += (ulong)count;
                 _sentData += (ulong)count;

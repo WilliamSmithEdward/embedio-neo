@@ -1,4 +1,4 @@
-﻿namespace EmbedIO.QuicPrototype
+﻿namespace EmbedIO.Quic
 {
     internal static class RecoveryTests
     {

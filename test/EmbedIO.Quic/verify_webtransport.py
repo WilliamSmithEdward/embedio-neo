@@ -61,12 +61,19 @@ async def case(args, mode, relay=None):
     negative = mode in ("unauthorized", "origin", "missing-reset")
     passed = failure is None and peer is not None and peer.returncode == 0 and server.returncode == (1 if negative else 0)
     passed = passed and report.get("acceptedSessions") == (0 if negative else 2 if mode in ("siblings", "session-fault") else 1)
-    if mode == "outbound-reset":
+    passed = passed and report.get("phase") == "Closed"
+    if mode in ("connection-fault", "datagram-fault"):
+        passed = passed and report.get("closePackets", 0) > 0
+    elif mode == "idle":
+        passed = passed and report.get("idleExpired") is True and report.get("closePackets", 0) == 0
+    elif mode == "outbound-reset":
         passed = passed and report.get("streamsDelivered", 0) == 1 and report.get("outboundResets", 0) >= 1
     elif not negative:
         passed = passed and report.get("streamsDelivered", 0) >= (4 if mode == "siblings" else 2) and report.get("datagramsDelivered", 0) >= 1
-    if mode in ("large", "credit"):
+    if mode in ("large", "credit", "sustained", "sustained-credit"):
         passed = passed and report.get("keyUpdates", 0) >= 1
+    if mode in ("sustained", "sustained-credit"):
+        passed = passed and report.get("receiveCreditUpdates", 0) >= 10 and report.get("streamBytesReceived", 0) > 524288
     if mode == "reset":
         passed = passed and report.get("resetsDelivered", 0) == 1
     if relay in ("loss-handshake", "loss-stream"):
@@ -81,13 +88,14 @@ async def main(args):
     results = []
     for mode, relay in [("echo", None), ("siblings", None), ("reset", None), ("outbound-reset", None), ("session-fault", None), ("unauthorized", None), ("origin", None),
                         ("missing-reset", None), ("large", None), ("credit", None),
+                        ("connection-fault", None), ("datagram-fault", None), ("idle", None), ("sustained", None), ("sustained-credit", None), ("sustained", "loss-stream"),
                         ("echo", "loss-handshake"), ("echo", "loss-stream"), ("large", "loss-stream")]:
         result = await case(args, mode, relay)
         results.append(result)
         print(json.dumps(result), flush=True)
         if not result["passed"]:
             break
-    receipt = {"passed": len(results) == 13 and all(r["passed"] for r in results), "cases": results,
+    receipt = {"passed": len(results) == 19 and all(r["passed"] for r in results), "cases": results,
                **provenance(args),
                "peerSha256": hashlib.sha256(Path(args.peer).read_bytes()).hexdigest()}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")

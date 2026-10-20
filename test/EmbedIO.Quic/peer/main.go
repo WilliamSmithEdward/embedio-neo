@@ -137,7 +137,10 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	config := &quic.Config{EnableDatagrams: true, EnableStreamResetPartialDelivery: *mode != "missing-reset", MaxIncomingStreams: 16, MaxIncomingUniStreams: 16}
-	if *mode == "credit" {
+	if *mode == "idle" {
+		config.MaxIdleTimeout = 500 * time.Millisecond
+	}
+	if *mode == "credit" || *mode == "sustained-credit" {
 		config.InitialStreamReceiveWindow = 1024
 		config.MaxStreamReceiveWindow = 2048
 		config.InitialConnectionReceiveWindow = 8192
@@ -259,6 +262,44 @@ func run() error {
 	}
 	if status != "200" {
 		return fmt.Errorf("CONNECT status %s", status)
+	}
+	if *mode == "connection-fault" || *mode == "datagram-fault" || *mode == "idle" {
+		if *mode == "datagram-fault" {
+			if err = conn.SendDatagram(integer(1 << 60)); err != nil {
+				return err
+			}
+		}
+		if *mode == "connection-fault" {
+			if err = control.Close(); err != nil {
+				return err
+			}
+		}
+		select {
+		case <-conn.Context().Done():
+			cause := context.Cause(conn.Context())
+			if *mode == "idle" {
+				var timeout *quic.IdleTimeoutError
+				if !errors.As(cause, &timeout) {
+					return fmt.Errorf("expected idle timeout: %v", cause)
+				}
+			} else if *mode == "datagram-fault" {
+				var failure *quic.ApplicationError
+				if !errors.As(cause, &failure) || failure.ErrorCode != 0x33 {
+					return fmt.Errorf("expected datagram error: %v", cause)
+				}
+			} else {
+				var failure *quic.TransportError
+				if !errors.As(cause, &failure) || failure.ErrorCode != 0x0a {
+					return fmt.Errorf("expected protocol close: %v", cause)
+				}
+			}
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if *mode == "sustained" || *mode == "sustained-credit" {
+		return sustained(ctx, conn, session, unis)
 	}
 	if *mode == "outbound-reset" {
 		upload, e := conn.OpenUniStreamSync(ctx)
@@ -422,6 +463,132 @@ func run() error {
 	}
 	return nil
 }
+func sustained(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis <-chan *quic.ReceiveStream) error {
+	const chunkSize = 16384
+	const streamSize = 262144
+	maximum := uint64(65536)
+	sent := uint64(0)
+	consumed := uint64(0)
+	for _, uni := range []bool{false, true} {
+		var writer io.WriteCloser
+		var reader io.Reader
+		if uni {
+			stream, err := conn.OpenUniStreamSync(ctx)
+			if err != nil {
+				return err
+			}
+			writer = stream
+			if err = write(stream, append(integer(0x54), integer(uint64(session.StreamID()))...)); err != nil {
+				return err
+			}
+		} else {
+			stream, err := conn.OpenStreamSync(ctx)
+			if err != nil {
+				return err
+			}
+			writer, reader = stream, stream
+			if err = write(stream, append(integer(0x41), integer(uint64(session.StreamID()))...)); err != nil {
+				return err
+			}
+		}
+		for offset := 0; offset < streamSize; offset += chunkSize {
+			payload := make([]byte, chunkSize)
+			for i := range payload {
+				payload[i] = byte((offset + i) % 251)
+			}
+			for sent+chunkSize > maximum {
+				kind, data, err := readFrame(session)
+				if err != nil {
+					return err
+				}
+				if kind != 0 {
+					return errors.New("expected capsule DATA")
+				}
+				capsules := bytes.NewReader(data)
+				for capsules.Len() > 0 {
+					kind, data, err = readFrame(capsules)
+					if err != nil {
+						return err
+					}
+					if kind == 0x190B4D3D {
+						limit, e := readInteger(bytes.NewReader(data))
+						if e != nil {
+							return e
+						}
+						if limit > maximum {
+							maximum = limit
+						}
+					}
+				}
+			}
+			if err := write(writer, payload); err != nil {
+				return err
+			}
+			sent += uint64(len(payload))
+			if reader == nil {
+				select {
+				case response := <-unis:
+					id, err := readInteger(response)
+					if err != nil {
+						return err
+					}
+					if id != uint64(session.StreamID()) {
+						return errors.New("sustained stream association")
+					}
+					reader = response
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			actual := make([]byte, len(payload))
+			if _, err := io.ReadFull(reader, actual); err != nil {
+				return err
+			}
+			if !bytes.Equal(actual, payload) {
+				return errors.New("sustained echo differs")
+			}
+			consumed += uint64(len(actual))
+			if consumed%32768 == 0 {
+				if err := write(session, frame(0, frame(0x190B4D3D, integer(consumed+65536)))); err != nil {
+					return err
+				}
+			}
+		}
+		if err := writer.Close(); err != nil {
+			return err
+		}
+		tail, err := io.ReadAll(reader)
+		if err != nil {
+			return err
+		}
+		if len(tail) != 0 {
+			return errors.New("sustained echo has extra bytes")
+		}
+	}
+	datagram := append(integer(uint64(session.StreamID())/4), []byte("after-sustained")...)
+	if err := conn.SendDatagram(datagram); err != nil {
+		return err
+	}
+	received, err := conn.ReceiveDatagram(ctx)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(received, datagram) {
+		return errors.New("sustained datagram differs")
+	}
+	if maximum <= 262144 {
+		return errors.New("session receive credit was not replenished")
+	}
+	if err = write(session, frame(0, frame(0x2843, []byte{0, 0, 0, 0}))); err != nil {
+		return err
+	}
+	if err = session.Close(); err != nil {
+		return err
+	}
+	_, err = io.ReadAll(session)
+	return err
+}
+
 func main() {
 	err := run()
 	report := map[string]any{"passed": err == nil}

@@ -1,6 +1,6 @@
 ﻿using System.Buffers.Binary;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
     // RFC 9000 section 16. All cursor operations reject truncated peer input.
     internal ref struct WireReader(ReadOnlySpan<byte> bytes)

@@ -1,6 +1,6 @@
 ﻿using System.Security.Cryptography;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
     internal static class KeyUpdateTests
     {

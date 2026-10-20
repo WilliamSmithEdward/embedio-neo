@@ -25,7 +25,7 @@ The IANA HTTP/3 parameter registries (last updated 2023-06-13) and the HTTP
 Capsule Types registry (last updated 2026-08-28) contain no WebTransport entry.
 Every codepoint used here is therefore a draft request, consistent with the
 [standards applicability audit](http-standards-applicability.md), which recorded
-WebTransport as experimental and unsupported. Draft section 7.1 says each draft
+WebTransport as unsupported in production. Draft section 7.1 says each draft
 version uses a distinct `SETTINGS_WT_ENABLED` codepoint; the core carries the
 -16 values and must be revised with the draft.
 

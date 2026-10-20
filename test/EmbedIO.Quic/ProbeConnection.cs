@@ -1,7 +1,9 @@
 ﻿using System.Buffers.Binary;
 using System.Security.Cryptography;
+using EmbedIO.Net.Internal.Http3;
+using EmbedIO.Net.Internal.WebTransport;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
     // Restricted to one loopback connection: raw stream echo or the bounded HTTP/3
     // WebTransport profile. This executable is not a production QUIC provider.
@@ -26,6 +28,8 @@ namespace EmbedIO.QuicPrototype
 
         internal int KeyUpdates { get; private set; }
         internal int OutboundResets => _streams?.OutboundResets ?? 0;
+        internal int ReceiveCreditUpdates => _streams?.ReceiveCreditUpdates ?? 0;
+        internal ulong StreamBytesReceived => _streams?.ReceivedData ?? 0;
         internal WebTransportApplication? WebTransport => _streams?.Application;
 
         private readonly byte[] _originalId;
@@ -47,6 +51,14 @@ namespace EmbedIO.QuicPrototype
         private readonly Queue<Delivery> _pending = new();
         private readonly Queue<Delivery> _urgent = new();
         private readonly Recovery _recovery;
+        private readonly ConnectionLifetime _lifetime = new();
+        private byte[]? _closePayload;
+        private int _closeLevel;
+
+        internal int ClosePackets { get; private set; }
+        internal ConnectionPhase Phase => _lifetime.Phase;
+        internal bool IdleExpired => _lifetime.IdleExpired;
+
         private double _now;
         private int _ackDelayExponent = 3;
 
@@ -65,7 +77,7 @@ namespace EmbedIO.QuicPrototype
 
         internal bool Established => _tls.Established;
         internal bool Complete => _webTransport ? _streams?.Application.AcceptedSessions > 0 : _responseSent;
-        internal bool Closed { get; private set; }
+        internal bool Closed => Phase == ConnectionPhase.Closed;
         internal int EchoBytes { get; private set; }
         internal long ReceivedBytes { get; private set; }
         internal long SentBytes { get; private set; }
@@ -137,7 +149,38 @@ namespace EmbedIO.QuicPrototype
 
         internal List<byte[]> Receive(ReadOnlySpan<byte> datagram, double now)
         {
-            if (Closed) return [];
+            try
+            {
+                return ReceiveCore(datagram, now);
+            }
+
+            catch (Http3ProtocolException error)
+            {
+                BeginClose(2, Wire.Frame(0x1d, (ulong)error.ErrorCode, 0));
+                return Drain();
+            }
+
+            catch (WebTransportException error)
+            {
+                BeginClose(2, Wire.Frame(0x1d, (ulong)error.ErrorCode, 0));
+                return Drain();
+            }
+
+            catch (InvalidDataException)
+            {
+                BeginClose(
+                    _tls.WriteKeys[2] != null ? 2 : _tls.WriteKeys[1] != null ? 1 : 0,
+                    Wire.Frame(0x1c, 0x0a, 0, 0)
+                );
+                return Drain();
+            }
+        }
+
+        private List<byte[]> ReceiveCore(ReadOnlySpan<byte> datagram, double now)
+        {
+            _lifetime.Tick(now, _recovery.KeyRetention);
+
+            if (Closed || Phase == ConnectionPhase.Draining) return [];
 
             _now = now;
             ReceivedBytes += datagram.Length;
@@ -185,6 +228,38 @@ namespace EmbedIO.QuicPrototype
                     continue;
                 }
 
+                _lifetime.Authenticated(now);
+
+                if (Phase == ConnectionPhase.Closing)
+                {
+                    var closeReader = new WireReader(plaintext);
+
+                    while (closeReader.Remaining != 0)
+                    {
+                        var type = closeReader.Integer();
+
+                        if (type == 0) continue;
+
+                        if (type is 0x1c or 0x1d)
+                        {
+                            if (type == 0x1d && level != 2)
+                                throw new InvalidDataException("Application close outside application packet space.");
+
+                            closeReader.Integer();
+
+                            if (type == 0x1c) closeReader.Integer();
+
+                            closeReader.Take(closeReader.Length(4096));
+                            _lifetime.Drain(now, _recovery.KeyRetention);
+                        }
+
+                        break;
+                    }
+
+                    position += length;
+                    continue;
+                }
+
                 if (_received[level].Count >= 4096) throw new InvalidDataException("Packet budget exceeded.");
 
                 var fresh = _received[level].Add(number);
@@ -200,7 +275,9 @@ namespace EmbedIO.QuicPrototype
                 {
                     var acknowledge = Frames(level, plaintext);
 
-                    if (acknowledge && !Closed) AcknowledgeReceived(level);
+                    if (acknowledge && Phase == ConnectionPhase.Active) AcknowledgeReceived(level);
+
+                    if (Phase != ConnectionPhase.Active) break;
 
                     try
                     {
@@ -210,8 +287,7 @@ namespace EmbedIO.QuicPrototype
                     catch (InvalidDataException) when (_tls.AlertCode.HasValue)
                     {
                         // RFC 9001 section 4.8: carry TLS alerts as QUIC CRYPTO_ERROR.
-                        Send(level, Wire.Frame(0x1c, 0x100UL + _tls.AlertCode.Value, 6, 0), false, false);
-                        Closed = true;
+                        BeginClose(level, Wire.Frame(0x1c, 0x100UL + _tls.AlertCode.Value, 6, 0));
                         break;
                     }
 
@@ -317,9 +393,23 @@ namespace EmbedIO.QuicPrototype
                 _previousRead = null;
             }
 
-            if (!Closed && (_addressValidated || SentBytes + 1200 <= ReceivedBytes * 3)) _recovery.Tick(now);
+            _lifetime.Tick(now, _recovery.KeyRetention);
+
+            if (Phase == ConnectionPhase.Active && (_addressValidated || SentBytes + 1200 <= ReceivedBytes * 3))
+                _recovery.Tick(now);
 
             return Drain();
+        }
+
+        private void BeginClose(int level, byte[] payload)
+        {
+            if (Phase != ConnectionPhase.Active) return;
+
+            _pending.Clear();
+            _urgent.Clear();
+            _closeLevel = level;
+            _closePayload = payload;
+            _lifetime.Close(_now, _recovery.KeyRetention);
         }
 
         private void AcknowledgeReceived(int level)
@@ -357,7 +447,8 @@ namespace EmbedIO.QuicPrototype
 
         private void QueueRepeat(Delivery delivery, bool probe)
         {
-            if (delivery.Acknowledged || _recovery.IsDiscarded(delivery.Level)) return;
+            if (Phase != ConnectionPhase.Active || delivery.Acknowledged || _recovery.IsDiscarded(delivery.Level))
+                return;
 
             if (delivery.Queued)
             {
@@ -383,6 +474,25 @@ namespace EmbedIO.QuicPrototype
         private List<byte[]> Drain()
         {
             var output = new List<byte[]>();
+
+            if (Phase != ConnectionPhase.Active)
+            {
+                if (
+                    Phase == ConnectionPhase.Closing
+                    && _closePayload != null
+                    && (_addressValidated || SentBytes + 1200 <= ReceivedBytes * 3)
+                    && _lifetime.TakeCloseResponse(_now)
+                )
+                {
+                    var packet = Protect(new Delivery(_closeLevel, _closePayload, false, false));
+                    _sentNumbers[_closeLevel]++;
+                    SentBytes += packet.Length;
+                    ClosePackets++;
+                    output.Add(packet);
+                }
+
+                return output;
+            }
 
             while (_urgent.Count + _pending.Count != 0)
             {
@@ -416,74 +526,17 @@ namespace EmbedIO.QuicPrototype
                     _pending.Count == 0
                 );
                 SentBytes += packet.Length;
+
+                if (delivery.Eliciting) _lifetime.SentEliciting(_now);
+
                 output.Add(packet);
             }
 
             return output;
         }
 
-        private bool TryHeader(ReadOnlySpan<byte> packet, out int level, out int length, out int numberOffset)
-        {
-            level = 0;
-            length = 0;
-            numberOffset = 0;
-
-            try
-            {
-                var reader = new WireReader(packet);
-                var first = reader.Byte();
-
-                if ((first & 64) == 0) return false;
-
-                if ((first & 128) != 0)
-                {
-                    if (BinaryPrimitives.ReadUInt32BigEndian(reader.Take(4)) != 1) return false;
-
-                    var type = (first >> 4) & 3;
-
-                    if (type is not (0 or 2)) return false;
-
-                    level = type == 0 ? 0 : 1;
-                    var destination = reader.Take(reader.Byte());
-                    var source = reader.Take(reader.Byte());
-
-                    if (
-                        (!destination.SequenceEqual(_originalId) && !destination.SequenceEqual(_serverId))
-                        || !source.SequenceEqual(_clientId)
-                    ) return false;
-
-                    if (level == 0) reader.Take(reader.Length(4096));
-
-                    var payloadLength = reader.Length(packet.Length);
-                    numberOffset = packet.Length - reader.Remaining;
-
-                    if (payloadLength > reader.Remaining || payloadLength < 20) return false;
-
-                    length = numberOffset + payloadLength;
-                }
-
-                else
-                {
-                    level = 2;
-
-                    if (
-                        !reader
-                            .Take(_serverId.Length)
-                            .SequenceEqual(_serverId)
-                    ) return false;
-
-                    numberOffset = packet.Length - reader.Remaining;
-                    length = packet.Length;
-                }
-
-                return numberOffset + 20 <= length;
-            }
-
-            catch (InvalidDataException)
-            {
-                return false;
-            }
-        }
+        private bool TryHeader(ReadOnlySpan<byte> packet, out int level, out int length, out int numberOffset) =>
+            PacketHeader.TryRead(packet, _originalId, _serverId, _clientId, out level, out length, out numberOffset);
 
         private bool Frames(int level, ReadOnlySpan<byte> plaintext)
         {
@@ -498,32 +551,12 @@ namespace EmbedIO.QuicPrototype
 
                 if (type is 2 or 3)
                 {
-                    var largest = reader.Integer();
-
-                    if (largest >= _sentNumbers[level]) throw new InvalidDataException("ACK for unsent packet.");
-
-                    var delay = reader.Integer() * Math.Pow(2, _ackDelayExponent) / 1000;
-                    var ranges = reader.Length(128);
-                    var acknowledged = new List<(ulong Low, ulong High)>();
-                    var range = reader.Integer();
-
-                    if (range > largest) throw new InvalidDataException("Invalid ACK range.");
-
-                    var smallest = largest - range;
-                    acknowledged.Add((smallest, largest));
-
-                    for (var i = 0; i < ranges; i++)
-                    {
-                        var gap = reader.Integer();
-                        range = reader.Integer();
-
-                        if (gap + 2 > smallest || range > smallest - gap - 2)
-                            throw new InvalidDataException("Invalid ACK gap.");
-
-                        var high = smallest - gap - 2;
-                        smallest = high - range;
-                        acknowledged.Add((smallest, high));
-                    }
+                    var acknowledged = AckRanges.Read(
+                        ref reader,
+                        _sentNumbers[level],
+                        _ackDelayExponent,
+                        out var delay
+                    );
 
                     _recovery.Acknowledge(level, acknowledged, delay, _now);
 
@@ -551,12 +584,17 @@ namespace EmbedIO.QuicPrototype
 
                 if (type is 0x1c or 0x1d)
                 {
+                    if (type == 0x1d && level != 2)
+                        throw new InvalidDataException("Application close outside application packet space.");
+
                     reader.Integer();
 
                     if (type == 0x1c) reader.Integer();
 
                     reader.Take(reader.Length(4096));
-                    Closed = true;
+                    _pending.Clear();
+                    _urgent.Clear();
+                    _lifetime.Drain(_now, _recovery.KeyRetention);
                     return false;
                 }
 
@@ -735,6 +773,8 @@ namespace EmbedIO.QuicPrototype
                         || (id is 8 or 9 && value > 1UL << 60)
                     )
                         throw new InvalidDataException("Invalid transport parameter value.");
+
+                    if (id == 1 && value != 0) _lifetime.IdleTimeout = Math.Min(10000, value);
 
                     if (id == 10) _ackDelayExponent = (int)value;
 

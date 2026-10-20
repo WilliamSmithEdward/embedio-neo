@@ -75,7 +75,7 @@ non-ASCII bytes and unusual CR/LF sequences. The fast path improved ordinary
 headers but reproducibly slowed a one-byte-fragmented large header by about 23%.
 The simpler loop had unchanged allocations and inconclusive timing benefits, so
 it was deferred. The production parser remains unchanged; 44 compatibility cases preserve these semantics for
-future investigations. Experimental sources and comparison logs remain under
+future investigations. Investigation sources and comparison logs remain under
 ignored TestResults/listener-audit/parser.
 
 The following opportunities need separate evidence before implementation:

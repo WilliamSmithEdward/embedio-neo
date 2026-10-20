@@ -379,11 +379,17 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 
 WebTransport is not supported by the public listener. The internal session core
 and native experiments do not make it available to applications. The independent
-QUIC engine feasibility project is test-only, uses OpenSSL 3.5.7 for TLS, and is
-outside the solution and published packages. Its bounded prototype now includes
+EmbedIO.Quic development host is test-only, uses OpenSSL 3.5.7 for TLS, and is
+referenced by the fuzz harness and excluded from published packages. It includes
 loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
-current reliable-reset framing. It has no public application API and is not a
-replacement for the current HTTP/3 provider. See [its scope and reproduction steps](docs/project/quic-engine-feasibility.md)
+current reliable-reset framing, reusable receive windows and explicit connection
+closing/draining. It has no public application API; the intended fully validated
+replacement will remove MsQuic from the production transport, but the current
+HTTP/3 provider remains in place. The [development and testing record](docs/project/quic-development-and-testing.md)
+tracks all fuzz engines, extensive local runs and remaining production acceptance.
+Once the replacement is complete, remove MsQuic-specific quarantines/workarounds
+and review every open Neo issue; close issues only after validating their resolution.
+See [its scope and reproduction steps](docs/project/quic-engine-feasibility.md)
 and [WebTransport readiness](docs/project/webtransport-upstream-readiness.md).
 
 ## 5. HTTPS and TLS
@@ -895,7 +901,7 @@ when changing the library; follow [CONTRIBUTING.md](CONTRIBUTING.md).
 The [cold-path experiment](docs/project/cold-path-jit-latency.md) retains
 measurements of HTTP/1 header/logging extraction. That optimization was deferred
 after mixed warm results and is absent from the library source; the numbers
-describe experimental binaries, not current production behavior. The requested
+describe diagnostic binaries, not current production behavior. The requested
 listener display name is `EmbedIO-Neo HTTP Listener`. The measurement runner,
 wire regressions and evidence remain available for future investigations.
 

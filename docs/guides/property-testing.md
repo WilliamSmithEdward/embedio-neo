@@ -1,13 +1,14 @@
-# Generated URL, query and multipart properties
+# Generated URL, query, multipart and QUIC properties
 
 `test/EmbedIO.Fuzz` includes a test-only FsCheck 3.4.0 mode. It generates strings
 of up to 128 characters containing separators, malformed percent escapes,
-controls, ordinary text and Unicode. Five properties check:
+controls, ordinary text and Unicode. Six existing properties check:
 
 - URL normalization returns a valid path and is idempotent, for both ordinary
   paths and base paths.
 - Mutable and immutable query parsing return the same ordered keys and value
   arrays, with flag grouping both enabled and disabled.
+- Literal terminal route matching agrees with the legacy regex reference.
 - Multipart file bodies round-trip byte for byte, and arbitrary raw multipart
   parsing has the same result under ordinary and fragmented transport reads.
   The shared AFL++/libFuzzer driver also supplies arbitrary binary input (bounded
@@ -48,3 +49,11 @@ shrinking. [Scorecard's C# detector](https://github.com/ossf/scorecard/blob/c395
 recognizes FsCheck integration but did not recognize the custom mutation
 harness. Recognition is separate from the properties' scope and effectiveness;
 a score does not establish comprehensive parser coverage.
+
+## EmbedIO.Quic
+
+The test-only QUIC core now participates in the existing fuzz campaigns. See the
+[development and testing record](../project/quic-development-and-testing.md) for
+all seven targets, multi-connection traces, managed coverage evidence, native TLS
+mutation scope and extensive local commands. This does not activate a production
+provider or remove existing HTTP/3/MsQuic coverage.

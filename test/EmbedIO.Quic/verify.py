@@ -162,6 +162,7 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
         not success and failure is not None and process.returncode == 1
         and not report.get("complete", False) and termination is not None
         and termination["code"] == expected_code)
+    passed = passed and report.get("phase") == "Closed"
     if noise and positive:
         passed = passed and report.get("rejectedPackets", 0) >= 4
     if relay is True:
@@ -180,7 +181,7 @@ def provenance(args):
     files = set(project.glob("*.cs")) | set(project.glob("*.py")) | set(project.glob("*.csproj"))
     files.update(project.glob("peer/*"))
     files = {path for path in files if path.is_file()}
-    for item in ET.parse(project / "EmbedIO.QuicPrototype.csproj").iter("Compile"):
+    for item in ET.parse(project / "EmbedIO.Quic.csproj").iter("Compile"):
         included = project / item.attrib["Include"]
         files.update(included.parent.glob(included.name))
     for name in ("global.json", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props",

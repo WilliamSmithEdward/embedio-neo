@@ -41,6 +41,10 @@ if ($LASTEXITCODE) { throw 'Publish failed.' }
 dotnet tool install SharpFuzz.CommandLine --version 2.3.0 --tool-path $tools 2>&1 | Tee-Object (Join-Path $output 'tool.log')
 if ($LASTEXITCODE) { throw 'Instrumenter installation failed.' }
 
+$quicAssembly = Join-Path $publish 'EmbedIO.Quic.dll'
+$quicOrdinary = Join-Path $repo 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll'
+$quicOrdinaryHash = (Get-FileHash $quicOrdinary).Hash
+$quicOriginalHash = (Get-FileHash $quicAssembly).Hash
 $assembly = Join-Path $publish 'EmbedIO.dll'
 $ordinaryAssembly = Join-Path $repo 'src/EmbedIO/bin/Release/net10.0/EmbedIO.dll'
 $ordinaryHash = (Get-FileHash $ordinaryAssembly).Hash
@@ -54,6 +58,9 @@ try {
     & (Join-Path $tools 'sharpfuzz') $assembly EmbedIO.Utilities.UrlPath EmbedIO.Utilities.UrlEncodedDataParser EmbedIO.MultipartReader |
         Tee-Object (Join-Path $output 'instrumentation.log')
     if ($LASTEXITCODE) { throw 'Instrumentation failed.' }
+    & (Join-Path $tools 'sharpfuzz') $quicAssembly EmbedIO.Quic.Wire EmbedIO.Quic.PacketHeader EmbedIO.Quic.AckRanges EmbedIO.Quic.PacketKeys EmbedIO.Quic.Reassembly EmbedIO.Quic.StreamReassembly EmbedIO.Quic.Recovery EmbedIO.Quic.ConnectionLifetime EmbedIO.Quic.ConnectionStreams EmbedIO.Quic.WebTransportApplication EmbedIO.Net.Internal |
+        Tee-Object (Join-Path $output 'quic-instrumentation.log')
+    if ($LASTEXITCODE) { throw 'QUIC instrumentation failed.' }
 } finally {
     $env:DOTNET_ROLL_FORWARD = $priorRollForward
     $env:SHARPFUZZ_PRINT_INSTRUMENTED_TYPES = $priorPrintTypes
@@ -66,6 +73,12 @@ if ($instrumentation -notmatch 'EmbedIO\.MultipartReader/<ReadBodyCoreAsync>' -o
 if ((Get-FileHash $assembly).Hash -eq $originalHash) { throw 'Instrumentation did not change the copied assembly.' }
 if ((Get-FileHash $ordinaryAssembly).Hash -ne $ordinaryHash) { throw 'Instrumentation modified the ordinary build output.' }
 
+$quicInstrumentation = Get-Content (Join-Path $output 'quic-instrumentation.log') -Raw
+foreach ($type in @('PacketHeader', 'AckRanges', 'PacketKeys', 'StreamReassembly', 'Recovery', 'ConnectionLifetime', 'ConnectionStreams', 'WebTransportApplication')) {
+    if ($quicInstrumentation -notmatch ('EmbedIO\.Quic\.' + $type)) { throw "QUIC type was not instrumented: $type" }
+}
+if ((Get-FileHash $quicAssembly).Hash -eq $quicOriginalHash) { throw 'QUIC instrumentation did not change the copied assembly.' }
+if ((Get-FileHash $quicOrdinary).Hash -ne $quicOrdinaryHash) { throw 'QUIC instrumentation modified the ordinary assembly.' }
 $harness = Join-Path $publish 'EmbedIO.SharpFuzz.dll'
 $seeds = Get-ChildItem (Join-Path $repo 'test/EmbedIO.SharpFuzz/corpus') -File | Sort-Object Name
 foreach ($file in $seeds) {

@@ -6,7 +6,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
     internal static class Program
     {
@@ -17,6 +17,22 @@ namespace EmbedIO.QuicPrototype
                 if (arguments is ["self-test"])
                 {
                     SelfTests.Run();
+                    return 0;
+                }
+
+                if (
+                    arguments is [
+                        "fuzz-native",
+                        var nativeLibrary,
+                        var nativeCertificate,
+                        var nativeKey,
+                        var seed,
+                        var cases,
+                        var evidence
+                    ]
+                )
+                {
+                    NativeFuzz.Run(nativeLibrary, nativeCertificate, nativeKey, seed, cases, evidence);
                     return 0;
                 }
 
@@ -127,11 +143,37 @@ namespace EmbedIO.QuicPrototype
                                     .SendAsync(packet, peer, deadline.Token)
                                     .ConfigureAwait(false);
 
+                            if (connection.Closed) break;
+
                             continue;
                         }
                     }
 
-                    var datagram = await receive.ConfigureAwait(false);
+                    UdpReceiveResult datagram;
+
+                    try
+                    {
+                        datagram = await receive.ConfigureAwait(false);
+                    }
+
+                    catch (SocketException error) when (
+                        error.SocketErrorCode == SocketError.ConnectionReset
+                            && connection?.Phase is ConnectionPhase.Closing
+                            or ConnectionPhase.Draining
+                    )
+                    {
+                        // Windows can report ICMP from a peer that has already closed.
+                        // Preserve the bounded closing/draining timer without sending application data.
+                        connection.Tick(clock.Elapsed.TotalMilliseconds);
+
+                        if (connection.Closed) break;
+
+                        receive = socket
+                            .ReceiveAsync(deadline.Token)
+                            .AsTask();
+                        continue;
+                    }
+
                     receive = socket
                         .ReceiveAsync(deadline.Token)
                         .AsTask();
@@ -198,6 +240,9 @@ namespace EmbedIO.QuicPrototype
                 var result = new
                 {
                     established = connection?.Established ?? false,
+                    phase = connection?.Phase.ToString(),
+                    idleExpired = connection?.IdleExpired ?? false,
+                    closePackets = connection?.ClosePackets ?? 0,
                     complete = connection?.Complete ?? false,
                     echoBytes = connection?.EchoBytes ?? 0,
                     receivedBytes = connection?.ReceivedBytes ?? 0,
@@ -207,6 +252,8 @@ namespace EmbedIO.QuicPrototype
                     retransmittedPackets = connection?.RetransmittedPackets ?? 0,
                     keyUpdates = connection?.KeyUpdates ?? 0,
                     outboundResets = connection?.OutboundResets ?? 0,
+                    receiveCreditUpdates = connection?.ReceiveCreditUpdates ?? 0,
+                    streamBytesReceived = connection?.StreamBytesReceived ?? 0,
                     probeTimeouts = connection?.ProbeTimeouts ?? 0,
                     congestionEvents = connection?.CongestionEvents ?? 0,
                     bytesInFlight = connection?.BytesInFlight ?? 0,

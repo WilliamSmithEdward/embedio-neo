@@ -2,7 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
     // Original implementation of RFC 9001 sections 5.1-5.4; AES primitives are BCL implementations.
     internal sealed class PacketKeys : IDisposable

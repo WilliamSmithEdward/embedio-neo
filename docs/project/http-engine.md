@@ -4886,7 +4886,7 @@ TestResults/http-engine/quic-loader-evidence-artifact and quic-loader-ordering.j
 
 Ordinary CI on that same head still fails its macOS rebind test with
 AddressAlreadyInUse under the stock dependency. No normal prerequisite, production
-package or loader policy was changed to obtain this experimental result. Supported
+package or loader policy was changed to obtain this comparison result. Supported
 native deployment, maintenance/provenance policy and final exact-head checks
 remain release blockers.
 

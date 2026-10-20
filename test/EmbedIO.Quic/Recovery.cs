@@ -1,4 +1,4 @@
-﻿namespace EmbedIO.QuicPrototype
+﻿namespace EmbedIO.Quic
 {
     // Original RFC 9002 recovery logic. Time is supplied by the owner, in monotonic
     // milliseconds, so loss, PTO and congestion behavior can be tested without sleeps.

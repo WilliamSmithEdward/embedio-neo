@@ -1,7 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 
-namespace EmbedIO.QuicPrototype
+namespace EmbedIO.Quic
 {
     internal static class SelfTests
     {
@@ -99,6 +99,9 @@ namespace EmbedIO.QuicPrototype
             RecoveryTests.Run();
             BridgeTests.Run();
             KeyUpdateTests.Run();
+            StreamWindowTests.Run();
+            LifetimeTests.Run();
+            QuicFuzzChecks.SelfTest();
             var result = new
             {
                 selfTests = "passed",

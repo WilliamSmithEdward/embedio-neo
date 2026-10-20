@@ -8,6 +8,8 @@ using EmbedIO.Utilities;
 
 if (FsCheckProperties.Run(args)) return;
 
+if (QuicCoreFuzz.Run(args)) return;
+
 if (await HttpResultsFuzz.SelfTestAsync(args)) return;
 
 if (await RequestBindingFuzz.SelfTestAsync(args)) return;
@@ -40,6 +42,8 @@ if (await ResponsePipelineFuzz.SelfTestAsync(args)) return;
 
 var stateMachines = new Dictionary<string, Func<StateMachineTrace, CancellationToken, Task>>
 {
+    ["quic-recovery"] = QuicCoreFuzz.RecoveryAsync,
+    ["quic-lifecycle"] = QuicCoreFuzz.LifecycleAsync,
     ["websocket-budget"] = SharedBudgetFuzz.RunAsync,
     ["rate-limits"] = SharedRateLimitFuzz.RunAsync,
     ["routes"] = SharedRoutesFuzz.RunAsync,

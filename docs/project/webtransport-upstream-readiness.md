@@ -3,9 +3,9 @@
 [Issue #303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303)
 tracks current-wire reliable reset and complete WebTransport integration.
 The native candidate remains **test-only** while awaiting upstream support.
-An independently implemented C# [QUIC prototype](quic-engine-feasibility.md) now
+An independently implemented C# [EmbedIO.Quic implementation](quic-engine-feasibility.md) now
 explores another transport route, with recovery and a bounded H3/WebTransport
-adapter. It does not activate a production provider. No modified native library, experimental application facade,
+adapter. It does not activate a production provider. No modified native library, application facade,
 or new provider is shipped by this decision. Existing HTTP/3 providers and
 defaults are unchanged; current WebTransport support is not advertised.
 

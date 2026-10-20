@@ -271,7 +271,8 @@ points for existing links.
 
 - [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance.
 
-- [Independent QUIC engine feasibility](project/quic-engine-feasibility.md): isolated C# recovery, congestion and H3/WebTransport experiment with OpenSSL TLS and independent peers; no production provider activation.
+- [QUIC development and testing record](project/quic-development-and-testing.md): implementation stages, fuzz targets, extensive local campaigns, validation ledger and MsQuic retirement checklist.
+- [EmbedIO.Quic implementation](project/quic-engine-feasibility.md): EmbedIO.Quic recovery, congestion, receive-window/lifecycle and H3/WebTransport implementation with OpenSSL TLS and independent peers; no production provider activation.
 - [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): decision to await a current-wire provider, test-only evidence and resumption gates.
 
 - [Coverage-guided URL fuzzing](guides/coverage-guided-fuzzing.md): instrumented parser campaigns, seed replay and crash artifacts.

@@ -1,12 +1,17 @@
-# Independent QUIC engine feasibility
+# EmbedIO.Quic implementation
 
-This is an isolated development experiment in `test/EmbedIO.QuicPrototype`, outside
-`EmbedIO.sln` and every shipped package. It establishes that original C# QUIC packet
+The EmbedIO.Quic development and validation host is in `test/EmbedIO.Quic`. It is
+referenced only by test harnesses and excluded from shipped packages. Its C# packet
 and stream handling can use an existing TLS provider and communicate with an
 independent implementation. It adds no public listener mode or application API.
 The production HTTP/3 listener continues to use its existing provider. Public
-WebTransport APIs remain unavailable. The prototype now includes loss recovery,
-NewReno congestion control and an experimental HTTP/3/WebTransport adapter.
+WebTransport APIs remain unavailable. The engine includes loss recovery,
+NewReno congestion control and an HTTP/3/WebTransport adapter.
+
+The intended production end state replaces MsQuic entirely, including the native
+provider and indirect use through `System.Net.Quic`. That transition remains gated
+on complete transport/application integration, interoperability, platform and
+performance validation. The existing production provider is still in place.
 
 ## Scope and provenance
 
@@ -23,12 +28,12 @@ References:
 - [RFC 9001](https://www.rfc-editor.org/rfc/rfc9001.html), initial secrets,
   packet/header protection, TLS CRYPTO transport and alert mapping.
 - [OpenSSL 3.5 QUIC TLS callbacks](https://docs.openssl.org/3.5/man3/SSL_set_quic_tls_cbs/).
-  The runtime is deliberately pinned to OpenSSL 3.5.7 for this experiment.
+  The runtime is deliberately pinned to OpenSSL 3.5.7 for this development host.
 - [RFC 9002](https://www.rfc-editor.org/rfc/rfc9002.html), ACK ranges, RTT sampling,
   packet/time loss thresholds, PTO, NewReno, persistent congestion and pacing.
 - [WebTransport HTTP/3 draft 16](https://datatracker.ietf.org/doc/html/draft-ietf-webtrans-http3-16)
   and [reliable stream reset draft 11](https://datatracker.ietf.org/doc/html/draft-ietf-quic-reliable-stream-reset-11).
-  The experimental adapter uses current parameter `0x1d` and frame `0x24`.
+  The adapter uses current parameter `0x1d` and frame `0x24`.
 
 OpenSSL performs the TLS 1.3 handshake, certificate/key handling and secret
 calculation. The original C# code owns UDP, QUIC packetization, packet protection,
@@ -74,10 +79,15 @@ consume congestion credit but are not retransmitted.
 Bounds remain deliberate: 64 KiB CRYPTO reassembly per encryption level, 4096 sent
 packet numbers per space, 4096 active recovery records, bounded ACK/loss history
 and 512 queued packets. H3 permits 16 incoming streams of each direction, 64 KiB
-per stream and 256 KiB total receive credit. Final reset sizes consume credit once,
-including gaps. The prototype waits for the reliable prefix before reporting a
+per stream receive window and an initial 256 KiB connection window. Both windows
+advance as the application consumes or discards input; buffered gaps retain their
+credit. Final reset sizes consume and release connection credit once, including
+gaps, after any required reliable prefix arrives. The engine waits for the reliable prefix before reporting a
 partial reset and preserves the header when a local reset waits for send credit.
-It does not replenish the connection receive window for indefinite transfers.
+Stream reassembly reuses a fixed ring, and the H3 parser compacts consumed input.
+Retired duplicate bytes are ignored; overlap still buffered in the ring must agree,
+and final-size history is retained. The packet/session/stream-count budgets and
+process deadline still bound each validation process; this is not indefinite service.
 Pre-validation sends obey the three-times-received byte allowance.
 
 Peer-initiated key updates derive fresh packet secrets while preserving header
@@ -85,10 +95,18 @@ protection, mirror the peer's send phase, and retain the previous receive keys f
 reordering during three PTO durations. The larger peer cases require a recorded
 key update and complete exact-byte transfer.
 
-This remains a restricted experiment. It has no Retry, migration, locally initiated
+Connections now distinguish active, closing, draining and closed states. Local
+protocol/TLS errors send bounded CONNECTION_CLOSE responses; peer close enters
+silent draining for three PTO durations. Negotiated idle expiry is silent, and
+repeated local sends cannot keep an unresponsive peer alive. Authenticated traffic
+can trigger a rate-limited close retry; closing/draining deadlines are not extended.
+The Windows harness tolerates ICMP connection-reset notifications while finishing
+those states. The hard ten-second process deadline remains independent.
+
+The current transport profile has no Retry, migration, locally initiated
 key updates, resumption, 0-RTT, complete post-handshake TLS processing,
-multi-connection listener, complete draining/closing state
-machine or production provider interface. It supports a bounded H3 echo profile,
+multi-connection listener, complete transport-error classification, stateless reset
+or production provider interface. It supports a bounded H3 echo profile,
 not a general request dispatcher, public application facade or browser release.
 Do not change the bind address or embed this executable into an application.
 
@@ -103,14 +121,14 @@ From the repository root, in PowerShell:
 
 ```powershell
 $opensslDirectory = 'C:\path\to\OpenSSL-3.5.7\bin'
-python -m venv TestResults/quic-prototype-python
-$python = 'TestResults/quic-prototype-python/Scripts/python.exe'
+python -m venv TestResults/embedio-quic-python
+$python = 'TestResults/embedio-quic-python/Scripts/python.exe'
 & $python -m pip install --require-hashes --only-binary=:all: -r test/EmbedIO.Conformance/drivers/requirements.txt
-dotnet restore test/EmbedIO.QuicPrototype/EmbedIO.QuicPrototype.csproj --locked-mode
-dotnet build test/EmbedIO.QuicPrototype/EmbedIO.QuicPrototype.csproj -c Release --no-restore
-$assembly = 'test/EmbedIO.QuicPrototype/bin/Release/net10.0/EmbedIO.QuicPrototype.dll'
+dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
+dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore
+$assembly = 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll'
 dotnet $assembly self-test
-& $python test/EmbedIO.QuicPrototype/verify.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --output TestResults/quic-prototype-wire
+& $python test/EmbedIO.Quic/verify.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --output TestResults/embedio-quic-wire
 ```
 
 Use a fresh output directory for each run to retain earlier evidence. The harness
@@ -127,15 +145,19 @@ checks. Run receipts retain exact assembly/source/native-library identities.
 - Fifteen aioquic 1.6.0 cases cover the original ten interoperability cases plus
   Initial/handshake/response loss, ACK loss and reordering. The designated reliable
   loss cases require actual retransmitted packets as well as an exact response.
-- Thirteen quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
+- Nineteen quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
   datagrams, two sessions and quota rejection, authorization/Origin rejection,
   missing current-reset negotiation, incoming and outgoing partial resets,
   a malformed capsule followed by a healthy sibling, larger transfers, withheld
-  transport credit, peer key updates and handshake/response loss.
+  transport credit, peer key updates and handshake/response loss. Three cases
+  transfer 512 KiB per session beyond the initial stream and connection windows,
+  including small peer windows and packet loss. Three cases verify transport/application
+  closing and silent idle expiry; every wire case requires completed shutdown.
 - The original 10,076 primitive assertions remain. Additional deterministic
   recovery and bridge regressions cover packet spaces, RTT/ACK delay, PTO backoff,
   late/duplicate ACKs, persistent congestion, blocked credit, sparse reliable
-  prefixes, final-size conflicts and session admission. A seeded recovery campaign
+  prefixes, final-size conflicts, session admission, receive-window reuse and
+  closing/draining timers. A seeded recovery campaign
   checks 10,000 state transitions plus complete retirement of each run.
 
 CI builds the standalone project and runs the managed checks without loading
@@ -146,7 +168,7 @@ comparison or production acceptance is claimed.
 ### Current-wire peer
 
 Use Go 1.27.3 for the independent peer. Its source dependencies are pinned in
-`test/EmbedIO.QuicPrototype/peer/go.mod` and authenticated by `go.sum`. The Windows
+`test/EmbedIO.Quic/peer/go.mod` and authenticated by `go.sum`. The Windows
 amd64 toolchain archive is
 [`go1.27.3.windows-amd64.zip`](https://go.dev/dl/go1.27.3.windows-amd64.zip), SHA-256
 `f26081f438319757f8a1b46d7d0b2c5ec7583d4038e485e0aa725cfde7885fff`.
@@ -157,19 +179,27 @@ any NuGet dependency group or package payload.
 ```powershell
 $env:GOTOOLCHAIN = 'local'
 go version # Expect go1.27.3.
-go -C test/EmbedIO.QuicPrototype/peer mod download
-go -C test/EmbedIO.QuicPrototype/peer mod verify
-go -C test/EmbedIO.QuicPrototype/peer build -mod=readonly -trimpath -o ../../../TestResults/webtransport-peer.exe .
-& $python test/EmbedIO.QuicPrototype/verify_webtransport.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --peer TestResults/webtransport-peer.exe --output TestResults/quic-prototype-webtransport
+go -C test/EmbedIO.Quic/peer mod download
+go -C test/EmbedIO.Quic/peer mod verify
+go -C test/EmbedIO.Quic/peer build -mod=readonly -trimpath -o ../../../TestResults/webtransport-peer.exe .
+& $python test/EmbedIO.Quic/verify_webtransport.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --peer TestResults/webtransport-peer.exe --output TestResults/embedio-quic-webtransport
 ```
+
+## Development and fuzzing
+
+The [development and testing record](quic-development-and-testing.md) contains
+the complete implementation/test map, replay commands, extended local campaigns,
+validation ledger and MsQuic retirement checklist. All existing fuzz engines now
+include direct QUIC core targets; native-context mutations complement managed
+coverage. The production provider remains unchanged.
 
 ## Next acceptance boundaries
 
-1. Extend the bounded connection/stream machinery to sustained receive-credit
-   replenishment, complete shutdown/draining, repeated and locally initiated key updates, and
-   concurrent connections.
-   Broaden loss/congestion campaigns before treating the recovery algorithm as
-   production transport acceptance.
+1. Extend the bounded connection/stream machinery to concurrent connections,
+   replenished stream counts, bounded retirement of packet history, complete error
+   classification/stateless reset, and repeated/locally initiated key updates.
+   Broaden loss/congestion and close-retry campaigns before treating the recovery
+   and lifecycle algorithms as production transport acceptance.
 2. Exercise outbound partial reset, withheld credit, concurrent session termination
    and malformed authenticated traffic more extensively against independent peers.
 3. Connect the validated transport to the production HTTP/3 provider abstraction,
@@ -180,5 +210,5 @@ go -C test/EmbedIO.QuicPrototype/peer build -mod=readonly -trimpath -o ../../../
    choosing any default provider.
 
 The existing [WebTransport upstream readiness record](webtransport-upstream-readiness.md)
-continues to describe the MsQuic route. This experiment explores a separate provider;
+continues to describe the MsQuic route. EmbedIO.Quic implements a separate provider;
 it does not establish that either route is ready to ship.

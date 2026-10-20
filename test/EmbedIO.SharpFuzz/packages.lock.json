@@ -28,6 +28,9 @@
           "System.Threading.RateLimiting": "[10.0.13, )"
         }
       },
+      "embedio.quic": {
+        "type": "Project"
+      },
       "System.Threading.RateLimiting": {
         "type": "CentralTransitive",
         "requested": "[10.0.13, )",
