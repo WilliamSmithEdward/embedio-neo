@@ -417,3 +417,6 @@
 
 - name: Typed HTTP results review
   href: project/typed-results-audit.md
+
+- name: Independent QUIC engine feasibility
+  href: project/quic-engine-feasibility.md

@@ -196,8 +196,8 @@ whitespace, namespace style, and `var` preferences remain configured. StyleCop's
 Hungarian-prefix, member-layout, and XML-comment wording checks are intentionally
 not reproduced. This is not a claim of identical analyzer coverage.
 
-Use **PrettyCSharp 1.1.5** for C# source changes (owner preference, 2026-10-18).
-Install that exact development-tool version with `python -m pip install prettycsharp==1.1.5`,
+Use **PrettyCSharp 1.1.10** for C# source changes (owner preference, 2026-10-18).
+Install that exact development-tool version with `python -m pip install prettycsharp==1.1.10`,
 or use an existing verified installation. A version update should be deliberate.
 It reads the repository's EditorConfig, including block namespaces and UTF-8 BOMs.
 Format and check only changed C# files; repository-wide formatting belongs to an
