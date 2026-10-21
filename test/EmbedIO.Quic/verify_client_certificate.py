@@ -13,7 +13,8 @@ from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID, AuthorityInformationAccessOID
+from revocation_peer import make_ocsp_responder, serve_revocation
 from verify import provenance
 from verify_tls_listener import CertificatePeer, configuration, fingerprint
 
@@ -40,6 +41,10 @@ def certificates(directory, crl_base):
             builder = builder.add_extension(x509.CRLDistributionPoints([x509.DistributionPoint(
                 full_name=[x509.UniformResourceIdentifier(crl_base + '/root.crl')], relative_name=None,
                 reasons=None, crl_issuer=None)]), critical=False)
+        if issuer is not None:
+            builder = builder.add_extension(x509.AuthorityInformationAccess([x509.AccessDescription(
+                AuthorityInformationAccessOID.OCSP,
+                x509.UniformResourceIdentifier(crl_base + '/ocsp/' + ('intermediate' if ca else name)))]), critical=False)
         return builder.sign(signer or key, hashes.SHA256())
     root_key = ec.generate_private_key(ec.SECP256R1())
     root = issue('temporary client root', root_key, ca=True)
@@ -49,12 +54,14 @@ def certificates(directory, crl_base):
     (directory / 'client-root.pem').write_bytes(root.public_bytes(pem))
     result = {}
     revoked_serial = None
+    responders = {'/ocsp/intermediate': make_ocsp_responder(intermediate, root, root_key)}
     for name in ('client', 'other', 'expired', 'server-only', 'revoked'):
         key = ec.generate_private_key(ec.SECP256R1())
         certificate = issue(name, key, intermediate, intermediate_key, expired=name == 'expired', server_only=name == 'server-only')
         (directory / (name + '.pem')).write_bytes(certificate.public_bytes(pem) + intermediate.public_bytes(pem) + root.public_bytes(pem))
         (directory / (name + '.key')).write_bytes(key.private_bytes(pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
         result[name] = fingerprint(certificate).upper().encode()
+        responders['/ocsp/' + name] = make_ocsp_responder(certificate, intermediate, intermediate_key, name == 'revoked')
         if name == 'revoked':
             revoked_serial = certificate.serial_number
     def crl(issuer, signer, revoked=None):
@@ -66,7 +73,7 @@ def certificates(directory, crl_base):
             builder = builder.add_revoked_certificate(x509.RevokedCertificateBuilder().serial_number(revoked)
                 .revocation_date(now - datetime.timedelta(seconds=30)).build())
         return builder.sign(signer, hashes.SHA256()).public_bytes(serialization.Encoding.DER)
-    return result, {'/root.crl': crl(root, root_key), '/intermediate.crl': crl(intermediate, intermediate_key, revoked_serial)}
+    return result, {'/root.crl': crl(root, root_key), '/intermediate.crl': crl(intermediate, intermediate_key, revoked_serial), **responders}
 
 
 async def case(args, mode, client, allowed):
@@ -77,23 +84,7 @@ async def case(args, mode, client, allowed):
     requests = []
     nonce = '/' + uuid.uuid4().hex
     async def serve_crl(reader, writer):
-        try:
-            raw = await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), 3)
-            first = raw.split(b'\r\n', 1)[0].split()
-            path = first[1].decode('ascii') if len(first) == 3 and first[0] == b'GET' else ''
-            requests.append(path)
-            body = resources.get(path)
-            if body is None:
-                writer.write(b'HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
-            else:
-                writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: application/pkix-crl\r\nConnection: close\r\nContent-Length: '
-                             + str(len(body)).encode() + b'\r\n\r\n' + body)
-            await writer.drain()
-        except (ConnectionError, asyncio.TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError):
-            pass
-        finally:
-            writer.close()
-            await writer.wait_closed()
+        await serve_revocation(reader, writer, resources, requests)
     crl_server = await asyncio.start_server(serve_crl, '127.0.0.1', 0, limit=8192)
     crl_port = crl_server.sockets[0].getsockname()[1]
     identities, crls = certificates(output, f'http://127.0.0.1:{crl_port}' + nonce)

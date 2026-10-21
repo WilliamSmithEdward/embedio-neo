@@ -1,1 +1,1 @@
-EMBEDIO_QUIC_TLS_1 { global: embedio_quic_tls_*; local: *; };
+EMBEDIO_QUIC_TLS_2 { global: embedio_quic_tls_*; local: *; };

@@ -48,12 +48,22 @@ jobs:
         run: |
           set -euo pipefail
           host=TestResults/quic-host/EmbedIO.Quic.Development.dll
+          "$EMBEDIO_DATAGRAM_PEER_PYTHON" -m unittest discover -s test/EmbedIO.Quic -p 'test_*peer.py'
           "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify.py --dotnet dotnet --assembly "$host" --openssl portable-rsa --output TestResults/quic-native-wire
           "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_cipher_suites.py --dotnet dotnet --assembly "$host" --openssl portable-rsa --vectors 32 --output TestResults/quic-native-ciphers
           "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_sni.py --dotnet dotnet --assembly "$host" --output TestResults/quic-native-sni
           "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_tls_listener.py --dotnet dotnet --assembly "$host" --output TestResults/quic-native-publication
           "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_client_certificate.py --dotnet dotnet --assembly "$host" --profile full --output TestResults/quic-native-client-certificate
           "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/fuzz_client_certificate.py --dotnet dotnet --assembly "$host" --cases 256 --seed 1729 --output TestResults/quic-native-auth-fuzz
+      - name: Validate outgoing chains in the disposable Linux profile
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          EMBEDIO_QUIC_DISPOSABLE_CERTIFICATE_STORE: '1'
+        run: >-
+          "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_server_chain.py
+          --dotnet dotnet --assembly TestResults/quic-host/EmbedIO.Quic.Development.dll
+          --output TestResults/quic-native-server-chains
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

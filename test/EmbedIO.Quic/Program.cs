@@ -14,6 +14,11 @@ namespace EmbedIO.Quic
         {
             try
             {
+                if (arguments is ["serve-server-chain", var chainProfile, var chainDirectory])
+                    return await ServerChainTests
+                        .RunAsync(chainProfile, chainDirectory)
+                        .ConfigureAwait(false);
+
                 if (
                     arguments is [
                         "serve-webserver" or "serve-webserver-policy",

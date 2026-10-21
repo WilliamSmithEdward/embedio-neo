@@ -79,7 +79,7 @@ namespace EmbedIO.Quic
         internal static void EnsureAvailable()
         {
             if (
-                NativeMethods.Abi() != 1
+                NativeMethods.Abi() != 2
                 || Marshal.PtrToStringUTF8(NativeMethods.Version()) != "OpenSSL 3.5.9 29 Sep 2026"
             )
                 throw new InvalidOperationException("Unexpected native TLS ABI or version.");
@@ -175,6 +175,8 @@ namespace EmbedIO.Quic
                     fixed (byte* input = credential)
                         if (NativeMethods.SetCredential(_owner, input, (nuint)credential.Length) != 1)
                             throw new InvalidDataException("Native TLS credential rejected.");
+
+                    InstallServerChain(certificate);
                 }
 
                 finally
@@ -188,6 +190,48 @@ namespace EmbedIO.Quic
 
         internal override X509Certificate2? CopyClientCertificate() =>
             _clientCertificate == null ? null : X509CertificateLoader.LoadCertificate(_clientCertificate.RawData);
+
+        private void InstallServerChain(X509Certificate2 certificate)
+        {
+            using var chain = new X509Chain();
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+
+            // This chooses the configured server's outgoing chain, not peer trust.
+            // Keep the runtime's normal issuer discovery behavior.
+            try
+            {
+                _ = chain.Build(certificate);
+                var incomplete = false;
+
+                foreach (var status in chain.ChainStatus)
+                    incomplete |= (status.Status & X509ChainStatusFlags.PartialChain) != 0;
+
+                var end = chain.ChainElements.Count - (incomplete ? 0 : 1);
+
+                for (var index = 1; index < end; index++)
+                {
+                    var encoded = chain.ChainElements[index].Certificate.RawData;
+
+                    try
+                    {
+                        fixed (byte* input = encoded)
+                            if (NativeMethods.AddChain(_owner, input, (nuint)encoded.Length) != 1)
+                                throw Failure(80, "Native TLS issuer certificate rejected.");
+                    }
+
+                    finally
+                    {
+                        CryptographicOperations.ZeroMemory(encoded);
+                    }
+                }
+            }
+
+            finally
+            {
+                foreach (var element in chain.ChainElements)
+                    if (!ReferenceEquals(element.Certificate, certificate)) element.Certificate.Dispose();
+            }
+        }
 
         private void ValidateClientCertificate()
         {
@@ -438,6 +482,11 @@ namespace EmbedIO.Quic
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
             [LibraryImport(Library, EntryPoint = "embedio_quic_tls_set_credential")]
             internal static partial int SetCredential(NativeHandle owner, byte* bytes, nuint length);
+
+            [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
+            [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_add_chain")]
+            internal static partial int AddChain(NativeHandle owner, byte* bytes, nuint length);
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

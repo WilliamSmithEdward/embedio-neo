@@ -1240,3 +1240,29 @@ Windows Schannel CI script passed after the test-loader rename. Build-tool archi
 regressions cover ordinary file contents/permissions and refusal of traversal,
 foreign roots, links and special files. These are Linux x64/glibc 2.39 and Windows
 local results; hosted macOS validation and distributable native assets are pending.
+
+## Outgoing chains and portable revocation fixtures
+
+Private native ABI 2 adds ordered DER issuer installation after the selected
+leaf's private credential. The managed adapter uses the runtime's normal issuer
+discovery, retains a partial chain's final issuer, omits a complete chain's trust
+anchor and releases the copies it creates. Client-certificate validation remains
+separate. ABI 1 fails preflight before readiness.
+
+Five local Linux profiles passed against both a BCL TCP control and the actual
+QUIC factory: complete, partial, two intermediates, direct-root and self-signed.
+The peer trusts only the configured root and checks exact wire issuer hashes/order
+and root omission. Native contexts/buffers return to zero. This fixture modifies
+only public CA entries in an explicitly disposable Linux user profile, removes its
+entries, never trusts a root globally, and is outside ordinary application startup.
+The native ownership run passed 6,144 lifecycles, including 32-issuer capacity,
+malformed DER, credential parsing and retirement. Wrapper ASan/UBSan/leak checking
+used uninstrumented vendor archives; it does not establish whole-vendor coverage.
+
+The independent revocation fixture now supplies signed OCSP responses alongside
+CRLs, checks requested certificate IDs, echoes nonces and bounds HTTP GET/POST.
+Four responder/transport regressions passed; the existing 23 Windows and 24 Linux
+policy cases passed without changing their expectations. Local ABI 2 validation
+also passed the wire/SNI/publication/cipher matrices, 5,000 authentication mutations
+and six common-factory JIT/NativeAOT wire cases. Hosted macOS validation of the
+expanded fixture is pending.

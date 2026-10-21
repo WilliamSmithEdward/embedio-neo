@@ -97,7 +97,7 @@ def build(args):
     if system == "Darwin":
         exports = work / "exports.txt"
         names = re.findall(r'visibility\("default"\)\)\) [^\n]*?\b(embedio_quic_tls_\w+)\(', (source / "native.c").read_text(encoding="utf-8"))
-        if len(names) != 14 or len(set(names)) != len(names):
+        if len(names) != 15 or len(set(names)) != len(names):
             raise RuntimeError("Unexpected private native ABI export inventory")
         exports.write_text("".join("_" + name + "\n" for name in names), encoding="utf-8")
         command += ["-Wl,-exported_symbols_list," + str(exports), "-Wl,-install_name,@rpath/" + library.name]

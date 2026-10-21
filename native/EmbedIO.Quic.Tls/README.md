@@ -39,3 +39,32 @@ Public HTTP/3 provider selection remains unchanged. Native runtime packaging,
 older libc/musl support, all RID validation and the final provider transition are
 still development work; these sources do not add a runtime package dependency.
 See [the development record](../../docs/project/quic-development-and-testing.md).
+
+## Issuer chains and ownership checks
+
+Private ABI 2 adds ordered public issuer certificates separately from the leaf's
+PKCS#12 credential. The managed adapter uses normal runtime issuer discovery,
+keeps a partial chain's final issuer, omits the trust anchor and releases its
+chain copies. An older ABI fails preflight before listener readiness. This does
+not change public provider selection or client-certificate trust policy.
+
+`verify_server_chain.py` exercises a BCL TCP control and the actual QUIC factory
+with complete, partial, two-intermediate, direct-root and self-signed profiles,
+including exact wire issuer order and root omission. It requires Linux and
+`EMBEDIO_QUIC_DISPOSABLE_CERTIFICATE_STORE=1`; use only a disposable container or
+CI user profile. It adds public certificates only to the temporary current-user
+CA store and removes its entries afterward. It never adds a trusted root.
+
+The standalone Linux ownership test also checks 32 issuer entries, excess and
+malformed input, allocation cleanup and native error retirement. After the native
+build above, use the pinned independent-peer Python environment:
+
+```sh
+python3 native/EmbedIO.Quic.Tls/tests/create_fixtures.py TestResults/quic-owned-fixtures
+work=TestResults/quic-native-work
+cc -std=c11 -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -I"$work/objects/include" -I"$work/openssl-3.5.9/include" native/EmbedIO.Quic.Tls/native.c native/EmbedIO.Quic.Tls/tests/ownership.c "$work/objects/libssl.a" "$work/objects/libcrypto.a" -Wl,--exclude-libs,ALL -ldl -pthread -o TestResults/quic-owned-fixtures/ownership
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 TestResults/quic-owned-fixtures/ownership TestResults/quic-owned-fixtures/credential.pfx TestResults/quic-owned-fixtures/certificate.der
+```
+
+This instruments the boundary/test code and checks allocator leaks; the ordinary
+vendor archives and assembler are not compiler-instrumented by this command.

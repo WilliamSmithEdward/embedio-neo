@@ -25,7 +25,7 @@ struct connection {
     SSL *tls;
     struct block *input[3], *tail[3], *held, *events, *last_event;
     size_t input_bytes, input_count, event_bytes, event_count;
-    int read_level, write_level, credential_set, error, alert;
+    int read_level, write_level, credential_set, error, alert, server_chain_count;
     unsigned char alpn[255], parameters[4096];
     size_t alpn_length, parameters_length;
 };
@@ -182,7 +182,7 @@ static const OSSL_DISPATCH dispatch[] = {
 
 __attribute__((visibility("default"))) uint64_t embedio_quic_tls_connections(void) { return atomic_load_explicit(&live_connections, memory_order_relaxed); }
 __attribute__((visibility("default"))) uint64_t embedio_quic_tls_blocks(void) { return atomic_load_explicit(&live_blocks, memory_order_relaxed); }
-__attribute__((visibility("default"))) unsigned int embedio_quic_tls_abi(void) { return 1; }
+__attribute__((visibility("default"))) unsigned int embedio_quic_tls_abi(void) { return 2; }
 __attribute__((visibility("default"))) const char *embedio_quic_tls_version(void) { return OpenSSL_version(OPENSSL_VERSION); }
 __attribute__((visibility("default"))) void embedio_quic_tls_free(struct connection *owner)
 {
@@ -305,12 +305,32 @@ __attribute__((visibility("default"))) int embedio_quic_tls_set_credential(struc
     if (sk_X509_num(additional) > 32) goto done;
     for (int index = 0; index < sk_X509_num(additional); index++)
         if (!SSL_add1_chain_cert(owner->tls, sk_X509_value(additional, index))) goto done;
+    owner->server_chain_count = sk_X509_num(additional);
+    if (owner->server_chain_count < 0) owner->server_chain_count = 0;
     result = 1; owner->credential_set = 1;
 done:
     PKCS12_free(encoded); EVP_PKEY_free(key); X509_free(certificate);
     sk_X509_pop_free(additional, X509_free);
     if (!result) fail(owner);
     return result;
+}
+/* Append public issuer certificates in managed chain order before TLS resumes. */
+__attribute__((visibility("default"))) int embedio_quic_tls_add_chain(struct connection *owner,
+        const unsigned char *data, size_t length)
+{
+    const unsigned char *cursor = data;
+    X509 *certificate;
+    int result;
+    if (owner == NULL || owner->error || !owner->credential_set
+            || SSL_is_init_finished(owner->tls) || owner->server_chain_count >= 32
+            || data == NULL || length == 0 || length > CHUNK_LIMIT) return 0;
+    certificate = d2i_X509(NULL, &cursor, (long)length);
+    result = certificate != NULL && cursor == data + length
+        && SSL_add1_chain_cert(owner->tls, certificate);
+    X509_free(certificate);
+    if (!result) return fail(owner);
+    owner->server_chain_count++;
+    return 1;
 }
 __attribute__((visibility("default"))) int embedio_quic_tls_next(struct connection *owner, int *kind, int *level, int *cipher,
         unsigned char *output, size_t capacity, size_t *length)

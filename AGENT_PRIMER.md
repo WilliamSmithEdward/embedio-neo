@@ -1111,3 +1111,14 @@ policy cases and 5,000 native-auth mutations, plus six common-factory JIT/Native
 wire cases and 3,072 wrapper-sanitizer ownership lifecycles. Those initial proofs
 used the recorded development build; final restricted native-build validation is
 recorded separately in the development guide. None of this work is released.
+
+The portable boundary's private ABI is now 2. Server credential preparation keeps
+runtime-discovered intermediates in order, preserves partial issuers and omits the
+trust anchor; issuer installation transfers only public DER. Native ABI 1 is
+rejected during preflight. Local Linux tests compare five chain profiles with a
+BCL TCP control and check exact peer-visible issuer order and cleanup. The store
+fixture requires an explicitly disposable Linux profile and stores public CA
+certificates without adding a trusted root. The independent revocation fixture
+serves signed CRLs and OCSP responses, including nonce handling and bounded HTTP
+GET/POST. It preserves the existing policy assertions; hosted Apple revalidation
+is pending after the initial CRL-only fixture could not establish online status.
