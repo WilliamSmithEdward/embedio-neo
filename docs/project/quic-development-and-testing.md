@@ -1508,3 +1508,24 @@ native build/audit/package/wheel suite passed all 26 methods locally on Windows
 with its existing symlink-only skip. The next actual Intel run must confirm the
 dependency inventory and complete consumer suites; no platform acceptance is
 inferred from source compilation alone.
+
+## Standards capture controls
+
+The development-only capture helper uses the same reviewed, hash-locked
+`defusedxml` 0.7.1 as the source-quality environment. Its separate requirements
+file supports an isolated manual capture environment. Requests and redirects
+permit only the enumerated RFC Editor, IANA and IETF Datatracker HTTPS origins.
+A response or RFC index may contain at most 64 MiB, the RFC update graph at most
+512 documents, and index parsing rejects DTD/entity markup. The existing
+120-second socket timeout remains; it is not a whole-campaign deadline.
+
+Eleven offline controls cover origin/redirect refusal, exact byte boundaries,
+response cleanup, malformed/oversized XML, namespace preservation, graph limits,
+parser pin consistency and failure without a fabricated manifest. CI runs them
+in its existing source-quality environment. Live bounded fetches returned RFC
+9000 metadata and the QUIC registry successfully; a retained 13,732,913-byte RFC
+index parsed 9,848 entries and contained RFC 9000. The earlier partial smoke had
+incorrectly assumed more than 10,000 entries; the corrected assertion checks the
+known document rather than guessing a count. These checks do not redate the
+separate frozen standards inventory. See [HTTP conformance](http-conformance.md)
+for capture commands.

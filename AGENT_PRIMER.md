@@ -1195,3 +1195,11 @@ groups retire with connection ownership. This does not supply server-issued ID
 rotation, server reset emission or path migration; those remain development work.
 The new model, dispatcher, independent-peer and fuzz checks are recorded in the
 development/testing guide. Public provider selection remains unchanged.
+
+The development-only standards capture tool uses the hash-locked
+`.github/requirements/standards-capture.txt` parser dependency. It permits only
+primary-source HTTPS origins and redirects, limits individual responses/indexes
+to 64 MiB and the RFC update graph to 512 documents, and rejects XML DTD/entity
+markup. Offline controls run in CI's existing source-quality environment. See
+[HTTP conformance](docs/project/http-conformance.md) for isolated capture commands;
+new captures do not overwrite or redate the documented frozen inventory.

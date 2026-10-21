@@ -6,7 +6,8 @@ from the RFC Editor errata API, and downloads the IANA registries that govern
 HTTP/1.1, HTTP/2, HTTP/3, QPACK, QUIC and WebSocket. Every response is stored
 with its URL, UTC retrieval time and SHA-256 so the audit can cite exact bytes.
 
-Usage: python -I capture_standards.py <output-directory>
+Install the hash-locked .github/requirements/standards-capture.txt into an isolated
+Python environment, then run: python -I capture_standards.py <output-directory>
 """
 
 import datetime
@@ -14,7 +15,9 @@ import hashlib
 import json
 import pathlib
 import sys
+import urllib.parse
 import urllib.request
+from defusedxml import ElementTree as SafeET
 
 SEED_RFCS = [
     # Core HTTP
@@ -52,11 +55,45 @@ RECENT_GROUPS = {"httpbis", "quic", "masque", "tls", "webtrans", "httpapi", "moq
 USER_AGENT = "embedio-neo-standards-capture/1 (development audit)"
 
 
+MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+MAX_RFCS = 512
+SOURCE_HOSTS = frozenset({"www.rfc-editor.org", "rfc-editor.org", "www.iana.org", "iana.org", "datatracker.ietf.org"})
+
+
+def source_url(url):
+    if not isinstance(url, str) or any(ord(character) <= 32 or ord(character) == 127 for character in url):
+        raise ValueError("Invalid standards source URL")
+    parsed = urllib.parse.urlsplit(url)
+    if (parsed.scheme != "https" or parsed.hostname not in SOURCE_HOSTS or
+            parsed.username is not None or parsed.password is not None or parsed.port not in (None, 443) or
+            parsed.fragment):
+        raise ValueError("Standards source must use an approved HTTPS origin")
+    return url
+
+
+class SourceRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        return super().redirect_request(request, response, code, message, headers, source_url(new_url))
+
+
 def fetch(url):
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        body = response.read()
-        return response.geturl(), response.status, body
+    request = urllib.request.Request(source_url(url), headers={"User-Agent": USER_AGENT})
+    opener = urllib.request.build_opener(SourceRedirects())
+    with opener.open(request, timeout=120) as response:
+        final_url = source_url(response.geturl())
+        body = response.read(MAX_RESPONSE_BYTES + 1)
+        if len(body) > MAX_RESPONSE_BYTES:
+            raise ValueError("Standards response exceeds the byte limit")
+        return final_url, response.status, body
+
+
+def rfc_index_entries(path):
+    with path.open("rb") as stream:
+        data = stream.read(MAX_RESPONSE_BYTES + 1)
+    if len(data) > MAX_RESPONSE_BYTES:
+        raise ValueError("RFC index exceeds the byte limit")
+    root = SafeET.fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
+    return root.findall("r:rfc-entry", {"r": "https://www.rfc-editor.org/rfc-index"})
 
 
 def record(out, name, url):
@@ -85,6 +122,8 @@ def main():
         number = pending.pop(0)
         if number in seen:
             continue
+        if len(seen) >= MAX_RFCS:
+            raise ValueError("RFC update graph exceeds the document limit")
         seen.add(number)
         entry = record(out, f"rfc/rfc{number}.json", f"https://www.rfc-editor.org/rfc/rfc{number}.json")
         metadata = json.loads((out / entry["file"]).read_bytes())
@@ -122,10 +161,9 @@ def main():
     # the seed list cannot silently miss a newly published specification.
     index_entry = record(out, "rfc-index.xml", "https://www.rfc-editor.org/rfc-index.xml")
     manifest["rfc_index"] = index_entry
-    import xml.etree.ElementTree as ElementTree
     namespace = {"r": "https://www.rfc-editor.org/rfc-index"}
     recent = []
-    for entry in ElementTree.parse(out / "rfc-index.xml").getroot().findall("r:rfc-entry", namespace):
+    for entry in rfc_index_entries(out / "rfc-index.xml"):
         group = entry.findtext("r:wg_acronym", default="", namespaces=namespace)
         year = int(entry.findtext("r:date/r:year", default="0", namespaces=namespace))
         if group in RECENT_GROUPS and year >= 2023:
