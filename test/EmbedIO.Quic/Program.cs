@@ -104,7 +104,7 @@ namespace EmbedIO.Quic
 
                 if (
                     arguments is [
-                        "serve-many" or "serve-many-h3",
+                        "serve-many" or "serve-many-h3" or "serve-many-async",
                         var sharedLibrary,
                         var sharedCertificate,
                         var sharedKey,
@@ -119,7 +119,8 @@ namespace EmbedIO.Quic
                             sharedKey,
                             arguments[0] == "serve-many-h3",
                             int.Parse(expected, System.Globalization.CultureInfo.InvariantCulture),
-                            int.Parse(port, System.Globalization.CultureInfo.InvariantCulture)
+                            int.Parse(port, System.Globalization.CultureInfo.InvariantCulture),
+                            asyncStreams: arguments[0] == "serve-many-async"
                         )
                         .ConfigureAwait(false);
 

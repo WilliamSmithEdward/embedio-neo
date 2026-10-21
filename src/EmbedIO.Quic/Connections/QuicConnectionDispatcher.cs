@@ -8,6 +8,12 @@ namespace EmbedIO.Quic
 
     internal delegate QuicConnection QuicConnectionFactory(ReadOnlySpan<byte> firstPacket, double now);
 
+    internal delegate QuicConnection ScheduledQuicConnectionFactory(
+        ReadOnlySpan<byte> firstPacket,
+        double now,
+        Action notify
+    );
+
     // Receive, Tick and SendOneAsync are driven by one socket-loop owner. Native
     // work runs on the execution pool; workers publish immutable state and owned
     // packet arrays without touching the routing dictionaries.
@@ -21,7 +27,7 @@ namespace EmbedIO.Quic
         {
             internal Entry(
                 QuicConnectionDispatcher dispatcher,
-                QuicConnectionFactory create,
+                ScheduledQuicConnectionFactory create,
                 string original,
                 IPEndPoint peer,
                 double deadline
@@ -34,11 +40,13 @@ namespace EmbedIO.Quic
                 Deadline = deadline;
                 Owner = new QuicConnectionOwner(
                     dispatcher._pool,
-                    create,
+                    (packet, now) => create(packet, now, Notify),
                     () => dispatcher.ConnectionClock(this),
                     output => dispatcher.Publish(this, output)
                 );
             }
+
+            private void Notify() => Owner.Notify();
 
             internal string Original { get; }
             internal IPEndPoint Peer { get; }
@@ -55,7 +63,7 @@ namespace EmbedIO.Quic
         }
 
         private readonly QuicExecutionPool _pool;
-        private readonly QuicConnectionFactory _create;
+        private readonly ScheduledQuicConnectionFactory _create;
         private readonly Func<double> _clock;
         private readonly int _capacity;
         private readonly double _handshakeTimeout;
@@ -77,7 +85,7 @@ namespace EmbedIO.Quic
         private double _now;
 
         internal QuicConnectionDispatcher(
-            QuicConnectionFactory create,
+            ScheduledQuicConnectionFactory create,
             Func<double> clock,
             int capacity = 16,
             int workers = 2,

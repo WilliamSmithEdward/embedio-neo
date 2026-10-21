@@ -730,6 +730,37 @@ exercise bounded failure/resource assertions, with deterministic regressions and
 independent peers providing separate behavioral evidence. Production HTTP/3
 integration remains separate from this shared development host.
 
+### Scheduled asynchronous application commands
+
+The dispatcher supplies its connection factory with a coalescing wake callback.
+`AsyncStreamApplication` can invoke that callback when an application queues a
+stream open, write, FIN, abort, datagram or connection close. Its existing command
+readiness channel remains available to standalone consumers. Both notifications
+represent the same bounded pending work; the connection worker processes it under
+the existing serialized owner, including when a wake overlaps packet processing.
+Late callbacks after retirement cannot create new work or revive disposed TLS.
+
+The ordinary self-test covers outbound bidirectional and unidirectional streams
+opening, writing, finishing and closing without another packet or timer tick.
+The shared UDP host has a `serve-many-async` mode that owns and awaits each async
+echo application through listener shutdown. Independent-peer coverage includes
+eight concurrent 128-KiB uploads on this mode, with byte-for-byte response checks.
+Clients keep the connection open until the server closes after acknowledged
+write completion; merely reading EOF and closing immediately does not prove that
+the server observed the final acknowledgement. Shutdown awaits every application
+task even if connection-owner cleanup reports an error.
+The eighth managed target also varies stream direction and payload in bounded
+scheduled application traces; a dedicated binary corpus seed selects this path.
+The async integration passed 87 independent-peer cases across OpenSSL and
+Schannel RSA/ECDSA, 100,000 managed mutations, 10,000 cases per property, 4,000
+actor traces and six scheduled native first flights. The new traces also ran in
+60-second campaigns with 68,143 libFuzzer and 24,746 AFL++ executions and no
+retained crashes or hangs. AFL's 5.04% map stability has the same concurrent
+coverage limitation described above.
+
+These are development transport integrations; the production HTTP/3 listener,
+controllers and authentication path still require integration and acceptance.
+
 ## Remaining production acceptance work
 
 1. Promote the bounded shared listener into the production ownership/transport

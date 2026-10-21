@@ -23,7 +23,8 @@ namespace EmbedIO.Quic
             ulong authenticationLimit = 1UL << 52,
             bool multiplexed = false,
             bool asyncStreams = false,
-            Func<byte[], string, TlsSession>? tlsFactory = null
+            Func<byte[], string, TlsSession>? tlsFactory = null,
+            Func<StreamOperations, StreamApplication>? applicationFactory = null
         )
             : base(
                 firstPacket,
@@ -36,14 +37,16 @@ namespace EmbedIO.Quic
                         parameters,
                         webTransport ? "h3" : OpenSslTls.ApplicationProtocol
                     ),
-                (operations, features) => webTransport
-                    ? new WebTransportApplication(
-                        features.MaximumDatagramFrameSize > 0 && features.ReliableReset,
-                        operations,
-                        headers => headers.TryGetValue("authorization", out var value)
-                            && value == "Bearer " + authorization
-                    )
-                    : asyncStreams ? new AsyncStreamApplication(operations) : new StreamEchoApplication(operations),
+                (operations, features) => applicationFactory != null
+                    ? applicationFactory(operations)
+                    : webTransport
+                        ? new WebTransportApplication(
+                            features.MaximumDatagramFrameSize > 0 && features.ReliableReset,
+                            operations,
+                            headers => headers.TryGetValue("authorization", out var value)
+                                && value == "Bearer " + authorization
+                        )
+                        : asyncStreams ? new AsyncStreamApplication(operations) : new StreamEchoApplication(operations),
                 now,
                 keyUpdateInterval,
                 encryptionLimit,

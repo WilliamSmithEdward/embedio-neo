@@ -20,7 +20,7 @@ async def parallel(operations):
             group.create_task(operation)
 
 
-async def echo(args, port, index, barrier=None, relay=None):
+async def echo(args, port, index, barrier=None, relay=None, length=4096, server_closes=False):
     transport = None
     if relay:
         transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(
@@ -35,11 +35,15 @@ async def echo(args, port, index, barrier=None, relay=None):
                 if barrier:
                     await barrier.wait()
                 reader, writer = await peer.create_stream()
-                payload = bytes((value + index) % 251 for value in range(4096))
+                payload = bytes((value + index) % 251 for value in range(length))
                 writer.write(payload)
                 writer.write_eof()
                 if await reader.read() != payload:
                     raise AssertionError("Shared listener returned another owner's bytes")
+                if server_closes:
+                    await peer.wait_closed()
+                    if peer.termination is None or peer.termination["code"] != 0x1234:
+                        raise AssertionError("Async server did not close after acknowledged echo completion")
     finally:
         if transport:
             transport.close()
@@ -122,6 +126,12 @@ async def main(args):
     if results[-1]["passed"]:
         results.append(await run(args, "shared-webtransport", "serve-many-h3", 4, webtransport))
 
+    async def scheduled_async(ready):
+        barrier = asyncio.Barrier(8)
+        await parallel(echo(args, ready["port"], index, barrier, length=131072, server_closes=True) for index in range(8))
+    if results[-1]["passed"]:
+        results.append(await run(args, "shared-async-streams", "serve-many-async", 8, scheduled_async))
+
     async def hold(ready):
         configuration = QuicConfiguration(is_client=True, alpn_protocols=[ALPN], server_name="localhost",
                                         verify_mode=ssl.CERT_REQUIRED, idle_timeout=30)
@@ -135,7 +145,7 @@ async def main(args):
     if results[-1]["passed"]:
         results.append(await run(args, "cancel-active-owner", "serve-many", 1, hold, timed_out=True))
     receipt = {**provenance(args), "peerSha256": hashlib.sha256(Path(args.peer).read_bytes()).hexdigest(),
-               "aioquicVersion": importlib.metadata.version("aioquic"), "cases": results, "passed": len(results) == 4 and all(r["passed"] for r in results)}
+               "aioquicVersion": importlib.metadata.version("aioquic"), "cases": results, "passed": len(results) == 5 and all(r["passed"] for r in results)}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
     return 0 if receipt["passed"] else 1
 

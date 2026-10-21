@@ -20,11 +20,13 @@ namespace EmbedIO.Quic
     internal sealed class AsyncStreamApplication : StreamApplication
     {
         private readonly StreamOperations _operations;
+        private readonly Action? _wake;
 
-        internal AsyncStreamApplication(StreamOperations operations)
+        internal AsyncStreamApplication(StreamOperations operations, Action? wake = null)
         {
             ArgumentNullException.ThrowIfNull(operations);
             _operations = operations;
+            _wake = wake;
             _accepted = Channel.CreateBounded<AsyncQuicStream>(new BoundedChannelOptions(
                 operations.InboundStreamCapacity
             )
@@ -166,7 +168,11 @@ namespace EmbedIO.Quic
                 .WaitToReadAsync(token)
                 .AsTask();
 
-        private void Notify() => _ready.Writer.TryWrite(0);
+        private void Notify()
+        {
+            _ready.Writer.TryWrite(0);
+            _wake?.Invoke();
+        }
 
         private void CheckOpen()
         {

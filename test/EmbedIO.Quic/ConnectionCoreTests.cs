@@ -337,7 +337,7 @@ namespace EmbedIO.Quic
 
         // Deterministic TLS substitute for packet ownership/flow tests. It supplies
         // public test keys only; native and independent-peer suites verify real TLS.
-        private sealed class ModelTls(bool establish, bool failDispose = false) : TlsSession
+        internal sealed class ModelTls(bool establish, bool failDispose = false) : TlsSession
         {
             private readonly Reassembly[] _input =
             [

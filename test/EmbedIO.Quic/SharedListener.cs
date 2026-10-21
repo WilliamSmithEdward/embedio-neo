@@ -14,7 +14,8 @@ namespace EmbedIO.Quic
             string key,
             bool webTransport,
             int expected,
-            int port
+            int port,
+            bool asyncStreams = false
         )
         {
             if (expected is < 1 or > 64 || port is < 0 or > 65535)
@@ -29,9 +30,18 @@ namespace EmbedIO.Quic
             using var provider = new DevelopmentTlsProvider(library, certificate, key);
             var clock = Stopwatch.StartNew();
             var observed = new System.Collections.Concurrent.ConcurrentBag<ProbeConnection>();
-            await using var connections = new QuicConnectionDispatcher(
-                (packet, now) =>
+            var applications = new System.Collections.Concurrent.ConcurrentBag<(AsyncStreamEcho Echo, Task Task)>();
+            var connections = new QuicConnectionDispatcher(
+                (packet, now, notify) =>
                 {
+                    StreamApplication CreateApplication(StreamOperations operations)
+                    {
+                        var application = new AsyncStreamApplication(operations, notify);
+                        var echo = new AsyncStreamEcho(application, closeAfterEcho: true);
+                        applications.Add((echo, echo.RunAsync(stop.Token)));
+                        return application;
+                    }
+
                     var connection = new ProbeConnection(
                         packet,
                         library,
@@ -40,29 +50,33 @@ namespace EmbedIO.Quic
                         webTransport,
                         authorization,
                         now,
-                        tlsFactory: provider.Create
+                        asyncStreams: asyncStreams,
+                        tlsFactory: provider.Create,
+                        applicationFactory: asyncStreams ? CreateApplication : null
                     );
                     observed.Add(connection);
                     return connection;
                 },
                 () => clock.Elapsed.TotalMilliseconds
             );
-            var ready = new
-            {
-                ready = true,
-                authorization,
-                port = ((IPEndPoint)(socket.Client.LocalEndPoint
-                    ?? throw new InvalidOperationException("Missing endpoint."))).Port
-            };
-            Console.WriteLine(JsonSerializer.Serialize(ready));
             Task<UdpReceiveResult>? receive = null;
             Task<bool>? tick = null;
             Task<bool>? output = null;
             var completed = 0;
             var deadline = false;
+            var failures = new List<Exception>();
 
             try
             {
+                var ready = new
+                {
+                    ready = true,
+                    authorization,
+                    port = ((IPEndPoint)(socket.Client.LocalEndPoint
+                        ?? throw new InvalidOperationException("Missing endpoint."))).Port
+                };
+                Console.WriteLine(JsonSerializer.Serialize(ready));
+
                 receive = socket
                     .ReceiveAsync(stop.Token)
                     .AsTask();
@@ -130,6 +144,15 @@ namespace EmbedIO.Quic
                 deadline = true;
             }
 
+            catch (Exception error) when (
+                error is not OutOfMemoryException
+                    and not StackOverflowException
+                    and not AccessViolationException
+            )
+            {
+                failures.Add(error);
+            }
+
             finally
             {
                 await stop
@@ -168,10 +191,25 @@ namespace EmbedIO.Quic
                     catch (OperationCanceledException) { }
                 }
 
-                await connections
+                var owners = connections
                     .DisposeAsync()
-                    .ConfigureAwait(false);
-                completed = observed.Count(connection => connection.Complete);
+                    .AsTask();
+                await owners.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+                // Factories have finished, so this includes every application owner,
+                // even when native shutdown reported an error.
+                var handlers = Task
+                    .WhenAll(applications.Select(application => application.Task))
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+                var shutdown = Task.WhenAll(owners, handlers);
+                await shutdown.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+                if (shutdown.Exception != null) failures.Add(shutdown.Exception);
+
+                else if (shutdown.IsCanceled) failures.Add(new TaskCanceledException(shutdown));
+
+                completed = asyncStreams
+                    ? applications.Count(application => application.Echo.Completed > 0)
+                    : observed.Count(connection => connection.Complete);
                 var result = new
                 {
                     accepted = connections.Accepted,
@@ -186,6 +224,8 @@ namespace EmbedIO.Quic
                 };
                 Console.WriteLine(JsonSerializer.Serialize(result));
             }
+
+            if (failures.Count != 0) throw new AggregateException("Shared QUIC listener failed.", failures);
 
             return !deadline && completed >= expected ? 0 : 1;
 

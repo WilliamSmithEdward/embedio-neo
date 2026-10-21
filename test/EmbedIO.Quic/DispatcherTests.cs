@@ -36,6 +36,8 @@ namespace EmbedIO.Quic
             await InvalidInitialAsync().ConfigureAwait(false);
             await CleanupFailureAsync().ConfigureAwait(false);
             await CallbackTimeoutAsync().ConfigureAwait(false);
+            await ScheduledApplicationAsync([0, 42]).ConfigureAwait(false);
+            await ScheduledApplicationAsync([1]).ConfigureAwait(false);
             await RoutingAndSendFailureAsync().ConfigureAwait(false);
             Mutate([0, 1, 2, 3, 4, 5, 6, 7]);
             Mutate([255, 17, 2, 1]);
@@ -47,7 +49,7 @@ namespace EmbedIO.Quic
             using var release = new ManualResetEventSlim();
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now) =>
+                (packet, now, _) =>
                 {
                     var blocked = packet[6] == 1;
                     return Connection(
@@ -121,7 +123,7 @@ namespace EmbedIO.Quic
             var now = 0.0;
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, time) => Connection(
+                (packet, time, _) => Connection(
                     packet,
                     time,
                     new ControlledTls(
@@ -186,7 +188,7 @@ namespace EmbedIO.Quic
             var factories = 0;
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, time) =>
+                (packet, time, _) =>
                 {
                     Interlocked.Increment(ref factories);
                     return Connection(
@@ -250,7 +252,7 @@ namespace EmbedIO.Quic
         {
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, time) => Connection(
+                (packet, time, _) => Connection(
                     packet,
                     time,
                     new ControlledTls(
@@ -332,7 +334,7 @@ namespace EmbedIO.Quic
         {
             var nativeFactories = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now) => new QuicConnection(
+                (packet, now, _) => new QuicConnection(
                     packet,
                     _ =>
                     {
@@ -362,7 +364,7 @@ namespace EmbedIO.Quic
         {
             var cleaned = 0;
             var dispatcher = new QuicConnectionDispatcher(
-                (packet, now) =>
+                (packet, now, _) =>
                 {
                     var fail = packet[6] == 1;
                     return Connection(
@@ -426,7 +428,7 @@ namespace EmbedIO.Quic
             var disposed = 0;
             var failure = new TimeoutException("callback timeout");
             var dispatcher = new QuicConnectionDispatcher(
-                (packet, now) => Connection(
+                (packet, now, _) => Connection(
                     packet,
                     now,
                     new ControlledTls(() => throw failure, () => Interlocked.Increment(ref disposed))
@@ -472,13 +474,94 @@ namespace EmbedIO.Quic
             }
         }
 
+        private static async Task ScheduledApplicationAsync(byte[] data)
+        {
+            var ready = new TaskCompletionSource<AsyncStreamApplication>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
+            var tls = new ConnectionCoreTests.ModelTls(true);
+            Action? lateNotify = null;
+            await using var dispatcher = new QuicConnectionDispatcher(
+                (packet, now, notify) =>
+                {
+                    lateNotify = notify;
+                    return new QuicConnection(
+                        packet,
+                        _ => tls,
+                        (operations, _) =>
+                        {
+                            var application = new AsyncStreamApplication(operations, notify);
+                            ready.TrySetResult(application);
+                            return application;
+                        },
+                        now
+                    );
+                },
+                static () => 0
+            );
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            dispatcher.Receive(Packet(1), new IPEndPoint(IPAddress.Loopback, 17001));
+            var application = await ready.Task
+                .WaitAsync(stop.Token)
+                .ConfigureAwait(false);
+            var unidirectional = data.Length == 0 || (data[0] & 1) == 0;
+            var stream = await application
+                .OpenOutboundStreamAsync(unidirectional, stop.Token)
+                .ConfigureAwait(false);
+            Check(stream.Id == (unidirectional ? 3UL : 1UL), "scheduled application opens without packet or timer");
+            await stream
+                .WriteAsync(data.AsMemory(), stop.Token)
+                .ConfigureAwait(false);
+            stream.CompleteWrites();
+            Check(
+                await dispatcher
+                    .WaitForOutputAsync(stop.Token)
+                    .ConfigureAwait(false),
+                "application output wakes socket owner"
+            );
+            var sent = 0;
+
+            while (
+                await dispatcher
+                    .SendOneAsync(output =>
+                    {
+                        Check(output.Peer.Port == 17001, "async application output keeps its peer");
+                        sent++;
+                        return ValueTask.CompletedTask;
+                    })
+                    .ConfigureAwait(false)
+            ) { }
+
+            Check(sent > 0, "scheduled output sent without a timer");
+            await application
+                .CloseAsync(0x1234, stop.Token)
+                .ConfigureAwait(false);
+            await dispatcher
+                .DisposeAsync()
+                .ConfigureAwait(false);
+            await stream
+                .DisposeAsync()
+                .ConfigureAwait(false);
+
+            for (var index = 0; index < 32; index++) lateNotify?.Invoke();
+
+            Check(
+                application.IsClosed
+                    && tls.DisposeCalls == 1
+                    && dispatcher.Active == 0
+                    && dispatcher.PendingOutputBytes == 0
+                    && dispatcher.FailedOwners == 0,
+                "late application notifications cannot resurrect a retired owner"
+            );
+        }
+
         private static async Task RoutingAndSendFailureAsync()
         {
             var packets = 0;
             var disposed = 0;
             QuicConnection? connection = null;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now) =>
+                (packet, now, _) =>
                 {
                     connection = Connection(
                         packet,
@@ -556,17 +639,24 @@ namespace EmbedIO.Quic
             );
         }
 
-        internal static void Mutate(ReadOnlySpan<byte> data) =>
+        internal static void Mutate(ReadOnlySpan<byte> data)
+        {
             MutateAsync(data[..Math.Min(12, data.Length)].ToArray())
                 .GetAwaiter()
                 .GetResult();
+
+            if (!data.IsEmpty && (data[0] & 15) == 0)
+                ScheduledApplicationAsync(data[1..Math.Min(13, data.Length)].ToArray())
+                    .GetAwaiter()
+                    .GetResult();
+        }
 
         private static async Task MutateAsync(byte[] data)
         {
             var created = 0;
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now) =>
+                (packet, now, _) =>
                 {
                     var connection = new QuicConnection(
                         packet,

@@ -419,8 +419,11 @@ parameter extraction have property, deterministic and coverage-guided fuzz cover
 dispatch and full TLS/certificate parity remain pending.
 The source core owns packet processing and destination-ID routing through
 `QuicConnection` and `QuicConnectionDispatcher`, with injected TLS/application factories
-and validated internal stream-count/idle configuration. All development protocols
-use the same stream owner. The synchronous registry is retained only in the
+and validated internal stream-count/idle configuration. Scheduled factories receive
+a coalescing wake callback; the async stream application uses it for application
+commands, so outgoing work need not wait for a peer packet or periodic timer.
+The shared development host also runs owned async stream handlers on that path.
+All development protocols use the same stream owner. The synchronous registry is retained only in the
 development test host as a deterministic reference. Registry shutdown releases all sibling owners before
 reporting ordinary cleanup failures. Direct managed fuzzing exercises both owners
 without loading native TLS; independent peers validate the native path. The bounded
