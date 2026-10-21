@@ -22,7 +22,7 @@ half-close before reading. Pass the token to streaming, upload and application
 work; retain deadlines because disconnect detection is best effort. Generated
 bindings support AOT and omit the token from OpenAPI. The in-process testing
 context observes its caller token. See [request-abort cancellation](docs/guides/request-abort.md)
-for completion ownership, HTTP/2ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ3 resets, TLS/proxy limits and examples.
+for completion ownership, HTTP/2ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“3 resets, TLS/proxy limits and examples.
 Canceled request-abort tokens keep their cancellation source until the token can
 be collected, so retained-token registrations and signaled wait handles remain
 usable. Parent registrations still detach at completion.
@@ -387,7 +387,8 @@ same internal engine sources; the standalone `EmbedIO.Quic` project remains an
 independent build boundary. The host no longer compiles copies of the HTTP/3 codecs. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
 credentials and AES-128-GCM/SHA-256. Its Schannel implementation now compiles in the
 .NET 10 library under `Net/Internal/Http3/Tls`, with certificate-source and TLS-policy
-integration exercised by the actual WebServer fixture. Client-certificate, full cipher,
+integration exercised by the actual WebServer fixture. Windows client-certificate
+policies now have direct controller, chain, callback and revocation checks; full cipher,
 resumption and supported-platform parity remain pending. The standalone
 core and development host remain nonpackable. Existing package dependency groups
 and .NET Standard compilation are unchanged; the public listener still selects
@@ -411,8 +412,12 @@ constructing each handshake, then selects and clones the certificate after a com
 ClientHello. It preserves bounded ASCII SNI spelling, calls the configured selector
 once and isolates selector failures. Later publication applies to new handshakes;
 existing connections keep their original credential. Ordinary library TLS omits
-development diagnostic strings. The current internal profile rejects client-certificate
-policies explicitly until their integration is complete.
+development diagnostic strings. Its Windows path honors `ClientCertificateMode.None`,
+`Allow` and `Require`, builds the client-authentication chain using presented intermediates,
+and applies the existing validator and revocation option before TLS completion. Supplied
+roots are not trusted automatically. Accepted requests use the existing
+`Request.GetClientCertificate()` API; certificate copies retain their existing lifetime
+independently of native TLS cleanup. Full platform/configuration parity remains pending.
 A bounded execution pool now serializes each connection's factory, packet,
 timer, application and cleanup work. Its mailbox counts both queued and executing
 input toward packet/byte limits; shutdown waits for active native calls. Direct
@@ -442,8 +447,11 @@ fixture profile. `test/EmbedIO.Quic/verify_tls_listener.py` additionally verifie
 SNI selection, authenticated certificate publication, strict trust/hostname rejection,
 and healthy existing connections through the library's Windows TLS implementation.
 `scripts/run-quic-development.py --schannel` includes Windows listener/policy checks
-and native RSA/ECDSA mutations. Public WebTransport and complete credential/configuration
-parity remain pending before changing the public listener default.
+and native RSA/ECDSA mutations. It also runs the client-certificate wire matrix and seeded
+full-handshake certificate/key mutations through `verify_client_certificate.py` and
+`fuzz_client_certificate.py`. These include a continuing healthy connection and retained
+input/fixture replay. Public WebTransport and complete credential/configuration parity
+remain pending before changing the public listener default.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production

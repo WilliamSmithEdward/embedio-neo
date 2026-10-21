@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 
 namespace EmbedIO.Quic
 {
@@ -14,6 +15,9 @@ namespace EmbedIO.Quic
         internal byte[]? PeerParameters { get; set; }
         internal byte? AlertCode { get; set; }
         internal bool Established { get; set; }
+
+        // Called on the serialized owner after handshake validation. The caller owns the copy.
+        internal virtual X509Certificate2? CopyClientCertificate() => null;
 
         internal abstract void Add(int level, ulong offset, ReadOnlySpan<byte> bytes);
 

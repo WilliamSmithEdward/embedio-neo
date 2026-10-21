@@ -4,7 +4,8 @@ This record covers the development path, test architecture, reproducible local
 campaigns and remaining acceptance work for the original C# QUIC engine. It is
 maintained with the implementation. The feature is pending in draft PR #506;
 production HTTP/3 still uses its existing MsQuic provider. No package release or
-public WebTransport API is implied by this record.
+public WebTransport API is implied by this record. The sections retain the implementation
+sequence and its evidence; the final acceptance list describes work still outstanding.
 
 See [the feasibility profile](quic-engine-feasibility.md) for standards references,
 exact dependency pins, bounds and independent-peer setup. The implementation is
@@ -20,8 +21,8 @@ copying from those projects.
 
 | Stage | Implementation and validation |
 | --- | --- |
-| Core packet and connection owners | `QuicConnection` and `QuicConnectionDispatcher` own packet/TLS/recovery state and bounded destination-ID routing in the source core. Factories supply TLS and applications; development wrappers add protocol error mapping and observations. Simple echo, multiplexed streams and H3 use the same stream owner. Production socket and policy integration remain pending. |
-| Windows certificate selection | Complete ClientHello/SNI framing precedes a once-only certificate selector. A selected certificate is cloned for the native credential; the source remains application-owned. Focused tests exercise publication timing, selector errors and disposal during selection. The independent selection profile uses two non-exportable CNG key types and six aioquic cases. The actual WebServer fixture now uses the library's policy/source factory to verify SNI and live publication; complete client-certificate and platform parity remains pending. |
+| Core packet and connection owners | `QuicConnection` and `QuicConnectionDispatcher` own packet/TLS/recovery state and bounded destination-ID routing in the source core. Factories supply TLS and applications; development wrappers add protocol error mapping and observations. Simple echo, multiplexed streams and H3 use the same stream owner. The library socket binding now exercises the actual WebServer pipeline; public provider selection is unchanged. |
+| Windows certificate selection | Complete ClientHello/SNI framing precedes a once-only certificate selector. A selected certificate is cloned for the native credential; the source remains application-owned. Focused tests exercise publication timing, selector errors and disposal during selection. The independent selection profile uses two non-exportable CNG key types and six aioquic cases. The actual WebServer fixture now uses the library's policy/source factory to verify SNI and live publication; Windows client-certificate integration is described below; complete platform parity remains pending. |
 | Windows TLS credentials | Original managed SSPI binding, provider-neutral TLS state and non-exportable CNG RSA/ECDSA test credentials. Native credential/context/buffer ownership, bounded ClientHello parsing and once-only traffic-secret installation are exercised before production integration. The development cipher profile remains AES-128-GCM/SHA-256. |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
 | Key generations | Current, previous and next read keys share header protection; ACK-confirmed local updates track full generations, enforce encryption/integrity usage limits and retain reordering boundaries. Independent command/packet oracles and native wire error checks complement the repeated-update peer case. |
@@ -157,6 +158,7 @@ each separated by 104729, starting at 1729:
 | Native connection/TLS mutation | 100,000 inputs when `--openssl` is supplied |
 | Shared-owner native traces | 100,000 admission/retirement commands when `--openssl` is supplied |
 | Windows native TLS mutations | An additional 100,000 inputs per RSA/ECDSA profile with `--schannel`, plus corresponding shared-owner traces |
+| Complete Windows client-authentication handshakes | 100,000 certificate/key mutation inputs with `--schannel` (5,000 per seed), up to 16 peers at once and one continuing healthy connection |
 | SharpFuzz/libFuzzer | 600 seconds |
 | AFL++ | 600 seconds, one CPU and 4 GiB container limit |
 
@@ -502,7 +504,9 @@ dotnet $hostDll fuzz-native schannel-rsa TestResults/quic-schannel-public.pem un
 
 The existing Windows CI test leg is configured to reuse its already provisioned,
 hash-locked aioquic peer for both credential profiles, native lifetime checks and
-1,000 native mutation cases per profile plus the six certificate-selection cases. This adds no job or dependency installation.
+1,000 native mutation cases per profile plus the six certificate-selection cases.
+It now also includes six client-certificate policy cases and 16 complete-handshake
+certificate/key mutations in that same Windows step. This adds no job or dependency installation.
 A configured step is not a completed hosted result; inspect its exact-head run.
 
 The Windows helper retains a bounded `schannel-contract-probe` report on every run,
@@ -904,9 +908,9 @@ bounded SNI spelling once. A null result uses that captured fallback; the select
 certificate is cloned for the native credential without exporting its key. The
 application retains ownership of source certificates according to the existing
 `ServerCertificateSource` contract. Policies lock when the factory is created.
-The current internal profile refuses client-certificate modes explicitly and
-requires TLS 1.3; mTLS, revocation and full cipher/platform parity remain required
-before production provider selection changes.
+The internal profile requires TLS 1.3. Its Windows client-certificate policy integration
+is described below; full cipher and supported-platform parity remain required before
+production provider selection changes.
 
 `ProductionTlsTests` covers fragmented selection, publication before and after
 handshake construction, fallback timing, policy locking, explicit unsupported
@@ -924,7 +928,7 @@ trust and an unknown hostname. Missing/denied bearer credentials cannot publish 
 certificate; the authorized controller publishes once. An accepted large response
 then completes during drain, and the UDP port can be rebound. The fixture passed
 with non-exportable Windows RSA/ECDSA credentials; it does not establish other
-platforms or client-certificate support.
+platforms. Client-certificate validation has its separate fixture below.
 
 The final Windows TLS increment passed another 100,000 managed mutations,
 10,000 cases per property, 5,000 native mutation inputs per non-exportable key
@@ -944,14 +948,90 @@ an end-to-end one-seed check with 100 cases per property, 20 traces per state
 scenario and 50 native inputs per key profile. This checks the command's wiring;
 the larger native campaign counts above come from the separate full increment run.
 
+## Windows client-certificate policies
+
+The library TLS policy factory now requests a client certificate for `Allow` and
+`Require`, using the Windows SDK's mutual-authentication request and disabling
+Windows account mapping. After native handshake verification, it queries the
+peer certificate and presented intermediates. The chain builder applies client
+usage, dates and the configured revocation mode. Presented roots enter only the
+extra-certificate collection; they do not become trust anchors. The existing
+`ServerTlsPolicy` validator receives the chain and errors and makes the final
+application decision. Missing certificates follow `Allow`/`Require` without
+calling a certificate callback. Ordinary callback exceptions refuse the handshake;
+critical runtime exceptions retain their propagation behavior.
+
+TLS completion remains false until validation succeeds, so the stream application
+and HTTP/3 controller cannot start earlier. The accepted peer publishes an independent
+public certificate through the existing request API. Request and validation-callback
+certificate copies remain usable after native connection cleanup. The chain remains
+borrowed for the validation call. Tests keep bounded samples, verify them after shutdown,
+then release their test-owned references. Native query contexts, store snapshots,
+server credentials, TLS contexts and buffers retain explicit cleanup.
+
+`verify_client_certificate.py` covers all three modes, default trust decisions,
+application pinning, custom in-memory test roots, date/client-usage checks, missing
+intermediates and validation callbacks. A loopback-only CRL fixture uses fresh URL
+identities and checks a healthy and revoked chain with online validation; disabling
+revocation makes no CRL requests. It does not modify operating-system trust stores.
+The matrix also checks the existing bearer policy, retained certificate objects,
+healthy sibling connections, active-response drain and port rebind.
+
+`fuzz_client_certificate.py` drives complete encrypted TLS handshakes with original,
+truncated, extended, modified and arbitrary certificate encodings and distinct key
+proofs. The oracle requires the pinned identity for every completed controller
+request and keeps a separate healthy connection active throughout the campaign.
+It uses at most 16 mutation peers, retains an unexpected input with its seed/index
+and ephemeral fixture, and attempts normal host shutdown before a kill fallback.
+Native implementation code is not coverage-instrumented. The existing managed
+properties, mutation targets, actor traces, SharpFuzz and AFL++ continue to cover
+transport/parser/ownership behavior separately.
+
+A local 5,000-input complete-handshake campaign passed with seed 104729, 1,429
+accepted pinned identities, 3,571 expected TLS rejections and 1,123 successful
+healthy-sibling requests. The run completed in 68.988 seconds on the Windows
+validation host. This is fuzz workload evidence, not a latency benchmark. The
+23-case wire matrix passed again on final source, including retained request and
+validation-callback certificates after shutdown. A second 5,000-input campaign
+with seed 1729 passed with 1,429 accepted pinned identities and 1,117 successful
+healthy-sibling requests. Synthetic replay controls reproduced both an accepted
+identity and a mismatched-key rejection using the retained DER/key fixture.
+
+The final increment also passed 100,000 managed mutations, 10,000 cases per
+property, both 5,000-input native first-flight profiles, all three actual-WebServer
+TLS profiles, and the 750-case existing HTTP/3/request-abort/datagram suite
+(749 successes, zero failures and one Windows-inapplicable certificate-export
+skip). All six packages passed content checks; the compatibility audit completed
+142 cases / 284 comparisons without errors. Updated instrumented campaigns
+completed 58,599 libFuzzer and 25,070 AFL++ executions without retained crashes or
+hangs. AFL reported 6.04% map stability, so its edge percentage remains unsuitable
+as a coverage claim.
+
+The extended `--schannel` command runs the full policy matrix and adds one native
+authentication campaign per seed, using `--native-cases` for its input count.
+The bounded Windows CI profile selects six policy cases, including online CRLs,
+and 16 mutation inputs. Configured hosted steps require an exact-head passing run.
+For retained input replay, use a fresh output directory:
+
+```powershell
+python test/EmbedIO.Quic/fuzz_client_certificate.py --dotnet dotnet `
+  --assembly <harness>/EmbedIO.Quic.Development.dll `
+  --replay <evidence>/failure-<index>.json --output TestResults/auth-replay
+```
+
+The retained DER and generated test-key fixture are required for exact input replay;
+the seed alone does not reproduce cryptographically generated certificates. Keep
+these local evidence directories ignored. Cross-platform client certificates,
+full cipher support and final production provider selection remain acceptance work.
+
 ## Remaining production acceptance work
 
 1. Complete application configuration, certificate lifetime and platform acceptance
    for the new internal socket binding. The real WebServer path now has initial
    controller/authentication/cancellation/drain evidence, plus Windows SNI and live
    certificate-publication checks through the actual policy factory. Complete
-   client-certificate/revocation behavior, SNI/reload and non-exportable-key support
-   on every supported platform, cipher-suite parity and
+   client-certificate/revocation behavior on the other supported platforms, broaden
+   SNI/reload and non-exportable-key support, cipher-suite parity and
    bounded native TLS worker scheduling. The listener uses bounded worker ownership;
    the offline actor model is not a listener load test.
 2. Validate longer transfer/loss/endurance patterns and expose sustainable stream

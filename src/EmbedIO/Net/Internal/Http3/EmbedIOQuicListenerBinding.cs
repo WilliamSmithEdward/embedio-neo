@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -88,10 +89,11 @@ namespace EmbedIO.Net.Internal.Http3
         )
         {
             var peer = new Peer(owner, endpoints);
+            TlsSession? tls = null;
             var connection = new EmbedIO.Quic.QuicConnection(
                 packet,
-                createTls,
-                peer.CreateApplication,
+                parameters => tls = createTls(parameters),
+                (operations, features) => peer.CreateApplication(operations, features, tls),
                 now,
                 limits: new QuicConnectionLimits
                 {
@@ -341,6 +343,7 @@ namespace EmbedIO.Net.Internal.Http3
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
             private readonly Task _closed;
+            private X509Certificate2? _clientCertificate;
 
             internal Peer(QuicConnectionOwner owner, QuicConnectionEndpoints endpoints)
             {
@@ -352,8 +355,13 @@ namespace EmbedIO.Net.Internal.Http3
                 _closed = ObserveClosureAsync();
             }
 
-            internal AsyncStreamApplication CreateApplication(StreamOperations operations, QuicPeerFeatures _)
+            internal AsyncStreamApplication CreateApplication(
+                StreamOperations operations,
+                QuicPeerFeatures _,
+                TlsSession? tls
+            )
             {
+                _clientCertificate = tls?.CopyClientCertificate();
                 var application = new AsyncStreamApplication(operations, _owner.Notify);
 
                 if (!_ready.TrySetResult(application))
@@ -365,6 +373,7 @@ namespace EmbedIO.Net.Internal.Http3
                 return application;
             }
 
+            internal override X509Certificate2? ClientCertificate => Volatile.Read(ref _clientCertificate);
             internal override bool HandshakePending => true;
 
             internal override ValueTask WaitReadyAsync(CancellationToken token) => new(_ready.Task.WaitAsync(token));
@@ -417,7 +426,17 @@ namespace EmbedIO.Net.Internal.Http3
 
                 finally
                 {
-                    await _closed.ConfigureAwait(false);
+                    try
+                    {
+                        await _closed.ConfigureAwait(false);
+                    }
+
+                    finally
+                    {
+                        // Request certificate copies retain their non-disposing public contract.
+                        // The TLS owner releases its separate native certificate/context lease.
+                        Interlocked.Exchange(ref _clientCertificate, null);
+                    }
                 }
             }
 

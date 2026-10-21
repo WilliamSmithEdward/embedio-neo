@@ -20,11 +20,20 @@ namespace EmbedIO.Quic
             string library,
             string certificate,
             string key,
-            bool certificatePolicy = false
+            bool certificatePolicy = false,
+            string? clientCertificatePolicy = null,
+            int lifetimeSeconds = 30
         )
         {
             if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                return RunSupportedAsync(library, certificate, key, certificatePolicy);
+                return RunSupportedAsync(
+                    library,
+                    certificate,
+                    key,
+                    certificatePolicy,
+                    clientCertificatePolicy,
+                    lifetimeSeconds
+                );
 
             throw new PlatformNotSupportedException("HTTP/3 validation requires a desktop platform.");
         }
@@ -36,12 +45,31 @@ namespace EmbedIO.Quic
             string library,
             string certificatePath,
             string key,
-            bool certificatePolicy
+            bool certificatePolicy,
+            string? clientCertificatePolicy,
+            int lifetimeSeconds
         )
         {
+            if (lifetimeSeconds is < 30 or > 1800 || (lifetimeSeconds != 30 && clientCertificatePolicy == null))
+                throw new ArgumentOutOfRangeException(nameof(lifetimeSeconds));
+
             if (certificatePolicy && (library != "schannel-sni" || !OperatingSystem.IsWindows()))
                 throw new NotSupportedException("Certificate policy validation requires the Schannel SNI fixture.");
 
+            if (clientCertificatePolicy != null && (library != "schannel-rsa" || !OperatingSystem.IsWindows()))
+                throw new NotSupportedException("Client-certificate validation requires the Windows fixture.");
+
+            var state = new ProductionListenerState();
+            using var expectedClient = clientCertificatePolicy != null
+                ? X509CertificateLoader.LoadCertificateFromFile(
+                    Path.Combine(Path.GetDirectoryName(certificatePath) ?? ".", "client.pem")
+                )
+                : null;
+            using var clientRoot = clientCertificatePolicy != null
+                ? X509CertificateLoader.LoadCertificateFromFile(
+                    Path.Combine(Path.GetDirectoryName(certificatePath) ?? ".", "client-root.pem")
+                )
+                : null;
             using var provider = new DevelopmentTlsProvider(library, certificatePath, key);
             using var replacement = certificatePolicy && OperatingSystem.IsWindows()
                 ? new SchannelTestCertificate(certificatePath + ".replacement.pem", true)
@@ -57,7 +85,14 @@ namespace EmbedIO.Quic
                         ? provider.SelectedNativeCertificate
                         : null
                 }
-                : null;
+                : clientCertificatePolicy == null
+                    ? null
+                    : ProductionClientCertificatePolicy.Create(
+                        clientCertificatePolicy,
+                        expectedClient ?? throw new InvalidOperationException("Missing client fixture."),
+                        clientRoot ?? throw new InvalidOperationException("Missing client root fixture."),
+                        state
+                    );
             using var imported = provider.NativeCertificate == null
                 ? X509Certificate2.CreateFromPemFile(certificatePath, key)
                 : null;
@@ -101,7 +136,6 @@ namespace EmbedIO.Quic
                     }
                 )
             );
-            var state = new ProductionListenerState();
             var module = new WebApiModule("/", ResponseSerializer.None(false));
             module.ConfigureAuthorization(
                 new AuthorizationOptions().AddPolicy(
@@ -110,6 +144,9 @@ namespace EmbedIO.Quic
                 )
             );
             module.RegisterController(() => new ProductionListenerController(state));
+
+            if (clientCertificatePolicy != null)
+                module.RegisterController(() => new ProductionClientCertificateController(state));
 
             if (replacementCertificate != null)
                 module.RegisterController(() => new ProductionTlsController(source, replacementCertificate, state));
@@ -131,7 +168,7 @@ namespace EmbedIO.Quic
                         return Task.FromResult(principal);
                     }))
                 .WithModule(module);
-            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(lifetimeSeconds));
             var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             server.StateChanged += (_, change) =>
             {
@@ -162,24 +199,37 @@ namespace EmbedIO.Quic
                     .ReadLineAsync(stop.Token)
                     .ConfigureAwait(false);
 
-                if (command != "drain") throw new InvalidDataException("Expected drain command.");
-
-                await state.DrainEntered.Task
-                    .WaitAsync(stop.Token)
-                    .ConfigureAwait(false);
-                // Prove that ending acceptance retains UDP for an already dispatched response.
-                var drain = server.DrainAsync(TimeSpan.FromSeconds(5), stop.Token);
-
-                while (binding.IsAccepting)
-                    await Task
-                        .Delay(1, stop.Token)
+                if (command == "stop" && clientCertificatePolicy != null)
+                {
+                    await server
+                        .DrainAsync(TimeSpan.FromSeconds(5), stop.Token)
                         .ConfigureAwait(false);
+                    await running
+                        .WaitAsync(stop.Token)
+                        .ConfigureAwait(false);
+                }
 
-                state.DrainRelease.TrySetResult();
-                await drain.ConfigureAwait(false);
-                await running
-                    .WaitAsync(stop.Token)
-                    .ConfigureAwait(false);
+                else
+                {
+                    if (command != "drain") throw new InvalidDataException("Expected drain command.");
+
+                    await state.DrainEntered.Task
+                        .WaitAsync(stop.Token)
+                        .ConfigureAwait(false);
+                    // Prove that ending acceptance retains UDP for an already dispatched response.
+                    var drain = server.DrainAsync(TimeSpan.FromSeconds(5), stop.Token);
+
+                    while (binding.IsAccepting)
+                        await Task
+                            .Delay(1, stop.Token)
+                            .ConfigureAwait(false);
+
+                    state.DrainRelease.TrySetResult();
+                    await drain.ConfigureAwait(false);
+                    await running
+                        .WaitAsync(stop.Token)
+                        .ConfigureAwait(false);
+                }
             }
 
             finally
@@ -196,8 +246,36 @@ namespace EmbedIO.Quic
             await using (var rebound = new EmbedIOQuicListenerBinding(endpoint, createTls))
                 QuicFuzzChecks.Require(rebound.LocalEndPoint.Equals(endpoint), "production-listener-rebind");
 
+            var retained = state.Certificates.ToArray();
+
+            foreach (var certificate in retained)
+            {
+                QuicFuzzChecks.Require(
+                    certificate.RawData.Length != 0 && !certificate.HasPrivateKey,
+                    "retained-client-certificate-contract"
+                );
+            }
+
+            foreach (var certificate in retained) certificate.Dispose();
+
+            var retainedCallbacks = state.CallbackCertificates.ToArray();
+
+            foreach (var certificate in retainedCallbacks)
+            {
+                QuicFuzzChecks.Require(
+                    certificate.RawData.Length != 0 && !certificate.HasPrivateKey,
+                    "retained-validation-certificate"
+                );
+            }
+
+            foreach (var certificate in retainedCallbacks) certificate.Dispose();
+
             var report = new
             {
+                retainedCallbackCertificates = retainedCallbacks.Length,
+                clientCertificateRequests = state.ClientCertificateRequests,
+                clientCertificateValidations = state.ClientCertificateValidations.ToArray(),
+                retainedCertificates = retained.Length,
                 completed = true,
                 aborted = state.Aborted.Count,
                 drainCompleted = state.DrainCompleted,
@@ -240,6 +318,13 @@ namespace EmbedIO.Quic
         internal int NumberRequests;
         internal int SecureRequests;
         internal int Publications;
+        internal int ClientCertificateRequests;
+        internal int CertificateReservations;
+        internal int CallbackCertificateReservations;
+
+        internal ConcurrentQueue<X509Certificate2> CallbackCertificates { get; } = new();
+        internal ConcurrentQueue<string> ClientCertificateValidations { get; } = new();
+        internal ConcurrentQueue<X509Certificate2> Certificates { get; } = new();
     }
 
     internal sealed class ProductionListenerController(ProductionListenerState state) : WebApiController

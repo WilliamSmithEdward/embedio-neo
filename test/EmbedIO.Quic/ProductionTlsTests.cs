@@ -102,14 +102,23 @@ namespace EmbedIO.Quic
 
             foreach (var mode in new[] { ClientCertificateMode.Allow, ClientCertificateMode.Require })
             {
-                try
-                {
-                    EmbedIOQuicTls.CreateFactory(source, new ServerTlsPolicy { ClientCertificateMode = mode });
-                    throw new InvalidOperationException("Unsupported client-certificate policy was ignored.");
-                }
-
-                catch (NotSupportedException) { }
+                using var tls = EmbedIOQuicTls.CreateFactory(
+                    source,
+                    new ServerTlsPolicy { ClientCertificateMode = mode }
+                )([]);
+                tls.Add(0, 0, TlsHelloTests.NativeHello([], "h3"));
+                tls.Pump();
+                Check(
+                    tls.WriteKeys[1] != null
+                        && !tls.Established
+                        && tls.Output.Any(output => output.Level == 1 && output.Bytes[0] == 13),
+                    "client certificate request is sent during the initial handshake"
+                );
+                using var earlyCertificate = tls.CopyClientCertificate();
+                Check(earlyCertificate == null, "unvalidated identity is not published");
             }
+
+            ClientCertificateValidationTests.Run();
 
             try
             {

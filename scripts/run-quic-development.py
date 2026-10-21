@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -100,6 +101,8 @@ def main():
                 "--output", str(report / profile)])
         run("schannel-certificate-policy", [sys.executable, "test/EmbedIO.Quic/verify_tls_listener.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "certificate-policy")])
+        run("schannel-client-certificate-policy", [sys.executable, "test/EmbedIO.Quic/verify_client_certificate.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "client-certificate-policy")])
     for index in range(args.rounds):
         seed = 1729 + index * 104729
         run(f"properties-{seed}", fuzz + ["--fscheck", str(seed), str(args.cases)])
@@ -117,6 +120,10 @@ def main():
                 run(f"{profile}-native-{seed}", native + ["fuzz-native", profile,
                     str(directory / "certificate.pem"), str(directory / "unused-key.pem"),
                     str(seed), str(args.native_cases), str(directory / "native")])
+            run(f"schannel-auth-{seed}", [sys.executable, "test/EmbedIO.Quic/fuzz_client_certificate.py", "--dotnet", args.dotnet,
+                "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--cases", str(args.native_cases),
+                "--seed", str(seed), "--output", str(report / f"schannel-auth-{seed}")],
+                timeout=max(30, min(1800, 30 + math.ceil(args.native_cases / 16))) + 60)
     if args.coverage_seconds:
         for script in ("run-sharpfuzz.ps1", "run-afl.ps1"):
             command = ["pwsh", "-NoProfile", "-File", "scripts/" + script,

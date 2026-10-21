@@ -26,6 +26,41 @@ namespace EmbedIO.Quic
                         .RunAsync(hostLibrary, hostCertificate, hostKey, arguments[0] == "serve-webserver-policy")
                         .ConfigureAwait(false);
 
+                if (
+                    arguments is [
+                        "serve-webserver-client-certificate",
+                        var certificateMode,
+                        var clientServerCertificate,
+                        var clientServerKey
+                    ]
+                )
+                    return await ProductionListenerHost
+                        .RunAsync(
+                            "schannel-rsa",
+                            clientServerCertificate,
+                            clientServerKey,
+                            clientCertificatePolicy: certificateMode
+                        )
+                        .ConfigureAwait(false);
+
+                if (
+                    arguments is [
+                        "serve-webserver-client-certificate-fuzz",
+                        var fuzzServerCertificate,
+                        var fuzzServerKey,
+                        var fuzzBudget
+                    ]
+                )
+                    return await ProductionListenerHost
+                        .RunAsync(
+                            "schannel-rsa",
+                            fuzzServerCertificate,
+                            fuzzServerKey,
+                            clientCertificatePolicy: "require-pin",
+                            lifetimeSeconds: int.Parse(fuzzBudget, System.Globalization.CultureInfo.InvariantCulture)
+                        )
+                        .ConfigureAwait(false);
+
                 if (arguments is ["dispatcher-self-test"])
                 {
                     await DispatcherTests

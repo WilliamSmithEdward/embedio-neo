@@ -248,7 +248,7 @@ def provenance(args):
         provider = {"kind": "schannel", "platform": platform.platform(),
                     "testCredential": "non-exportable CNG " + ("RSA/ECDSA P-256 SNI" if args.openssl == "schannel-sni" else "RSA" if args.openssl == "schannel-rsa" else "ECDSA P-256"),
                     "systemModules": {name: hashlib.sha256((system / name).read_bytes()).hexdigest()
-                                      for name in ("secur32.dll", "schannel.dll", "ncrypt.dll")}}
+                                      for name in ("secur32.dll", "schannel.dll", "ncrypt.dll", "crypt32.dll")}}
     return {"libraries": libraries, "tlsProvider": provider,
             "assemblySha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
             "engineAssemblySha256": hashlib.sha256((Path(args.assembly).parent / "EmbedIO.dll").read_bytes()).hexdigest(),

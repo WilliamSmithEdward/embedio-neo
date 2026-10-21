@@ -43,3 +43,8 @@ foreach ($provider in 'schannel-rsa', 'schannel-ecdsa') {
 
 & $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_sni.py --dotnet dotnet --assembly $assembly --output "$output/selection" > "$output/selection.log" 2>&1
 if ($LASTEXITCODE) { Get-Content "$output/selection.log"; throw 'Schannel certificate-selection checks failed.' }
+
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_client_certificate.py --profile ci --dotnet dotnet --assembly $assembly --output "$output/client-certificate" > "$output/client-certificate.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/client-certificate.log"; throw 'Schannel client-certificate policy checks failed.' }
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/fuzz_client_certificate.py --dotnet dotnet --assembly $assembly --cases 16 --seed 1729 --output "$output/client-certificate-mutations" > "$output/client-certificate-mutations.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/client-certificate-mutations.log"; throw 'Schannel client-certificate mutations failed.' }

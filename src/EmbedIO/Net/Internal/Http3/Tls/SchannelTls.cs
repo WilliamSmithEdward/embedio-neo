@@ -20,11 +20,16 @@ namespace EmbedIO.Quic
     internal sealed partial class SchannelTls : TlsSession
     {
         private const int Capacity = 65536;
+        private const uint DisableReconnects = 0x80;
+        private const uint NoWindowsAccountMapping = 0x2;
+        private const uint RequestClientCertificate = 0x2;
         private X509Certificate2? _certificate;
         private Func<string?, X509Certificate2?>? _selector;
         private string? _serverName;
         private readonly string _protocol;
         private readonly bool _recordDiagnostics;
+        private readonly Func<X509Certificate2?, X509Certificate2Collection, bool>? _validateClientCertificate;
+        private X509Certificate2? _clientCertificate;
         private Reassembly[] _input =
         [
             new(Capacity),
@@ -72,8 +77,9 @@ namespace EmbedIO.Quic
             X509Certificate2 certificate,
             byte[] parameters,
             string protocol,
-            bool recordDiagnostics = true
-        ) : this(FixedCertificate(certificate), parameters, protocol, recordDiagnostics)
+            bool recordDiagnostics = true,
+            Func<X509Certificate2?, X509Certificate2Collection, bool>? validateClientCertificate = null
+        ) : this(FixedCertificate(certificate), parameters, protocol, recordDiagnostics, validateClientCertificate)
         { }
 
         private static Func<string?, X509Certificate2> FixedCertificate(X509Certificate2 certificate)
@@ -90,11 +96,13 @@ namespace EmbedIO.Quic
             Func<string?, X509Certificate2?> selector,
             byte[] parameters,
             string protocol,
-            bool recordDiagnostics = true
+            bool recordDiagnostics = true,
+            Func<X509Certificate2?, X509Certificate2Collection, bool>? validateClientCertificate = null
         )
         {
             _protocol = protocol;
             _recordDiagnostics = recordDiagnostics;
+            _validateClientCertificate = validateClientCertificate;
 
             try
             {
@@ -167,7 +175,7 @@ namespace EmbedIO.Quic
                 Version = 5,
                 CertificateCount = 1,
                 Certificates = certificate.Address,
-                Flags = 0x80,
+                Flags = DisableReconnects | (_validateClientCertificate != null ? NoWindowsAccountMapping : 0),
                 ParameterCount = 1,
                 Parameters = settings.Address
             };
@@ -279,9 +287,10 @@ namespace EmbedIO.Quic
 
                 _started = true;
 
-                if (status == 0)
+                if (status == 0 && !Established)
                 {
                     ConfirmProtocol();
+                    ValidateClientCertificate();
                     Established = true;
                 }
 
@@ -328,7 +337,7 @@ namespace EmbedIO.Quic
                 ref _credential,
                 oldContext,
                 ref inputDescriptor,
-                0x18018,
+                0x18018U | (_validateClientCertificate != null ? RequestClientCertificate : 0),
                 0,
                 _context.Address,
                 ref outputDescriptor,
@@ -490,6 +499,60 @@ namespace EmbedIO.Quic
             }
         }
 
+        internal override X509Certificate2? CopyClientCertificate() =>
+            _clientCertificate == null ? null : X509CertificateLoader.LoadCertificate(_clientCertificate.RawData);
+
+        private void ValidateClientCertificate()
+        {
+            var validate = _validateClientCertificate;
+
+            if (validate == null) return;
+
+            using var output = new NativeRegion(nint.Size);
+            var status = NativeMethods.Query(_context.Address, 0x53, output.Address);
+            var context = status == 0 ? Marshal.ReadIntPtr(output.Address) : 0;
+            var additional = new X509Certificate2Collection();
+
+            try
+            {
+                if (status == unchecked((int)0x8009030e) || (status == 0 && context == 0))
+                {
+                    if (!validate(null, additional)) throw Failure(116, "A client certificate is required.");
+
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+                    return;
+                }
+
+                if (status != 0 || context == 0) throw Failure(80, "The client certificate could not be queried.");
+
+                using var certificate = new X509Certificate2(context);
+                var native = Marshal.PtrToStructure<CertificateContext>(context);
+
+                if (native.Store != 0)
+                {
+                    using var store = new X509Store(native.Store);
+                    additional.AddRange(store.Certificates);
+                }
+
+                if (!validate(certificate, additional)) throw Failure(42, "The client certificate was refused.");
+
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                _clientCertificate = X509CertificateLoader.LoadCertificate(certificate.RawData);
+            }
+
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+            {
+                throw Failure(42, "Client certificate validation failed.", error);
+            }
+
+            finally
+            {
+                foreach (var certificate in additional) certificate.Dispose();
+
+                if (context != 0) NativeMethods.FreeCertificate(context);
+            }
+        }
+
         private void ConfirmProtocol()
         {
             using var output = new NativeRegion(264);
@@ -555,6 +618,8 @@ namespace EmbedIO.Quic
             _selector = null;
             _certificate?.Dispose();
             _certificate = null;
+            _clientCertificate?.Dispose();
+            _clientCertificate = null;
             _context.Dispose();
             _incoming.Dispose();
             _outgoing.Dispose();
@@ -579,6 +644,16 @@ namespace EmbedIO.Quic
                 throw new InvalidOperationException(
                     $"Native TLS cleanup failed: {contextStatus:X8}/{credentialStatus:X8}"
                 );
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct CertificateContext
+        {
+            internal uint Encoding;
+            internal nint Bytes;
+            internal uint Length;
+            internal nint Information;
+            internal nint Store;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -775,6 +850,11 @@ namespace EmbedIO.Quic
             [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
             [LibraryImport("secur32.dll", EntryPoint = "DeleteSecurityContext")]
             internal static partial int Delete(nint context);
+
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [LibraryImport("crypt32.dll", EntryPoint = "CertFreeCertificateContext")]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static partial bool FreeCertificate(nint certificate);
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
             [LibraryImport("secur32.dll", EntryPoint = "QueryContextAttributesW")]
