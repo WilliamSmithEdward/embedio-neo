@@ -57,7 +57,10 @@ namespace EmbedIO.Quic
                     Path.Combine(output, elliptic ? "replacement-rsa.pem" : "replacement-ecdsa.pem"),
                     !elliptic
                 ))
+                {
                     SchannelSelectionTests.Run(certificate, replacement);
+                    ProductionTlsTests.Run(certificate, replacement);
+                }
 
                 FirstFlight(certificate);
 

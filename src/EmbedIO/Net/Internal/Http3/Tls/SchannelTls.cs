@@ -1,4 +1,10 @@
-﻿using System.Buffers.Binary;
+﻿#if NET10_0_OR_GREATER
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -9,7 +15,7 @@ using EmbedIO.Internal;
 namespace EmbedIO.Quic
 {
     // Original binding to the Windows SDK's public recordless SSPI interface.
-    // This adapter is exercised by the development host before production use.
+    // The connection owner serializes native calls and owns the credential/context lease.
     [SupportedOSPlatform("windows")]
     internal sealed partial class SchannelTls : TlsSession
     {
@@ -18,6 +24,7 @@ namespace EmbedIO.Quic
         private Func<string?, X509Certificate2?>? _selector;
         private string? _serverName;
         private readonly string _protocol;
+        private readonly bool _recordDiagnostics;
         private Reassembly[] _input =
         [
             new(Capacity),
@@ -61,8 +68,12 @@ namespace EmbedIO.Quic
         internal string? SelectedCertificateSha256 => _certificate?.GetCertHashString(HashAlgorithmName.SHA256);
         internal bool NativeContextCreated => _contextOwned;
 
-        internal SchannelTls(X509Certificate2 certificate, byte[] parameters, string protocol)
-            : this(FixedCertificate(certificate), parameters, protocol)
+        internal SchannelTls(
+            X509Certificate2 certificate,
+            byte[] parameters,
+            string protocol,
+            bool recordDiagnostics = true
+        ) : this(FixedCertificate(certificate), parameters, protocol, recordDiagnostics)
         { }
 
         private static Func<string?, X509Certificate2> FixedCertificate(X509Certificate2 certificate)
@@ -75,9 +86,15 @@ namespace EmbedIO.Quic
             return _ => certificate;
         }
 
-        internal SchannelTls(Func<string?, X509Certificate2?> selector, byte[] parameters, string protocol)
+        internal SchannelTls(
+            Func<string?, X509Certificate2?> selector,
+            byte[] parameters,
+            string protocol,
+            bool recordDiagnostics = true
+        )
         {
             _protocol = protocol;
+            _recordDiagnostics = recordDiagnostics;
 
             try
             {
@@ -238,7 +255,7 @@ namespace EmbedIO.Quic
                             _certificate = new X509Certificate2(selected);
                             _serverName = hello.ServerName;
 
-                            if (Diagnostics.Count < 64)
+                            if (_recordDiagnostics && Diagnostics.Count < 64)
                                 Diagnostics.Add("server-name=" + (hello.ServerName ?? "(none)"));
 
                             AcquireCredential();
@@ -334,7 +351,7 @@ namespace EmbedIO.Quic
                     throw Failure(80, "Invalid native TLS output buffer.");
             }
 
-            if (Diagnostics.Count < 64)
+            if (_recordDiagnostics && Diagnostics.Count < 64)
                 Diagnostics.Add($"status={status:X8};input={_count};output={outputs.Get(0).Length}");
 
             var alert = outputs.Get(1);
@@ -408,7 +425,7 @@ namespace EmbedIO.Quic
         {
             var kind = BinaryPrimitives.ReadUInt32LittleEndian(secret[392..]);
 
-            if (kind != 0 && Diagnostics.Count < 64)
+            if (_recordDiagnostics && kind != 0 && Diagnostics.Count < 64)
                 Diagnostics.Add(
                     $"native-secret={kind};algorithm={Name(secret[..128])};mode={Name(secret.Slice(128, 128))};hash={Name(secret.Slice(256, 128))};key={BinaryPrimitives.ReadUInt16LittleEndian(secret[384..])};iv={BinaryPrimitives.ReadUInt16LittleEndian(secret[386..])};size={BinaryPrimitives.ReadUInt16LittleEndian(secret[396..])}"
                 );
@@ -440,7 +457,7 @@ namespace EmbedIO.Quic
             keys[level] = new PacketKeys(value);
             seen[level] = value.ToArray();
 
-            if (Diagnostics.Count < 64) Diagnostics.Add($"secret-direction={kind};level={level}");
+            if (_recordDiagnostics && Diagnostics.Count < 64) Diagnostics.Add($"secret-direction={kind};level={level}");
         }
 
         private static string Name(ReadOnlySpan<byte> bytes) =>
@@ -497,7 +514,7 @@ namespace EmbedIO.Quic
 
         private InvalidDataException Failure(byte alert, string message, Exception? inner = null)
         {
-            if (Diagnostics.Count < 64) Diagnostics.Add(message);
+            if (_recordDiagnostics && Diagnostics.Count < 64) Diagnostics.Add(message);
 
             AlertCode ??= alert;
             return new InvalidDataException(message, inner);
@@ -633,11 +650,17 @@ namespace EmbedIO.Quic
             internal nint Buffers;
         }
 
-        private sealed class NativeBuffers(int count) : IDisposable
+        private sealed class NativeBuffers : IDisposable
         {
-            private readonly NativeRegion _memory = new(count * Marshal.SizeOf<NativeBuffer>());
+            private readonly NativeRegion _memory;
 
-            internal int Count { get; } = count;
+            internal NativeBuffers(int count)
+            {
+                _memory = new NativeRegion(count * Marshal.SizeOf<NativeBuffer>());
+                Count = count;
+            }
+
+            internal int Count { get; }
             internal BufferList Descriptor => new()
             {
                 Count = (uint)Count,
@@ -759,3 +782,4 @@ namespace EmbedIO.Quic
         }
     }
 }
+#endif

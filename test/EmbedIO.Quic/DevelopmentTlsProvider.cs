@@ -48,6 +48,8 @@ namespace EmbedIO.Quic
 
         internal X509Certificate2? NativeCertificate =>
             OperatingSystem.IsWindows() ? _nativeCertificate?.BorrowCertificate() : null;
+        internal X509Certificate2? SelectedNativeCertificate =>
+            OperatingSystem.IsWindows() ? _sniCertificate?.BorrowCertificate() : null;
 
         internal TlsSession Create(byte[] parameters, string protocol)
         {

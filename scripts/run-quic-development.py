@@ -21,10 +21,13 @@ def main():
     parser.add_argument("--native-cases", type=int, default=5000)
     parser.add_argument("--coverage-seconds", type=int, default=600)
     parser.add_argument("--openssl", type=Path)
+    parser.add_argument("--schannel", action="store_true", help="Include Windows native TLS and certificate-policy campaigns")
     args = parser.parse_args()
     if not (1 <= args.rounds <= 100 and 1 <= args.cases <= 100000 and 1 <= args.state_cases <= 100000
             and 1 <= args.native_cases <= 100000 and 0 <= args.coverage_seconds <= 1800):
         parser.error("Campaign counts or duration exceed supported bounds.")
+    if args.schannel and os.name != "nt":
+        parser.error("Schannel campaigns require Windows.")
     repo = Path(__file__).resolve().parent.parent
     os.chdir(repo)
     report = repo / "TestResults" / "quic-development" / uuid.uuid4().hex
@@ -89,6 +92,14 @@ def main():
         run("production-listener", [sys.executable, "test/EmbedIO.Quic/verify_listener.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--openssl", str(args.openssl.resolve()),
             "--output", str(report / "production-listener")])
+    if args.schannel:
+        run("schannel-self-test", native + ["schannel-self-test"])
+        for profile in ("schannel-rsa", "schannel-ecdsa"):
+            run(profile + "-listener", [sys.executable, "test/EmbedIO.Quic/verify_listener.py", "--dotnet", args.dotnet,
+                "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--openssl", profile,
+                "--output", str(report / profile)])
+        run("schannel-certificate-policy", [sys.executable, "test/EmbedIO.Quic/verify_tls_listener.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "certificate-policy")])
     for index in range(args.rounds):
         seed = 1729 + index * 104729
         run(f"properties-{seed}", fuzz + ["--fscheck", str(seed), str(args.cases)])
@@ -99,6 +110,13 @@ def main():
             run(f"native-{seed}", native + ["fuzz-native", str(args.openssl.resolve()),
                 str(report / "certificate/certificate.pem"), str(report / "certificate/key.pem"),
                 str(seed), str(args.native_cases), str(report / f"native-{seed}")])
+        if args.schannel:
+            for profile in ("schannel-rsa", "schannel-ecdsa"):
+                directory = report / f"{profile}-{seed}"
+                directory.mkdir()
+                run(f"{profile}-native-{seed}", native + ["fuzz-native", profile,
+                    str(directory / "certificate.pem"), str(directory / "unused-key.pem"),
+                    str(seed), str(args.native_cases), str(directory / "native")])
     if args.coverage_seconds:
         for script in ("run-sharpfuzz.ps1", "run-afl.ps1"):
             command = ["pwsh", "-NoProfile", "-File", "scripts/" + script,

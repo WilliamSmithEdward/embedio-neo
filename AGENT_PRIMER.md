@@ -385,8 +385,10 @@ library HTTP/3 protocol and uses OpenSSL 3.5.7 or the Windows SDK recordless Sch
 interface for TLS. In this unreleased branch, the .NET 10 library asset compiles the
 same internal engine sources; the standalone `EmbedIO.Quic` project remains an
 independent build boundary. The host no longer compiles copies of the HTTP/3 codecs. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
-credentials and AES-128-GCM/SHA-256; it does not establish production certificate,
-SNI, client-certificate, resumption or supported-platform parity. The standalone
+credentials and AES-128-GCM/SHA-256. Its Schannel implementation now compiles in the
+.NET 10 library under `Net/Internal/Http3/Tls`, with certificate-source and TLS-policy
+integration exercised by the actual WebServer fixture. Client-certificate, full cipher,
+resumption and supported-platform parity remain pending. The standalone
 core and development host remain nonpackable. Existing package dependency groups
 and .NET Standard compilation are unchanged; the public listener still selects
 its existing providers. The fuzz harness exercises the library's engine source. It includes
@@ -404,10 +406,13 @@ exercises it without HTTP/3 control-stream or WebTransport session assumptions;
 its async test-host API adds owned reads/writes, outbound bidi/uni streams,
 consumption-driven buffering, cancellation with explicit read-abort codes, FIN-ACK
 completion and bounded datagram/open/accept queues. Application commands wake the
-UDP owner directly. The Windows development adapter selects and snapshots a borrowed
-certificate after a complete ClientHello, preserves bounded ASCII SNI spelling and
-isolates selector failures. Selection is once per handshake; a later publication
-applies to a new handshake. Production policy/worker integration remains pending.
+UDP owner directly. The Windows TLS factory captures the fallback certificate when
+constructing each handshake, then selects and clones the certificate after a complete
+ClientHello. It preserves bounded ASCII SNI spelling, calls the configured selector
+once and isolates selector failures. Later publication applies to new handshakes;
+existing connections keep their original credential. Ordinary library TLS omits
+development diagnostic strings. The current internal profile rejects client-certificate
+policies explicitly until their integration is complete.
 A bounded execution pool now serializes each connection's factory, packet,
 timer, application and cleanup work. Its mailbox counts both queued and executing
 input toward packet/byte limits; shutdown waits for active native calls. Direct
@@ -433,8 +438,12 @@ exercises actual WebServer controllers, bearer authentication and policy authori
 request-abort cancellation, endpoint metadata isolation, active-response drain and UDP
 rebind through the new binding. OpenSSL and Windows non-exportable RSA/ECDSA profiles
 passed this development-host validation. It rejects TLS configurations outside its
-fixture profile. Public WebTransport and complete credential/configuration parity
-remain pending before changing the public listener default.
+fixture profile. `test/EmbedIO.Quic/verify_tls_listener.py` additionally verifies
+SNI selection, authenticated certificate publication, strict trust/hostname rejection,
+and healthy existing connections through the library's Windows TLS implementation.
+`scripts/run-quic-development.py --schannel` includes Windows listener/policy checks
+and native RSA/ECDSA mutations. Public WebTransport and complete credential/configuration
+parity remain pending before changing the public listener default.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production

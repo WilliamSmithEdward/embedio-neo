@@ -16,10 +16,15 @@ namespace EmbedIO.Quic
 {
     internal static class ProductionListenerHost
     {
-        internal static Task<int> RunAsync(string library, string certificate, string key)
+        internal static Task<int> RunAsync(
+            string library,
+            string certificate,
+            string key,
+            bool certificatePolicy = false
+        )
         {
             if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                return RunSupportedAsync(library, certificate, key);
+                return RunSupportedAsync(library, certificate, key, certificatePolicy);
 
             throw new PlatformNotSupportedException("HTTP/3 validation requires a desktop platform.");
         }
@@ -27,9 +32,32 @@ namespace EmbedIO.Quic
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task<int> RunSupportedAsync(string library, string certificatePath, string key)
+        private static async Task<int> RunSupportedAsync(
+            string library,
+            string certificatePath,
+            string key,
+            bool certificatePolicy
+        )
         {
+            if (certificatePolicy && (library != "schannel-sni" || !OperatingSystem.IsWindows()))
+                throw new NotSupportedException("Certificate policy validation requires the Schannel SNI fixture.");
+
             using var provider = new DevelopmentTlsProvider(library, certificatePath, key);
+            using var replacement = certificatePolicy && OperatingSystem.IsWindows()
+                ? new SchannelTestCertificate(certificatePath + ".replacement.pem", true)
+                : null;
+            var replacementCertificate = OperatingSystem.IsWindows() ? replacement?.BorrowCertificate() : null;
+            var tlsPolicy = certificatePolicy
+                ? new ServerTlsPolicy
+                {
+                    ServerCertificateSelector = name => StringComparer.OrdinalIgnoreCase.Equals(
+                        name,
+                        "selected.example"
+                    )
+                        ? provider.SelectedNativeCertificate
+                        : null
+                }
+                : null;
             using var imported = provider.NativeCertificate == null
                 ? X509Certificate2.CreateFromPemFile(certificatePath, key)
                 : null;
@@ -38,15 +66,16 @@ namespace EmbedIO.Quic
                     ?? imported
                     ?? throw new InvalidOperationException("Missing development certificate.")
             );
-            await using var binding = new EmbedIOQuicListenerBinding(
-                new IPEndPoint(IPAddress.Loopback, 0),
-                parameters => provider.Create(parameters, "h3")
-            );
+            var createTls = OperatingSystem.IsWindows() && provider.NativeCertificate != null
+                ? EmbedIOQuicTls.CreateFactory(source, tlsPolicy)
+                : parameters => provider.Create(parameters, "h3");
+            await using var binding = new EmbedIOQuicListenerBinding(new IPEndPoint(IPAddress.Loopback, 0), createTls);
             var endpoint = binding.LocalEndPoint;
             var options = new WebServerOptions()
                 .WithMode(HttpListenerMode.EmbedIOHttp3)
                 .WithUrlPrefix($"https://127.0.0.1:{endpoint.Port}/")
-                .WithCertificateSource(source);
+                .WithCertificateSource(source)
+                .WithTlsPolicy(tlsPolicy);
             var bound = false;
             using var server = new WebServer(
                 options,
@@ -62,7 +91,7 @@ namespace EmbedIO.Quic
                             bound
                             || !requested.Equals(endpoint)
                             || !ReferenceEquals(source, certificates)
-                            || policy != null
+                            || !ReferenceEquals(policy, tlsPolicy)
                             || native
                         )
                             throw new NotSupportedException("Unsupported development listener configuration.");
@@ -81,6 +110,10 @@ namespace EmbedIO.Quic
                 )
             );
             module.RegisterController(() => new ProductionListenerController(state));
+
+            if (replacementCertificate != null)
+                module.RegisterController(() => new ProductionTlsController(source, replacementCertificate, state));
+
             server
                 .WithModule(new BearerAuthenticationModule("/", (token, _) =>
                     {
@@ -160,10 +193,7 @@ namespace EmbedIO.Quic
                 .DisposeAsync()
                 .ConfigureAwait(false);
 
-            await using (var rebound = new EmbedIOQuicListenerBinding(
-                endpoint,
-                parameters => provider.Create(parameters, "h3")
-            ))
+            await using (var rebound = new EmbedIOQuicListenerBinding(endpoint, createTls))
                 QuicFuzzChecks.Require(rebound.LocalEndPoint.Equals(endpoint), "production-listener-rebind");
 
             var report = new
@@ -174,10 +204,27 @@ namespace EmbedIO.Quic
                 rebind = true,
                 healthRequests = state.HealthRequests,
                 numberRequests = state.NumberRequests,
-                secureRequests = state.SecureRequests
+                secureRequests = state.SecureRequests,
+                publications = state.Publications
             };
             Console.WriteLine(JsonSerializer.Serialize(report));
             return 0;
+        }
+    }
+
+    internal sealed class ProductionTlsController(
+        ServerCertificateSource source,
+        X509Certificate2 replacement,
+        ProductionListenerState state
+    ) : WebApiController
+    {
+        [Route(HttpVerbs.Post, "/publish")]
+        [Authorize("read")]
+        public TextHttpResult Publish()
+        {
+            source.Publish(replacement);
+            Interlocked.Increment(ref state.Publications);
+            return HttpResults.Text("published");
         }
     }
 
@@ -192,6 +239,7 @@ namespace EmbedIO.Quic
         internal int HealthRequests;
         internal int NumberRequests;
         internal int SecureRequests;
+        internal int Publications;
     }
 
     internal sealed class ProductionListenerController(ProductionListenerState state) : WebApiController

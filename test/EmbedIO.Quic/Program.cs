@@ -14,9 +14,16 @@ namespace EmbedIO.Quic
         {
             try
             {
-                if (arguments is ["serve-webserver", var hostLibrary, var hostCertificate, var hostKey])
+                if (
+                    arguments is [
+                        "serve-webserver" or "serve-webserver-policy",
+                        var hostLibrary,
+                        var hostCertificate,
+                        var hostKey
+                    ]
+                )
                     return await ProductionListenerHost
-                        .RunAsync(hostLibrary, hostCertificate, hostKey)
+                        .RunAsync(hostLibrary, hostCertificate, hostKey, arguments[0] == "serve-webserver-policy")
                         .ConfigureAwait(false);
 
                 if (arguments is ["dispatcher-self-test"])

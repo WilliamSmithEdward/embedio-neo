@@ -21,7 +21,7 @@ copying from those projects.
 | Stage | Implementation and validation |
 | --- | --- |
 | Core packet and connection owners | `QuicConnection` and `QuicConnectionDispatcher` own packet/TLS/recovery state and bounded destination-ID routing in the source core. Factories supply TLS and applications; development wrappers add protocol error mapping and observations. Simple echo, multiplexed streams and H3 use the same stream owner. Production socket and policy integration remain pending. |
-| Windows certificate selection | Complete ClientHello/SNI framing precedes a once-only certificate selector. A selected certificate is cloned for the native credential; the source remains application-owned. Focused tests exercise publication timing, selector errors and disposal during selection. The independent selection profile uses two non-exportable CNG key types and six aioquic cases; production policy/worker integration is pending. |
+| Windows certificate selection | Complete ClientHello/SNI framing precedes a once-only certificate selector. A selected certificate is cloned for the native credential; the source remains application-owned. Focused tests exercise publication timing, selector errors and disposal during selection. The independent selection profile uses two non-exportable CNG key types and six aioquic cases. The actual WebServer fixture now uses the library's policy/source factory to verify SNI and live publication; complete client-certificate and platform parity remains pending. |
 | Windows TLS credentials | Original managed SSPI binding, provider-neutral TLS state and non-exportable CNG RSA/ECDSA test credentials. Native credential/context/buffer ownership, bounded ClientHello parsing and once-only traffic-secret installation are exercised before production integration. The development cipher profile remains AES-128-GCM/SHA-256. |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
 | Key generations | Current, previous and next read keys share header protection; ACK-confirmed local updates track full generations, enforce encryption/integrity usage limits and retain reordering boundaries. Independent command/packet oracles and native wire error checks complement the repeated-update peer case. |
@@ -46,8 +46,10 @@ async ownership files live in `src/EmbedIO.Quic`, grouped under `Packets`,
 `Cryptography`, `Recovery`, `Connections` and `Streams`. The core contains no HTTP/3
 linked sources, console commands, native TLS bindings or test helpers.
 
-Tests, peers, native TLS/console socket ownership and HTTP application adapters remain under
-`test/EmbedIO.Quic`, whose executable assembly is `EmbedIO.Quic.Development`.
+Tests, peers, the OpenSSL development binding, console socket ownership and HTTP
+application adapters remain under `test/EmbedIO.Quic`, whose executable assembly is
+`EmbedIO.Quic.Development`. The Windows Schannel binding and its certificate-policy
+factory live in `src/EmbedIO/Net/Internal/Http3/Tls` on the .NET 10 asset.
 The standalone core build and host remain nonpackable. For the current production
 protocol integration, the .NET 10 `EmbedIO` asset compiles the same internal engine
 sources, and the unsigned development host references that library through an
@@ -139,19 +141,22 @@ separate from per-push Actions budgets and shared runner capacity. Use the pinne
 SDK and the same Python/OpenSSL/Go setup as the feasibility guide.
 
 ```powershell
-python scripts/run-quic-development.py --openssl 'C:\path\to\OpenSSL-3.5.7\bin'
+python scripts/run-quic-development.py --openssl 'C:\path\to\OpenSSL-3.5.7\bin' --schannel
 ```
 
-The defaults perform 20 seeds, each separated by 104729, starting at 1729:
+On Windows, `--schannel` adds native RSA/ECDSA listener, certificate-policy and
+mutation checks. Omit that flag on other platforms. The defaults perform 20 seeds,
+each separated by 104729, starting at 1729:
 
 | Campaign | Default local workload |
 | --- | ---: |
-| QUIC FsCheck | 14,000,000 generated target cases (7 x 100,000 x 20) |
+| QUIC FsCheck | 16,000,000 generated target cases (8 x 100,000 x 20) |
 | Existing FsCheck properties | 12,000,000 cases (6 x 100,000 x 20) |
 | QUIC deterministic mutations | 2,000,000 inputs |
 | Recovery/lifetime state machines | 400,000 traces; 19,200,000 commanded transitions |
-| Native connection/TLS mutation | 100,000 fresh contexts when `--openssl` is supplied |
+| Native connection/TLS mutation | 100,000 inputs when `--openssl` is supplied |
 | Shared-owner native traces | 100,000 admission/retirement commands when `--openssl` is supplied |
+| Windows native TLS mutations | An additional 100,000 inputs per RSA/ECDSA profile with `--schannel`, plus corresponding shared-owner traces |
 | SharpFuzz/libFuzzer | 600 seconds |
 | AFL++ | 600 seconds, one CPU and 4 GiB container limit |
 
@@ -883,12 +888,70 @@ The host rejects TLS policy settings outside its development profile. These test
 establish the integration path; supported-platform packaging, full certificate
 policy and public WebTransport acceptance still precede production selection.
 
+## Library Windows TLS and certificate policy
+
+The original Schannel binding now compiles in the .NET 10 library instead of the
+development executable. The main library enables unsafe compilation only for
+that target to support its bounded native buffers and generated Windows SDK
+interop. The Windows actual-WebServer fixture uses the library's certificate-source
+and policy factory. Its ordinary handshake path does not collect development
+status, algorithm or SNI diagnostic strings. Public provider selection and existing
+runtime dependency groups are unchanged.
+
+The factory captures its fallback certificate when a handshake is constructed.
+After complete ClientHello framing, the configured selector receives the original
+bounded SNI spelling once. A null result uses that captured fallback; the selected
+certificate is cloned for the native credential without exporting its key. The
+application retains ownership of source certificates according to the existing
+`ServerCertificateSource` contract. Policies lock when the factory is created.
+The current internal profile refuses client-certificate modes explicitly and
+requires TLS 1.3; mTLS, revocation and full cipher/platform parity remain required
+before production provider selection changes.
+
+`ProductionTlsTests` covers fragmented selection, publication before and after
+handshake construction, fallback timing, policy locking, explicit unsupported
+configuration, ordinary callback rejection, critical callback propagation and
+absence of ordinary diagnostic strings. It verifies that the native TLS class
+comes from the actual library assembly. Existing native lifetime tests still
+exercise both non-exportable key types and concurrent context cleanup.
+
+`verify_tls_listener.py` drives the actual HTTP/3/WebServer/controller path with
+strict aioquic certificate verification. Six HTTP requests verify initial and
+published fallback credentials, selected SNI credentials and healthy existing
+connections. Each records the verified leaf's SHA-256 fingerprint. Three negative
+handshakes require the certificate-validation error for obsolete trust, wrong SNI
+trust and an unknown hostname. Missing/denied bearer credentials cannot publish a
+certificate; the authorized controller publishes once. An accepted large response
+then completes during drain, and the UDP port can be rebound. The fixture passed
+with non-exportable Windows RSA/ECDSA credentials; it does not establish other
+platforms or client-certificate support.
+
+The final Windows TLS increment passed another 100,000 managed mutations,
+10,000 cases per property, 5,000 native mutation inputs per non-exportable key
+type, all three actual-WebServer TLS profiles and the certificate-policy fixture.
+The wider promotion checks also passed 90 independent-peer cases, 4,000 generated
+actor traces and six scheduled native first flights. The existing HTTP/3,
+request-abort and native-datagram suite again reported 749 successes, zero failures
+and one Windows-inapplicable certificate-export skip out of 750 cases. All six
+packages passed content checks; the compatibility audit again completed 142 cases /
+284 upstream/Neo comparisons with zero errors.
+
+Updated instrumented campaigns completed 55,662 libFuzzer and 24,941 AFL++
+executions with no retained crashes or hangs. AFL reported 6.30% map stability;
+the concurrent-coverage limitation still applies, and its edge percentage is not
+used as a coverage claim. The updated `--schannel` development driver also passed
+an end-to-end one-seed check with 100 cases per property, 20 traces per state
+scenario and 50 native inputs per key profile. This checks the command's wiring;
+the larger native campaign counts above come from the separate full increment run.
+
 ## Remaining production acceptance work
 
 1. Complete application configuration, certificate lifetime and platform acceptance
    for the new internal socket binding. The real WebServer path now has initial
-   controller/authentication/cancellation/drain evidence with development credentials. Complete SNI/client-certificate/credential-reload behavior,
-   non-exportable-key support on every supported platform, cipher-suite parity and
+   controller/authentication/cancellation/drain evidence, plus Windows SNI and live
+   certificate-publication checks through the actual policy factory. Complete
+   client-certificate/revocation behavior, SNI/reload and non-exportable-key support
+   on every supported platform, cipher-suite parity and
    bounded native TLS worker scheduling. The listener uses bounded worker ownership;
    the offline actor model is not a listener load test.
 2. Validate longer transfer/loss/endurance patterns and expose sustainable stream
