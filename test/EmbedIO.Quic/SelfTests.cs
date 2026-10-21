@@ -10,6 +10,7 @@ namespace EmbedIO.Quic
         internal static void Run()
         {
             TlsHelloTests.Run();
+            ConnectionCoreTests.Run();
 
             foreach (var number in new ulong[]
             {

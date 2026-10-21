@@ -9,6 +9,8 @@
         private ulong _nextUni = 3;
 
         internal int Completed { get; private set; }
+        internal int Echoes { get; private set; }
+        internal int EchoBytes { get; private set; }
         internal int Retained => _outputs.Count + _finished.Count;
 
         internal override void Stream(ulong id, byte[] bytes, bool fin)
@@ -28,7 +30,13 @@
             operations.Write(output, bytes, fin);
             operations.Consume(id, bytes.Length);
 
-            if (fin) _finished.Add(id);
+            EchoBytes = checked(EchoBytes + bytes.Length);
+
+            if (fin)
+            {
+                _finished.Add(id);
+                Echoes++;
+            }
         }
 
         internal override void Reset(ulong id, ulong error, ulong reliableSize)

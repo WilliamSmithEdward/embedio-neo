@@ -226,6 +226,7 @@ namespace EmbedIO.Quic
         private static void HeadersAndAcks(ReadOnlySpan<byte> data)
         {
             TlsHelloTests.Mutate(data);
+            ConnectionCoreTests.Mutate(data);
             PacketNumberWindowTests.Mutate(data);
 
             if (PacketHeader.TryDestination(data, out var destination, out var initial))

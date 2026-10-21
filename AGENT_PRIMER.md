@@ -408,8 +408,14 @@ A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
 dispatch and full TLS/certificate parity remain pending.
-A bounded shared listener adds destination-ID routing, admission
-limits, handshake deadlines and cancellation across multiple connections. It has
+The source core owns packet processing and destination-ID routing through
+`QuicConnection` and `QuicConnectionSet`, with injected TLS/application factories
+and validated internal stream-count/idle configuration. All development protocols
+use the same stream owner. Registry shutdown releases all sibling owners before
+reporting ordinary cleanup failures. Direct managed fuzzing exercises both owners
+without loading native TLS; independent peers validate the native path. The bounded
+development socket listener supplies admission limits, handshake deadlines and
+cancellation across multiple connections. It has
 no public application API; the intended fully validated
 replacement will remove MsQuic from the production transport, but the current
 HTTP/3 provider remains in place. The [development and testing record](docs/project/quic-development-and-testing.md)

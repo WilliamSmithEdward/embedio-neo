@@ -42,8 +42,8 @@
             internal int Position;
         }
 
-        private readonly StreamCountWindow _incomingBidi = new();
-        private readonly StreamCountWindow _incomingUni = new();
+        private readonly StreamCountWindow _incomingBidi;
+        private readonly StreamCountWindow _incomingUni;
         private readonly StreamCountWindow _localUni = new(32);
         private readonly StreamCountWindow _localBidi = new(32);
         private readonly Func<int, bool> _canQueue;
@@ -93,9 +93,13 @@
             bool reset,
             Func<StreamOperations, StreamApplication> createApplication,
             Func<int, bool>? canQueue = null,
-            Action<ulong>? close = null
+            Action<ulong>? close = null,
+            int inboundBidirectionalStreams = 16,
+            int inboundUnidirectionalStreams = 16
         )
         {
+            _incomingBidi = new StreamCountWindow(inboundBidirectionalStreams);
+            _incomingUni = new StreamCountWindow(inboundUnidirectionalStreams);
             _transmit = transmit;
             _canQueue = canQueue ?? (static _ => true);
             _peerData = peerData;

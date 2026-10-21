@@ -23,12 +23,12 @@ test "$before" != "$(sha256sum /work/publish/EmbedIO.dll)"
 sha256sum --check /results/ordinary-before.sha256
 sha256sum src/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.dll > /results/quic-ordinary-before.sha256
 quic_before=$(sha256sum /work/publish/EmbedIO.Quic.dll)
-DOTNET_ROLL_FORWARD=Major SHARPFUZZ_PRINT_INSTRUMENTED_TYPES=1 /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.Quic.dll EmbedIO.Quic.Wire EmbedIO.Quic.PacketHeader EmbedIO.Quic.AckRanges EmbedIO.Quic.PacketNumberWindow EmbedIO.Quic.PacketKeys EmbedIO.Quic.TlsClientHello EmbedIO.Quic.KeyUpdateState EmbedIO.Quic.Reassembly EmbedIO.Quic.StreamReassembly EmbedIO.Quic.StreamCountWindow EmbedIO.Quic.Recovery EmbedIO.Quic.ConnectionLifetime EmbedIO.Quic.ConnectionStreams EmbedIO.Quic.AsyncQuicStream EmbedIO.Quic.AsyncStreamApplication > /results/quic-instrumentation.log 2>&1
+DOTNET_ROLL_FORWARD=Major SHARPFUZZ_PRINT_INSTRUMENTED_TYPES=1 /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.Quic.dll EmbedIO.Quic.Wire EmbedIO.Quic.PacketHeader EmbedIO.Quic.AckRanges EmbedIO.Quic.PacketNumberWindow EmbedIO.Quic.PacketKeys EmbedIO.Quic.TlsClientHello EmbedIO.Quic.KeyUpdateState EmbedIO.Quic.Reassembly EmbedIO.Quic.StreamReassembly EmbedIO.Quic.StreamCountWindow EmbedIO.Quic.Recovery EmbedIO.Quic.ConnectionLifetime EmbedIO.Quic.QuicConnection EmbedIO.Quic.QuicConnectionSet EmbedIO.Quic.ConnectionStreams EmbedIO.Quic.AsyncQuicStream EmbedIO.Quic.AsyncStreamApplication > /results/quic-instrumentation.log 2>&1
 sha256sum test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll > /results/quic-host-ordinary-before.sha256
 quic_host_before=$(sha256sum /work/publish/EmbedIO.Quic.Development.dll)
 DOTNET_ROLL_FORWARD=Major SHARPFUZZ_PRINT_INSTRUMENTED_TYPES=1 /opt/sharpfuzz/sharpfuzz /work/publish/EmbedIO.Quic.Development.dll EmbedIO.Quic.StreamEchoApplication EmbedIO.Quic.WebTransportApplication EmbedIO.Net.Internal > /results/quic-host-instrumentation.log 2>&1
 cat /results/quic-instrumentation.log /results/quic-host-instrumentation.log > /results/quic-all-instrumentation.log
-for type in PacketHeader AckRanges PacketNumberWindow PacketKeys TlsClientHello KeyUpdateState StreamReassembly StreamCountWindow Recovery ConnectionLifetime ConnectionStreams StreamEchoApplication AsyncQuicStream AsyncStreamApplication WebTransportApplication; do
+for type in PacketHeader AckRanges PacketNumberWindow PacketKeys TlsClientHello KeyUpdateState StreamReassembly StreamCountWindow Recovery ConnectionLifetime QuicConnection QuicConnectionSet ConnectionStreams StreamEchoApplication AsyncQuicStream AsyncStreamApplication WebTransportApplication; do
     grep -F "EmbedIO.Quic.$type" /results/quic-all-instrumentation.log
 done
 test "$quic_before" != "$(sha256sum /work/publish/EmbedIO.Quic.dll)"
@@ -67,6 +67,11 @@ fi
 test -s /results/maps/quic-tls-sni && test -s /results/maps/quic-tls-sni-invalid
 if cmp -s /results/maps/quic-tls-sni /results/maps/quic-tls-sni-invalid; then
     echo 'Distinct TLS server-name inputs produced identical coverage maps.' >&2
+    exit 1
+fi
+test -s /results/maps/quic-connection-owner && test -s /results/maps/quic-connection-malformed
+if cmp -s /results/maps/quic-connection-owner /results/maps/quic-connection-malformed; then
+    echo 'Distinct connection-owner inputs produced identical coverage maps.' >&2
     exit 1
 fi
 printf 'seconds=%s\nseed=%s\nafl_commit=dbaf11913c1b2702dee5b4d3dcfffd52f1defe50\n' "$seconds" "$seed" > /results/campaign.txt

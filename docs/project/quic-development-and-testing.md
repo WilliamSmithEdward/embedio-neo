@@ -20,6 +20,7 @@ copying from those projects.
 
 | Stage | Implementation and validation |
 | --- | --- |
+| Core packet and connection owners | `QuicConnection` and `QuicConnectionSet` own packet/TLS/recovery state and bounded destination-ID routing in the source core. Factories supply TLS and applications; development wrappers add protocol error mapping and observations. Simple echo, multiplexed streams and H3 use the same stream owner. Production socket and policy integration remain pending. |
 | Windows certificate selection | Complete ClientHello/SNI framing precedes a once-only certificate selector. A selected certificate is cloned for the native credential; the source remains application-owned. Focused tests exercise publication timing, selector errors and disposal during selection. The independent selection profile uses two non-exportable CNG key types and six aioquic cases; production policy/worker integration is pending. |
 | Windows TLS credentials | Original managed SSPI binding, provider-neutral TLS state and non-exportable CNG RSA/ECDSA test credentials. Native credential/context/buffer ownership, bounded ClientHello parsing and once-only traffic-secret installation are exercised before production integration. The development cipher profile remains AES-128-GCM/SHA-256. |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
@@ -40,12 +41,12 @@ full RFC conformance, production provider integration or browser support.
 
 ## Source and responsibility map
 
-The generic assembly and namespace are **EmbedIO.Quic**. Fifteen protocol and
+The generic assembly and namespace are **EmbedIO.Quic**. Protocol, packet, connection and
 async ownership files live in `src/EmbedIO.Quic`, grouped under `Packets`,
 `Cryptography`, `Recovery`, `Connections` and `Streams`. The core contains no HTTP/3
 linked sources, console commands, native TLS bindings or test helpers.
 
-Tests, peers, TLS/console ownership and application adapters remain under
+Tests, peers, native TLS/console socket ownership and HTTP application adapters remain under
 `test/EmbedIO.Quic`, whose executable assembly is `EmbedIO.Quic.Development`.
 A project reference and one explicit friend assembly connect the host to the core;
 both projects remain nonpackable and production packages do not yet reference
@@ -63,7 +64,7 @@ corresponding host/test files.
 | Stream counts and retirement | `StreamCountWindow.cs`, `StreamCountTests.cs`, `StreamLifecycleTests.cs` | Independent closed-ID sets, 100,000 sequential retirements, implicit stream opening, delayed/late ACKs, repeated requests, closed references, pending session association, final-size checks and buffer disposal. |
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
-| Connection ownership | `ConnectionSet.cs`, `SharedListener.cs`, `ConnectionSetTests.cs`, `verify_connections.py` | Capacity/deadline/disposal regressions, seeded admission/retirement mutations and simultaneous independent clients on one UDP port. |
+| Connection ownership | `QuicConnection.cs`, `QuicConnectionSet.cs`, `QuicConnectionLimits.cs`, `ConnectionCoreTests.cs`, `ConnectionSetTests.cs`, `SharedListener.cs`, `verify_connections.py` | Authentication before TLS allocation, configured stream credit, rejection after disposal, sibling cleanup after a failing disposer, capacity/deadline regressions, direct managed ownership mutations and simultaneous independent clients on one UDP port. |
 | TLS framing | `TlsClientHello.cs`, `TlsHelloTests.cs` | Complete handshake/vector boundaries, duplicate extensions, required transport parameters, malformed/truncated input, parameter limits and structured/raw mutations through FsCheck, deterministic mutation, SharpFuzz and AFL++. |
 | Native TLS boundary | `TlsSession.cs`, `OpenSslTls.cs`, `SchannelTls.cs`, `SchannelTests.cs`, `ProbeConnection.cs`, `NativeFuzz.cs` | Fresh TLS owners, structured TLS 1.3 and malformed Initial frame/CRYPTO mutations, unauthenticated-packet isolation, credential/context/buffer cleanup and amplification accounting. Schannel tests include invalid constructor inputs, fragmented native rejection and concurrent context disposal. Native libraries themselves are not coverage-instrumented. |
 | Independent transport peer | `verify.py` | aioquic positive/negative handshake, exact echo, corruption, ALPN, flow-control and packet-loss/reordering cases. |
@@ -505,6 +506,40 @@ TLS_AES_128_GCM_SHA256. The supplied-selector development profile is implemented
 SNI/certificate-source policy integration, client certificates, credential reload,
 resumption and other cipher suites remain acceptance work. Native TLS operations
 also need production worker/lifetime integration before moving into the UDP owner.
+
+## Source connection-owner integration
+
+The core now contains the packet engine and bounded connection registry. Their
+injected TLS and application factories keep native bindings, HTTP error mapping
+and development success counters in the host. `ProbeConnection` and `ConnectionSet`
+are thin development wrappers; they no longer duplicate packet or registry logic.
+
+Every established development connection uses `ConnectionStreams`, including the
+simple echo profile. Its former special stream-zero echo path is removed. The
+shared default profile advertises 16 incoming bidi and 16 uni streams, 64 KiB per
+stream, 256 KiB connection receive credit and a ten-second idle timeout.
+`QuicConnectionLimits` supplies validated internal stream counts and idle timeout;
+the focused HTTP/3 configuration test advertises 128 bidi streams, 16 uni streams
+and a 60-second idle timeout and checks the actual stream-limit close frame. This
+is an internal configuration seam; production listener defaults are unchanged.
+
+Shutdown releases connection keys even when application or TLS disposal throws.
+Registry disposal visits every owner, removes aliases and reports ordinary cleanup
+failures together after completing sibling cleanup. Direct managed mutations use
+a deterministic test TLS substitute with public test keys to exercise authenticated
+packet framing, flow limits, connection admission and retirement. The native and
+independent-peer suites remain responsible for actual TLS interoperability.
+Both coverage-guided scripts instrument the source packet and registry owners;
+AFL++ also checks distinct coverage for normal and malformed owner seeds.
+
+The connection-owner promotion passed the same 159 independent wire cases across
+OpenSSL, Schannel RSA and Schannel ECDSA, including six SNI selection cases. It also
+passed 30,000 native mutations, 30,000 shared-owner commands, 100,000 managed
+mutations, 10,000 cases per FsCheck property, 4,000 actor traces and their stored
+replays. The two 60-second coverage campaigns completed 161,506 libFuzzer and
+30,322 AFL++ executions with no retained crashes or hangs; ordinary assemblies
+remained uninstrumented. These bounded runs exercise the current development
+profile and do not establish production load, browser or platform acceptance.
 
 ## Remaining production acceptance work
 
