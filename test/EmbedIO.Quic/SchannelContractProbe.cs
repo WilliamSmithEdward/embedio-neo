@@ -10,7 +10,7 @@ namespace EmbedIO.Quic
     [SupportedOSPlatform("windows")]
     internal static class SchannelContractProbe
     {
-        internal static int Run()
+        internal static int Run(bool x25519Available)
         {
             var output = Path.Combine(
                 "TestResults",
@@ -46,7 +46,8 @@ namespace EmbedIO.Quic
                                             parameterSize,
                                             name,
                                             keyShare,
-                                            fragmented
+                                            fragmented,
+                                            keyShare == 2 || x25519Available
                                         )
                                     ) failures++;
                                 }
@@ -70,7 +71,8 @@ namespace EmbedIO.Quic
             int parameterSize,
             string? name,
             int keyShare,
-            bool fragmented
+            bool fragmented,
+            bool expectedSupport
         )
         {
             var extensions = name == null
@@ -79,6 +81,8 @@ namespace EmbedIO.Quic
             var hello = TlsHelloTests.NativeHello([], protocol, keyShare, extensions);
             string? error = null;
             var firstFlight = false;
+            var rejectedWithoutKeys = false;
+            var handshakeRejected = false;
             byte? alert = null;
             string[] diagnostics = [];
 
@@ -117,6 +121,11 @@ namespace EmbedIO.Quic
                 finally
                 {
                     alert = tls.AlertCode;
+                    rejectedWithoutKeys = alert is > 0
+                        && !tls.Established
+                        && tls.Output.Count == 0
+                        && tls.ReadKeys.All(key => key == null)
+                        && tls.WriteKeys.All(key => key == null);
                     diagnostics = [.. tls.Diagnostics];
                 }
             }
@@ -128,12 +137,16 @@ namespace EmbedIO.Quic
             )
             {
                 error = failure.ToString();
+                handshakeRejected = failure is InvalidDataException;
             }
 
             var released = SchannelTls.ActiveRegions == 0
                 && SchannelTls.ActiveContexts == 0
                 && SchannelTls.ActiveCredentials == 0;
-            var passed = firstFlight && error == null && released;
+            var passed = released
+                && (expectedSupport
+                    ? firstFlight && error == null
+                    : !firstFlight && handshakeRejected && rejectedWithoutKeys);
             var result = new
             {
                 kind = "first-flight-contract",
@@ -149,6 +162,8 @@ namespace EmbedIO.Quic
                     _ => "generated"
                 },
                 fragmented,
+                expectedSupport,
+                rejectedWithoutKeys,
                 passed,
                 firstFlight,
                 released,

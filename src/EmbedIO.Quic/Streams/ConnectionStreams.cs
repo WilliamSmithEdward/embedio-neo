@@ -652,6 +652,7 @@
             _closedSizes.Add(id, input.Buffer.FinalSize ?? throw new InvalidOperationException("Missing final size."));
             _closedOrder.Enqueue(id);
             _incoming.Remove(id);
+            input.Buffer.Dispose();
             _outgoing.Remove(id);
             Protocol.Retire(id);
 
@@ -716,6 +717,9 @@
             finally
             {
                 _disposed = true;
+
+                foreach (var input in _incoming.Values) input.Buffer.Dispose();
+
                 _incoming.Clear();
                 _outgoing.Clear();
                 _writes.Clear();

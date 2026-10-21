@@ -15,6 +15,9 @@ try {
 }
 catch { $policy.legacyFipsError = $_.Exception.Message }
 $policy | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath "$output/host-policy.json" -Encoding utf8
+if ($policy.curvesError -or $policy.legacyFipsError) { throw 'TLS group policy could not be read; retain the host-policy report.' }
+if ($policy.curves -notcontains 'NistP256') { throw 'The native acceptance fixture requires enabled P-256.' }
+$x25519 = if ($policy.curves -contains 'curve25519' -and $policy.legacyFipsEnabled -eq 0) { 'enabled' } else { 'disabled' }
 dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
 if ($LASTEXITCODE) { throw 'QUIC host restore failed.' }
 dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore -p:RunAnalyzers=true
@@ -24,10 +27,13 @@ dotnet $assembly schannel-self-test > "$output/lifetime.log" 2>&1
 if ($LASTEXITCODE) {
   Get-Content "$output/lifetime.log"
   # Preserve the original hard failure; diagnostics cannot turn it into a pass.
-  dotnet $assembly schannel-contract-probe > "$output/first-flight-contracts.log" 2>&1
+  dotnet $assembly schannel-contract-probe $x25519 > "$output/first-flight-contracts.log" 2>&1
   Get-Content "$output/first-flight-contracts.log"
   throw 'Schannel lifetime checks failed.'
 }
+# Exercise enabled and disabled groups against the captured host policy.
+dotnet $assembly schannel-contract-probe $x25519 > "$output/first-flight-contracts.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/first-flight-contracts.log"; throw 'Schannel group policy checks failed.' }
 foreach ($provider in 'schannel-rsa', 'schannel-ecdsa') {
   & $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify.py --dotnet dotnet --assembly $assembly --openssl $provider --output "$output/$provider-wire" > "$output/$provider-peer.log" 2>&1
   if ($LASTEXITCODE) { Get-Content "$output/$provider-peer.log"; throw 'Schannel independent peer checks failed.' }

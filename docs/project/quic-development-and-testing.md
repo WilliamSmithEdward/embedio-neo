@@ -492,16 +492,22 @@ hash-locked aioquic peer for both credential profiles, native lifetime checks an
 1,000 native mutation cases per profile plus the six certificate-selection cases. This adds no job or dependency installation.
 A configured step is not a completed hosted result; inspect its exact-head run.
 
-On a native lifetime-check failure, the Windows helper retains a bounded
-`schannel-contract-probe` report. Its 144 first-flight cases vary RSA/ECDSA credentials,
+The Windows helper retains a bounded `schannel-contract-probe` report on every run,
+including a native lifetime-check failure. Its 144 first-flight cases vary RSA/ECDSA credentials,
 short/long ALPN, SNI presence, transport-parameter lengths, X25519/P-256 shares and
 fragmented ClientHello delivery. X25519 cases separately exercise the original
 basepoint and the public Alice key from [RFC 7748 section 6.1](https://www.rfc-editor.org/rfc/rfc7748.html#section-6.1).
 The helper also retains the OS version, configured TLS groups and legacy FIPS setting
-as read-only host evidence. Missing policy diagnostics are recorded explicitly.
+as read-only host evidence. Missing policy evidence fails validation. Native lifetime
+fixtures use P-256; the matrix separately requires enabled X25519 to succeed and
+disabled X25519 to reject without installing keys or retaining resources. A configured
+unsupported group is exercised as a rejection case, not skipped. No machine TLS policy
+is changed. P-256 must be enabled for this acceptance fixture. The helper chooses
+`schannel-contract-probe enabled` or `schannel-contract-probe disabled` from the
+captured X25519 policy; a wrong expectation is itself a failing result.
 The native step precedes the ordinary regression suite within the existing Windows
 job; all existing gates, assertions and time allowances remain enforced.
-The original lifetime gate still fails. The diagnostic checks native first-flight
+A failed lifetime check remains fatal. The matrix checks native first-flight
 key installation and cleanup; it is not a completed TLS handshake or peer result.
 
 The adjacent shared HTTP lifecycle campaign also observes pending client requests
@@ -517,8 +523,12 @@ all cleanup and negative-oracle checks, both corpus traces and 200 Windows lifec
 cases. All 96 native diagnostic cases and existing native/core self-tests passed
 locally. Hosted run 39528086800 passed all 48 P-256 cases and failed all 48 original
 X25519 cases, independently of ALPN, SNI, credential and fragmentation. The expanded
-144-case diagnostic passed locally. Hosted key-share investigation remains open;
-local first-flight success does not establish hosted interoperability.
+144-case diagnostic passed locally. Run 39530212076 then confirmed the hosted image
+configures only NistP384/NistP256 with legacy FIPS disabled: both X25519 variants
+failed all 96 cases, while all 48 P-256 cases passed. The fixture now follows that
+observed group policy and keeps explicit rejection checks. Complete hosted acceptance
+of the corrected fixture remains pending; local first-flight success does not
+establish hosted interoperability.
 
 Use fresh output directories. Both `schannel-rsa` and `schannel-ecdsa` are validation
 selectors; no production listener setting selects them. The unused key-path argument
@@ -585,6 +595,36 @@ replays. The two 60-second coverage campaigns completed 161,506 libFuzzer and
 30,322 AFL++ executions with no retained crashes or hangs; ordinary assemblies
 remained uninstrumented. These bounded runs exercise the current development
 profile and do not establish production load, browser or platform acceptance.
+
+### Receive-page ownership
+
+The source receive window rents storage for occupied pages and clears it on return.
+Empty streams preserve their offsets and final-size state without reserving payload
+storage. Consumption releases empty pages; stream retirement and connection shutdown
+release remaining pages. Buffered overlap, final-size, reliable-prefix and sliding
+window rules are unchanged. The generic stream model now includes page-boundary and
+non-power-of-two window traces, shared by all existing QUIC fuzz engines.
+
+Dedicated regressions exercise dirty pool input, partial consumption, wraparound,
+retired duplicates, overlap rejection, empty FIN, sparse disposal and repeated disposal.
+The empty-owner allocation regression fails with the eager-window implementation.
+The focused suite passed 72 independent peer cases, 10,000 FsCheck cases per
+property, 100,000 managed mutations and 4,000 generated recovery/lifetime traces.
+The final Windows fixture passed 54 peer/certificate-selection cases, 2,000 native
+mutations and 144 first-flight cases. Supplying the wrong disabled-X25519 expectation
+on the enabled local machine failed exactly its 96 X25519 cases. Separate script
+checks retain failure for missing policy, failed lifetime checks and failed matrices.
+
+Fresh 60-second campaigns completed 198,310 libFuzzer and 25,027 AFL++ executions,
+with no retained crashes or hangs. Both instrument the source receive window, and
+the page-boundary/minimal corpus entries replay through their ordinary harnesses.
+Debug/Release diagnostics, PrettyCSharp, source-quality and analyzer guards passed.
+
+An isolated Windows source-loop comparison reduced allocation for 144 empty owners
+from 18,892,912 to 11,632 bytes; the regression gate requires less than 64 KiB.
+The loop favored paged storage for 64-byte and larger blocks, while one-byte loops
+cost tens of nanoseconds more. These are source-level observations, not completed
+HTTP cold/warm/tail or whole-listener memory acceptance.
 
 ## Remaining production acceptance work
 

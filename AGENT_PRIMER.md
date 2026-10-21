@@ -416,14 +416,17 @@ reporting ordinary cleanup failures. Direct managed fuzzing exercises both owner
 without loading native TLS; independent peers validate the native path. The bounded
 development socket listener supplies admission limits, handshake deadlines and
 cancellation across multiple connections. Async accept/owner bounds follow the validated
-transport stream capacities, including the production 128/16 profile. It has
+transport stream capacities, including the production 128/16 profile. Receive windows
+rent pages as data arrives and clear/return them after consumption, retirement or
+connection shutdown; empty streams do not reserve full payload windows. It has
 no public application API; the intended fully validated
 replacement will remove MsQuic from the production transport, but the current
 HTTP/3 provider remains in place. The [development and testing record](docs/project/quic-development-and-testing.md)
 tracks all fuzz engines, extensive local runs and remaining production acceptance. The Windows
-validation helper retains a bounded first-flight contract diagnostic when its native
-lifetime gate fails, including separate X25519 public-key profiles and read-only host
-TLS-policy evidence; the failure remains fatal. Shared HTTP lifecycle fuzzing distinguishes
+validation helper checks native lifetime and a bounded first-flight matrix against
+read-only host TLS-group policy. P-256 must succeed; X25519 must succeed when enabled
+and reject without keys when disabled. Missing policy evidence or unexpected outcomes
+fail the gate; validation never changes machine policy. Shared HTTP lifecycle fuzzing distinguishes
 expected stopped-client disconnects from response failures and cleanup deadlines.
 Once the replacement is complete, remove MsQuic-specific quarantines/workarounds
 and review every open Neo issue; close issues only after validating their resolution.

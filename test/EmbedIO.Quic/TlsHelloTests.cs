@@ -175,7 +175,7 @@ namespace EmbedIO.Quic
             byte[] parameters,
             string protocol,
             params (ushort Type, byte[] Value)[] extras
-        ) => NativeHello(parameters, protocol, 0, extras);
+        ) => NativeHello(parameters, protocol, 2, extras);
 
         internal static byte[] NativeHello(
             byte[] parameters,
