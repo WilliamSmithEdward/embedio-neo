@@ -74,6 +74,8 @@ namespace EmbedIO.Quic
             steps = steps[..Math.Min(steps.Length, MaximumInput)];
             RecoveryRetentionTests.Mutate(steps);
             PeerConnectionIdTests.Mutate(steps);
+            StatelessResetTests.Mutate(steps);
+            cover?.Invoke("connection.stateless-reset");
             cover?.Invoke("connection.peer-id-bounds");
             QuicFuzzState.Run(steps, false, cover);
             Span<byte> commands = stackalloc byte[4];
@@ -93,6 +95,8 @@ namespace EmbedIO.Quic
             steps = steps[..Math.Min(steps.Length, MaximumInput)];
             QuicFuzzState.Run(steps, true, cover);
             PeerConnectionIdTests.Mutate(steps);
+            StatelessResetTests.Mutate(steps);
+            cover?.Invoke("connection.stateless-reset");
             cover?.Invoke("connection.peer-id-bounds");
             AsyncStreamTests.ConnectionClosure(steps);
             cover?.Invoke("streams.async-closure");

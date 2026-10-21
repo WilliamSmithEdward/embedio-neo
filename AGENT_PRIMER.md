@@ -1166,7 +1166,7 @@ recovery owner. It retains at most two active peer IDs and four unacknowledged
 retirements, releases acknowledged records and uses the replacement ID before
 sending a close. These bounds remain constant over long-lived rotation. This
 handles peer destination IDs; local-issued ID rotation, migration, Retry and
-stateless reset remain separate acceptance work.
+server reset emission remain separate acceptance work.
 
 CI run 39653100127 built all six native assets and assembled the combined package.
 Its complete package-consumer suites passed on Linux x64, Linux ARM64 and macOS
@@ -1181,3 +1181,17 @@ Its actual Intel macOS run and both changed-source musl runs remain required.
 This wheel is test infrastructure, not a production dependency or an assertion of
 upstream Intel macOS support. See the development record for evidence and the
 remaining production, browser, endurance and latency work.
+
+
+The unmerged engine now recognizes received stateless resets using tokens for
+peer IDs it has actually used; unused and retired IDs do not qualify. Valid
+packet authentication takes precedence. A recognized reset enters silent draining
+and cancels active application work, including request-abort tokens. The dispatcher
+uses endpoint-bound keyed token identities when a randomized header does not
+identify its connection. Shared-endpoint candidates first preserve authentication
+by the issued-ID owner; only failure permits forwarding to the token owner. This
+adds no token hash to the usual single-connection packet path. Reset routes and endpoint
+groups retire with connection ownership. This does not supply server-issued ID
+rotation, server reset emission or path migration; those remain development work.
+The new model, dispatcher, independent-peer and fuzz checks are recorded in the
+development/testing guide. Public provider selection remains unchanged.

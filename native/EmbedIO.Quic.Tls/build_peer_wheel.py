@@ -112,6 +112,24 @@ def verify_artifact(directory, source_commit, native_receipt):
     return receipt
 
 
+def macos_dependencies(listing, identification):
+    lines = listing.splitlines()
+    identity = identification.splitlines()
+    require(lines and identity and lines[0].endswith(":") and lines[0] == identity[0] and len(identity) <= 2,
+            "Unexpected macOS dependency metadata")
+    require(all(" (" in line for line in lines[1:]), "Malformed macOS dependency entry")
+    dependencies = [line.strip().split(" (", 1)[0] for line in lines[1:]]
+    # otool -L prints LC_ID_DYLIB first, although that is not a library load.
+    # -D identifies that exact row; any repeated actual load is still validated.
+    if len(identity) == 2:
+        require(dependencies and dependencies[0] == identity[1].strip(), "macOS install name differs")
+        dependencies = dependencies[1:]
+    require(dependencies and all(path.startswith(("/usr/lib/", "/System/Library/Frameworks/")) and
+                                safe_path(path.removeprefix("/")).as_posix() == path.removeprefix("/")
+                                for path in dependencies), "Test peer has a non-system shared library dependency")
+    return dependencies
+
+
 def audit_wheel(wheel, work):
     _, contents = wheel_contents(wheel)
     modules = [(name, data) for name, data in contents.items() if name.endswith(".so")]
@@ -122,14 +140,16 @@ def audit_wheel(wheel, work):
     if platform.system() == "Darwin":
         require(module.read_bytes()[:8] == bytes.fromhex("cffaedfe07000001"), "Peer module architecture differs")
         output = subprocess.check_output(["otool", "-L", str(module)], text=True)
-        dependencies = [line.strip().split(" (", 1)[0] for line in output.splitlines()[1:]]
-        require(dependencies and all(path.startswith(("/usr/lib/", "/System/Library/Frameworks/")) for path in dependencies),
-                "Test peer has a non-system shared library dependency")
+        (work / "peer-native-dependencies.log").write_text(output, encoding="utf-8")
+        identity = subprocess.check_output(["otool", "-D", str(module)], text=True)
+        (work / "peer-native-install-name.log").write_text(identity, encoding="utf-8")
+        dependencies = macos_dependencies(output, identity)
     else:
         data = module.read_bytes()
         require(data[:6] == bytes.fromhex("7f454c460201") and struct.unpack_from("<H", data, 18)[0] == 62,
                 "Peer module architecture differs")
         output = subprocess.check_output(["readelf", "-d", str(module)], text=True)
+        (work / "peer-native-dependencies.log").write_text(output, encoding="utf-8")
         dependencies = re.findall(r"\(NEEDED\).*?\[(.*?)\]", output)
         require(set(dependencies) <= {"libgcc_s.so.1", "libc.so.6", "libm.so.6", "libdl.so.2", "libpthread.so.0",
                                       "librt.so.1", "ld-linux-x86-64.so.2"}, "Unexpected test peer dynamic dependency")

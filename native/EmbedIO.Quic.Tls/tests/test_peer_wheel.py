@@ -11,6 +11,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -38,6 +39,45 @@ class PeerWheelTests(unittest.TestCase):
             for name, data in files.items():
                 wheel.writestr(name, data)
         return files
+
+    def test_macos_self_install_name_is_not_a_dependency(self):
+        listing = "module.so:\n\t@rpath/lib_rust.dylib (compatibility version 0.0.0, current version 0.0.0)\n"
+        system = "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1351.0.0)\n"
+        self.assertEqual(module.macos_dependencies(listing + system, "module.so:\n@rpath/lib_rust.dylib\n"),
+                         ["/usr/lib/libSystem.B.dylib"])
+        self.assertEqual(module.macos_dependencies("module.so:\n" + system, "module.so:\n"),
+                         ["/usr/lib/libSystem.B.dylib"])
+
+    def test_macos_external_loads_remain_rejected(self):
+        identity = "module.so:\n@rpath/lib_rust.dylib\n"
+        listing = "module.so:\n\t@rpath/lib_rust.dylib (compatibility version 0.0.0, current version 0.0.0)\n"
+        for path in ("@rpath/foreign.dylib", "/opt/homebrew/lib/libssl.3.dylib", "@rpath/lib_rust.dylib",
+                     "/usr/lib/../foreign.dylib"):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                module.macos_dependencies(listing + "\t" + path + " (compatibility version 1.0.0)\n", identity)
+
+    def test_macos_dynamic_openssl_and_failed_audit_keep_evidence(self):
+        prefix = "module.so:\n"
+        listing = prefix + "\t@rpath/lib_rust.dylib (compatibility version 0.0.0)\n" + \
+                  "\t/usr/lib/libcrypto.3.dylib (compatibility version 1.0.0)\n"
+        identity = prefix + "@rpath/lib_rust.dylib\n"
+        contents = {"cryptography/hazmat/bindings/_rust.abi3.so": bytes.fromhex("cffaedfe07000001") + bytes(24)}
+        with tempfile.TemporaryDirectory() as temporary, patch.object(module.platform, "system", return_value="Darwin"), \
+             patch.object(module, "wheel_contents", return_value=([], contents)), \
+             patch.object(module.subprocess, "check_output", side_effect=[listing, identity]):
+            work = Path(temporary)
+            with self.assertRaisesRegex(ValueError, "dynamically loads OpenSSL"):
+                module.audit_wheel(work / "wheel.whl", work)
+            self.assertEqual((work / "peer-native-dependencies.log").read_text(), listing)
+            self.assertEqual((work / "peer-native-install-name.log").read_text(), identity)
+
+    def test_macos_malformed_identity_and_dependencies_fail(self):
+        listing = "module.so:\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0)\n"
+        for identity in ("", "other.so:\n", "module.so:\n@rpath/other.dylib\n", "module.so:\none\ntwo\n"):
+            with self.subTest(identity=identity), self.assertRaises(ValueError):
+                module.macos_dependencies(listing, identity)
+        with self.assertRaises(ValueError):
+            module.macos_dependencies("module.so:\nnot an entry\n", "module.so:\n")
 
     def test_license_preserves_vendor_bytes_and_rebuilds_record(self):
         with tempfile.TemporaryDirectory() as temporary:

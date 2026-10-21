@@ -89,7 +89,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (failure?.Length > 4096) failure = failure[..4096];
 
                 return FormattableString.Invariant(
-                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};last-rejection={failure}"
+                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};last-rejection={failure}"
                 );
             }
         }

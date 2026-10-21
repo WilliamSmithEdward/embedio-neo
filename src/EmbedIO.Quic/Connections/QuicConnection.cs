@@ -90,6 +90,9 @@ namespace EmbedIO.Quic
         private ulong _peerStreamData;
 
         internal ReadOnlySpan<byte> ServerId => _serverId;
+        internal ReadOnlyMemory<byte> ResetToken => _peerIds?.ResetToken ?? default;
+        internal bool StatelessResetReceived { get; private set; }
+        internal bool DatagramAuthenticated { get; private set; }
         internal bool Established => _tls.Established;
         private int CloseLevel =>
             _tls.Established && _tls.WriteKeys[2] != null
@@ -176,6 +179,8 @@ namespace EmbedIO.Quic
 
         internal virtual List<byte[]> Receive(ReadOnlySpan<byte> datagram, double now)
         {
+            DatagramAuthenticated = false;
+
             try
             {
                 return ReceiveCore(datagram, now);
@@ -205,9 +210,12 @@ namespace EmbedIO.Quic
             ObjectDisposedException.ThrowIf(_disposed, this);
             _lifetime.Tick(now, _recovery.KeyRetention);
 
-            if (Closed || Phase == ConnectionPhase.Draining || _authenticationLimitReached) return [];
+            if (Closed || Phase == ConnectionPhase.Draining) return [];
 
             _now = now;
+
+            if (_authenticationLimitReached) return DetectReset(datagram) ? Drain() : [];
+
             ReceivedBytes += datagram.Length;
             var position = 0;
 
@@ -217,12 +225,16 @@ namespace EmbedIO.Quic
 
                 if (!TryHeader(remaining, out var level, out var length, out var numberOffset))
                 {
+                    if (position == 0 && DetectReset(datagram)) break;
+
                     RejectedPackets++;
                     break;
                 }
 
                 if (_recovery.IsDiscarded(level))
                 {
+                    if (position == 0 && DetectReset(datagram)) break;
+
                     position += length;
                     continue;
                 }
@@ -231,6 +243,8 @@ namespace EmbedIO.Quic
 
                 if (keys == null || (level == 2 && !_tls.Established))
                 {
+                    if (position == 0 && DetectReset(datagram)) break;
+
                     RejectedPackets++;
                     position += length;
                     continue;
@@ -250,6 +264,8 @@ namespace EmbedIO.Quic
 
                 catch (CryptographicException)
                 {
+                    if (position == 0 && DetectReset(datagram)) break;
+
                     RejectedPackets++;
 
                     _failedAuthentications++;
@@ -260,6 +276,7 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
+                DatagramAuthenticated = true;
                 _lifetime.Authenticated(now);
                 _peerProtectionLevel = Math.Max(_peerProtectionLevel, level);
 
@@ -370,6 +387,16 @@ namespace EmbedIO.Quic
             }
 
             return Drain();
+        }
+
+        private bool DetectReset(ReadOnlySpan<byte> datagram)
+        {
+            if (_peerIds?.MatchesReset(datagram) != true) return false;
+
+            StatelessResetReceived = true;
+            _lifetime.Drain(_now, _recovery.KeyRetention);
+            _streams?.Protocol.ConnectionClosed(0, false);
+            return true;
         }
 
         private byte[] UnprotectApplication(ReadOnlySpan<byte> packet, int offset, out ulong number)
@@ -635,6 +662,7 @@ namespace EmbedIO.Quic
                 var keys = (level == 0 ? _initialWrite : _tls.WriteKeys[level])
                     ?? throw new InvalidOperationException("Packet keys unavailable.");
                 var packet = keys.Protect(header, numberOffset, _sentNumbers[level], payload);
+                _peerIds?.MarkUsed();
 
                 queue.Dequeue();
                 delivery.Queued = false;
@@ -828,7 +856,7 @@ namespace EmbedIO.Quic
 
                 var id = reader.Take(size);
                 var token = reader.Take(16);
-                _peerIds ??= new PeerConnectionIds(_clientId, RetirePeerConnectionId);
+                _peerIds ??= new PeerConnectionIds(_clientId, RetirePeerConnectionId, SentBytes != 0);
 
                 try
                 {
@@ -1031,7 +1059,9 @@ namespace EmbedIO.Quic
             var (header, numberOffset, payload) = Prepare(delivery);
             var keys = (delivery.Level == 0 ? _initialWrite : _tls.WriteKeys[delivery.Level])
                 ?? throw new InvalidOperationException("Packet keys are unavailable.");
-            return keys.Protect(header, numberOffset, _sentNumbers[delivery.Level], payload);
+            var packet = keys.Protect(header, numberOffset, _sentNumbers[delivery.Level], payload);
+            _peerIds?.MarkUsed();
+            return packet;
         }
 
         private (byte[] Header, int NumberOffset, byte[] Payload) Prepare(Delivery delivery)

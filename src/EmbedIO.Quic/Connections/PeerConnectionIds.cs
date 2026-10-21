@@ -6,7 +6,11 @@ namespace EmbedIO.Quic
 {
     // RFC 9000 5.1/19.15: active IDs and unacknowledged retirements have separate
     // bounds. Retired sequence numbers are represented by a watermark, not history.
-    internal sealed class PeerConnectionIds(byte[] initial, Func<ulong, Delivery> retire) : IDisposable
+    internal sealed class PeerConnectionIds(
+        byte[] initial,
+        Func<ulong, Delivery> retire,
+        bool initialUsed = false
+    ) : IDisposable
     {
         internal const int ActiveLimit = 2;
         internal const int RetirementLimit = 2 * ActiveLimit;
@@ -19,6 +23,9 @@ namespace EmbedIO.Quic
         private readonly bool _zeroLength = initial.Length == 0;
         private ulong _retirePrior;
         private bool _disposed;
+        private ulong? _usedSequence = initialUsed ? 0UL : null;
+        private byte[]? _snapshotSource;
+        private ReadOnlyMemory<byte> _resetSnapshot;
 
         internal int ActiveCount => _active.Count;
         internal int RetainedRetirements => _retiring.Count;
@@ -31,6 +38,44 @@ namespace EmbedIO.Quic
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 return _active[0].Id;
             }
+        }
+
+        // Snapshots are immutable publication metadata; copying is limited to a
+        // selected token change, never ordinary packets. Unused/retired IDs do not qualify.
+        internal ReadOnlyMemory<byte> ResetToken
+        {
+            get
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                var current = _active[0];
+
+                if (_usedSequence != current.Sequence || current.Token.Length != 16) return default;
+
+                if (!ReferenceEquals(_snapshotSource, current.Token))
+                {
+                    _snapshotSource = current.Token;
+                    byte[] copy = [.. current.Token];
+                    _resetSnapshot = copy;
+                }
+
+                return _resetSnapshot;
+            }
+        }
+
+        internal void MarkUsed()
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _usedSequence = _active[0].Sequence;
+        }
+
+        internal bool MatchesReset(ReadOnlySpan<byte> datagram)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var current = _active[0];
+            return datagram.Length >= 21
+                && _usedSequence == current.Sequence
+                && current.Token.Length == 16
+                && CryptographicOperations.FixedTimeEquals(datagram[^16..], current.Token);
         }
 
         private static byte[] CopyInitial(byte[] initial)
@@ -144,6 +189,8 @@ namespace EmbedIO.Quic
 
             _active.Clear();
             _retiring.Clear();
+            _snapshotSource = null;
+            _resetSnapshot = default;
         }
     }
 }

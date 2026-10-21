@@ -56,3 +56,6 @@ if ($LASTEXITCODE) { Get-Content "$output/cipher-suites.log"; throw 'Schannel ci
 
 & $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_peer_connection_ids.py --dotnet dotnet --assembly $assembly --output "$output/peer-connection-ids" > "$output/peer-connection-ids.log" 2>&1
 if ($LASTEXITCODE) { Get-Content "$output/peer-connection-ids.log"; throw 'Schannel peer connection-ID checks failed.' }
+
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_stateless_reset.py --dotnet dotnet --assembly $assembly --output "$output/stateless-reset" > "$output/stateless-reset.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/stateless-reset.log"; throw 'Schannel stateless-reset checks failed.' }

@@ -29,6 +29,9 @@ namespace EmbedIO.Quic
 
         internal static async Task RunAsync()
         {
+            await StatelessResetTests
+                .DispatcherAsync()
+                .ConfigureAwait(false);
             await SiblingProgressAsync().ConfigureAwait(false);
             await AdmissionCleanupAsync().ConfigureAwait(false);
             await QueuedExpiryAsync().ConfigureAwait(false);

@@ -185,3 +185,14 @@ python3 test/EmbedIO.Quic.PackageConsumer/validate.py --rid osx-x64 --feed TestR
 Musl consumers run Docker as the checkout owner's UID/GID with disposable writable
 HOME and .NET CLI directories. This retains Git's ownership validation and leaves
 artifact files readable by the runner; it does not add a safe-directory exception.
+
+
+The test-wheel audit reads the module's own install name with `otool -D` before
+checking `otool -L` imports. The leading ID row describes the module itself, as
+[Apple explains](https://developer.apple.com/forums/thread/736719); it is not an
+external library load. Every actual load still must be an absolute canonical
+system path, and dynamic OpenSSL remains disallowed. Both raw listings are saved
+before validation so a rejected dependency remains inspectable in build logs.
+The Intel source wheel compiled in CI 39662188674, but its earlier audit failed
+without retaining that listing. The corrected audit and complete Intel consumer
+run still require new-head hosted validation.

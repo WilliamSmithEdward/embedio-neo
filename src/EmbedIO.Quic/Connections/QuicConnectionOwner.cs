@@ -8,7 +8,8 @@ namespace EmbedIO.Quic
         ReadOnlyMemory<byte> ConnectionId,
         IReadOnlyList<byte[]> Datagrams,
         bool Established,
-        bool Closed
+        bool Closed,
+        ReadOnlyMemory<byte> ResetToken = default
     );
 
     // The mailbox owns copied input until its turn completes. Factory, packet,
@@ -16,7 +17,7 @@ namespace EmbedIO.Quic
     internal sealed class QuicConnectionOwner : IAsyncDisposable
     {
         private readonly object _gate = new();
-        private readonly Queue<byte[]> _packets = new();
+        private readonly Queue<(byte[] Bytes, QuicConnectionOwner? ResetOwner)> _packets = new();
         private readonly QuicExecutionPool.Registration _execution;
         private readonly QuicConnectionFactory _create;
         private readonly Func<double> _clock;
@@ -25,6 +26,7 @@ namespace EmbedIO.Quic
         private readonly int _byteCapacity;
         private QuicConnection? _connection;
         private byte[] _id = [];
+        private ReadOnlyMemory<byte> _resetToken;
         private bool _established;
         private bool _reported;
         private bool _closing;
@@ -77,7 +79,7 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal bool Receive(ReadOnlySpan<byte> bytes)
+        internal bool Receive(ReadOnlySpan<byte> bytes, QuicConnectionOwner? resetOwner = null)
         {
             lock (_gate)
             {
@@ -87,7 +89,7 @@ namespace EmbedIO.Quic
 
                 if (_pendingPackets >= _packetCapacity || bytes.Length > _byteCapacity - _pendingBytes) return false;
 
-                _packets.Enqueue(bytes.ToArray());
+                _packets.Enqueue((bytes.ToArray(), resetOwner));
                 _pendingPackets++;
                 _pendingBytes += bytes.Length;
             }
@@ -123,11 +125,23 @@ namespace EmbedIO.Quic
         private void Execute()
         {
             byte[]? packet;
+            QuicConnectionOwner? resetOwner;
             bool tick;
 
             lock (_gate)
             {
-                _packets.TryDequeue(out packet);
+                if (_packets.TryDequeue(out var pending))
+                {
+                    packet = pending.Bytes;
+                    resetOwner = pending.ResetOwner;
+                }
+
+                else
+                {
+                    packet = null;
+                    resetOwner = null;
+                }
+
                 tick = _tick;
                 _tick = false;
             }
@@ -150,16 +164,34 @@ namespace EmbedIO.Quic
                     ? tick ? connection.Tick(ReadClock()) : connection.PumpApplications(ReadClock())
                     : connection.Receive(packet, ReadClock());
 
+                // A shared-endpoint token candidate is forwarded only after the
+                // header owner fails authentication. Its bounded mailbox performs
+                // the final comparison; forwarding never loops or touches routes.
+                if (
+                    packet != null
+                    && resetOwner != null
+                    && !connection.DatagramAuthenticated
+                    && !connection.StatelessResetReceived
+                )
+                    resetOwner.Receive(packet);
+
                 if (packet != null && tick && !connection.Closed) output.AddRange(connection.Tick(ReadClock()));
+
+                var resetToken = connection.ResetToken;
 
                 if (
                     !_execution.Closing
-                    && (!_reported || output.Count != 0 || connection.Established != _established || connection.Closed)
+                    && (!_reported
+                        || output.Count != 0
+                        || connection.Established != _established
+                        || connection.Closed
+                        || !resetToken.Equals(_resetToken))
                 )
                 {
                     _reported = true;
                     _established = connection.Established;
-                    _publish(new QuicConnectionOutput(_id, output, _established, connection.Closed));
+                    _resetToken = resetToken;
+                    _publish(new QuicConnectionOutput(_id, output, _established, connection.Closed, _resetToken));
                 }
 
                 if (connection.Closed) RequestClose();

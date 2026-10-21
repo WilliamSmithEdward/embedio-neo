@@ -1148,7 +1148,7 @@ python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py
    host already replenishes stream counts and retires stream/application buffers.
    Receive and recovery histories retire within fixed bounds; packet encryption
    enforces per-key AES-GCM limits and ACK-confirmed local/peer key generations.
-3. Complete transport/application error classification, stateless reset, Retry,
+3. Complete transport/application error classification, server reset emission, Retry,
    path handling, post-handshake TLS, resumption and any intentionally supported
    0-RTT policy. Features outside the supported profile must fail explicitly.
 4. Finish production provider selection and public WebTransport API/controller
@@ -1447,3 +1447,64 @@ build/audit/package/wheel test methods passed on Linux without skips. This is a
 Linux source-build/integration proof, not Intel macOS acceptance. An initial local
 Ubuntu-native SDK attempt was correctly refused by the existing glibc baseline
 audit; the final proof used the reviewed manylinux builder.
+
+
+## Received stateless resets and macOS peer dependency metadata
+
+The engine now recognizes received stateless resets for recently used,
+non-retired peer connection IDs. It checks a datagram's trailing token after its
+first packet cannot be associated or authenticated; a valid authenticated packet
+retains precedence. Unused, retired, corrupted and undersized tokens do not reset
+the connection. Recognition enters silent draining, cancels active application
+work and suppresses later close/recovery responses. The draining interval is not
+extended by repeated resets. An exhausted AEAD authentication budget still permits
+a valid reset to stop an already-closing connection.
+
+A randomized reset header need not carry the issued server ID. The dispatcher
+therefore indexes endpoint-bound keyed token transforms and routes a recognized
+candidate to its serialized owner for the final constant-time comparison.
+Snapshots change only when the selected eligible token changes. Shared endpoint
+groups preserve authentication by the header's owner before forwarding an
+unrecognized candidate once through the token owner's bounded mailbox. Expired
+header aliases still allow association with a live token owner. The ordinary
+single-connection path avoids per-packet token hashing. Routes and
+groups remain bounded by admitted owners, retire during cleanup, and their counts
+are available only in post-disposal development diagnostics. The per-listener
+transform key is cleared after its workers stop.
+
+A controlled Windows wire test initially left an active controller request
+running after a valid reset. The receiver correction cancels that request while
+an independent sibling remains usable, then completes drain and rebind. Ten
+Windows Schannel cases passed across both AES profiles and five header forms,
+including minimum-size, known/unknown-ID, clear-fixed-bit and long-header resets.
+Each case also rejects five invalid or ineligible reset candidates. Deterministic
+model/dispatcher checks cover token ownership, stable metadata, eligibility,
+valid-packet precedence across owners, shared endpoints, expired aliases, wrong
+source/local addresses, silent draining, authentication-budget closing and complete index cleanup. The helper
+also joins the existing core, lifecycle and state-machine mutation entry points.
+The local candidate passed 100,000 managed mutations, 10,000 FsCheck cases per
+property and 1,000 traces each for recovery and lifecycle with seed 1729.
+The final Windows source repeated all ten reset cases and its model/dispatcher
+suites. Linux repeated all 15 reset cases, ten peer-ID cases, 24 existing wire
+cases and 24 certificate-policy cases with the same-version source-built peer;
+all 26 native build/audit/package/wheel test methods passed without skips. The
+final mutation, property and trace campaigns also passed after the cross-owner
+routing correction. Guided-fuzz results and hosted platform acceptance are
+recorded separately; received resets do not implement server reset emission,
+server-issued ID rotation, Retry or migration.
+
+In CI run 39662188674, all six native TLS SDK builds/audits completed, including
+Intel macOS, where the pinned cryptography 50.0.2 wheel also compiled with Rust
+1.99.1 for Python 3.14. Its dependency audit then failed and the downstream package
+consumer matrix did not run. The failing audit did not retain its dependency
+listing, so the exact rejected row is unavailable. The updated helper preserves
+both dependency and install-name output before validation. It uses `otool -D` to
+identify the module's own install name, which `otool -L` lists before actual
+imports; [Apple documents this distinction](https://developer.apple.com/forums/thread/736719).
+Only that exact leading identity row is removed. Actual external, repeated,
+malformed, path-traversing and dynamic OpenSSL loads still fail. Regression tests
+cover these distinctions and preservation of failed-audit evidence. The expanded
+native build/audit/package/wheel suite passed all 26 methods locally on Windows
+with its existing symlink-only skip. The next actual Intel run must confirm the
+dependency inventory and complete consumer suites; no platform acceptance is
+inferred from source compilation alone.
