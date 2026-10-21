@@ -62,9 +62,10 @@
         internal static void Check(ReadOnlySpan<byte> data)
         {
             PageBoundaries(data);
+            StreamDiscardTests.Mutate(data);
             var buffer = new StreamReassembly(32);
             var pending = new SortedDictionary<ulong, byte>();
-            ulong delivered = 0, extent = 0;
+            ulong delivered = 0, extent = 0, retentionLimit = StreamReassembly.MaximumOffset;
             ulong? final = null;
 
             try
@@ -75,6 +76,19 @@
                     var offset = (data[cursor + 1] & 1) != 0 && delivered > 0
                         ? delivered - Math.Min(delivered, (ulong)delta)
                         : delivered + (ulong)delta;
+
+                    if ((data[cursor + 3] & 128) != 0)
+                    {
+                        retentionLimit = Math.Min(retentionLimit, offset);
+
+                        foreach (var position in pending.Keys
+                            .Where(position => position >= retentionLimit)
+                            .ToArray())
+                            pending.Remove(position);
+
+                        buffer.DiscardFrom(offset);
+                    }
+
                     var bytes = Enumerable
                         .Repeat(data[cursor + 2], data[cursor + 1] % 9)
                         .ToArray();
@@ -104,6 +118,7 @@
                         buffer = new StreamReassembly(32);
                         pending.Clear();
                         delivered = extent = 0;
+                        retentionLimit = StreamReassembly.MaximumOffset;
                         final = null;
                         continue;
                     }
@@ -115,12 +130,15 @@
                     extent = Math.Max(extent, end);
 
                     for (var index = 0; index < bytes.Length; index++)
-                        if (offset + (ulong)index >= delivered) pending[offset + (ulong)index] = bytes[index];
+                        if (offset + (ulong)index >= delivered && offset + (ulong)index < retentionLimit)
+                            pending[offset + (ulong)index] = bytes[index];
 
                     var maximum = delivered + (ulong)(data[cursor + 3] % 33);
                     var expected = new List<byte>();
 
-                    while (delivered < maximum && pending.Remove(delivered, out var value))
+                    while (
+                        delivered < maximum && delivered < retentionLimit && pending.Remove(delivered, out var value)
+                    )
                     {
                         expected.Add(value);
                         delivered++;

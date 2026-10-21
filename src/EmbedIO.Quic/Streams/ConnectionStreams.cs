@@ -66,6 +66,7 @@
 
         internal int RetiredStreams { get; private set; }
         internal int IncomingCount => _incoming.Count;
+        internal int RetainedReceiveCapacity => _incoming.Values.Sum(input => input.Buffer.RetainedCapacity);
         internal int OutgoingCount => _outgoing.Count;
         internal int ClosedHistoryCount => _closedSizes.Count;
         internal int ReceiveCreditUpdates { get; private set; }
@@ -188,8 +189,8 @@
 
             if (input.ReadStopped)
             {
-                input.Buffer.Consume();
-                input.Discarded = input.Extent - input.Consumed;
+                input.Buffer.DiscardFrom(input.Buffer.Delivered);
+                input.Discarded = input.Extent - input.Buffer.Delivered;
                 input.Terminal = input.ResetError.HasValue || input.Buffer.FinalSize.HasValue;
                 ReleaseTo(id, input, input.Consumed + input.Discarded);
                 return;
@@ -242,6 +243,7 @@
 
             else input.ReliableSize = Math.Min(input.ReliableSize, reliable);
 
+            input.Buffer.DiscardFrom(input.ReliableSize);
             Deliver(id, input);
             Prune();
         }

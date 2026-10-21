@@ -6,6 +6,7 @@
         {
             EmptyOwnerAllocation();
             StreamStorageTests.Run();
+            StreamDiscardTests.Run();
             using var window = new StreamReassembly(32);
 
             for (ulong offset = 0; offset < 32000; offset += 32)

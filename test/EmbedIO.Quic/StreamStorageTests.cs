@@ -6,6 +6,7 @@ namespace EmbedIO.Quic
     {
         internal static void Run()
         {
+            DiscardedStorage();
             var pool = new TrackingPool();
 
             using (var empty = new StreamReassembly(65536, pool))
@@ -92,6 +93,77 @@ namespace EmbedIO.Quic
             Check(pool.Active == 0 && pool.Rents == pool.Returns, "disposal releases sparse pages");
         }
 
+        private static void DiscardedStorage()
+        {
+            var pool = new TrackingPool();
+
+            using (var buffer = new StreamReassembly(1024, pool))
+            {
+                buffer.Add(0, [1, 2, 3, 4, 5]);
+                buffer.DiscardFrom(3);
+                pool.CheckCleared(3, 2);
+                Reject(() => buffer.Add(4, [], true));
+                Reject(() => buffer.Add(1025, []));
+                buffer.Add(5, [], true);
+                buffer.DiscardFrom(4);
+                Check(
+                    buffer
+                        .Consume()
+                        .AsSpan()
+                        .SequenceEqual((ReadOnlySpan<byte>)[1, 2, 3]),
+                    "discard limit cannot be increased"
+                );
+                Check(
+                    buffer.Delivered == 3 && buffer.FinalSize == 5 && !buffer.Complete,
+                    "discard preserves delivered count and final size"
+                );
+                var rents = pool.Rents;
+                buffer.Add(3, [9, 9], true);
+                Check(pool.Rents == rents && buffer.Consume().Length == 0, "discarded suffix never rents again");
+                buffer.Dispose();
+                CheckDisposed(() => buffer.DiscardFrom(0));
+            }
+
+            foreach (var capacity in new[] { 16, 1023, 1024, 1025, 65536 })
+            {
+                using var buffer = new StreamReassembly(capacity, pool);
+                var bytes = Enumerable
+                    .Range(0, capacity)
+                    .Select(value => (byte)value)
+                    .ToArray();
+                buffer.Add(0, bytes.AsSpan(0, capacity - 1));
+                Check(buffer.Consume().Length == capacity - 1, "prepare wrapped discard");
+                var start = buffer.Delivered;
+                buffer.Add(start, bytes, true);
+                var prefix = capacity / 2;
+                buffer.DiscardFrom(start + (ulong)prefix);
+                buffer.DiscardFrom(start + (ulong)prefix - 1);
+                buffer.DiscardFrom(start + (ulong)prefix);
+                Check(buffer.Delivered == start, "discard never advances delivery");
+                Check(
+                    buffer
+                        .Consume()
+                        .AsSpan()
+                        .SequenceEqual(bytes.AsSpan(0, prefix - 1)),
+                    "wrapped discard preserves reliable prefix"
+                );
+                Check(pool.Active == 0 && buffer.RetainedCapacity == 0, "wrapped discard and consume return all pages");
+                var rents = pool.Rents;
+                buffer.Add(start, bytes, true);
+                Check(pool.Rents == rents && buffer.Consume().Length == 0, "wrapped late data stays discarded");
+                Reject(() => buffer.Add(start + (ulong)capacity, [1]));
+            }
+
+            using (var empty = new StreamReassembly(0, pool))
+            {
+                empty.DiscardFrom(0);
+                empty.Add(0, [], true);
+                Check(empty.Complete && empty.RetainedCapacity == 0, "empty discard remains allocation-free");
+            }
+
+            Check(pool.Active == 0 && pool.Rents == pool.Returns, "all discarded pool ownership released once");
+        }
+
         private sealed class TrackingPool : ArrayPool<byte>
         {
             private readonly HashSet<byte[]> _active = [];
@@ -99,6 +171,16 @@ namespace EmbedIO.Quic
             internal int Rents { get; private set; }
             internal int Returns { get; private set; }
             internal int Active => _active.Count;
+
+            internal void CheckCleared(int offset, int length) =>
+                Check(
+                    _active
+                        .Single()
+                        .AsSpan(offset, length)
+                        .IndexOfAnyExcept((byte)0)
+                        < 0,
+                    "discarded bytes cleared while page remains owned"
+                );
 
             public override byte[] Rent(int minimumLength)
             {

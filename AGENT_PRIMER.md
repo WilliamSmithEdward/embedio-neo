@@ -417,8 +417,10 @@ without loading native TLS; independent peers validate the native path. The boun
 development socket listener supplies admission limits, handshake deadlines and
 cancellation across multiple connections. Async accept/owner bounds follow the validated
 transport stream capacities, including the production 128/16 profile. Receive windows
-rent pages as data arrives and clear/return them after consumption, retirement or
-connection shutdown; empty streams do not reserve full payload windows. It has
+rent pages as data arrives and clear/return them after consumption, read abort,
+reliable-reset suffix discard, retirement or connection shutdown; empty streams do
+not reserve full payload windows. Discard retains offset/final-size validation and
+keeps application-delivered bytes under explicit consumption ownership. It has
 no public application API; the intended fully validated
 replacement will remove MsQuic from the production transport, but the current
 HTTP/3 provider remains in place. The [development and testing record](docs/project/quic-development-and-testing.md)

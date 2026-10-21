@@ -626,6 +626,30 @@ The loop favored paged storage for 64-byte and larger blocks, while one-byte loo
 cost tens of nanoseconds more. These are source-level observations, not completed
 HTTP cold/warm/tail or whole-listener memory acceptance.
 
+### Discarded receive payload
+
+Read abort and reliable reset release unused receive payload before stream
+retirement. A one-way retention limit lets a reliable prefix shrink while its
+missing bytes arrive. Discard clears partial-page payload and returns empty pages;
+late suffix data does not rent storage again. Offset, extent, final-size and
+receive-window checks still apply to all incoming frames. Bytes already delivered
+to the application retain separate consumption ownership, returning credit once.
+
+Direct regressions cover partial-page clearing, pool return ownership, wraparound
+at power-of-two and other window sizes, a missing/shrinking reliable prefix,
+late consumption, duplicate frames, final-size history and repeated disposal.
+The dictionary model now includes discard commands; a dedicated suffix-discard
+seed also reaches the shared coverage-guided harness.
+
+The discard increment passed 72 independent peer cases, 10,000 FsCheck cases per
+property, 100,000 managed mutations and 4,000 generated recovery/lifetime traces.
+Fresh 60-second campaigns completed 178,301 libFuzzer and 29,203 AFL++ executions
+without retained crashes or hangs. Debug/Release diagnostics, PrettyCSharp,
+source-quality and analyzer guards passed. An isolated warm receive-loop comparison
+against the preceding paged implementation observed unchanged allocation per
+operation and no slowdown in the tested 1/64/1200/65536-byte blocks; complete HTTP
+and listener latency acceptance remains outstanding.
+
 ## Remaining production acceptance work
 
 1. Promote the bounded shared listener into the production ownership/transport

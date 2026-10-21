@@ -22,6 +22,7 @@ namespace EmbedIO.Quic
         private readonly ArrayPool<byte> _pool = pool ?? ArrayPool<byte>.Shared;
         private Page[]? _pages;
         private ulong _extent;
+        private ulong _retentionLimit = MaximumOffset;
         private bool _disposed;
 
         internal ulong Delivered { get; private set; }
@@ -49,14 +50,20 @@ namespace EmbedIO.Quic
             if (final) FinalSize = end;
 
             _extent = Math.Max(_extent, end);
-            var start = offset < Delivered ? (int)Math.Min((ulong)bytes.Length, Delivered - offset) : 0;
+            var retainedEnd = Math.Min(end, _retentionLimit);
+            var retainedStart = Math.Max(offset, Delivered);
 
-            while (start < bytes.Length)
+            if (retainedEnd <= retainedStart) return;
+
+            var start = (int)(retainedStart - offset);
+            var length = (int)(retainedEnd - offset);
+
+            while (start < length)
             {
                 _pages ??= new Page[(_capacity - 1) / PageSize + 1];
                 var ring = (int)((offset + (ulong)start) % (ulong)_capacity);
                 var local = ring % PageSize;
-                var take = Math.Min(bytes.Length - start, Math.Min(PageSize - local, _capacity - ring));
+                var take = Math.Min(length - start, Math.Min(PageSize - local, _capacity - ring));
                 ref var page = ref _pages[ring / PageSize];
 
                 if (page.Bytes == null)
@@ -94,9 +101,62 @@ namespace EmbedIO.Quic
             }
         }
 
+        // Retire payload only. Delivered still counts bytes handed to the application;
+        // extent and final-size checks continue to include discarded wire data.
+        internal void DiscardFrom(ulong offset)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (offset >= _retentionLimit) return;
+
+            var position = Math.Max(Delivered, offset);
+            var end = Math.Min(_retentionLimit, Delivered + (ulong)_capacity);
+            _retentionLimit = offset;
+
+            if (_pages == null) return;
+
+            while (position < end)
+            {
+                var ring = (int)(position % (ulong)_capacity);
+                var local = ring % PageSize;
+                var count = (int)Math.Min(end - position, (ulong)Math.Min(PageSize - local, _capacity - ring));
+                ref var page = ref _pages[ring / PageSize];
+                var buffer = page.Bytes;
+
+                if (buffer != null)
+                {
+                    for (var index = local; index < local + count; index++)
+                    {
+                        var mark = PageSize + (index >> 3);
+                        var mask = (byte)(1 << (index & 7));
+
+                        if ((buffer[mark] & mask) == 0) continue;
+
+                        buffer[mark] &= (byte)~mask;
+                        page.Count--;
+                    }
+
+                    if (page.Count == 0)
+                    {
+                        page.Bytes = null;
+                        _pool.Return(buffer, clearArray: true);
+                    }
+
+                    else
+                        buffer
+                            .AsSpan(local, count)
+                            .Clear();
+                }
+
+                position += (ulong)count;
+            }
+        }
+
         internal byte[] Consume(ulong maximum = MaximumOffset)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+
+            maximum = Math.Min(maximum, _retentionLimit);
 
             if (_pages == null || maximum <= Delivered) return [];
 
