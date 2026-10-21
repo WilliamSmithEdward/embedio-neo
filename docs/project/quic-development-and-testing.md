@@ -1785,3 +1785,8 @@ AFL++ feedback stability was 1.51%, so that campaign is crash evidence rather
 than reliable coverage-growth evidence. The final source-quality, compiler,
 format and pinned scan gates passed. Browser, package and production-provider
 acceptance remain separate work.
+
+The macOS package-consumer source-IP/CID case binds 127.0.0.2. The hosted
+runner configures this as a temporary loopback /32 alias, verifies that a
+socket can bind it, and removes the alias when the validation step ends. This
+keeps the actual IP-change case enabled without changing production networking.

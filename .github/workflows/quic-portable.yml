@@ -176,6 +176,15 @@ jobs:
               --rid "$QUIC_RID" --feed TestResults/quic-runtime-feed --output TestResults/quic-package-validation
           else
             python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
+            if [[ "$QUIC_RID" == osx-* ]]; then
+              # macOS requires an explicit loopback alias for the independent
+              # source-IP/CID rebinding case. Own and remove only our alias.
+              if ! python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.2", 0)); s.close()'; then
+                sudo -n /sbin/ifconfig lo0 inet 127.0.0.2 netmask 255.255.255.255 alias
+                trap 'sudo -n /sbin/ifconfig lo0 inet 127.0.0.2 -alias' EXIT
+              fi
+              python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.2", 0)); s.close()'
+            fi
             consumer_options=(--rid "$QUIC_RID" --feed TestResults/quic-runtime-feed --output TestResults/quic-package-validation)
             if [ "$QUIC_RID" = osx-x64 ]; then
               consumer_options+=(--peer-wheel-directory "$PWD/TestResults/quic-peer-wheel")

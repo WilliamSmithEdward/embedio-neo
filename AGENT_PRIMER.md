@@ -1252,4 +1252,6 @@ reliable retirement on the validated route; reservations stay separate from rese
 token eligibility until a packet is sent. A close response can use that validated
 route when the new path lacks send allowance or a usable peer ID. Broader loss,
 reordering, browser and platform/package acceptance remain development work;
-public provider selection is unchanged.
+public provider selection is unchanged. The macOS hosted package fixture adds
+127.0.0.2 to loopback only for the source-IP/CID case and removes that alias
+when validation ends; production networking does not require this fixture setup.
