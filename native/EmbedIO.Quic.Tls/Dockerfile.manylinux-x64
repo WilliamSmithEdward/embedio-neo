@@ -1,0 +1,3 @@
+# Baseline compiler only; the image's Python/Perl are not runtime dependencies.
+FROM quay.io/pypa/manylinux2014_x86_64@sha256:55df5597db86b0a03d5f21a03b060271efffc78ef97123c60ee9c7ce0f10ec31
+RUN yum --setopt=gpgcheck=1 install -y perl-core-5.16.3-299.el7_9 && yum clean all

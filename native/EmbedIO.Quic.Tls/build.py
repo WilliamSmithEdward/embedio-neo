@@ -82,6 +82,8 @@ def build(args):
     # loaded modules from a machine's different OpenSSL installation are used.
     options = [target, "no-shared", "no-quic", "no-tests", "no-apps", "no-docs",
                "no-autoload-config", "no-dso", "no-module", "-fPIC"]
+    if system == "Darwin":
+        options.append("-mmacosx-version-min=15.0")
     run(["perl", str(upstream / "Configure"), *options], "configure", objects)
     run(["make", f"-j{args.jobs}", "build_libs"], "make", objects)
     for name in ("libssl.a", "libcrypto.a"):
@@ -100,7 +102,7 @@ def build(args):
         if len(names) != 15 or len(set(names)) != len(names):
             raise RuntimeError("Unexpected private native ABI export inventory")
         exports.write_text("".join("_" + name + "\n" for name in names), encoding="utf-8")
-        command += ["-Wl,-exported_symbols_list," + str(exports), "-Wl,-install_name,@rpath/" + library.name]
+        command += ["-mmacosx-version-min=15.0", "-Wl,-exported_symbols_list," + str(exports), "-Wl,-install_name,@rpath/" + library.name]
     else:
         command += ["-Wl,--exclude-libs,ALL", "-Wl,-Bsymbolic", "-Wl,-z,relro,-z,now,-z,noexecstack",
                     "-Wl,--version-script=" + str(source / "exports.map"), "-Wl,-soname," + library.name, "-ldl"]
@@ -112,11 +114,16 @@ def build(args):
     else:
         run(["readelf", "-d", str(library)], "dependencies")
         run(["nm", "-D", "--defined-only", str(library)], "exports")
+    audit = [sys.executable, str(source / "audit.py"), "--library", str(library), "--output", str(output / "binary-audit.json")]
+    if args.rid:
+        audit += ["--rid", args.rid]
+    run(audit, "audit")
     shutil.copyfile(upstream / "LICENSE.txt", output / "OpenSSL-LICENSE.txt")
     receipt = {"opensslVersion": VERSION, "opensslArchiveSha256": SHA256, "upstreamUrl": URL,
                "host": {"system": system, "architecture": machine, "platform": platform.platform()},
                "configure": options, "commands": commands,
-               "nativeSourceHashes": {name: digest(source / name) for name in ("native.c", "exports.map")},
+               "nativeSourceHashes": {name: digest(source / name) for name in ("native.c", "exports.map", "build.py", "audit.py")},
+               "binaryAudit": json.loads((output / "binary-audit.json").read_text(encoding="utf-8")),
                "outputs": {p.name: digest(p) for p in output.iterdir() if p.is_file()},
                "scope": "TLS-only native build. Runtime interoperability, sanitizers, packaging and platform support require separate validation."}
     (output / "build-receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
@@ -130,6 +137,7 @@ if __name__ == "__main__":
     parser.add_argument("--work", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--cc", default="cc")
+    parser.add_argument("--rid", choices=("linux-x64", "linux-arm64", "linux-musl-x64", "linux-musl-arm64", "osx-x64", "osx-arm64"))
     parser.add_argument("--jobs", type=int, default=2)
     args = parser.parse_args()
     if not 1 <= args.jobs <= 64:

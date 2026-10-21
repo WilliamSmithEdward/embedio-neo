@@ -68,3 +68,34 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 TestResults/quic-owned-fixtures/owne
 
 This instruments the boundary/test code and checks allocator leaks; the ordinary
 vendor archives and assembler are not compiler-instrumented by this command.
+
+## Runtime asset preparation
+
+`build.py --rid <rid>` requests a distribution identity. The build runs `audit.py`
+without loading the native code and records the result and tool/source hashes in
+`binary-audit.json` and `build-receipt.json`. Linux checks the actual ELF64
+architecture, exact ABI-2 symbol versions, system-only dependencies, SONAME,
+non-executable stack, RELRO and immediate binding. Requested glibc RIDs reject
+symbol requirements newer than 2.27. A development build without `--rid` records
+its actual glibc requirement and must not be treated as a distribution artifact.
+macOS builds target 15.0 and check the actual Mach-O deployment, architecture,
+exports and dependency metadata. Musl metadata cannot prove runtime compatibility
+by itself; each supported RID still requires real execution and package testing.
+
+Linux x64 CI uses the pinned compiler-only `Dockerfile.manylinux-x64`. Its
+OpenSSL configuration and link commands stay TLS-only. No image Python/Perl or
+compiler dependency is shipped in the resulting library. To reproduce its build
+from a Linux shell with Docker:
+
+```sh
+docker build -f native/EmbedIO.Quic.Tls/Dockerfile.manylinux-x64 -t embedio-quic-native-build native/EmbedIO.Quic.Tls
+mkdir -p TestResults
+docker run --rm --cpus 3 --memory 6g --mount "type=bind,source=$PWD/native/EmbedIO.Quic.Tls,target=/source,readonly" --mount "type=bind,source=$PWD/TestResults,target=/results" embedio-quic-native-build bash /source/build-linux.sh linux-x64
+python3 -m unittest discover -s native/EmbedIO.Quic.Tls/tests -p 'test_*.py'
+```
+
+Use fresh output directories. Native binaries, their license, binary audit and
+source/output receipt are retained by the portable workflow. These are inputs to
+runtime-asset packaging; the current sources do not yet add NuGet runtime assets
+or change the public HTTP/3 provider. See the development record for exact tests,
+platform scope and remaining work.

@@ -33,8 +33,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m unittest discover -s native/EmbedIO.Quic.Tls/tests -p test_build.py
-          python3 native/EmbedIO.Quic.Tls/build.py --work "$RUNNER_TEMP/embedio-quic-native" --output TestResults/quic-native --jobs 3
+          python3 -m unittest discover -s native/EmbedIO.Quic.Tls/tests -p 'test_*.py'
+          if [ "$RUNNER_OS" = Linux ]; then
+            docker build -f native/EmbedIO.Quic.Tls/Dockerfile.manylinux-x64 -t embedio-quic-native-build native/EmbedIO.Quic.Tls
+            mkdir -p TestResults/quic-native-build-logs
+            docker run --rm --cpus 3 --memory 6g \
+              --mount "type=bind,source=$PWD/native/EmbedIO.Quic.Tls,target=/source,readonly" \
+              --mount "type=bind,source=$PWD/TestResults,target=/results" \
+              embedio-quic-native-build bash /source/build-linux.sh linux-x64
+          else
+            python3 native/EmbedIO.Quic.Tls/build.py --work "$RUNNER_TEMP/embedio-quic-native" --output TestResults/quic-native --jobs 3 --rid osx-arm64
+          fi
       - name: Provision pinned independent peer
         run: python3 scripts/setup_datagram_peer.py
       - name: Build actual library and development host
@@ -69,8 +78,7 @@ jobs:
         with:
           name: portable-quic-tls-${{ matrix.os }}
           path: |
-            TestResults/quic-native/build-receipt.json
-            TestResults/quic-native/OpenSSL-LICENSE.txt
+            TestResults/quic-native/
             TestResults/quic-native-*/
             ${{ runner.temp }}/embedio-quic-native/*.log
           if-no-files-found: error

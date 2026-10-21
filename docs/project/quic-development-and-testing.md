@@ -1289,3 +1289,33 @@ revoked-client fixture delays its local revocation responses by 600 ms and still
 requires the exact CRYPTO_ERROR, no controller invocation, cleanup and rebind.
 The full 23-case Windows policy suite and execution/dispatcher checks passed
 locally. Changed-source hosted and remaining platform results remain required.
+
+The Linux x64 asset is built using a digest-pinned manylinux2014 compiler image
+with the exact signed Perl-core package required for configuration. Its Python,
+Perl and compiler are build tools, not runtime dependencies. The final local
+artifact's highest required glibc symbol version is 2.17; dependencies are libc,
+libpthread and libdl. This is below the .NET 10 portable glibc 2.27 baseline and
+does not add support for the image's retired host distribution. See the
+[.NET platform requirements](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md)
+and [manylinux toolchain documentation](https://github.com/pypa/manylinux).
+
+The audited artifact passed 24 wire cases, all three cipher profiles/96 vectors,
+24 client-certificate policies, five strict issuer-chain profiles, six SNI cases,
+live publication and 5,000 full-handshake mutations. The latter accepted 715
+pinned identities, refused 4,285 inputs and completed 1,237 healthy concurrent
+requests with cleanup/drain/rebind. These native-binary runs precede the separate
+clock-path change above; its combined Linux repeat is recorded separately.
+The ordinary and compiler-instrumented/native-vendor coverage limitations still
+apply.
+
+`audit.py` checks native architecture/RID, exact versioned exports, dependency
+closure and ELF stack/RELRO/immediate-binding properties without loading the
+library. A requested glibc distribution RID fails if symbols require a version
+above 2.27; the earlier development binary requires 2.38 and is rejected. macOS
+builds target 15.0 and verify their Mach-O deployment/dependency metadata. Musl
+identity alone cannot establish its minimum compatible runtime. Eight native
+build/audit test methods cover incompatible architectures, libc/RID mismatches,
+foreign dependencies/exports, missing protections and macOS deployment metadata.
+The portable CI artifacts now retain binaries, licenses, audit records and build
+receipts. Other RIDs, actual NuGet runtime-asset consumers, signing/AOT/browser
+acceptance and the provider transition remain outstanding.

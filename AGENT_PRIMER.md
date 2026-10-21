@@ -1132,3 +1132,11 @@ including application certificate policy, before starting a closing interval.
 Established packet processing does not take this extra clock reading. A delayed
 revocation responder exercises rejection after validation exceeds a loopback PTO;
 policy expectations, handshake limits and response deadlines remain enforced.
+
+Portable builds now emit a binary audit with RID/architecture, dependency,
+export and platform-version metadata. Requested glibc assets reject requirements
+above 2.27; Linux x64 CI builds in a digest-pinned manylinux compiler environment
+and the tested artifact requires only GLIBC_2.17. macOS builds explicitly target
+15.0 and verify their load commands. Binary metadata does not establish all RID,
+musl, signing, package-consumer or runtime acceptance. The native artifacts and
+receipts are retained for that next stage; NuGet runtime assets remain pending.
