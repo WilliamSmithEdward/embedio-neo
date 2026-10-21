@@ -223,7 +223,7 @@ namespace EmbedIO.Quic
                     advertised = parameters;
                     return new ModelTls(true);
                 },
-                static (port, _) => new StreamEchoApplication(port),
+                static (port, _) => new AsyncStreamApplication(port),
                 limits: new QuicConnectionLimits
                 {
                     InboundBidirectionalStreams = 128,
@@ -250,9 +250,28 @@ namespace EmbedIO.Quic
 
             Require(fields[1] == 60000 && fields[8] == 128 && fields[9] == 16, "advertised-production-limits");
             connection.Receive(first, 0);
-            connection.Receive(ApplicationPacket(connection.ServerId, Wire.Frame(0x0b, 127 * 4, 0)), 1);
-            Require(connection.Phase == ConnectionPhase.Active, "configured-final-stream-admitted");
-            var output = connection.Receive(ApplicationPacket(connection.ServerId, Wire.Frame(0x0b, 128 * 4, 0), 1), 2);
+
+            for (var index = 0U; index < 128; index++)
+                connection.Receive(
+                    ApplicationPacket(connection.ServerId, Wire.Frame(0x0b, index * 4, 0), index),
+                    index + 1
+                );
+
+            for (var index = 0U; index < 16; index++)
+                connection.Receive(
+                    ApplicationPacket(connection.ServerId, Wire.Frame(0x0b, index * 4 + 2, 0), index + 128),
+                    index + 129
+                );
+
+            Require(
+                connection.Phase == ConnectionPhase.Active
+                    && connection.Application is AsyncStreamApplication { Retained: 144 },
+                "configured-full-async-admission"
+            );
+            var output = connection.Receive(
+                ApplicationPacket(connection.ServerId, Wire.Frame(0x0b, 128 * 4, 0), 144),
+                145
+            );
             Require(connection.Phase == ConnectionPhase.Closing && output.Count == 1, "configured-next-stream-refused");
             using var applicationKeys = new PacketKeys(new byte[32]);
             var close = new WireReader(applicationKeys.Unprotect(output[0], 1 + Client.Length, 0, out _));

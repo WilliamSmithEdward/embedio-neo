@@ -553,6 +553,23 @@ independent-peer suites remain responsible for actual TLS interoperability.
 Both coverage-guided scripts instrument the source packet and registry owners;
 AFL++ also checks distinct coverage for normal and malformed owner seeds.
 
+Async stream admission now uses the same validated stream-window capacities as the
+packet owner. The production 128 bidirectional / 16 unidirectional profile permits
+144 pending inbound accepts and 208 retained stream owners, including the existing
+32 locally opened streams of each direction. The 16/16 development profile retains
+its 32-accept / 96-owner bounds. Unaccepted terminal streams retain their credit;
+accept cancellation does not consume an item; transport limit errors and local-open
+backpressure still enforce each direction separately. Regression cases exercise
+full mixed-direction occupancy, local overlap, retirement, replenishment and owner
+cleanup. Managed property/mutation/state-machine and coverage-guided paths include
+configured-capacity cases.
+The increment passed 72 raw/async independent-peer cases across OpenSSL and both
+Schannel credential profiles, 100,000 managed mutations, 10,000 cases per property,
+4,000 generated actor traces and corpus replays. Separate 60-second libFuzzer/AFL++
+campaigns completed 127,662 / 27,729 executions with no retained crashes or
+hangs. Source quality, Debug/Release diagnostics and changed-file formatting gates
+passed; native Windows hosted interoperability remains a separate open check.
+
 The connection-owner promotion passed the same 159 independent wire cases across
 OpenSSL, Schannel RSA and Schannel ECDSA, including six SNI selection cases. It also
 passed 30,000 native mutations, 30,000 shared-owner commands, 100,000 managed

@@ -10,6 +10,7 @@
         private ulong _opened;
         private ulong _completed;
 
+        internal int Capacity => _capacity;
         internal ulong Maximum => Math.Min(MaximumCount, _completed + (ulong)_capacity);
         internal ulong Opened => _opened;
         internal ulong Active => _opened - _completed;

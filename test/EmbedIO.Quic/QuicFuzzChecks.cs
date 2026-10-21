@@ -45,6 +45,7 @@ namespace EmbedIO.Quic
                     break;
 
                 case 5:
+                    AsyncStreamTests.ConfiguredCapacity(data);
                     AsyncStreamTests.Mutate(data);
                     StreamApplicationTests.Mutate(data);
                     StreamCountTests.Mutate(data);
@@ -71,6 +72,8 @@ namespace EmbedIO.Quic
 
             for (var index = 0; index < count; index++)
                 commands[index] = (byte)(steps[index * 3 + 1] | steps[index * 3 + 2]);
+
+            if (AsyncStreamTests.ConfiguredCapacity(commands[..count])) cover?.Invoke("streams.configured-capacity");
 
             AsyncStreamTests.Mutate(commands[..count]);
             cover?.Invoke("streams.async-ownership");

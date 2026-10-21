@@ -123,7 +123,9 @@
                     AbortWrite,
                     TryDatagram,
                     DatagramLimit(),
-                    close
+                    close,
+                    _incomingBidi.Capacity + _incomingUni.Capacity,
+                    _incomingBidi.Capacity + _incomingUni.Capacity + _localBidi.Capacity + _localUni.Capacity
                 )
             );
         }

@@ -42,7 +42,9 @@
         Action<ulong, ulong> abortWrite,
         Func<byte[], bool> tryDatagram,
         int? datagramLimit,
-        Action<ulong>? close
+        Action<ulong>? close,
+        int inboundStreamCapacity,
+        int streamCapacity
     )
     {
         internal Action<ulong, byte[], bool> Write { get; } = write;
@@ -57,5 +59,7 @@
         internal Func<byte[], bool> TryDatagram { get; } = tryDatagram;
         internal int? DatagramLimit { get; } = datagramLimit;
         internal Action<ulong>? Close { get; } = close;
+        internal int InboundStreamCapacity { get; } = inboundStreamCapacity;
+        internal int StreamCapacity { get; } = streamCapacity;
     }
 }

@@ -415,7 +415,8 @@ use the same stream owner. Registry shutdown releases all sibling owners before
 reporting ordinary cleanup failures. Direct managed fuzzing exercises both owners
 without loading native TLS; independent peers validate the native path. The bounded
 development socket listener supplies admission limits, handshake deadlines and
-cancellation across multiple connections. It has
+cancellation across multiple connections. Async accept/owner bounds follow the validated
+transport stream capacities, including the production 128/16 profile. It has
 no public application API; the intended fully validated
 replacement will remove MsQuic from the production transport, but the current
 HTTP/3 provider remains in place. The [development and testing record](docs/project/quic-development-and-testing.md)

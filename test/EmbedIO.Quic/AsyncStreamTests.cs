@@ -11,7 +11,14 @@
             internal ConnectionStreams Streams { get; }
             internal AsyncStreamApplication Application => (AsyncStreamApplication)Streams.Protocol;
 
-            internal Peer(ulong uni = 32, ulong bidi = 32, ulong datagram = 1200, ulong data = 1UL << 32) =>
+            internal Peer(
+                ulong uni = 32,
+                ulong bidi = 32,
+                ulong datagram = 1200,
+                ulong data = 1UL << 32,
+                int inboundBidi = 16,
+                int inboundUni = 16
+            ) =>
                 Streams = new ConnectionStreams(
                     (bytes, reliable) =>
                     {
@@ -29,7 +36,9 @@
                     true,
                     operations => new AsyncStreamApplication(operations),
                     _ => CanQueue,
-                    code => ClosedCode = code
+                    code => ClosedCode = code,
+                    inboundBidi,
+                    inboundUni
                 );
 
             internal void Pump() => Streams.Prune();
@@ -47,6 +56,9 @@
 
         internal static void Run()
         {
+            ConfiguredCapacity(128, 16, true);
+            ConfiguredCapacity(16, 128, true);
+            ConfiguredCapacity(1, 1, false);
             ReadWrite();
             ResetCredit();
             ResetDiscard();
@@ -66,6 +78,165 @@
             CheckNotificationsAsync()
                 .GetAwaiter()
                 .GetResult();
+        }
+
+        internal static bool ConfiguredCapacity(ReadOnlySpan<byte> data)
+        {
+            if (data.Length < 2 || (data[0] & 31) != 0) return false;
+
+            ConfiguredCapacity(33 + data[1] % 4, 1, false);
+            return true;
+        }
+
+        private static void ConfiguredCapacity(int inboundBidi, int inboundUni, bool localStreams)
+        {
+            using var peer = new Peer(uni: 64, bidi: 64, inboundBidi: inboundBidi, inboundUni: inboundUni);
+            var total = inboundBidi + inboundUni;
+
+            for (var index = 0; index < inboundBidi; index++) peer.Streams.Receive((ulong)index * 4, 0, [], true);
+
+            for (var index = 0; index < inboundUni; index++) peer.Streams.Receive((ulong)index * 4 + 2, 0, [], true);
+
+            Check(
+                peer.Application.Retained == total && peer.Streams.RetiredStreams == 0,
+                "configured-unaccepted-retention"
+            );
+            var bidiFailure = Expect<TransportException>(
+                () => peer.Streams.Receive((ulong)inboundBidi * 4, 0, [], true)
+            );
+            var uniFailure = Expect<TransportException>(
+                () => peer.Streams.Receive((ulong)inboundUni * 4 + 2, 0, [], true)
+            );
+            Check(
+                bidiFailure.ErrorCode == 4 && uniFailure.ErrorCode == 4 && peer.Application.Retained == total,
+                "configured-overflow-preserves-owners"
+            );
+
+            var outbound = new List<AsyncQuicStream>();
+
+            if (localStreams)
+            {
+                for (var index = 0; index < 32; index++)
+                    foreach (var uni in new[] { false, true })
+                    {
+                        var opening = peer.Application
+                            .OpenOutboundStreamAsync(uni)
+                            .AsTask();
+                        peer.Pump();
+                        outbound.Add(Await(opening));
+                    }
+
+                Check(peer.Application.Retained == total + 64, "configured-inbound-and-local-capacity");
+                using var canceled = new CancellationTokenSource();
+                var blockedBidi = peer.Application
+                    .OpenOutboundStreamAsync(false, canceled.Token)
+                    .AsTask();
+                var blockedUni = peer.Application
+                    .OpenOutboundStreamAsync(true, canceled.Token)
+                    .AsTask();
+                peer.Pump();
+                Check(!blockedBidi.IsCompleted && !blockedUni.IsCompleted, "configured-local-capacity-backpressure");
+                canceled.Cancel();
+                Expect<OperationCanceledException>(() => Await(blockedBidi));
+                Expect<OperationCanceledException>(() => Await(blockedUni));
+                peer.Pump();
+                Check(peer.Application.PendingOpens == 0, "configured-canceled-opens-retired");
+            }
+
+            using (var canceled = new CancellationTokenSource())
+            {
+                canceled.Cancel();
+                Expect<OperationCanceledException>(
+                    () => Await(
+                        peer.Application
+                            .AcceptInboundStreamAsync(canceled.Token)
+                            .AsTask()
+                    )
+                );
+                Check(
+                    peer.Application.Retained == total + outbound.Count,
+                    "configured-canceled-accept-preserves-queue"
+                );
+            }
+
+            var expected = new HashSet<ulong>();
+
+            for (var index = 0; index < inboundBidi; index++) expected.Add((ulong)index * 4);
+
+            for (var index = 0; index < inboundUni; index++) expected.Add((ulong)index * 4 + 2);
+
+            for (var index = 0; index < total; index++)
+            {
+                using var stream = Await(
+                    peer.Application
+                        .AcceptInboundStreamAsync()
+                        .AsTask()
+                );
+                Check(expected.Remove(stream.Id), "configured-accepted-identity");
+                Check(
+                    Await(
+                        stream
+                            .ReadAsync(new byte[1])
+                            .AsTask()
+                    )
+                        == 0,
+                    "configured-accepted-final-size"
+                );
+
+                if (stream.CanWrite)
+                {
+                    var write = stream
+                        .WriteOwnedAsync(ReadOnlyMemory<byte>.Empty, true, default)
+                        .AsTask();
+                    peer.Pump();
+                    Await(write);
+                    peer.Ack();
+                }
+
+                else peer.Pump();
+            }
+
+            Check(expected.Count == 0 && peer.Application.Retained == outbound.Count, "configured-inbound-retirement");
+
+            foreach (var stream in outbound)
+            {
+                using (stream)
+                {
+                    if (stream.CanRead)
+                    {
+                        peer.Streams.Receive(stream.Id, 0, [], true);
+                        Check(
+                            Await(
+                                stream
+                                    .ReadAsync(new byte[1])
+                                    .AsTask()
+                            )
+                                == 0,
+                            "configured-local-eof"
+                        );
+                    }
+
+                    var write = stream
+                        .WriteOwnedAsync(ReadOnlyMemory<byte>.Empty, true, default)
+                        .AsTask();
+                    peer.Pump();
+                    Await(write);
+                    peer.Ack();
+                }
+            }
+
+            Check(
+                peer.Application.Retained == 0
+                    && peer.Streams.IncomingCount == 0
+                    && peer.Streams.OutgoingCount == 0
+                    && peer.Streams.RetiredStreams == total + outbound.Count,
+                "configured-all-owners-retired"
+            );
+            peer.Streams.Receive((ulong)inboundBidi * 4, 0, [], false);
+            peer.Streams.Receive((ulong)inboundUni * 4 + 2, 0, [], false);
+            Check(peer.Application.Retained == 2, "configured-stream-credit-replenished");
+            peer.Dispose();
+            Check(peer.Application.Retained == 0, "configured-queued-owners-disposed");
         }
 
         private static void ReadWrite()

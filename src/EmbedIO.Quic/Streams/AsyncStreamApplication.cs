@@ -21,7 +21,20 @@ namespace EmbedIO.Quic
     {
         private readonly StreamOperations _operations;
 
-        internal AsyncStreamApplication(StreamOperations operations) => _operations = operations;
+        internal AsyncStreamApplication(StreamOperations operations)
+        {
+            ArgumentNullException.ThrowIfNull(operations);
+            _operations = operations;
+            _accepted = Channel.CreateBounded<AsyncQuicStream>(new BoundedChannelOptions(
+                operations.InboundStreamCapacity
+            )
+            {
+                SingleReader = false,
+                SingleWriter = true,
+                FullMode = BoundedChannelFullMode.Wait,
+                AllowSynchronousContinuations = false
+            });
+        }
 
         private sealed class OpenRequest
         {
@@ -103,15 +116,7 @@ namespace EmbedIO.Quic
             FullMode = BoundedChannelFullMode.DropWrite,
             AllowSynchronousContinuations = false
         });
-        private readonly Channel<AsyncQuicStream> _accepted = Channel.CreateBounded<AsyncQuicStream>(
-            new BoundedChannelOptions(32)
-            {
-                SingleReader = false,
-                SingleWriter = true,
-                FullMode = BoundedChannelFullMode.Wait,
-                AllowSynchronousContinuations = false
-            }
-        );
+        private readonly Channel<AsyncQuicStream> _accepted;
         private readonly Channel<byte[]> _receivedDatagrams = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(
             32
         )
@@ -176,7 +181,8 @@ namespace EmbedIO.Quic
 
                 if (_streams.TryGetValue(id, out var stream)) return stream;
 
-                if (_streams.Count >= 96) throw new InvalidDataException("Async stream owner limit exceeded.");
+                if (_streams.Count >= _operations.StreamCapacity)
+                    throw new InvalidDataException("Async stream owner limit exceeded.");
 
                 stream = new AsyncQuicStream(id, Notify);
                 _streams.Add(id, stream);
