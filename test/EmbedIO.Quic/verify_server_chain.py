@@ -19,6 +19,7 @@ async def case(args, profile):
             ready=await process.stdout.readline();fields=json.loads(ready)
             assert fields['intermediates']==len(fields['issuers']),fields
             context=ssl.create_default_context(cafile=str(output/'root.pem'))
+            context.verify_flags |= ssl.VERIFY_X509_STRICT
             reader,writer=await asyncio.open_connection('127.0.0.1',fields['tcp'],ssl=context,server_hostname='localhost')
             assert await reader.readexactly(12)==b'tcp baseline'
             writer.close();await writer.wait_closed();tcp_ok=True

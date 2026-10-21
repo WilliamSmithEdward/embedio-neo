@@ -89,6 +89,7 @@ namespace EmbedIO.Quic
                 RSASignaturePadding.Pkcs1
             );
             request.CertificateExtensions.Add(new X509BasicConstraintsExtension(authority, false, 0, true));
+            request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
             request.CertificateExtensions.Add(
                 new X509KeyUsageExtension(
                     authority ? X509KeyUsageFlags.KeyCertSign : X509KeyUsageFlags.DigitalSignature,
@@ -109,6 +110,9 @@ namespace EmbedIO.Quic
 
         private static X509Certificate2 Issue(CertificateRequest request, X509Certificate2 issuer, RSA key)
         {
+            request.CertificateExtensions.Add(
+                X509AuthorityKeyIdentifierExtension.CreateFromCertificate(issuer, true, false)
+            );
             using var certificate = request.Create(
                 issuer,
                 DateTimeOffset.UtcNow.AddMinutes(-10),

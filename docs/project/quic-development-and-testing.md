@@ -1255,6 +1255,9 @@ The peer trusts only the configured root and checks exact wire issuer hashes/ord
 and root omission. Native contexts/buffers return to zero. This fixture modifies
 only public CA entries in an explicitly disposable Linux user profile, removes its
 entries, never trusts a root globally, and is outside ordinary application startup.
+Generated chain certificates include subject and issuer key identifiers. The TCP
+control explicitly enables `VERIFY_X509_STRICT`, so older local peer interpreters
+apply the same strict certificate checks as newer hosted interpreters.
 The native ownership run passed 6,144 lifecycles, including 32-issuer capacity,
 malformed DER, credential parsing and retirement. Wrapper ASan/UBSan/leak checking
 used uninstrumented vendor archives; it does not establish whole-vendor coverage.
@@ -1264,5 +1267,12 @@ CRLs, checks requested certificate IDs, echoes nonces and bounds HTTP GET/POST.
 Four responder/transport regressions passed; the existing 23 Windows and 24 Linux
 policy cases passed without changing their expectations. Local ABI 2 validation
 also passed the wire/SNI/publication/cipher matrices, 5,000 authentication mutations
-and six common-factory JIT/NativeAOT wire cases. Hosted macOS validation of the
-expanded fixture is pending.
+and six common-factory JIT/NativeAOT wire cases. The hosted macOS 26 ARM64
+[portable job in CI 39638190853](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/39638190853/job/119354520165)
+passed 24 wire cases, six SNI cases, live publication, all 24 certificate policies
+including online good/revoked status, all three ciphers and 256 native-auth inputs
+with 96 healthy concurrent requests. Linux in the same run exposed missing issuer
+key identifiers in the generated chain fixture's TCP control. The corrected
+fixture passed all five local chain profiles with strict validation enabled;
+the original hosted failure is retained and a changed-source CI repeat is required.
+This is not acceptance of all native RIDs or final dependency packaging.

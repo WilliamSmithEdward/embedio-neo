@@ -1118,7 +1118,11 @@ trust anchor; issuer installation transfers only public DER. Native ABI 1 is
 rejected during preflight. Local Linux tests compare five chain profiles with a
 BCL TCP control and check exact peer-visible issuer order and cleanup. The store
 fixture requires an explicitly disposable Linux profile and stores public CA
-certificates without adding a trusted root. The independent revocation fixture
+certificates without adding a trusted root. Generated chain certificates include
+subject/authority key identifiers, and the TCP control explicitly enables strict
+X.509 validation on every peer Python version. The independent revocation fixture
 serves signed CRLs and OCSP responses, including nonce handling and bounded HTTP
-GET/POST. It preserves the existing policy assertions; hosted Apple revalidation
-is pending after the initial CRL-only fixture could not establish online status.
+GET/POST. It preserves the existing policy assertions. Hosted macOS 26 ARM64
+revalidation passed all 24 certificate-policy cases, including online good/revoked
+checks, plus wire/SNI/publication, all three ciphers and 256 native-auth mutations
+in CI run 39638190853. This does not establish other macOS RIDs or native packaging.
