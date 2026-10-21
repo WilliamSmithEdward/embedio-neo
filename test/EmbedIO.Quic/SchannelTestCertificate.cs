@@ -17,7 +17,7 @@ namespace EmbedIO.Quic
         private readonly X509Certificate2 _certificate;
         private bool _disposed;
 
-        internal SchannelTestCertificate(string publicCertificatePath, bool elliptic)
+        internal SchannelTestCertificate(string publicCertificatePath, bool elliptic, string hostName = "localhost")
         {
             _key = CngKey.Create(
                 elliptic ? CngAlgorithm.ECDsaP256 : CngAlgorithm.Rsa,
@@ -46,7 +46,10 @@ namespace EmbedIO.Quic
                     ? new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pss)
                     : new CertificateRequest("CN=localhost", (ECDsa)key, HashAlgorithmName.SHA256);
                 var names = new SubjectAlternativeNameBuilder();
-                names.AddDnsName("localhost");
+                names.AddDnsName(hostName);
+
+                if (hostName == "localhost") names.AddIpAddress(System.Net.IPAddress.Loopback);
+
                 request.CertificateExtensions.Add(names.Build());
                 request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
                 request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
@@ -64,6 +67,12 @@ namespace EmbedIO.Quic
                 _key.Dispose();
                 throw;
             }
+        }
+
+        internal X509Certificate2 BorrowCertificate()
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return _certificate;
         }
 
         internal TlsSession Create(byte[] parameters, string protocol)

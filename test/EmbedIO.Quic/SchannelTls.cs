@@ -4,6 +4,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using EmbedIO.Internal;
 
 namespace EmbedIO.Quic
 {
@@ -13,7 +14,9 @@ namespace EmbedIO.Quic
     internal sealed partial class SchannelTls : TlsSession
     {
         private const int Capacity = 65536;
-        private readonly X509Certificate2 _certificate;
+        private X509Certificate2? _certificate;
+        private Func<string?, X509Certificate2?>? _selector;
+        private string? _serverName;
         private readonly string _protocol;
         private Reassembly[] _input =
         [
@@ -55,27 +58,44 @@ namespace EmbedIO.Quic
         private readonly byte[]?[] _writeSecrets = [null, null, null];
 
         internal List<string> Diagnostics { get; } = [];
+        internal string? SelectedCertificateSha256 => _certificate?.GetCertHashString(HashAlgorithmName.SHA256);
+        internal bool NativeContextCreated => _contextOwned;
 
         internal SchannelTls(X509Certificate2 certificate, byte[] parameters, string protocol)
+            : this(FixedCertificate(certificate), parameters, protocol)
+        { }
+
+        private static Func<string?, X509Certificate2> FixedCertificate(X509Certificate2 certificate)
+        {
+            ArgumentNullException.ThrowIfNull(certificate);
+
+            if (!certificate.HasPrivateKey)
+                throw new ArgumentException("The TLS certificate has no private key.", nameof(certificate));
+
+            return _ => certificate;
+        }
+
+        internal SchannelTls(Func<string?, X509Certificate2?> selector, byte[] parameters, string protocol)
         {
             _protocol = protocol;
 
             try
             {
-                ArgumentNullException.ThrowIfNull(certificate);
+                ArgumentNullException.ThrowIfNull(selector);
                 ArgumentNullException.ThrowIfNull(parameters);
                 ArgumentNullException.ThrowIfNull(protocol);
 
                 if (
-                    !certificate.HasPrivateKey
-                    || parameters.Length > 4096
+                    parameters.Length > 4096
                     || protocol.Length is < 1 or > 255 || protocol.Any(character => character > 127 || character == 0)
                 )
                     throw new ArgumentException("Invalid TLS credential, protocol or transport parameters.");
 
-                _certificate = new X509Certificate2(certificate);
+                _selector = selector;
                 _alpn = new NativeRegion(11 + protocol.Length);
-                _parameters = new NativeRegion(10 + parameters.Length);
+                // SEND_GENERIC_TLS_EXTENSION includes a one-byte trailing array
+                // and alignment padding even when BufferSize is zero.
+                _parameters = new NativeRegion(Math.Max(12, 10 + parameters.Length));
                 var alpn = _alpn.Bytes;
                 BinaryPrimitives.WriteUInt32LittleEndian(alpn, (uint)(alpn.Length - 4));
                 BinaryPrimitives.WriteUInt32LittleEndian(alpn[4..], 2);
@@ -88,7 +108,6 @@ namespace EmbedIO.Quic
                 BinaryPrimitives.WriteUInt16LittleEndian(extension[8..], (ushort)parameters.Length);
                 parameters.CopyTo(extension[10..]);
                 BinaryPrimitives.WriteUInt64LittleEndian(_flags.Bytes, 1UL << 32);
-                AcquireCredential();
             }
 
             catch
@@ -101,7 +120,8 @@ namespace EmbedIO.Quic
         private void AcquireCredential()
         {
             using var certificate = new NativeRegion(nint.Size);
-            Marshal.WriteIntPtr(certificate.Address, _certificate.Handle);
+            var selected = _certificate ?? throw new InvalidOperationException("TLS credential has not been selected.");
+            Marshal.WriteIntPtr(certificate.Address, selected.Handle);
             // This development profile currently supports AES-128-GCM/SHA-256.
             // Native cipher selection must match the existing packet-key profile.
             using var aesName = NativeRegion.Text("AES");
@@ -186,7 +206,11 @@ namespace EmbedIO.Quic
 
                     if (_count < size + 4) return;
 
-                    var parameters = TlsClientHello.ReadTransportParameters(_pending.AsSpan(0, size + 4));
+                    var hello = TlsClientHello.Read(_pending.AsSpan(0, size + 4));
+                    var parameters = hello.TransportParameters;
+
+                    if (_credentialOwned && !StringComparer.Ordinal.Equals(_serverName, hello.ServerName))
+                        throw Failure(47, "TLS server name changed during retry.");
 
                     if (
                         PeerParameters != null
@@ -197,6 +221,34 @@ namespace EmbedIO.Quic
                         throw Failure(47, "Client transport parameters changed during retry.");
 
                     PeerParameters ??= parameters;
+
+                    if (!_credentialOwned)
+                    {
+                        var selector = _selector ?? throw Failure(80, "Missing TLS certificate selector.");
+                        _selector = null;
+
+                        try
+                        {
+                            var selected = selector(hello.ServerName);
+                            ObjectDisposedException.ThrowIf(_disposed, this);
+
+                            if (selected == null || !selected.HasPrivateKey)
+                                throw Failure(80, "Invalid selected TLS credential.");
+
+                            _certificate = new X509Certificate2(selected);
+                            _serverName = hello.ServerName;
+
+                            if (Diagnostics.Count < 64)
+                                Diagnostics.Add("server-name=" + (hello.ServerName ?? "(none)"));
+
+                            AcquireCredential();
+                        }
+
+                        catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                        {
+                            throw Failure(80, "TLS credential preparation failed.", error);
+                        }
+                    }
                 }
 
                 var previousCount = _count;
@@ -287,9 +339,16 @@ namespace EmbedIO.Quic
 
             var alert = outputs.Get(1);
 
-            if (alert.Type == 17 && alert.Length >= 2) AlertCode = _alert.Bytes[1];
+            if (alert.Type == 17 && alert.Length >= 2 && _alert.Bytes[0] is 1 or 2) AlertCode = _alert.Bytes[1];
 
-            if (status == unchecked((int)0x80090318)) return status;
+            // Failed SSPI calls may leave output lengths at their input capacities.
+            // Only successful continuations publish tokens or traffic secrets.
+            if (status < 0)
+            {
+                foreach (var secret in _secrets) secret.Bytes.Clear();
+
+                return status;
+            }
 
             var remaining = 0;
 
@@ -436,12 +495,12 @@ namespace EmbedIO.Quic
                 throw Failure(80, "Incomplete TLS handshake state.");
         }
 
-        private InvalidDataException Failure(byte alert, string message)
+        private InvalidDataException Failure(byte alert, string message, Exception? inner = null)
         {
             if (Diagnostics.Count < 64) Diagnostics.Add(message);
 
             AlertCode ??= alert;
-            return new InvalidDataException(message);
+            return new InvalidDataException(message, inner);
         }
 
         private bool ContextExists
@@ -476,7 +535,9 @@ namespace EmbedIO.Quic
                 Interlocked.Decrement(ref _activeCredentials);
             }
 
+            _selector = null;
             _certificate?.Dispose();
+            _certificate = null;
             _context.Dispose();
             _incoming.Dispose();
             _outgoing.Dispose();

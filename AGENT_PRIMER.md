@@ -400,7 +400,11 @@ exercises it without HTTP/3 control-stream or WebTransport session assumptions;
 its async test-host API adds owned reads/writes, outbound bidi/uni streams,
 consumption-driven buffering, cancellation with explicit read-abort codes, FIN-ACK
 completion and bounded datagram/open/accept queues. Application commands wake the
-UDP owner directly. A provider-neutral TLS boundary caches handshake state and
+UDP owner directly. The Windows development adapter selects and snapshots a borrowed
+certificate after a complete ClientHello, preserves bounded ASCII SNI spelling and
+isolates selector failures. Selection is once per handshake; a later publication
+applies to a new handshake. Production policy/worker integration remains pending.
+A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
 dispatch and full TLS/certificate parity remain pending.

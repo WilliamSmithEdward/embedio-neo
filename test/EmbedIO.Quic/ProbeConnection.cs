@@ -88,6 +88,7 @@ namespace EmbedIO.Quic
 
         private bool _addressValidated;
         private bool _parametersValidated;
+        private int _peerProtectionLevel;
         private bool _handshakeDone;
         private bool _responseSent;
         private ulong _peerMaxData;
@@ -95,6 +96,14 @@ namespace EmbedIO.Quic
 
         internal ReadOnlySpan<byte> ServerId => _serverId;
         internal bool Established => _tls.Established;
+        private int CloseLevel =>
+            _tls.Established && _tls.WriteKeys[2] != null
+                ? 2
+                : _peerProtectionLevel >= 1 && _tls.WriteKeys[1] != null ? 1 : 0;
+        internal bool NativeTlsStarted =>
+            OperatingSystem.IsWindows() && _tls is SchannelTls schannel
+                ? schannel.NativeContextCreated
+                : _tls is OpenSslTls;
         internal IReadOnlyList<string> TlsDiagnostics =>
             OperatingSystem.IsWindows() && _tls is SchannelTls schannel ? schannel.Diagnostics : [];
         internal bool Complete =>
@@ -208,10 +217,7 @@ namespace EmbedIO.Quic
 
             catch (TransportException error)
             {
-                BeginClose(
-                    _tls.WriteKeys[2] != null ? 2 : _tls.WriteKeys[1] != null ? 1 : 0,
-                    Wire.Frame(0x1c, error.ErrorCode, 0, 0)
-                );
+                BeginClose(CloseLevel, Wire.Frame(0x1c, error.ErrorCode, 0, 0));
                 return Drain();
             }
 
@@ -223,10 +229,7 @@ namespace EmbedIO.Quic
 
             catch (InvalidDataException)
             {
-                BeginClose(
-                    _tls.WriteKeys[2] != null ? 2 : _tls.WriteKeys[1] != null ? 1 : 0,
-                    Wire.Frame(0x1c, 0x0a, 0, 0)
-                );
+                BeginClose(CloseLevel, Wire.Frame(0x1c, 0x0a, 0, 0));
                 return Drain();
             }
         }
@@ -292,6 +295,7 @@ namespace EmbedIO.Quic
                 }
 
                 _lifetime.Authenticated(now);
+                _peerProtectionLevel = Math.Max(_peerProtectionLevel, level);
 
                 if (Phase == ConnectionPhase.Closing)
                 {
@@ -475,7 +479,7 @@ namespace EmbedIO.Quic
         internal List<byte[]> CloseProtocol(double now)
         {
             _now = now;
-            BeginClose(_tls.WriteKeys[2] != null ? 2 : _tls.WriteKeys[1] != null ? 1 : 0, Wire.Frame(0x1c, 0x0a, 0, 0));
+            BeginClose(CloseLevel, Wire.Frame(0x1c, 0x0a, 0, 0));
             return Drain();
         }
 
@@ -833,7 +837,22 @@ namespace EmbedIO.Quic
         {
             if (_parametersValidated || _tls.PeerParameters == null) return;
 
-            var reader = new WireReader(_tls.PeerParameters);
+            try
+            {
+                ReadParameters();
+            }
+
+            catch (InvalidDataException error)
+            {
+                throw new TransportException(8, error.Message);
+            }
+        }
+
+        private void ReadParameters()
+        {
+            var reader = new WireReader(
+                _tls.PeerParameters ?? throw new InvalidOperationException("Missing peer transport parameters.")
+            );
             var seen = new HashSet<ulong>();
             var sourceMatched = false;
 
@@ -868,7 +887,7 @@ namespace EmbedIO.Quic
                         throw new InvalidDataException("Trailing transport parameter bytes.");
 
                     if (
-                        (id == 3 && value < 1200)
+                        (id == 3 && (value < 1200 || value > 65527))
                         || (id == 10 && value > 20)
                         || (id == 11 && value >= 16384)
                         || (id == 14 && value < 2)

@@ -1,4 +1,5 @@
 ﻿using System.Buffers.Binary;
+using System.Text;
 
 namespace EmbedIO.Quic
 {
@@ -44,7 +45,72 @@ namespace EmbedIO.Quic
             Require(TlsClientHello.ReadTransportParameters(Create(new byte[4096])).Length == 4096, "parameter-limit");
             var trailing = Create(parameters, (0x1234, new byte[65482]));
             Reject(trailing, 50);
+            CheckServerNames(parameters);
             Mutate([0, 1, 2, 3]);
+        }
+
+        private static void CheckServerNames(byte[] parameters)
+        {
+            Require(TlsClientHello.Read(Create(parameters)).ServerName == null, "missing-sni");
+
+            foreach (var name in new[]
+            {
+                "localhost",
+                "EXAMPLE.test",
+                "xn--bcher-kva.example",
+                "internal_name.local",
+                "localhost.",
+                string.Join(".", Enumerable.Repeat(new string('a', 63), 4))
+            })
+            {
+                var info = TlsClientHello.Read(Create(parameters, (0, ServerName(Encoding.ASCII.GetBytes(name)))));
+                Require(
+                    info.ServerName == name
+                        && info.TransportParameters
+                            .AsSpan()
+                            .SequenceEqual(parameters),
+                    "sni-wire-spelling"
+                );
+            }
+
+            foreach (var bytes in new byte[][]
+            {
+                [],
+                [0],
+                [10],
+                [127],
+                [128],
+                new byte[256]
+            })
+                Reject(Create(parameters, (0, ServerName(bytes))), 47);
+
+            foreach (var name in new[]
+            {
+                "../leaf",
+                "a/b",
+                "a\\b",
+                "x:443",
+                "a..b",
+                ".a",
+                new string('a', 64)
+            })
+                Reject(Create(parameters, (0, ServerName(Encoding.ASCII.GetBytes(name)))), 47);
+
+            Reject(Create(parameters, (0, [])), 50);
+            Reject(Create(parameters, (0, [0, 0])), 50);
+            Reject(Create(parameters, (0, [0, 4, 0, 0, 2, 65])), 50);
+            Reject(Create(parameters, (0, [0, 4, 1, 0, 1, 65])), 47);
+            Reject(Create(parameters, (0, [0, 8, 0, 0, 1, 65, 0, 0, 1, 66])), 47);
+        }
+
+        internal static byte[] ServerName(byte[] name)
+        {
+            using var value = new MemoryStream();
+            Length(value, checked((ushort)(name.Length + 3)));
+            value.WriteByte(0);
+            Length(value, checked((ushort)name.Length));
+            value.Write(name);
+            return value.ToArray();
         }
 
         internal static void Mutate(ReadOnlySpan<byte> data)
@@ -52,7 +118,7 @@ namespace EmbedIO.Quic
             data = data[..Math.Min(data.Length, 4096)];
             var type = data.Length >= 2 ? BinaryPrimitives.ReadUInt16BigEndian(data) : (ushort)0x1234;
 
-            if (type == 57) type = 58;
+            if (type is 0 or 57) type = 58;
 
             var parameters = data.ToArray();
             var valid = Create(parameters, (type, []));
@@ -63,6 +129,23 @@ namespace EmbedIO.Quic
                     .SequenceEqual(data),
                 "fuzz-parameters"
             );
+            var name = "x" + Convert.ToHexString(data[..Math.Min(data.Length, 16)]) + ".example";
+            var named = Create(parameters, (0, ServerName(Encoding.ASCII.GetBytes(name))));
+            var info = TlsClientHello.Read(named);
+            Require(
+                info.ServerName == name
+                    && info.TransportParameters
+                        .AsSpan()
+                        .SequenceEqual(data),
+                "fuzz-sni"
+            );
+
+            if (data.Length != 0)
+            {
+                named[data[0] % named.Length] ^= data[^1];
+                Check(named);
+            }
+
             Reject(Create(parameters, (type, []), (type, [])), 47);
             Check(data);
 
@@ -85,6 +168,35 @@ namespace EmbedIO.Quic
             {
                 Require(error.ErrorCode is 0x12f or 0x132 or 0x146 or 0x16d, "fuzz-alert-code");
             }
+        }
+
+        internal static byte[] NativeHello(
+            byte[] parameters,
+            string protocol,
+            params (ushort Type, byte[] Value)[] extras
+        )
+        {
+            var point = new byte[32];
+            point[0] = 9;
+            byte[] share = [0, 36, 0, 29, 0, 32, .. point];
+            var name = Encoding.ASCII.GetBytes(protocol);
+            byte[] alpn =
+            [
+                0,
+                checked((byte)(name.Length + 1)),
+                checked((byte)name.Length),
+                .. name
+            ];
+            (ushort Type, byte[] Value)[] extensions =
+            [
+                (43, [2, 3, 4]),
+                (10, [0, 2, 0, 29]),
+                (13, [0, 4, 8, 4, 4, 3]),
+                (51, share),
+                (16, alpn),
+                .. extras
+            ];
+            return Create(parameters, extensions);
         }
 
         internal static byte[] Create(byte[] parameters, params (ushort Type, byte[] Value)[] extras)

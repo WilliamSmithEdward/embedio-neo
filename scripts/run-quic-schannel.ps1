@@ -18,3 +18,6 @@ foreach ($provider in 'schannel-rsa', 'schannel-ecdsa') {
   dotnet $assembly fuzz-native $provider "$output/$provider-public.pem" unused-for-schannel 1729 1000 "$output/$provider-native" > "$output/$provider-native.log" 2>&1
   if ($LASTEXITCODE) { Get-Content "$output/$provider-native.log"; throw 'Schannel native mutation checks failed.' }
 }
+
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_sni.py --dotnet dotnet --assembly $assembly --output "$output/selection" > "$output/selection.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/selection.log"; throw 'Schannel certificate-selection checks failed.' }

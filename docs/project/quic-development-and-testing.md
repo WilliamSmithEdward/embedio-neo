@@ -20,6 +20,7 @@ copying from those projects.
 
 | Stage | Implementation and validation |
 | --- | --- |
+| Windows certificate selection | Complete ClientHello/SNI framing precedes a once-only certificate selector. A selected certificate is cloned for the native credential; the source remains application-owned. Focused tests exercise publication timing, selector errors and disposal during selection. The independent selection profile uses two non-exportable CNG key types and six aioquic cases; production policy/worker integration is pending. |
 | Windows TLS credentials | Original managed SSPI binding, provider-neutral TLS state and non-exportable CNG RSA/ECDSA test credentials. Native credential/context/buffer ownership, bounded ClientHello parsing and once-only traffic-secret installation are exercised before production integration. The development cipher profile remains AES-128-GCM/SHA-256. |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
 | Key generations | Current, previous and next read keys share header protection; ACK-confirmed local updates track full generations, enforce encryption/integrity usage limits and retain reordering boundaries. Independent command/packet oracles and native wire error checks complement the repeated-update peer case. |
@@ -64,7 +65,7 @@ corresponding host/test files.
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
 | Connection ownership | `ConnectionSet.cs`, `SharedListener.cs`, `ConnectionSetTests.cs`, `verify_connections.py` | Capacity/deadline/disposal regressions, seeded admission/retirement mutations and simultaneous independent clients on one UDP port. |
 | TLS framing | `TlsClientHello.cs`, `TlsHelloTests.cs` | Complete handshake/vector boundaries, duplicate extensions, required transport parameters, malformed/truncated input, parameter limits and structured/raw mutations through FsCheck, deterministic mutation, SharpFuzz and AFL++. |
-| Native TLS boundary | `TlsSession.cs`, `OpenSslTls.cs`, `SchannelTls.cs`, `SchannelTests.cs`, `ProbeConnection.cs`, `NativeFuzz.cs` | Fresh native contexts, authenticated Initial frame/CRYPTO mutations, unauthenticated-packet isolation, credential/context/buffer cleanup and amplification accounting. Schannel tests include invalid constructor inputs, fragmented native rejection and concurrent context disposal. Native libraries themselves are not coverage-instrumented. |
+| Native TLS boundary | `TlsSession.cs`, `OpenSslTls.cs`, `SchannelTls.cs`, `SchannelTests.cs`, `ProbeConnection.cs`, `NativeFuzz.cs` | Fresh TLS owners, structured TLS 1.3 and malformed Initial frame/CRYPTO mutations, unauthenticated-packet isolation, credential/context/buffer cleanup and amplification accounting. Schannel tests include invalid constructor inputs, fragmented native rejection and concurrent context disposal. Native libraries themselves are not coverage-instrumented. |
 | Independent transport peer | `verify.py` | aioquic positive/negative handshake, exact echo, corruption, ALPN, flow-control and packet-loss/reordering cases. |
 | Independent H3 peer | `peer/main.go`, `verify_webtransport.py` | quic-go/qpack interoperability, sessions, resets, datagrams, credit, sustained transfers, key update and close/idle behavior. |
 
@@ -408,6 +409,32 @@ host copies are instrumented independently while ordinary build-output hashes st
 unchanged. These bounded coverage runs supplement the longer historical campaigns;
 they do not replace native-platform or production acceptance.
 
+The subsequent SNI/native-boundary increment completed 159 independent wire cases:
+the same three 51-case provider matrices plus six certificate-selection cases. It
+also repeated the 30,000 native mutations, 30,000 owner steps, 100,000 managed
+mutations, 10,000 cases per FsCheck property, 4,000 actor traces and corpus replay.
+The final native self-test includes certificate selection and extension-payload
+boundaries for both CNG key types. Evidence and exact source/assembly hashes are in
+ignored `TestResults/quic-feasibility/continuation/sni-functional-02`. A subsequent
+local-variable style correction in the selection test is covered by the final
+source gate and repeated native self-test; it changes no protocol implementation.
+
+The SNI increment completed a 30-second SharpFuzz/libFuzzer campaign (97,507
+executions) and a 30-second AFL++ campaign (15,700 executions), with no retained
+crashes or hangs. New valid and invalid server-name seeds produce distinct AFL
+coverage maps. Both campaigns verify instrumentation of the core ClientHello parser
+and preserve ordinary build outputs; native SSPI internals are outside this managed
+instrumentation. Evidence is summarized under ignored
+`TestResults/quic-feasibility/continuation/sni-coverage-summary.json`.
+
+A focused Windows x64 Native AOT executable also completed the first server TLS
+flight, installed handshake/application traffic keys and returned native ownership
+counters to zero with both non-exportable CNG credential kinds. The executable links
+the same adapter and credential fixture used by the development host. This checks
+the native binding and key lifetime; it does not establish a complete AOT connection,
+production listener or packaged-provider support. Source/binary hashes and logs are
+under ignored `TestResults/quic-feasibility/continuation/sni-aot-probe`.
+
 ## Windows recordless TLS development profile
 
 `SchannelTls` binds the Windows SDK SSPI message interface; it contains original
@@ -429,6 +456,21 @@ adapter bounds CRYPTO input, ClientHello vectors and output queues. Repeated SSP
 publication of the same traffic secret is idempotent and never resets packet-key
 usage counters. TLS message classification selects Initial/Handshake/application
 CRYPTO levels; ALPN and peer transport parameters are checked before establishment.
+First-flight tests cover empty, one-byte, two-byte and maximum-size extension payloads
+without transmitting native structure padding. Failed native calls do not publish
+uninitialized token buffers or traffic keys.
+The Windows adapter waits for a complete ClientHello before invoking its certificate
+selector, snapshots the returned certificate once and releases only its own clone.
+SNI vectors, duplicates and ASCII label bounds are checked before selection; original
+case is retained, including compatible underscore labels and a trailing dot. Invalid
+or throwing selectors refuse the handshake, and disposal during selection cannot
+resurrect native credentials. A handshake's selected credential remains fixed as the
+source changes; a new handshake invokes the selector again.
+
+Malformed transport parameters use QUIC error `0x08`; closure protection follows
+authenticated handshake progress. The server's first-flight parameter rejection is
+readable under Initial protection. The UDP payload-size parameter is bounded to the
+protocol's 1200Ã¢â‚¬â€œ65527 range.
 Native imports resolve through the Windows system directory. Independent-peer
 receipts record provider identity and hashes of the corresponding system modules.
 
@@ -440,19 +482,27 @@ dotnet $hostDll schannel-self-test
 python test/EmbedIO.Quic/verify.py --dotnet dotnet --assembly $hostDll --openssl schannel-rsa --output TestResults/quic-schannel-rsa
 python test/EmbedIO.Quic/verify_webtransport.py --dotnet dotnet --assembly $hostDll --openssl schannel-ecdsa --peer TestResults/quic-feasibility/webtransport-peer.exe --output TestResults/quic-schannel-ecdsa-h3
 python test/EmbedIO.Quic/verify_connections.py --dotnet dotnet --assembly $hostDll --openssl schannel-rsa --peer TestResults/quic-feasibility/webtransport-peer.exe --output TestResults/quic-schannel-connections
+python test/EmbedIO.Quic/verify_sni.py --dotnet dotnet --assembly $hostDll --output TestResults/quic-schannel-selection
 dotnet $hostDll fuzz-native schannel-rsa TestResults/quic-schannel-public.pem unused-for-schannel 104729 100000 TestResults/quic-schannel-native
 ```
 
 The existing Windows CI test leg is configured to reuse its already provisioned,
 hash-locked aioquic peer for both credential profiles, native lifetime checks and
-1,000 native mutation cases per profile. This adds no job or dependency installation.
+1,000 native mutation cases per profile plus the six certificate-selection cases. This adds no job or dependency installation.
 A configured step is not a completed hosted result; inspect its exact-head run.
 
 Use fresh output directories. Both `schannel-rsa` and `schannel-ecdsa` are validation
 selectors; no production listener setting selects them. The unused key-path argument
 keeps the existing development command shape; Schannel uses its non-exportable
-credential. The Windows profile currently restricts negotiation to
-TLS_AES_128_GCM_SHA256. SNI selection, client certificates, credential reload,
+credential. Native mutation receipts now distinguish constructed TLS owners from actual native
+context starts. Inputs mix raw frames, malformed CRYPTO data and structured TLS 1.3
+ClientHello messages; forged packets remain isolated. OpenSSL allocates its SSL
+context at construction, while Schannel starts its context after complete-hello
+selection, so the start counts are not directly comparable between providers.
+
+The Windows profile currently restricts negotiation to
+TLS_AES_128_GCM_SHA256. The supplied-selector development profile is implemented on Windows; production
+SNI/certificate-source policy integration, client certificates, credential reload,
 resumption and other cipher suites remain acceptance work. Native TLS operations
 also need production worker/lifetime integration before moving into the UDP owner.
 

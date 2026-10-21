@@ -96,7 +96,7 @@ class DatagramRelay(asyncio.DatagramProtocol):
         self.transport.sendto(data, self.server)
 
 
-async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=ALPN, noise=False, relay=False, multiplexed=False, rounds=1, parallel=1, unidirectional=False, deadline=6, async_streams=False, close_code=None):
+async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=ALPN, noise=False, relay=False, multiplexed=False, rounds=1, parallel=1, unidirectional=False, deadline=6, async_streams=False, close_code=None, expected_hostname="localhost", trust_certificate=None):
     process = await asyncio.create_subprocess_exec(
         args.dotnet, args.assembly, "serve-async-close" if close_code is not None else "serve-async" if async_streams else "serve-streams" if multiplexed else "serve", args.openssl,
         str(args.output / "certificate.pem"), str(args.output / "key.pem"),
@@ -136,7 +136,7 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
             is_client=True, alpn_protocols=[alpn], server_name=hostname,
             verify_mode=ssl.CERT_REQUIRED, idle_timeout=3)
         if trusted:
-            configuration.load_verify_locations(cafile=str(args.output / "certificate.pem"))
+            configuration.load_verify_locations(cafile=str(trust_certificate or args.output / "certificate.pem"))
         async with asyncio.timeout(deadline):
             async with connect("127.0.0.1", port, configuration=configuration, create_protocol=create_peer, stream_handler=stream_handler) as peer:
                 if peer.negotiated_alpn != ALPN:
@@ -185,7 +185,7 @@ async def case(args, name, payload, *, trusted=True, hostname="localhost", alpn=
             relay_transport.close()
         (args.output / (name + ".stdout.log")).write_bytes(ready_line + stdout)
         (args.output / (name + ".stderr.log")).write_bytes(stderr)
-    positive = trusted and hostname == "localhost" and alpn == ALPN
+    positive = trusted and hostname == expected_hostname and alpn == ALPN
     reports = [json.loads(line) for line in stdout.splitlines() if line.startswith(b"{")]
     report = reports[-1] if reports else {}
     termination = peers[0].termination if peers else None
@@ -239,12 +239,12 @@ def provenance(args):
         if path.exists():
             libraries[name] = hashlib.sha256(path.read_bytes()).hexdigest()
     provider = {"kind": "openssl", "platform": platform.platform()}
-    if args.openssl in ("schannel-rsa", "schannel-ecdsa"):
+    if args.openssl in ("schannel-rsa", "schannel-ecdsa", "schannel-sni"):
         if os.name != "nt":
             raise RuntimeError("Schannel evidence requires Windows")
         system = Path(os.environ["SystemRoot"]) / "System32"
         provider = {"kind": "schannel", "platform": platform.platform(),
-                    "testCredential": "non-exportable CNG " + ("RSA" if args.openssl == "schannel-rsa" else "ECDSA P-256"),
+                    "testCredential": "non-exportable CNG " + ("RSA/ECDSA P-256 SNI" if args.openssl == "schannel-sni" else "RSA" if args.openssl == "schannel-rsa" else "ECDSA P-256"),
                     "systemModules": {name: hashlib.sha256((system / name).read_bytes()).hexdigest()
                                       for name in ("secur32.dll", "schannel.dll", "ncrypt.dll")}}
     return {"libraries": libraries, "tlsProvider": provider,

@@ -32,9 +32,11 @@ namespace EmbedIO.Quic
             using var keys = PacketKeys.Initial(original, false);
             var input = Array.Empty<byte>();
             var index = 0;
+            var nativeStarts = 0;
 
             try
             {
+                CheckEarlyTlsFailure(library, certificate, key, keys, original, client, tlsFactory);
                 CheckCloseLevels(library, certificate, key, keys, original, client, tlsFactory);
                 CheckReceiveHistory(library, certificate, key, keys, original, client, tlsFactory);
                 CheckEncryptionBudget(library, certificate, key, keys, original, client, tlsFactory);
@@ -46,13 +48,16 @@ namespace EmbedIO.Quic
                 {
                     var bytes = new byte[random.Next(0, 513)];
                     random.NextBytes(bytes);
-                    input = index % 3 == 0
-                        ?
-                        [
-                            .. Wire.Frame(6, 0, (ulong)bytes.Length),
-                            .. bytes
-                        ]
+                    var hello = index % 3 == 2
+                        ? TlsHelloTests.NativeHello(bytes, OpenSslTls.ApplicationProtocol)
                         : bytes;
+                    input = index % 3 == 1
+                        ? bytes
+                        :
+                        [
+                            .. Wire.Frame(6, 0, (ulong)hello.Length),
+                            .. hello
+                        ];
                     var first = Initial(keys, original, client, 0, [1]);
                     using var connection = new ProbeConnection(
                         first,
@@ -76,6 +81,8 @@ namespace EmbedIO.Quic
                     }
 
                     else connection.Receive(packet, 1);
+
+                    if (connection.NativeTlsStarted) nativeStarts++;
 
                     connection.Tick(100000);
                     QuicFuzzChecks.Require(
@@ -103,11 +110,62 @@ namespace EmbedIO.Quic
                 cases = count,
                 passed = true,
                 sockets = 0,
+                nativeStarts,
                 connectionSetSteps = Math.Min(count, 10000),
-                scope = "Fresh native TLS contexts and authenticated Initial frame/CRYPTO mutations"
+                scope = "Fresh TLS owners, native handshake admission and authenticated Initial frame/CRYPTO mutations"
             });
             File.WriteAllText(Path.Combine(output, "receipt.json"), report);
             Console.WriteLine(report);
+        }
+
+        private static void CheckEarlyTlsFailure(
+            string library,
+            string certificate,
+            string key,
+            PacketKeys keys,
+            byte[] original,
+            byte[] client,
+            Func<byte[], string, TlsSession> tlsFactory
+        )
+        {
+            byte[] source =
+            [
+                .. Wire.Frame(15, (ulong)client.Length),
+                .. client
+            ];
+
+            foreach (var parameters in new byte[][]
+            {
+                [255],
+                [
+                    .. source,
+                    .. Wire.Frame(3, 2, 1199)
+                ],
+                [
+                    .. source,
+                    .. Wire.Frame(3, 4, 65528)
+                ]
+            })
+            {
+                var hello = TlsHelloTests.NativeHello(parameters, OpenSslTls.ApplicationProtocol);
+                byte[] crypto =
+                [
+                    .. Wire.Frame(6, 0, (ulong)hello.Length),
+                    .. hello
+                ];
+                var first = Initial(keys, original, client, 0, crypto);
+                using var connection = new ProbeConnection(first, library, certificate, key, tlsFactory: tlsFactory);
+                var packets = connection.Receive(first, 0);
+                QuicFuzzChecks.Require(
+                    connection.Phase == ConnectionPhase.Closing && packets.Count == 1,
+                    "early-tls-parameter-failure-closes"
+                );
+                var reader = new WireReader(UnprotectInitial(packets[0], original));
+                QuicFuzzChecks.Require(
+                    reader.Integer() == 0x1c && reader.Integer() == 8,
+                    "early-parameter-error-is-readable"
+                );
+            }
         }
 
         private static void CheckAuthenticationBudget(

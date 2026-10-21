@@ -64,6 +64,11 @@ if cmp -s /results/maps/quic-tls-hello /results/maps/quic-tls-duplicate-extensio
     echo 'Distinct TLS ClientHello inputs produced identical coverage maps.' >&2
     exit 1
 fi
+test -s /results/maps/quic-tls-sni && test -s /results/maps/quic-tls-sni-invalid
+if cmp -s /results/maps/quic-tls-sni /results/maps/quic-tls-sni-invalid; then
+    echo 'Distinct TLS server-name inputs produced identical coverage maps.' >&2
+    exit 1
+fi
 printf 'seconds=%s\nseed=%s\nafl_commit=dbaf11913c1b2702dee5b4d3dcfffd52f1defe50\n' "$seconds" "$seed" > /results/campaign.txt
 set +e
 timeout "$((seconds + 120))" afl-fuzz -V "$seconds" -s "$seed" -G 4096 -t 10000 -m none -i /work/corpus -o /results/findings -- dotnet /work/publish/EmbedIO.SharpFuzz.dll --afl > /results/campaign.log 2>&1

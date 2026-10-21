@@ -1,11 +1,16 @@
 ﻿using System.Buffers.Binary;
+using System.Text;
 
 namespace EmbedIO.Quic
 {
+    internal readonly record struct TlsClientHelloInfo(byte[] TransportParameters, string? ServerName);
+
     // Bounded TLS handshake framing used before native credential selection.
     internal static class TlsClientHello
     {
-        internal static byte[] ReadTransportParameters(ReadOnlySpan<byte> message)
+        internal static byte[] ReadTransportParameters(ReadOnlySpan<byte> message) => Read(message).TransportParameters;
+
+        internal static TlsClientHelloInfo Read(ReadOnlySpan<byte> message)
         {
             if (message.Length < 42 || message.Length > 65536 || message[0] != 1)
                 throw Failure(50, "Invalid ClientHello.");
@@ -36,6 +41,7 @@ namespace EmbedIO.Quic
             if (position != body.Length) throw Failure(50, "Trailing ClientHello bytes.");
 
             byte[]? parameters = null;
+            string? serverName = null;
             var seen = new byte[8192];
 
             while (!extensions.IsEmpty)
@@ -51,6 +57,8 @@ namespace EmbedIO.Quic
                 var offset = 2;
                 var value = TakeLength(extensions, ref offset);
 
+                if (type == 0) serverName = ReadServerName(value);
+
                 if (type == 57)
                 {
                     if (value.Length > 4096) throw Failure(47, "Oversized client transport parameters.");
@@ -61,7 +69,66 @@ namespace EmbedIO.Quic
                 extensions = extensions[offset..];
             }
 
-            return parameters ?? throw Failure(109, "Missing client transport parameters.");
+            return new TlsClientHelloInfo(
+                parameters ?? throw Failure(109, "Missing client transport parameters."),
+                serverName
+            );
+        }
+
+        private static string ReadServerName(ReadOnlySpan<byte> extension)
+        {
+            var position = 0;
+            var names = TakeLength(extension, ref position);
+
+            if (position != extension.Length || names.IsEmpty) throw Failure(50, "Invalid server-name list.");
+
+            string? result = null;
+
+            while (!names.IsEmpty)
+            {
+                if (names[0] != 0 || result != null) throw Failure(47, "Unsupported or duplicate TLS server name.");
+
+                var offset = 1;
+                var name = TakeLength(names, ref offset);
+
+                if (name.IsEmpty || name.Length > 255) throw Failure(47, "Invalid TLS server-name length.");
+
+                var label = 0;
+
+                foreach (var value in name)
+                {
+                    if (value == '.')
+                    {
+                        if (label == 0) throw Failure(47, "Empty TLS server-name label.");
+
+                        label = 0;
+                    }
+
+                    else
+                    {
+                        if (
+                            value is not (>= (byte)'a'
+                                and <= (byte)'z'
+                                or >= (byte)'A'
+                                and <= (byte)'Z'
+                                or >= (byte)'0'
+                                and <= (byte)'9'
+                                or (byte)'-'
+                                or (byte)'_')
+                        )
+                            throw Failure(47, "Invalid TLS server-name encoding.");
+
+                        if (++label > 63) throw Failure(47, "Oversized TLS server-name label.");
+                    }
+                }
+
+                // Preserve the wire spelling for application selectors. Native TLS
+                // still verifies the full ClientHello and negotiated extensions.
+                result = Encoding.ASCII.GetString(name);
+                names = names[offset..];
+            }
+
+            return result ?? throw Failure(50, "Missing TLS server name.");
         }
 
         private static ReadOnlySpan<byte> TakeLength(ReadOnlySpan<byte> bytes, ref int position)
