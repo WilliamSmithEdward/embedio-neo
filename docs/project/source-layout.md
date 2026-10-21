@@ -16,7 +16,7 @@ namespaces or assemblies: existing `EmbedIO`, `EmbedIO.Internal` and
 | `src/EmbedIO/Modules` | Module contracts, composition and registration extension methods. |
 | `src/EmbedIO/Authentication` | Credential validation modules and bearer callbacks. |
 | `src/EmbedIO/Authorization` | Controller access requirements and named policy evaluation. |
-| `src/EmbedIO.Quic` | Independent .NET 10 packet, cryptography, recovery, stream and async ownership core. Nonpackable during production integration; the TLS/HTTP validation host stays under `test/EmbedIO.Quic`. |
+| `src/EmbedIO.Quic` | Independent .NET 10 packet, cryptography, TLS state/framing, recovery, stream and async ownership core. Nonpackable during production integration; the TLS/HTTP validation host stays under `test/EmbedIO.Quic`. |
 | `src/EmbedIO.Jwt` | Optional explicit-key JWT validation; IdentityModel dependencies stay in this package. |
 | `src/EmbedIO/Tunnels` | Public tunnel, capsule and datagram contracts. |
 | `src/EmbedIO/Internal/RequestBodies` | Request stream wrappers, decoding, accounting and policy enforcement. |

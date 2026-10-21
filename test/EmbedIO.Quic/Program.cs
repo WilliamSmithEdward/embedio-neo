@@ -19,6 +19,15 @@ namespace EmbedIO.Quic
                         .NotificationSelfTestAsync()
                         .ConfigureAwait(false);
 
+                if (arguments is ["schannel-self-test"])
+                {
+                    if (!OperatingSystem.IsWindows())
+                        throw new PlatformNotSupportedException("Schannel validation requires Windows.");
+
+                    SchannelTests.Run();
+                    return 0;
+                }
+
                 if (arguments is ["self-test"])
                 {
                     SelfTests.Run();
@@ -158,6 +167,8 @@ namespace EmbedIO.Quic
             bool closeAfterEcho
         )
         {
+            using var tlsProvider = new DevelopmentTlsProvider(library, certificate, key);
+            Func<byte[], string, TlsSession> tlsFactory = tlsProvider.Create;
             using var socket = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
             using var deadline = new CancellationTokenSource(
                 TimeSpan.FromSeconds(frequentUpdates || multiplexed || asyncStreams ? 30 : 10)
@@ -287,7 +298,8 @@ namespace EmbedIO.Quic
                                 authorization,
                                 keyUpdateInterval: frequentUpdates ? 128 : KeyUpdateState.DefaultInterval,
                                 multiplexed: multiplexed,
-                                asyncStreams: asyncStreams
+                                asyncStreams: asyncStreams,
+                                tlsFactory: tlsFactory
                             );
                         }
 
@@ -363,6 +375,7 @@ namespace EmbedIO.Quic
                     localKeyUpdates = connection?.LocalKeyUpdates ?? 0,
                     sentPackets = connection?.SentPackets ?? 0,
                     established = connection?.Established ?? false,
+                    tlsDiagnostics = connection?.TlsDiagnostics,
                     phase = connection?.Phase.ToString(),
                     idleExpired = connection?.IdleExpired ?? false,
                     closePackets = connection?.ClosePackets ?? 0,

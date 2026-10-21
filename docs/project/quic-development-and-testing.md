@@ -9,7 +9,9 @@ public WebTransport API is implied by this record.
 See [the feasibility profile](quic-engine-feasibility.md) for standards references,
 exact dependency pins, bounds and independent-peer setup. The implementation is
 standards-based, not a formally separated clean-room project. OpenSSL supplies
-TLS; .NET cryptography supplies AES-GCM, AES and HKDF. Our code owns the transport.
+TLS in the cross-platform development profile; a separate Windows adapter uses
+Schannel's public recordless SSPI interface. .NET cryptography supplies AES-GCM,
+AES and HKDF. Our code owns the transport.
 William permits consulting MsQuic and other open-source implementations where
 their licenses permit it; implementation code must be original, with no verbatim
 copying from those projects.
@@ -18,6 +20,7 @@ copying from those projects.
 
 | Stage | Implementation and validation |
 | --- | --- |
+| Windows TLS credentials | Original managed SSPI binding, provider-neutral TLS state and non-exportable CNG RSA/ECDSA test credentials. Native credential/context/buffer ownership, bounded ClientHello parsing and once-only traffic-secret installation are exercised before production integration. The development cipher profile remains AES-128-GCM/SHA-256. |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
 | Key generations | Current, previous and next read keys share header protection; ACK-confirmed local updates track full generations, enforce encryption/integrity usage limits and retain reordering boundaries. Independent command/packet oracles and native wire error checks complement the repeated-update peer case. |
 | Receive packet history | A sliding floor and at most 128 ACK ranges retain a 4096-number window. Retired packet numbers are never processed again; bounded history can advance without a connection-wide receive packet quota. |
@@ -29,7 +32,7 @@ copying from those projects.
 | Stream lifetime | Cumulative stream credit replenishes after complete receive/application and required send-ACK retirement. Closed-ID ranges prevent reuse; at most 64 recent final sizes retain narrow conflict checks. ACK delays keep echo work within resident stream bounds. |
 | Connection lifetime | Active, closing, draining and closed states use injected time. Idle expiry is silent; close replies are bounded; repeated sends or duplicate close traffic do not extend retirement. Windows ICMP reset notifications during retirement are handled explicitly. |
 | Shared listener | Destination-ID demultiplexing, endpoint-bound original-ID aliases, 16 resident owners, bounded admission attempts and fixed handshake deadlines. One cancellable UDP receive loop retires owners and permits clean port rebinding. |
-| Fuzz integration | All existing fuzz engines now have direct QUIC core entry points. Packet-header and ACK-range parsing are shared between the actual connection and fuzz targets. Dedicated native campaigns also exercise fresh OpenSSL contexts through authenticated Initial frames. |
+| Fuzz integration | All existing fuzz engines now have direct QUIC core entry points. Packet-header and ACK-range parsing are shared between the actual connection and fuzz targets. Dedicated native campaigns exercise fresh OpenSSL or Schannel contexts through authenticated Initial frames. |
 
 These stages are a bounded transport profile. They are not completion of
 full RFC conformance, production provider integration or browser support.
@@ -60,7 +63,8 @@ corresponding host/test files.
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
 | Connection ownership | `ConnectionSet.cs`, `SharedListener.cs`, `ConnectionSetTests.cs`, `verify_connections.py` | Capacity/deadline/disposal regressions, seeded admission/retirement mutations and simultaneous independent clients on one UDP port. |
-| Native TLS boundary | `OpenSslTls.cs`, `ProbeConnection.cs`, `NativeFuzz.cs` | Fresh native contexts, authenticated Initial frame/CRYPTO mutations, unauthenticated-packet isolation, cleanup and amplification accounting. This is not coverage instrumentation of OpenSSL itself. |
+| TLS framing | `TlsClientHello.cs`, `TlsHelloTests.cs` | Complete handshake/vector boundaries, duplicate extensions, required transport parameters, malformed/truncated input, parameter limits and structured/raw mutations through FsCheck, deterministic mutation, SharpFuzz and AFL++. |
+| Native TLS boundary | `TlsSession.cs`, `OpenSslTls.cs`, `SchannelTls.cs`, `SchannelTests.cs`, `ProbeConnection.cs`, `NativeFuzz.cs` | Fresh native contexts, authenticated Initial frame/CRYPTO mutations, unauthenticated-packet isolation, credential/context/buffer cleanup and amplification accounting. Schannel tests include invalid constructor inputs, fragmented native rejection and concurrent context disposal. Native libraries themselves are not coverage-instrumented. |
 | Independent transport peer | `verify.py` | aioquic positive/negative handshake, exact echo, corruption, ALPN, flow-control and packet-loss/reordering cases. |
 | Independent H3 peer | `peer/main.go`, `verify_webtransport.py` | quic-go/qpack interoperability, sessions, resets, datagrams, credit, sustained transfers, key update and close/idle behavior. |
 
@@ -71,7 +75,7 @@ loads OpenSSL. No new production dependency group or library API is introduced.
 ## Fuzzing engines
 
 The seven managed target selectors are integers, packet protection, reassembly,
-recovery, lifetime, WebTransport bridge, and packet headers/ACKs. Raw inputs are
+recovery, lifetime, WebTransport bridge, and packet headers/ACKs/TLS ClientHello framing. Raw inputs are
 bounded to 4096 bytes. Stateful byte traces execute at most 128 commands; checked-in
 JSON traces and generated multi-connection campaigns use three actors and 48 steps.
 The packet-protection selector also drives a 128-command key-generation model.
@@ -375,22 +379,90 @@ Fresh libFuzzer/AFL++ campaigns complete 177,970 / 29,211 inputs with no retaine
 crashes or hangs. Both instrumented modules change while their ordinary build
 outputs retain their original hashes. Workflow path filters include the new core.
 The renamed executable is `EmbedIO.Quic.Development.dll`; earlier receipts retain
-the executable identities belonging to their recorded source. Hosted validation
-of this increment remains required after its next push.
+the executable identities belonging to their recorded source. Subsequent increments require their own exact-source hosted validation.
 
 The 373e7df checkpoint's 38 hosted checks are green, including the corrected
-Windows tus recovery fixture. The async increment needs its own exact-head
-hosted results after the next push.
+Windows tus recovery fixture. Each subsequent increment needs its own exact-head hosted results.
 
 CI run 39470892485 on the preceding pushed head passed on attempt 2. Its original
 macOS failure occurred during checkout DNS resolution; the targeted retry passed.
 This is evidence for that head, not for subsequent uncommitted changes.
 
+The Windows TLS increment completed 153 independent wire cases: the existing 51-case
+suite against OpenSSL and against each non-exportable CNG RSA/ECDSA Schannel profile.
+Each profile includes aioquic, quic-go WebTransport and shared-listener cases.
+The same source completed 10,000 native authenticated-Initial mutations and
+10,000 connection-owner steps per provider, 100,000 managed mutations, 10,000 cases
+per FsCheck property and 4,000 generated recovery/lifetime actor traces, plus corpus
+replay. The native lifetime set exercised both credential kinds, invalid constructor
+inputs, fragmented rejection and 64 concurrent native failures; all native credential,
+context and buffer counters returned to zero. These are functional/resource checks,
+not latency measurements or production/platform acceptance. Evidence is under ignored
+`TestResults/quic-feasibility/continuation/tls-functional-01`.
+
+The same increment completed a 30-second SharpFuzz/libFuzzer campaign
+(92,888 executions) and a 30-second AFL++ campaign (15,921 executions),
+with no retained crash or hang. Both instrument the new core ClientHello parser;
+valid and duplicate-extension seeds produce distinct AFL coverage maps. Core and
+host copies are instrumented independently while ordinary build-output hashes stay
+unchanged. These bounded coverage runs supplement the longer historical campaigns;
+they do not replace native-platform or production acceptance.
+
+## Windows recordless TLS development profile
+
+`SchannelTls` binds the Windows SDK SSPI message interface; it contains original
+C# ownership and buffer orchestration, with no copied QUIC implementation code.
+The local baseline uses the Windows 10.0.26100 SDK interface on a current Windows
+host. It does not establish older Windows, mobile, browser or packaged-provider
+support. OpenSSL remains the independent cross-platform development TLS adapter.
+
+`DevelopmentTlsProvider` owns one validation credential independently of connection
+owners. RSA and ECDSA P-256 fixtures use unique, disposable named software CNG keys
+with export disabled; only the public certificate is written. Fixture cleanup
+removes its own named key. Native credential, context and unmanaged-region counters
+must return to zero after owners are disposed. Application certificates must keep
+their configured storage and export policy when production integration is added.
+
+The core `TlsSession` publishes managed handshake/key state, so ordinary packet
+processing does not query native handles for handshake completion. The Windows
+adapter bounds CRYPTO input, ClientHello vectors and output queues. Repeated SSPI
+publication of the same traffic secret is idempotent and never resets packet-key
+usage counters. TLS message classification selects Initial/Handshake/application
+CRYPTO levels; ALPN and peer transport parameters are checked before establishment.
+Native imports resolve through the Windows system directory. Independent-peer
+receipts record provider identity and hashes of the corresponding system modules.
+
+After the ordinary Release build, Windows development checks include:
+
+```powershell
+$hostDll = 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll'
+dotnet $hostDll schannel-self-test
+python test/EmbedIO.Quic/verify.py --dotnet dotnet --assembly $hostDll --openssl schannel-rsa --output TestResults/quic-schannel-rsa
+python test/EmbedIO.Quic/verify_webtransport.py --dotnet dotnet --assembly $hostDll --openssl schannel-ecdsa --peer TestResults/quic-feasibility/webtransport-peer.exe --output TestResults/quic-schannel-ecdsa-h3
+python test/EmbedIO.Quic/verify_connections.py --dotnet dotnet --assembly $hostDll --openssl schannel-rsa --peer TestResults/quic-feasibility/webtransport-peer.exe --output TestResults/quic-schannel-connections
+dotnet $hostDll fuzz-native schannel-rsa TestResults/quic-schannel-public.pem unused-for-schannel 104729 100000 TestResults/quic-schannel-native
+```
+
+The existing Windows CI test leg is configured to reuse its already provisioned,
+hash-locked aioquic peer for both credential profiles, native lifetime checks and
+1,000 native mutation cases per profile. This adds no job or dependency installation.
+A configured step is not a completed hosted result; inspect its exact-head run.
+
+Use fresh output directories. Both `schannel-rsa` and `schannel-ecdsa` are validation
+selectors; no production listener setting selects them. The unused key-path argument
+keeps the existing development command shape; Schannel uses its non-exportable
+credential. The Windows profile currently restricts negotiation to
+TLS_AES_128_GCM_SHA256. SNI selection, client certificates, credential reload,
+resumption and other cipher suites remain acceptance work. Native TLS operations
+also need production worker/lifetime integration before moving into the UDP owner.
+
 ## Remaining production acceptance work
 
 1. Promote the bounded shared listener into the production ownership/transport
    interfaces, with application configuration, certificate lifetime and graceful
-   shutdown parity. Its current admission limits and ten-second host deadline are
+   shutdown parity. Complete SNI/client-certificate/credential-reload behavior,
+   non-exportable-key support on every supported platform, cipher-suite parity and
+   bounded native TLS worker scheduling. Its current admission limits and ten-second host deadline are
    development-host bounds; the offline actor model is not a listener load test.
 2. Validate longer transfer/loss/endurance patterns and expose sustainable stream
    lifecycle through the production application transport boundary. The development

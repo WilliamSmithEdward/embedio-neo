@@ -250,3 +250,11 @@ dotnet_diagnostic.CA1845.severity = none
 [src/EmbedIO/Routing/RouteMatcher.cs]
 # Span-based string.Concat is unavailable on .NET Standard 2.0; retain the shared implementation.
 dotnet_diagnostic.CA1845.severity = none
+
+[src/EmbedIO.Quic/Recovery/Recovery.cs]
+# Owner-approved: preserve constructor syntax supported by the pinned scanner.
+csharp_style_prefer_primary_constructors = false:warning
+
+[src/EmbedIO.Quic/Streams/AsyncStreamApplication.cs]
+# Owner-approved: preserve constructor syntax supported by the pinned scanner.
+csharp_style_prefer_primary_constructors = false:warning

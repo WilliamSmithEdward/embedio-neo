@@ -2,26 +2,46 @@
 
 namespace EmbedIO.Quic
 {
-    internal sealed class QuicConnectionFailure(ulong errorCode, bool application, bool remote) : IOException(
-        "QUIC connection has closed."
-    )
+    internal sealed class QuicConnectionFailure : IOException
     {
-        internal ulong ErrorCode { get; } = errorCode;
-        internal bool Application { get; } = application;
-        internal bool Remote { get; } = remote;
+        internal QuicConnectionFailure(ulong errorCode, bool application, bool remote)
+            : base("QUIC connection has closed.")
+        {
+            ErrorCode = errorCode;
+            Application = application;
+            Remote = remote;
+        }
+
+        internal ulong ErrorCode { get; }
+        internal bool Application { get; }
+        internal bool Remote { get; }
     }
 
-    internal sealed class AsyncStreamApplication(StreamOperations operations) : StreamApplication
+    internal sealed class AsyncStreamApplication : StreamApplication
     {
-        private sealed class OpenRequest(bool uni, Action notify, CancellationToken token)
+        private readonly StreamOperations _operations;
+
+        internal AsyncStreamApplication(StreamOperations operations) => _operations = operations;
+
+        private sealed class OpenRequest
         {
+            private readonly bool _uni;
+            private readonly Action _notify;
+
+            internal OpenRequest(bool uni, Action notify, CancellationToken token)
+            {
+                _uni = uni;
+                _notify = notify;
+                Token = token;
+            }
+
             private readonly object _gate = new();
             private bool _done;
 
             internal TaskCompletionSource<AsyncQuicStream> Completion { get; } = new(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
-            internal CancellationToken Token { get; } = token;
+            internal CancellationToken Token { get; }
 
             internal void Cancel()
             {
@@ -33,7 +53,7 @@ namespace EmbedIO.Quic
                     Completion.TrySetCanceled(Token);
                 }
 
-                notify();
+                _notify();
             }
 
             internal bool TryOpen(StreamOperations port, Func<ulong, AsyncQuicStream> stream)
@@ -49,7 +69,7 @@ namespace EmbedIO.Quic
                         return true;
                     }
 
-                    var id = port.Open(uni);
+                    var id = port.Open(_uni);
 
                     if (!id.HasValue) return false;
 
@@ -125,7 +145,7 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal int? MaximumDatagramPayload => operations.DatagramLimit;
+        internal int? MaximumDatagramPayload => _operations.DatagramLimit;
         internal Task Closed => _closed.Task;
 
         internal bool IsClosed
@@ -330,7 +350,7 @@ namespace EmbedIO.Quic
             {
                 if (_failure != null) return ValueTask.CompletedTask;
 
-                if (operations.Close == null)
+                if (_operations.Close == null)
                     throw new NotSupportedException("Connection close callback is unavailable.");
 
                 _closeCode ??= code;
@@ -362,22 +382,22 @@ namespace EmbedIO.Quic
 
             if (close.HasValue)
             {
-                (operations.Close ?? throw new InvalidOperationException("Missing close callback."))(close.Value);
+                (_operations.Close ?? throw new InvalidOperationException("Missing close callback."))(close.Value);
                 FailAll(new QuicConnectionFailure(close.Value, true, false));
                 return;
             }
 
             foreach (var request in opening)
-                if (request.TryOpen(operations, GetStream))
+                if (request.TryOpen(_operations, GetStream))
                     lock (_gate) _opening.Remove(request);
 
-            foreach (var stream in streams) stream.Process(operations);
+            foreach (var stream in streams) stream.Process(_operations);
 
             for (var index = 0; index < 8; index++)
             {
                 lock (_gate)
                 {
-                    if (_datagrams.Count == 0 || !operations.TryDatagram(_datagrams.Peek())) break;
+                    if (_datagrams.Count == 0 || !_operations.TryDatagram(_datagrams.Peek())) break;
 
                     _datagrams.Dequeue();
 

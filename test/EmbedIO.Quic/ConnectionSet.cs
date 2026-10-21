@@ -12,7 +12,8 @@ namespace EmbedIO.Quic
         string certificate,
         string key,
         bool webTransport = false,
-        string authorization = ""
+        string authorization = "",
+        Func<byte[], string, TlsSession>? tlsFactory = null
     ) : IDisposable
     {
         internal const int Capacity = 16;
@@ -78,7 +79,8 @@ namespace EmbedIO.Quic
                         key,
                         webTransport,
                         authorization,
-                        now
+                        now,
+                        tlsFactory: tlsFactory
                     );
                 }
 

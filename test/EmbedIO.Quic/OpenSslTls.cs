@@ -6,7 +6,7 @@ namespace EmbedIO.Quic
 {
     // Only OpenSSL's published third-party QUIC TLS API is used. This class owns
     // native handles and callback buffers; it contains no QUIC transport implementation.
-    internal sealed class OpenSslTls : IDisposable
+    internal sealed class OpenSslTls : TlsSession
     {
         internal const string ApplicationProtocol = "embedio-quic-probe";
         private readonly NativeApi _api;
@@ -20,20 +20,12 @@ namespace EmbedIO.Quic
         private int _readLevel;
         private int _writeLevel;
         private Exception? _callbackError;
-        private readonly Reassembly[] _input =
+        private Reassembly[] _input =
         [
             new(65536),
             new(65536),
             new(65536)
         ];
-
-        internal Queue<(int Level, byte[] Bytes)> Output { get; } = new();
-        internal PacketKeys?[] ReadKeys { get; } = new PacketKeys?[3];
-        internal PacketKeys?[] WriteKeys { get; } = new PacketKeys?[3];
-        internal byte[]? PeerParameters { get; private set; }
-        internal byte? AlertCode { get; private set; }
-        internal bool Established => _api.Get<IntResult>("SSL_is_init_finished")(_ssl) == 1;
-
         private bool _disposed;
 
         internal OpenSslTls(
@@ -109,16 +101,26 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal void Add(int level, ulong offset, ReadOnlySpan<byte> bytes) => _input[level].Add(offset, bytes);
-
-        internal void Pump()
+        internal override void Add(int level, ulong offset, ReadOnlySpan<byte> bytes)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if ((uint)level > 2) throw new ArgumentOutOfRangeException(nameof(level));
+
+            _input[level].Add(offset, bytes);
+        }
+
+        internal override void Pump()
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             var result = _api.Get<IntResult>("SSL_do_handshake")(_ssl);
 
             if (_callbackError != null) throw new InvalidDataException("QUIC TLS callback failed.", _callbackError);
 
             if (result != 1 && _api.Get<GetError>("SSL_get_error")(_ssl, result) != 2)
                 throw new InvalidDataException("QUIC TLS handshake failed: " + _api.Error());
+
+            Established = _api.Get<IntResult>("SSL_is_init_finished")(_ssl) == 1;
         }
 
         private int Send(nint ssl, nint data, nuint length, out nuint consumed, nint argument)
@@ -258,7 +260,7 @@ namespace EmbedIO.Quic
             if (!success) throw new InvalidOperationException("OpenSSL " + operation + ": " + _api.Error());
         }
 
-        public void Dispose()
+        public override void Dispose()
         {
             if (_disposed) return;
 
@@ -272,9 +274,8 @@ namespace EmbedIO.Quic
             Marshal.FreeHGlobal(_parameters);
             Marshal.FreeHGlobal(_dispatch);
 
-            foreach (var keys in ReadKeys) keys?.Dispose();
-
-            foreach (var keys in WriteKeys) keys?.Dispose();
+            _input = [];
+            ReleaseKeys();
 
             _api.Dispose();
             GC.KeepAlive(_callbacks);

@@ -2,36 +2,47 @@
 {
     // Original RFC 9002 recovery logic. Time is supplied by the owner, in monotonic
     // milliseconds, so loss, PTO and congestion behavior can be tested without sleeps.
-    internal sealed class Delivery(int level, byte[] bytes, bool reliable = true, bool eliciting = true)
+    internal sealed class Delivery
     {
-        internal int Level { get; } = level;
-        internal byte[] Bytes { get; } = bytes;
-        internal bool Reliable { get; } = reliable;
-        internal bool Eliciting { get; } = eliciting;
+        internal Delivery(int level, byte[] bytes, bool reliable = true, bool eliciting = true)
+        {
+            Level = level;
+            Bytes = bytes;
+            Reliable = reliable;
+            Eliciting = eliciting;
+        }
+
+        internal int Level { get; }
+        internal byte[] Bytes { get; }
+        internal bool Reliable { get; }
+        internal bool Eliciting { get; }
         internal bool Acknowledged { get; set; }
         internal bool Queued { get; set; }
         internal bool ProbePending { get; set; }
         internal int Transmissions { get; set; }
     }
 
-    internal sealed class Recovery(
-        Action<Delivery, bool> repeat,
-        int acknowledgmentLimit = Recovery.MaximumAcknowledgments,
-        int retiredLimit = Recovery.MaximumRetiredPackets
-    )
+    internal sealed class Recovery
     {
         internal const int MaximumPacket = 1200;
         internal const int MaximumActivePackets = 4096;
         internal const int MaximumRetiredPackets = 4096;
         internal const int MaximumAcknowledgments = 12288;
-        private readonly int _acknowledgmentLimit = Bound(
-            acknowledgmentLimit,
-            8,
-            MaximumAcknowledgments,
-            nameof(acknowledgmentLimit)
-        );
-        private readonly int _retainedAcknowledgments = acknowledgmentLimit * 2 / 3;
-        private readonly int _retiredLimit = Bound(retiredLimit, 2, MaximumRetiredPackets, nameof(retiredLimit));
+        private readonly int _acknowledgmentLimit;
+        private readonly int _retainedAcknowledgments;
+        private readonly int _retiredLimit;
+
+        internal Recovery(
+            Action<Delivery, bool> repeat,
+            int acknowledgmentLimit = MaximumAcknowledgments,
+            int retiredLimit = MaximumRetiredPackets
+        )
+        {
+            _acknowledgmentLimit = Bound(acknowledgmentLimit, 8, MaximumAcknowledgments, nameof(acknowledgmentLimit));
+            _retainedAcknowledgments = acknowledgmentLimit * 2 / 3;
+            _retiredLimit = Bound(retiredLimit, 2, MaximumRetiredPackets, nameof(retiredLimit));
+            _repeat = repeat ?? throw new ArgumentNullException(nameof(repeat));
+        }
 
         private sealed record Sent(
             int Level,
@@ -50,7 +61,7 @@
         private readonly ulong?[] _largestAcknowledged = new ulong?[3];
         private readonly bool[] _discarded = new bool[3];
         private readonly double[] _lastEliciting = new double[3];
-        private readonly Action<Delivery, bool> _repeat = repeat ?? throw new ArgumentNullException(nameof(repeat));
+        private readonly Action<Delivery, bool> _repeat;
         private double _minimumRtt = double.PositiveInfinity;
         private double _latestRtt = 333;
         private double _smoothedRtt = 333;

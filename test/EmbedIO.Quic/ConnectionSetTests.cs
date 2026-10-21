@@ -4,9 +4,16 @@ namespace EmbedIO.Quic
 {
     internal static class ConnectionSetTests
     {
-        internal static void Mutate(string library, string certificate, string key, int seed, int count)
+        internal static void Mutate(
+            string library,
+            string certificate,
+            string key,
+            int seed,
+            int count,
+            Func<byte[], string, TlsSession>? tlsFactory = null
+        )
         {
-            using var owners = new ConnectionSet(library, certificate, key);
+            using var owners = new ConnectionSet(library, certificate, key, tlsFactory: tlsFactory);
             var random = new Random(seed);
             byte[] original = [1, 2, 3, 4, 5, 6, 7, 8];
             byte[] client = [9, 10, 11, 12, 13, 14, 15, 16];
@@ -49,9 +56,14 @@ namespace EmbedIO.Quic
             QuicFuzzChecks.Require(owners.Active == 0 && owners.Accepted == owners.Retired, "mutated-owners-retired");
         }
 
-        private static void ExhaustOwner(string library, string certificate, string key)
+        private static void ExhaustOwner(
+            string library,
+            string certificate,
+            string key,
+            Func<byte[], string, TlsSession>? tlsFactory
+        )
         {
-            using var owners = new ConnectionSet(library, certificate, key);
+            using var owners = new ConnectionSet(library, certificate, key, tlsFactory: tlsFactory);
             byte[] original = [1, 2, 3, 4, 5, 6, 7, 8];
             byte[] client = [9, 10, 11, 12, 13, 14, 15, 16];
             using var keys = PacketKeys.Initial(original, false);
@@ -77,10 +89,15 @@ namespace EmbedIO.Quic
             );
         }
 
-        internal static void Run(string library, string certificate, string key)
+        internal static void Run(
+            string library,
+            string certificate,
+            string key,
+            Func<byte[], string, TlsSession>? tlsFactory = null
+        )
         {
-            ExhaustOwner(library, certificate, key);
-            using var owners = new ConnectionSet(library, certificate, key);
+            ExhaustOwner(library, certificate, key, tlsFactory);
+            using var owners = new ConnectionSet(library, certificate, key, tlsFactory: tlsFactory);
             byte[] original = [1, 2, 3, 4, 5, 6, 7, 8];
             byte[] client = [9, 10, 11, 12, 13, 14, 15, 16];
             using var keys = PacketKeys.Initial(original, false);

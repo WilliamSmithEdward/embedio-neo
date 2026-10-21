@@ -26,7 +26,15 @@ namespace EmbedIO.Quic
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(2));
             var authorization = webTransport ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) : string.Empty;
-            using var connections = new ConnectionSet(library, certificate, key, webTransport, authorization);
+            using var provider = new DevelopmentTlsProvider(library, certificate, key);
+            using var connections = new ConnectionSet(
+                library,
+                certificate,
+                key,
+                webTransport,
+                authorization,
+                provider.Create
+            );
             var clock = Stopwatch.StartNew();
             var ready = new
             {

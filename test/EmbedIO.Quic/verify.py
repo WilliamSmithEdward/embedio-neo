@@ -10,6 +10,8 @@ import asyncio
 import hashlib
 import importlib.metadata
 import json
+import os
+import platform
 from pathlib import Path
 import socket
 import ssl
@@ -236,7 +238,16 @@ def provenance(args):
         path = Path(args.openssl) / name
         if path.exists():
             libraries[name] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return {"libraries": libraries,
+    provider = {"kind": "openssl", "platform": platform.platform()}
+    if args.openssl in ("schannel-rsa", "schannel-ecdsa"):
+        if os.name != "nt":
+            raise RuntimeError("Schannel evidence requires Windows")
+        system = Path(os.environ["SystemRoot"]) / "System32"
+        provider = {"kind": "schannel", "platform": platform.platform(),
+                    "testCredential": "non-exportable CNG " + ("RSA" if args.openssl == "schannel-rsa" else "ECDSA P-256"),
+                    "systemModules": {name: hashlib.sha256((system / name).read_bytes()).hexdigest()
+                                      for name in ("secur32.dll", "schannel.dll", "ncrypt.dll")}}
+    return {"libraries": libraries, "tlsProvider": provider,
             "assemblySha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
             "engineAssemblySha256": hashlib.sha256((Path(args.assembly).parent / "EmbedIO.Quic.dll").read_bytes()).hexdigest(),
             "sdk": subprocess.run([args.dotnet, "--version"], check=True, capture_output=True, text=True).stdout.strip(),

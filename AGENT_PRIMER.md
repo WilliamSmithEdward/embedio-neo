@@ -380,8 +380,11 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 WebTransport is not supported by the public listener. The internal session core
 and native validation hosts do not make it available to applications. The independent
 EmbedIO.Quic generic transport core is under `src/EmbedIO.Quic`. Its separate
-`EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, uses OpenSSL 3.5.7
-for TLS and links the HTTP/3 adapter. Both projects remain nonpackable; current
+`EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, links the HTTP/3
+adapter and uses OpenSSL 3.5.7 or the Windows SDK recordless Schannel interface
+for TLS. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
+credentials and AES-128-GCM/SHA-256; it does not establish production certificate,
+SNI, client-certificate, resumption or supported-platform parity. Both projects remain nonpackable; current
 shipping packages have no dependency on them. The fuzz harness uses both. It includes
 loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
 current reliable-reset framing, reusable receive windows and explicit connection
@@ -397,7 +400,10 @@ exercises it without HTTP/3 control-stream or WebTransport session assumptions;
 its async test-host API adds owned reads/writes, outbound bidi/uni streams,
 consumption-driven buffering, cancellation with explicit read-abort codes, FIN-ACK
 completion and bounded datagram/open/accept queues. Application commands wake the
-UDP owner directly. Production dispatch and TLS/certificate parity remain pending.
+UDP owner directly. A provider-neutral TLS boundary caches handshake state and
+releases packet keys with its connection. Bounded ClientHello framing and transport
+parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
+dispatch and full TLS/certificate parity remain pending.
 A bounded shared listener adds destination-ID routing, admission
 limits, handshake deadlines and cancellation across multiple connections. It has
 no public application API; the intended fully validated

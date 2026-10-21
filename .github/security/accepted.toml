@@ -9,5 +9,22 @@
 # Add an entry only with a reason a reviewer can check. Fixing the code
 # is the better answer wherever there is one.
 
-# No current findings are accepted. Keep the historical ZIP review in
-# .github/security/zip-provider-codeql-review.md; re-review any returned result.
+# Keep the historical ZIP review in .github/security/zip-provider-codeql-review.md;
+# re-review any returned result.
+
+[[finding]]
+tool = "Semgrep"
+rule = "csharp.dotnet.security.use_ecb_mode.use_ecb_mode"
+reason = "RFC 9001 section 5.4.3 requires a single AES block to derive QUIC header-protection masks. These three calls encrypt exactly one 16-byte sample with the independently HKDF-derived quic hp key and no padding; the result only masks header bits and packet-number bytes. Packet payload encryption and authentication use AesGcm with packet-number-based nonces, per-key limits and key-generation checks. Acceptance is limited to the exact rule, file and three source statements below; other findings and parser errors remain fatal."
+
+[[finding.where]]
+path = "src/EmbedIO.Quic/Cryptography/PacketKeys.cs"
+line = "_header.EncryptEcb(packet.AsSpan(numberOffset + 4, 16), mask, PaddingMode.None);"
+
+[[finding.where]]
+path = "src/EmbedIO.Quic/Cryptography/PacketKeys.cs"
+line = "_header.EncryptEcb(packet.Slice(offset + 4, 16), mask, PaddingMode.None);"
+
+[[finding.where]]
+path = "src/EmbedIO.Quic/Cryptography/PacketKeys.cs"
+line = "_header.EncryptEcb(packet.AsSpan(offset + 4, 16), mask, PaddingMode.None);"

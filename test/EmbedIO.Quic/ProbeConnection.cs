@@ -55,7 +55,7 @@ namespace EmbedIO.Quic
         private readonly byte[] _serverId = RandomNumberGenerator.GetBytes(8);
         private readonly PacketKeys _initialRead;
         private readonly PacketKeys _initialWrite;
-        private readonly OpenSslTls _tls;
+        private readonly TlsSession _tls;
         private readonly ulong[] _sentNumbers = new ulong[3];
         private readonly ulong[] _nextReceived = new ulong[3];
         private readonly ulong[] _cryptoOffsets = new ulong[3];
@@ -95,6 +95,8 @@ namespace EmbedIO.Quic
 
         internal ReadOnlySpan<byte> ServerId => _serverId;
         internal bool Established => _tls.Established;
+        internal IReadOnlyList<string> TlsDiagnostics =>
+            OperatingSystem.IsWindows() && _tls is SchannelTls schannel ? schannel.Diagnostics : [];
         internal bool Complete =>
             _webTransport
                 ? WebTransport?.AcceptedSessions > 0
@@ -117,7 +119,8 @@ namespace EmbedIO.Quic
             int encryptionLimit = PacketKeys.MaximumEncryptions,
             ulong authenticationLimit = 1UL << 52,
             bool multiplexed = false,
-            bool asyncStreams = false
+            bool asyncStreams = false,
+            Func<byte[], string, TlsSession>? tlsFactory = null
         )
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(encryptionLimit, 16);
@@ -169,13 +172,11 @@ namespace EmbedIO.Quic
             {
                 _initialRead.Unprotect(firstPacket[..(numberOffset + payloadLength)], numberOffset, 0, out _);
                 _initialWrite = PacketKeys.Initial(_originalId, true);
-                _tls = new OpenSslTls(
-                    library,
-                    certificate,
-                    key,
-                    LocalParameters(),
-                    webTransport ? "h3" : OpenSslTls.ApplicationProtocol
-                );
+                var protocol = webTransport ? "h3" : OpenSslTls.ApplicationProtocol;
+                var parameters = LocalParameters();
+                _tls = tlsFactory != null
+                    ? tlsFactory(parameters, protocol)
+                    : new OpenSslTls(library, certificate, key, parameters, protocol);
             }
 
             catch

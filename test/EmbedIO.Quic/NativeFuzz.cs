@@ -24,6 +24,8 @@ namespace EmbedIO.Quic
                 throw new InvalidOperationException("Use a fresh native fuzz evidence directory.");
 
             Directory.CreateDirectory(output);
+            using var provider = new DevelopmentTlsProvider(library, certificate, key);
+            Func<byte[], string, TlsSession> tlsFactory = provider.Create;
             var random = new Random(seed);
             byte[] original = [1, 2, 3, 4, 5, 6, 7, 8];
             byte[] client = [9, 10, 11, 12, 13, 14, 15, 16];
@@ -33,12 +35,12 @@ namespace EmbedIO.Quic
 
             try
             {
-                CheckCloseLevels(library, certificate, key, keys, original, client);
-                CheckReceiveHistory(library, certificate, key, keys, original, client);
-                CheckEncryptionBudget(library, certificate, key, keys, original, client);
-                CheckAuthenticationBudget(library, certificate, key, keys, original, client);
-                ConnectionSetTests.Run(library, certificate, key);
-                ConnectionSetTests.Mutate(library, certificate, key, seed, Math.Min(count, 10000));
+                CheckCloseLevels(library, certificate, key, keys, original, client, tlsFactory);
+                CheckReceiveHistory(library, certificate, key, keys, original, client, tlsFactory);
+                CheckEncryptionBudget(library, certificate, key, keys, original, client, tlsFactory);
+                CheckAuthenticationBudget(library, certificate, key, keys, original, client, tlsFactory);
+                ConnectionSetTests.Run(library, certificate, key, tlsFactory);
+                ConnectionSetTests.Mutate(library, certificate, key, seed, Math.Min(count, 10000), tlsFactory);
 
                 for (; index < count; index++)
                 {
@@ -52,7 +54,13 @@ namespace EmbedIO.Quic
                         ]
                         : bytes;
                     var first = Initial(keys, original, client, 0, [1]);
-                    using var connection = new ProbeConnection(first, library, certificate, key);
+                    using var connection = new ProbeConnection(
+                        first,
+                        library,
+                        certificate,
+                        key,
+                        tlsFactory: tlsFactory
+                    );
                     connection.Receive(first, 0);
                     var packet = Initial(keys, original, client, 1, input);
 
@@ -108,11 +116,19 @@ namespace EmbedIO.Quic
             string key,
             PacketKeys keys,
             byte[] original,
-            byte[] client
+            byte[] client,
+            Func<byte[], string, TlsSession> tlsFactory
         )
         {
             var first = Initial(keys, original, client, 0, [1]);
-            using var connection = new ProbeConnection(first, library, certificate, key, authenticationLimit: 2);
+            using var connection = new ProbeConnection(
+                first,
+                library,
+                certificate,
+                key,
+                authenticationLimit: 2,
+                tlsFactory: tlsFactory
+            );
             connection.Receive(first, 0);
             var forged = Initial(keys, original, client, 1, [1]);
             forged[^1] ^= 1;
@@ -147,11 +163,19 @@ namespace EmbedIO.Quic
             string key,
             PacketKeys keys,
             byte[] original,
-            byte[] client
+            byte[] client,
+            Func<byte[], string, TlsSession> tlsFactory
         )
         {
             var first = Initial(keys, original, client, 0, [1]);
-            using var connection = new ProbeConnection(first, library, certificate, key, encryptionLimit: 16);
+            using var connection = new ProbeConnection(
+                first,
+                library,
+                certificate,
+                key,
+                encryptionLimit: 16,
+                tlsFactory: tlsFactory
+            );
             var responses = connection.Receive(first, 0);
 
             for (uint number = 1; number <= 8; number++)
@@ -188,11 +212,12 @@ namespace EmbedIO.Quic
             string key,
             PacketKeys keys,
             byte[] original,
-            byte[] client
+            byte[] client,
+            Func<byte[], string, TlsSession> tlsFactory
         )
         {
             var first = Initial(keys, original, client, 0, [1]);
-            using var connection = new ProbeConnection(first, library, certificate, key);
+            using var connection = new ProbeConnection(first, library, certificate, key, tlsFactory: tlsFactory);
             connection.Receive(first, 0);
 
             for (uint number = 1; number <= 10000; number++)
@@ -239,11 +264,12 @@ namespace EmbedIO.Quic
             string key,
             PacketKeys keys,
             byte[] original,
-            byte[] client
+            byte[] client,
+            Func<byte[], string, TlsSession> tlsFactory
         )
         {
             var first = Initial(keys, original, client, 0, [1]);
-            using var connection = new ProbeConnection(first, library, certificate, key);
+            using var connection = new ProbeConnection(first, library, certificate, key, tlsFactory: tlsFactory);
             connection.Receive(first, 0);
             var replies = connection.Receive(Initial(keys, original, client, 1, Wire.Frame(0x1d, 0, 0)), 1);
             QuicFuzzChecks.Require(

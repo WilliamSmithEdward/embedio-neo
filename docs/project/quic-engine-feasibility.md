@@ -41,7 +41,10 @@ References:
   The adapter uses current parameter `0x1d` and frame `0x24`.
 
 OpenSSL performs the TLS 1.3 handshake, certificate/key handling and secret
-calculation. The original C# code owns UDP, QUIC packetization, packet protection,
+calculation in the cross-platform development profile. A Windows recordless
+Schannel adapter additionally exercises non-exportable CNG RSA/ECDSA credentials;
+see the [Windows TLS development profile](quic-development-and-testing.md#windows-recordless-tls-development-profile)
+for its scope, commands and remaining certificate/platform work. The original C# code owns UDP, QUIC packetization, packet protection,
 CRYPTO reassembly and the stream exchange. AES-GCM, AES and HKDF use the .NET
 cryptography implementations. Only TLS_AES_128_GCM_SHA256 is enabled. The TLS adapter
 uses OpenSSL's public C API and owns its callback buffers and native handles.
