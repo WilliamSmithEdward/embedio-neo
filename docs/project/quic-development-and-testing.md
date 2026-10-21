@@ -471,7 +471,7 @@ source changes; a new handshake invokes the selector again.
 Malformed transport parameters use QUIC error `0x08`; closure protection follows
 authenticated handshake progress. The server's first-flight parameter rejection is
 readable under Initial protection. The UDP payload-size parameter is bounded to the
-protocol's 1200Ã¢â‚¬â€œ65527 range.
+protocol's 1200-65527 range.
 Native imports resolve through the Windows system directory. Independent-peer
 receipts record provider identity and hashes of the corresponding system modules.
 
@@ -491,6 +491,27 @@ The existing Windows CI test leg is configured to reuse its already provisioned,
 hash-locked aioquic peer for both credential profiles, native lifetime checks and
 1,000 native mutation cases per profile plus the six certificate-selection cases. This adds no job or dependency installation.
 A configured step is not a completed hosted result; inspect its exact-head run.
+
+On a native lifetime-check failure, the Windows helper retains a bounded
+`schannel-contract-probe` report. Its 96 first-flight cases vary RSA/ECDSA credentials,
+short/long ALPN, SNI presence, transport-parameter lengths, X25519/P-256 shares and
+fragmented ClientHello delivery.
+The original lifetime gate still fails. The diagnostic checks native first-flight
+key installation and cleanup; it is not a completed TLS handshake or peer result.
+
+The adjacent shared HTTP lifecycle campaign also observes pending client requests
+when intentionally stopping listeners. Linux .NET 10.0.13 can report a direct
+`SocketError.NotConnected` from HttpClient endpoint discovery during that shutdown.
+Cleanup recognizes this specific outcome after checking handler cancellation and
+closure. Other direct socket errors, expired cleanup deadlines and normal response
+assertions still fail. The extended state-machine self-test exercises these boundaries.
+Both captured traces are retained in the ordinary state corpus.
+The correction passed 40 captured-trace replays and 10,000 lifecycle cases on Linux
+.NET 10.0.13. Final argument-order and equivalent collection/style cleanups passed
+all cleanup and negative-oracle checks, both corpus traces and 200 Windows lifecycle
+cases. All 96 native diagnostic cases and existing native/core self-tests passed
+locally. Hosted Windows ALPN failure investigation remains open; local first-flight
+success does not establish hosted interoperability.
 
 Use fresh output directories. Both `schannel-rsa` and `schannel-ecdsa` are validation
 selectors; no production listener setting selects them. The unused key-path argument

@@ -1,4 +1,5 @@
 ﻿using System.Buffers.Binary;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace EmbedIO.Quic
@@ -174,11 +175,46 @@ namespace EmbedIO.Quic
             byte[] parameters,
             string protocol,
             params (ushort Type, byte[] Value)[] extras
+        ) => NativeHello(parameters, protocol, false, extras);
+
+        internal static byte[] NativeHello(
+            byte[] parameters,
+            string protocol,
+            bool prime256,
+            params (ushort Type, byte[] Value)[] extras
         )
         {
-            var point = new byte[32];
-            point[0] = 9;
-            byte[] share = [0, 36, 0, 29, 0, 32, .. point];
+            var group = prime256 ? (byte)23 : (byte)29;
+            byte[] point;
+
+            if (prime256)
+            {
+                using var agreement = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+                var key = agreement.ExportParameters(false).Q;
+                point =
+                [
+                    4,
+                    ..key.X ?? throw new CryptographicException("Missing public X coordinate."),
+                    ..key.Y ?? throw new CryptographicException("Missing public Y coordinate.")
+                ];
+            }
+
+            else
+            {
+                point = new byte[32];
+                point[0] = 9;
+            }
+
+            byte[] share =
+            [
+                0,
+                checked((byte)(point.Length + 4)),
+                0,
+                group,
+                0,
+                checked((byte)point.Length),
+                .. point
+            ];
             var name = Encoding.ASCII.GetBytes(protocol);
             byte[] alpn =
             [
@@ -190,7 +226,7 @@ namespace EmbedIO.Quic
             (ushort Type, byte[] Value)[] extensions =
             [
                 (43, [2, 3, 4]),
-                (10, [0, 2, 0, 29]),
+                (10, [0, 2, 0, group]),
                 (13, [0, 4, 8, 4, 4, 3]),
                 (51, share),
                 (16, alpn),

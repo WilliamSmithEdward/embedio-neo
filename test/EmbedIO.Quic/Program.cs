@@ -19,6 +19,14 @@ namespace EmbedIO.Quic
                         .NotificationSelfTestAsync()
                         .ConfigureAwait(false);
 
+                if (arguments is ["schannel-contract-probe"])
+                {
+                    if (!OperatingSystem.IsWindows())
+                        throw new PlatformNotSupportedException("Schannel validation requires Windows.");
+
+                    return SchannelContractProbe.Run();
+                }
+
                 if (arguments is ["schannel-self-test"])
                 {
                     if (!OperatingSystem.IsWindows())

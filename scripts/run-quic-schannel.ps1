@@ -11,7 +11,13 @@ dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore -p:Ru
 if ($LASTEXITCODE) { throw 'QUIC host build failed.' }
 $assembly = 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll'
 dotnet $assembly schannel-self-test > "$output/lifetime.log" 2>&1
-if ($LASTEXITCODE) { Get-Content "$output/lifetime.log"; throw 'Schannel lifetime checks failed.' }
+if ($LASTEXITCODE) {
+  Get-Content "$output/lifetime.log"
+  # Preserve the original hard failure; diagnostics cannot turn it into a pass.
+  dotnet $assembly schannel-contract-probe > "$output/first-flight-contracts.log" 2>&1
+  Get-Content "$output/first-flight-contracts.log"
+  throw 'Schannel lifetime checks failed.'
+}
 foreach ($provider in 'schannel-rsa', 'schannel-ecdsa') {
   & $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify.py --dotnet dotnet --assembly $assembly --openssl $provider --output "$output/$provider-wire" > "$output/$provider-peer.log" 2>&1
   if ($LASTEXITCODE) { Get-Content "$output/$provider-peer.log"; throw 'Schannel independent peer checks failed.' }
