@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Security.Cryptography;
 
 namespace EmbedIO.Quic
@@ -47,6 +48,8 @@ namespace EmbedIO.Quic
         private readonly byte[] _clientId;
         private byte[] _destinationId;
         private PeerConnectionIds? _peerIds;
+        private IReadOnlyList<QuicPathRoute>? _retirementPaths;
+        private bool _retireUnusedPeerIds;
         private readonly byte[] _serverId;
         private readonly LocalConnectionIds _localIds;
         private readonly QuicConnectionIdIssuer? _ownedIdIssuer;
@@ -75,6 +78,40 @@ namespace EmbedIO.Quic
 
         private double _now;
         private Func<double>? _executionClock;
+        private QuicPathValidation? _paths;
+        private QuicConnectionEndpoints? _incomingEndpoints;
+        private QuicPath? _incomingPath;
+        private List<QuicPathRoute?>? _outputPaths;
+        private IPAddress? _congestionAddress;
+
+        internal IReadOnlyList<QuicPathRoute?>? OutputPaths => _outputPaths;
+        internal IReadOnlyList<QuicPathRoute>? ActivePaths => _paths?.Snapshot;
+        internal IReadOnlyList<ReadOnlyMemory<byte>> ResetTokens => _peerIds?.ResetTokens ?? [];
+
+        internal void BeginRouting(QuicConnectionEndpoints? endpoints)
+        {
+            if (_paths == null && endpoints != null)
+            {
+                _paths = new QuicPathValidation(endpoints);
+                _congestionAddress = endpoints.Peer.Address;
+            }
+
+            _incomingEndpoints = endpoints;
+            _incomingPath = null;
+            _outputPaths = [];
+        }
+
+        private void ObserveValidatedPath()
+        {
+            if (
+                _paths?.Current is not { AddressValidated: true } path
+                || Equals(_congestionAddress, path.Route.Endpoints.Peer.Address)
+            ) return;
+
+            _congestionAddress = path.Route.Endpoints.Peer.Address;
+            _recovery.ChangePath(_now);
+        }
+
         private int _ackDelayExponent = 3;
 
         internal int LostPackets => _recovery.LostPackets;
@@ -220,6 +257,10 @@ namespace EmbedIO.Quic
         private List<byte[]> ReceiveCore(ReadOnlySpan<byte> datagram, double now)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (_paths != null && _incomingEndpoints != null && !_handshakeDone && !_paths.Contains(_incomingEndpoints))
+                return [];
+
             _lifetime.Tick(now, _recovery.KeyRetention);
 
             if (Closed || Phase == ConnectionPhase.Draining) return [];
@@ -288,6 +329,31 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
+                var fresh = _received[level].Add(number);
+
+                if (_paths != null && _incomingEndpoints != null && _incomingPath == null)
+                {
+                    if (!fresh && !_paths.Contains(_incomingEndpoints))
+                    {
+                        position += length;
+                        continue;
+                    }
+
+                    _incomingPath = _paths.Receive(
+                        _incomingEndpoints,
+                        destination,
+                        datagram.Length,
+                        _handshakeDone && Phase == ConnectionPhase.Active,
+                        _now
+                    );
+
+                    if (_incomingPath == null)
+                    {
+                        position += length;
+                        continue;
+                    }
+                }
+
                 DatagramAuthenticated = true;
                 _lifetime.Authenticated(now);
                 _peerProtectionLevel = Math.Max(_peerProtectionLevel, level);
@@ -322,18 +388,27 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
-                var fresh = _received[level].Add(number);
                 _nextReceived[level] = Math.Max(_nextReceived[level], number + 1);
 
                 if (level == 1)
                 {
                     _addressValidated = true;
+                    _paths?.ValidateInitial();
                     _recovery.Discard(0);
                 }
 
                 if (fresh)
                 {
-                    var acknowledge = Frames(level, plaintext, number >= _keyUpdates.ReadMinimum, destination);
+                    var acknowledge = Frames(
+                        level,
+                        plaintext,
+                        number >= _keyUpdates.ReadMinimum,
+                        destination,
+                        out var nonProbing
+                    );
+
+                    if (level == 2 && _paths != null && _incomingPath != null)
+                        _paths.Observe(_incomingPath, number, nonProbing, _now, _recovery.KeyRetention / 3);
 
                     if (acknowledge && Phase == ConnectionPhase.Active) AcknowledgeReceived(level);
 
@@ -404,6 +479,15 @@ namespace EmbedIO.Quic
 
         private bool DetectReset(ReadOnlySpan<byte> datagram)
         {
+            if (_paths != null && _incomingEndpoints != null)
+            {
+                var associated = _paths.Snapshot.FirstOrDefault(
+                    route => QuicPathValidation.Same(route.Endpoints, _incomingEndpoints)
+                );
+
+                if (associated == null || _paths.Find(associated.Id)?.Sent == 0) return false;
+            }
+
             if (_peerIds?.MatchesReset(datagram) != true) return false;
 
             StatelessResetReceived = true;
@@ -610,6 +694,38 @@ namespace EmbedIO.Quic
         {
             var output = new List<byte[]>();
 
+            if (_paths?.Tick(_now) == true && _handshakeDone && Phase == ConnectionPhase.Active)
+                AcknowledgeReceived(2);
+
+            ObserveValidatedPath();
+
+            if (
+                Phase == ConnectionPhase.Active
+                && _paths != null
+                && _peerIds != null
+                && (_retireUnusedPeerIds || !ReferenceEquals(_retirementPaths, _paths.Snapshot))
+            )
+            {
+                try
+                {
+                    Span<ulong> sequences = stackalloc ulong[QuicPathValidation.Capacity];
+                    var count = _paths.CopyPeerSequences(sequences);
+                    _peerIds.RetireUnused(sequences[..count]);
+                    _retirementPaths = _paths.Snapshot;
+                    _retireUnusedPeerIds = false;
+                }
+
+                catch (TransportException error)
+                {
+                    BeginClose(CloseLevel, Wire.Frame(0x1c, error.ErrorCode, 0, 0));
+                }
+
+                catch (InvalidDataException)
+                {
+                    BeginClose(CloseLevel, Wire.Frame(0x1c, 1, 0, 0));
+                }
+            }
+
             if (Phase != ConnectionPhase.Active)
             {
                 _pending.Clear();
@@ -620,7 +736,9 @@ namespace EmbedIO.Quic
                 if (
                     Phase == ConnectionPhase.Closing
                     && _closePayload != null
-                    && (_addressValidated || SentBytes + 1200 <= ReceivedBytes * 3)
+                    && (_paths != null
+                        ? _paths.Current.Allowance >= 1200
+                        : _addressValidated || SentBytes + 1200 <= ReceivedBytes * 3)
                     && _lifetime.TakeCloseResponse(_now)
                 )
                 {
@@ -632,11 +750,21 @@ namespace EmbedIO.Quic
                         return output;
                     }
 
-                    var packet = Protect(new Delivery(_closeLevel, _closePayload, false, false));
+                    var close = new Delivery(_closeLevel, _closePayload, false, false);
+                    var path = _paths?.Current;
+
+                    if (!ResolveDestination(path, out var destination, out var sequence)) return output;
+
+                    var packet = Protect(close, path, destination);
+                    MarkDestination(sequence);
+
+                    if (path != null) QuicPathValidation.Sent(path, close, packet.Length, _now);
+
                     _sentNumbers[_closeLevel]++;
                     SentBytes += packet.Length;
                     ClosePackets++;
                     output.Add(packet);
+                    _outputPaths?.Add(path?.Route);
                 }
 
                 return output;
@@ -646,9 +774,20 @@ namespace EmbedIO.Quic
 
             if (Phase != ConnectionPhase.Active) return Drain();
 
-            while (_urgent.Count + _pending.Count != 0)
+            if (_paths != null)
+                foreach (var probe in _paths.Probes(_now)) QueueRepeat(probe, true);
+
+            var urgentVisits = _urgent.Count;
+            var pendingVisits = _pending.Count;
+
+            while (urgentVisits + pendingVisits != 0)
             {
-                var queue = _urgent.Count != 0 ? _urgent : _pending;
+                var queue = urgentVisits != 0 ? _urgent : _pending;
+
+                if (urgentVisits != 0) urgentVisits--;
+
+                else pendingVisits--;
+
                 var delivery = queue.Peek();
                 var level = delivery.Level;
 
@@ -665,17 +804,42 @@ namespace EmbedIO.Quic
                     return output;
                 }
 
-                var (header, numberOffset, payload) = Prepare(delivery);
+                var path = delivery.Path == null
+                    ? delivery.PreferValidatedPath ? _paths?.Fallback : _paths?.Current
+                    : _paths?.Find(delivery.Path.Id);
+
+                if (delivery.Path != null && path == null)
+                {
+                    queue.Dequeue();
+                    delivery.Queued = false;
+                    continue;
+                }
+
+                if (!ResolveDestination(path, out var destination, out var sequence))
+                {
+                    if (delivery.Path == null && (_paths?.Count ?? 0) <= 1) break;
+
+                    queue.Enqueue(queue.Dequeue());
+                    continue;
+                }
+
+                var (header, numberOffset, payload) = Prepare(delivery, path, destination);
                 var size = header.Length + payload.Length + 16;
+                var allowance = path?.Allowance ?? (_addressValidated ? long.MaxValue : ReceivedBytes * 3 - SentBytes);
 
-                if (!_addressValidated && SentBytes + size > ReceivedBytes * 3) break;
+                if (size > allowance || (delivery.Eliciting && !_recovery.CanSend(size, _now, queue == _urgent)))
+                {
+                    if (path == null || (delivery.Path == null && queue == _pending && (_paths?.Count ?? 0) <= 1))
+                        break;
 
-                if (delivery.Eliciting && !_recovery.CanSend(size, _now, queue == _urgent)) break;
+                    queue.Enqueue(queue.Dequeue());
+                    continue;
+                }
 
                 var keys = (level == 0 ? _initialWrite : _tls.WriteKeys[level])
                     ?? throw new InvalidOperationException("Packet keys unavailable.");
                 var packet = keys.Protect(header, numberOffset, _sentNumbers[level], payload);
-                _peerIds?.MarkUsed();
+                MarkDestination(sequence);
 
                 queue.Dequeue();
                 delivery.Queued = false;
@@ -691,9 +855,12 @@ namespace EmbedIO.Quic
                 );
                 SentBytes += packet.Length;
 
+                if (path != null) QuicPathValidation.Sent(path, delivery, packet.Length, _now);
+
                 if (delivery.Eliciting) _lifetime.SentEliciting(_now);
 
                 output.Add(packet);
+                _outputPaths?.Add(path?.Route);
             }
 
             return output;
@@ -729,9 +896,11 @@ namespace EmbedIO.Quic
             int level,
             ReadOnlySpan<byte> plaintext,
             bool currentReadKeys,
-            ReadOnlySpan<byte> destination
+            ReadOnlySpan<byte> destination,
+            out bool nonProbing
         )
         {
+            nonProbing = false;
             var reader = new WireReader(plaintext);
             var acknowledge = false;
 
@@ -740,6 +909,8 @@ namespace EmbedIO.Quic
                 var type = reader.Integer();
 
                 if (type == 0) continue;
+
+                if (type is not (0x1a or 0x1b or 0x18)) nonProbing = true;
 
                 if (type is 2 or 3)
                 {
@@ -895,16 +1066,28 @@ namespace EmbedIO.Quic
                 throw new TransportException(7, error.Message);
             }
 
-            // No challenge is outstanding until path initiation is integrated.
-            // RFC 9000 19.18 permits the existing protocol-violation policy.
-            if (type == 0x1b) throw new TransportException(10, "Unmatched path response.");
+            if (type == 0x1b)
+            {
+                if (_paths == null) throw new TransportException(10, "Unmatched path response.");
+
+                _paths.Respond(data, _now);
+                ObserveValidatedPath();
+                return;
+            }
 
             var response = new byte[9];
             response[0] = 0x1b;
             data.CopyTo(response.AsSpan(1));
             // RFC 9000 8.2.2/13.3: exactly one response per received challenge;
             // recovery may elicit fresh traffic, but must not repeat this frame.
-            QueueRepeat(new Delivery(2, response, false) { PadToMinimum = true }, false);
+            QueueRepeat(
+                new Delivery(2, response, false)
+                {
+                    PadToMinimum = true,
+                    Path = _incomingPath?.Route
+                },
+                true
+            );
         }
 
         private void RetireLocalConnectionId(ref WireReader reader, ReadOnlySpan<byte> destination)
@@ -941,6 +1124,7 @@ namespace EmbedIO.Quic
                 try
                 {
                     _peerIds.Add(sequence, retirePrior, id, token);
+                    _retireUnusedPeerIds = true;
                 }
 
                 finally
@@ -959,7 +1143,7 @@ namespace EmbedIO.Quic
 
         private Delivery RetirePeerConnectionId(ulong sequence)
         {
-            var delivery = new Delivery(2, Wire.Frame(0x19, sequence));
+            var delivery = new Delivery(2, Wire.Frame(0x19, sequence)) { PreferValidatedPath = true };
             QueueRepeat(delivery, false);
             return delivery;
         }
@@ -1135,18 +1319,52 @@ namespace EmbedIO.Quic
             return false;
         }
 
-        private byte[] Protect(Delivery delivery)
+        private bool ResolveDestination(QuicPath? path, out ReadOnlyMemory<byte> destination, out ulong? sequence)
         {
-            var (header, numberOffset, payload) = Prepare(delivery);
+            sequence = null;
+            destination = _destinationId;
+
+            if (_peerIds?.ActiveCount == 0) return false;
+
+            if (path == null) return true;
+
+            if (_peerIds == null) return !path.RequireUnusedId;
+
+            if (path.PeerSequence is not { } preferred || !_peerIds.IsActive(preferred))
+                path.PeerSequence = _paths?.SharedPeerSequence(path, _peerIds);
+
+            if (!_peerIds.Resolve(path.PeerSequence, out var selected, out destination))
+                return false;
+
+            if (path.PeerSequence != selected) _retireUnusedPeerIds = true;
+
+            sequence = path.PeerSequence = selected;
+            return true;
+        }
+
+        private void MarkDestination(ulong? sequence)
+        {
+            if (sequence.HasValue) _peerIds?.MarkUsed(sequence.Value);
+
+            else _peerIds?.MarkUsed();
+        }
+
+        private byte[] Protect(Delivery delivery, QuicPath? path = null, ReadOnlyMemory<byte>? destination = null)
+        {
+            var (header, numberOffset, payload) = Prepare(delivery, path, destination);
             var keys = (delivery.Level == 0 ? _initialWrite : _tls.WriteKeys[delivery.Level])
                 ?? throw new InvalidOperationException("Packet keys are unavailable.");
             var packet = keys.Protect(header, numberOffset, _sentNumbers[delivery.Level], payload);
-            _peerIds?.MarkUsed();
             return packet;
         }
 
-        private (byte[] Header, int NumberOffset, byte[] Payload) Prepare(Delivery delivery)
+        private (byte[] Header, int NumberOffset, byte[] Payload) Prepare(
+            Delivery delivery,
+            QuicPath? path = null,
+            ReadOnlyMemory<byte>? destination = null
+        )
         {
+            var target = destination ?? _destinationId;
             var level = delivery.Level;
             var payload = delivery.Bytes;
 
@@ -1156,8 +1374,8 @@ namespace EmbedIO.Quic
             {
                 header.WriteByte(level == 0 ? (byte)0xc3 : (byte)0xe3);
                 header.Write([0, 0, 0, 1]);
-                header.WriteByte((byte)_destinationId.Length);
-                header.Write(_destinationId);
+                header.WriteByte((byte)target.Length);
+                header.Write(target.Span);
                 header.WriteByte((byte)_localIds.Current.Length);
                 header.Write(_localIds.Current);
 
@@ -1174,7 +1392,7 @@ namespace EmbedIO.Quic
             else
             {
                 header.WriteByte(_keyUpdates.WritePhase ? (byte)0x47 : (byte)0x43);
-                header.Write(_destinationId);
+                header.Write(target.Span);
             }
 
             var numberOffset = (int)header.Length;
@@ -1185,9 +1403,9 @@ namespace EmbedIO.Quic
 
             if (delivery.PadToMinimum)
             {
-                var minimum = _addressValidated
-                    ? 1200
-                    : (int)Math.Min(1200, Math.Max(0, ReceivedBytes * 3 - SentBytes));
+                var minimum = path != null
+                    ? (int)Math.Min(1200, path.Allowance)
+                    : _addressValidated ? 1200 : (int)Math.Min(1200, Math.Max(0, ReceivedBytes * 3 - SentBytes));
                 Array.Resize(ref payload, Math.Max(payload.Length, minimum - (int)header.Length - 16));
             }
 

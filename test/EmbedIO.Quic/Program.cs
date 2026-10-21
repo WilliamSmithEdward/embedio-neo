@@ -126,6 +126,12 @@ namespace EmbedIO.Quic
                     return 0;
                 }
 
+                if (arguments is ["path-validation-self-test"])
+                {
+                    PathValidationTests.Run();
+                    return 0;
+                }
+
                 if (arguments is ["path-control-self-test"])
                 {
                     PathControlTests.Run();

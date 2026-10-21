@@ -65,3 +65,6 @@ if ($LASTEXITCODE) { Get-Content "$output/local-connection-ids.log"; throw 'Scha
 
 & $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_path_controls.py --dotnet dotnet --assembly $assembly --output "$output/path-controls" > "$output/path-controls.log" 2>&1
 if ($LASTEXITCODE) { Get-Content "$output/path-controls.log"; throw 'Schannel path-control checks failed.' }
+
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_path_validation.py --dotnet dotnet --assembly $assembly --output "$output/path-validation" > "$output/path-validation.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/path-validation.log"; throw 'Schannel path-validation checks failed.' }

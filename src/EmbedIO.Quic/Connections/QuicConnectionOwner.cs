@@ -10,7 +10,10 @@ namespace EmbedIO.Quic
         bool Established,
         bool Closed,
         ReadOnlyMemory<byte> ResetToken = default,
-        IReadOnlyList<ReadOnlyMemory<byte>>? IssuedConnectionIds = null
+        IReadOnlyList<ReadOnlyMemory<byte>>? IssuedConnectionIds = null,
+        IReadOnlyList<QuicPathRoute?>? OutputPaths = null,
+        IReadOnlyList<QuicPathRoute>? ActivePaths = null,
+        IReadOnlyList<ReadOnlyMemory<byte>>? ResetTokens = null
     );
 
     // The mailbox owns copied input until its turn completes. Factory, packet,
@@ -18,7 +21,11 @@ namespace EmbedIO.Quic
     internal sealed class QuicConnectionOwner : IAsyncDisposable
     {
         private readonly object _gate = new();
-        private readonly Queue<(byte[] Bytes, QuicConnectionOwner? ResetOwner)> _packets = new();
+        private readonly Queue<(
+            byte[] Bytes,
+            QuicConnectionOwner? ResetOwner,
+            QuicConnectionEndpoints? Endpoints
+        )> _packets = new();
         private readonly QuicExecutionPool.Registration _execution;
         private readonly QuicConnectionFactory _create;
         private readonly Func<double> _clock;
@@ -30,6 +37,8 @@ namespace EmbedIO.Quic
         private ReadOnlyMemory<byte> _resetToken;
         private IReadOnlyList<ReadOnlyMemory<byte>>? _issuedIds;
         private bool _established;
+        private IReadOnlyList<QuicPathRoute>? _activePaths;
+        private IReadOnlyList<ReadOnlyMemory<byte>>? _resetTokens;
         private bool _reported;
         private bool _closing;
         private bool _tick;
@@ -84,7 +93,11 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal bool Receive(ReadOnlySpan<byte> bytes, QuicConnectionOwner? resetOwner = null)
+        internal bool Receive(
+            ReadOnlySpan<byte> bytes,
+            QuicConnectionOwner? resetOwner = null,
+            QuicConnectionEndpoints? endpoints = null
+        )
         {
             lock (_gate)
             {
@@ -94,7 +107,7 @@ namespace EmbedIO.Quic
 
                 if (_pendingPackets >= _packetCapacity || bytes.Length > _byteCapacity - _pendingBytes) return false;
 
-                _packets.Enqueue((bytes.ToArray(), resetOwner));
+                _packets.Enqueue((bytes.ToArray(), resetOwner, endpoints));
                 _pendingPackets++;
                 _pendingBytes += bytes.Length;
             }
@@ -131,6 +144,7 @@ namespace EmbedIO.Quic
         {
             byte[]? packet;
             QuicConnectionOwner? resetOwner;
+            QuicConnectionEndpoints? endpoints;
             bool tick;
 
             lock (_gate)
@@ -139,12 +153,14 @@ namespace EmbedIO.Quic
                 {
                     packet = pending.Bytes;
                     resetOwner = pending.ResetOwner;
+                    endpoints = pending.Endpoints;
                 }
 
                 else
                 {
                     packet = null;
                     resetOwner = null;
+                    endpoints = null;
                 }
 
                 tick = _tick;
@@ -165,6 +181,7 @@ namespace EmbedIO.Quic
 
                 if (connection == null) return;
 
+                connection.BeginRouting(endpoints);
                 var output = packet == null
                     ? tick ? connection.Tick(ReadClock()) : connection.PumpApplications(ReadClock())
                     : connection.Receive(packet, ReadClock());
@@ -178,12 +195,14 @@ namespace EmbedIO.Quic
                     && !connection.DatagramAuthenticated
                     && !connection.StatelessResetReceived
                 )
-                    resetOwner.Receive(packet);
+                    resetOwner.Receive(packet, endpoints: endpoints);
 
                 if (packet != null && tick && !connection.Closed) output.AddRange(connection.Tick(ReadClock()));
 
                 var resetToken = connection.ResetToken;
                 var issuedIds = connection.IssuedConnectionIds;
+                var activePaths = connection.ActivePaths;
+                var resetTokens = connection.ResetTokens;
 
                 if (
                     !_execution.Closing
@@ -192,15 +211,29 @@ namespace EmbedIO.Quic
                         || connection.Established != _established
                         || connection.Closed
                         || !resetToken.Equals(_resetToken)
-                        || !ReferenceEquals(issuedIds, _issuedIds))
+                        || !ReferenceEquals(issuedIds, _issuedIds)
+                        || !ReferenceEquals(activePaths, _activePaths)
+                        || !ReferenceEquals(resetTokens, _resetTokens))
                 )
                 {
                     _reported = true;
                     _established = connection.Established;
                     _resetToken = resetToken;
                     _issuedIds = issuedIds;
+                    _activePaths = activePaths;
+                    _resetTokens = resetTokens;
                     _publish(
-                        new QuicConnectionOutput(_id, output, _established, connection.Closed, _resetToken, _issuedIds)
+                        new QuicConnectionOutput(
+                            _id,
+                            output,
+                            _established,
+                            connection.Closed,
+                            _resetToken,
+                            _issuedIds,
+                            connection.OutputPaths,
+                            _activePaths,
+                            _resetTokens
+                        )
                     );
                 }
 

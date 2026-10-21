@@ -36,6 +36,7 @@ async def case(args, cipher, mode):
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     startup, ready, failure, report = bytearray(), {}, None, {}
     trace, negatives, observed = QuicLogger(), 0, False
+    stdout, stderr, communicated, stage = b"", b"", False, "readiness"
     try:
         async with asyncio.timeout(8):
             while not ready.get("ready"):
@@ -50,6 +51,7 @@ async def case(args, cipher, mode):
             value.cipher_suites = [CipherSuite[cipher]]
             value.quic_logger = trace
             return value
+        stage = "reset-and-request-abort"
         async with asyncio.timeout(24):
             async with connect("127.0.0.1", ready["port"], configuration=config(), create_protocol=CertificatePeer) as sibling:
                 sibling.authority = f"127.0.0.1:{ready['port']}".encode()
@@ -112,12 +114,15 @@ async def case(args, cipher, mode):
                     observed = True
                     pending.cancel()
                     assert await request(sibling, "/health") == b"controller HTTP/3"
+                stage = "drain"
                 _, pending = sibling.start_request("/drain")
                 host.stdin.write(b"drain\n")
                 await host.stdin.drain()
                 fields, body = await asyncio.wait_for(pending, 8)
                 assert dict(fields)[b":status"] == b"200" and body == b"d" * 131072
+        stage = "host-cleanup"
         stdout, stderr = await asyncio.wait_for(host.communicate(), 10)
+        communicated = True
         reports = [json.loads(line) for line in stdout.splitlines() if line.startswith(b"{")]
         report = reports[-1] if reports else {}
         assert host.returncode == 0 and report.get("completed") and report.get("drainCompleted") and report.get("rebind"), report
@@ -127,12 +132,13 @@ async def case(args, cipher, mode):
         failure = repr(error)
         if host.returncode is None:
             host.kill()
-        stdout, stderr = await host.communicate()
+        if not communicated:
+            stdout, stderr = await host.communicate()
     (output / "host.stdout.log").write_bytes(startup + stdout)
     (output / "host.stderr.log").write_bytes(stderr)
     (output / "peer.qlog").write_text(json.dumps(trace.to_dict()), encoding="utf-8")
     result = {"passed": failure is None, "failure": failure, "cipher": cipher, "mode": mode,
-              "negativeCases": negatives, "resetObserved": observed, "exit": host.returncode, "server": report}
+              "negativeCases": negatives, "resetObserved": observed, "stage": stage, "exit": host.returncode, "server": report}
     (output / "receipt.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps({key: result[key] for key in ("passed", "failure", "cipher", "mode", "negativeCases", "resetObserved")}), flush=True)
     return result

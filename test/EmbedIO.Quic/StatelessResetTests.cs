@@ -413,7 +413,23 @@ namespace EmbedIO.Quic
 
             var reset = ResetBytes(selected);
             connections[1 - target].ServerId.CopyTo(reset.AsSpan(1));
-            Check(!dispatcher.Receive(reset, new IPEndPoint(IPAddress.Loopback, 17003), local), "foreign reset source");
+            Check(
+                dispatcher.Receive(reset, new IPEndPoint(IPAddress.Loopback, 17003), local) == !expireFirst,
+                "foreign known-CID packet reaches only a confirmed cryptographic owner"
+            );
+            Check(
+                dispatcher.Receive(
+                    ConnectionCoreTests.ApplicationPacket(connections[1].ServerId, Wire.Frame(1), 2),
+                    peer,
+                    local
+                ),
+                "foreign-source barrier"
+            );
+            await Flush().ConfigureAwait(false);
+            Check(
+                !closed[0].Task.IsCompleted && !closed[1].Task.IsCompleted && dispatcher.EndpointGroups == 1,
+                "foreign reset cannot close an owner or create a path"
+            );
             Check(
                 !dispatcher.Receive(reset, peer, new IPEndPoint(IPAddress.Loopback, 18003)),
                 "foreign reset destination"

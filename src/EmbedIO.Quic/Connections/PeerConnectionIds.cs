@@ -22,8 +22,11 @@ namespace EmbedIO.Quic
         private readonly Func<ulong, Delivery> _retire = retire ?? throw new ArgumentNullException(nameof(retire));
         private readonly bool _zeroLength = initial.Length == 0;
         private ulong _retirePrior;
+        private ulong _locallyRetiredBefore;
         private bool _disposed;
-        private ulong? _usedSequence = initialUsed ? 0UL : null;
+        private readonly HashSet<ulong> _used = initialUsed ? [0] : [];
+        private readonly HashSet<ulong> _assigned = initialUsed ? [0] : [];
+        private IReadOnlyList<ReadOnlyMemory<byte>>? _tokens;
         private byte[]? _snapshotSource;
         private ReadOnlyMemory<byte> _resetSnapshot;
 
@@ -36,7 +39,7 @@ namespace EmbedIO.Quic
             get
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
-                return _active[0].Id;
+                return _active.Count == 0 ? [] : _active[0].Id;
             }
         }
 
@@ -47,9 +50,12 @@ namespace EmbedIO.Quic
             get
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
+
+                if (_active.Count == 0) return default;
+
                 var current = _active[0];
 
-                if (_usedSequence != current.Sequence || current.Token.Length != 16) return default;
+                if (!_used.Contains(current.Sequence) || current.Token.Length != 16) return default;
 
                 if (!ReferenceEquals(_snapshotSource, current.Token))
                 {
@@ -65,17 +71,128 @@ namespace EmbedIO.Quic
         internal void MarkUsed()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            _usedSequence = _active[0].Sequence;
+
+            if (_active.Count != 0) MarkUsed(_active[0].Sequence);
+        }
+
+        internal void MarkUsed(ulong sequence)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            _assigned.Add(sequence);
+
+            if (_used.Add(sequence)) _tokens = null;
+        }
+
+        internal IReadOnlyList<ReadOnlyMemory<byte>> ResetTokens
+        {
+            get
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+
+                if (_tokens != null) return _tokens;
+
+                var tokens = new List<ReadOnlyMemory<byte>>(ActiveLimit);
+
+                foreach (var value in _active)
+                    if (_used.Contains(value.Sequence) && value.Token.Length == 16)
+                        tokens.Add(
+                            value.Token
+                                .AsSpan()
+                                .ToArray()
+                        );
+
+                _tokens = [.. tokens];
+                return _tokens;
+            }
+        }
+
+        internal bool Resolve(ulong? preferred, out ulong sequence, out ReadOnlyMemory<byte> id)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            Identifier? selected = null;
+
+            foreach (var value in _active)
+                if (value.Sequence == preferred) selected = value;
+
+            if (selected == null)
+                foreach (var value in _active)
+                    if (!_assigned.Contains(value.Sequence))
+                    {
+                        selected = value;
+                        break;
+                    }
+
+            if (selected != null) _assigned.Add(selected.Sequence);
+
+            sequence = selected?.Sequence ?? 0;
+            id = selected?.Id ?? ReadOnlyMemory<byte>.Empty;
+            return selected != null;
+        }
+
+        internal bool IsActive(ulong sequence)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            foreach (var value in _active)
+                if (value.Sequence == sequence) return true;
+
+            return false;
+        }
+
+        internal void RetireUnused(ReadOnlySpan<ulong> sequences)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            Prune();
+
+            for (var index = _active.Count - 1; index >= 0; index--)
+            {
+                var value = _active[index];
+
+                if (_active.Count == 1 || !_assigned.Contains(value.Sequence) || sequences.Contains(value.Sequence))
+                    continue;
+
+                // Keep lower active IDs as bounded exceptions. Delayed frames for
+                // removed or unseen lower IDs cannot resurrect retired associations.
+                _locallyRetiredBefore = Math.Max(_locallyRetiredBefore, value.Sequence + 1);
+                Remove(index);
+                Retire(value.Sequence);
+            }
+        }
+
+        private void Remove(int index)
+        {
+            var value = _active[index];
+            CryptographicOperations.ZeroMemory(value.Token);
+            _used.Remove(value.Sequence);
+            _assigned.Remove(value.Sequence);
+            _active.RemoveAt(index);
+            _tokens = null;
+        }
+
+        private void Retire(ulong sequence)
+        {
+            if (_retiring.ContainsKey(sequence)) return;
+
+            if (_retiring.Count >= RetirementLimit)
+                throw new TransportException(9, "Peer connection-ID retirement limit exceeded.");
+
+            _retiring.Add(sequence, _retire(sequence));
         }
 
         internal bool MatchesReset(ReadOnlySpan<byte> datagram)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var current = _active[0];
-            return datagram.Length >= 21
-                && _usedSequence == current.Sequence
-                && current.Token.Length == 16
-                && CryptographicOperations.FixedTimeEquals(datagram[^16..], current.Token);
+
+            if (datagram.Length < 21) return false;
+
+            var matched = false;
+
+            foreach (var value in _active)
+                if (_used.Contains(value.Sequence) && value.Token.Length == 16)
+                    matched |= CryptographicOperations.FixedTimeEquals(datagram[^16..], value.Token);
+
+            return matched;
         }
 
         private static byte[] CopyInitial(byte[] initial)
@@ -134,11 +251,11 @@ namespace EmbedIO.Quic
                 if (active.Sequence >= _retirePrior) continue;
 
                 retired[count++] = active.Sequence;
-                CryptographicOperations.ZeroMemory(active.Token);
-                _active.RemoveAt(index);
+                Remove(index);
             }
 
-            if (sequence < _retirePrior) retired[count++] = sequence;
+            if (sequence < _retirePrior || (existing == null && sequence < _locallyRetiredBefore))
+                retired[count++] = sequence;
 
             else if (existing == null)
             {
@@ -146,21 +263,18 @@ namespace EmbedIO.Quic
                     throw new TransportException(9, "Peer active connection-ID limit exceeded.");
 
                 _active.Add(new Identifier(sequence, id.ToArray(), token.ToArray()));
+                _tokens = null;
             }
 
             else if (existing.Token.Length == 0)
+            {
                 _active[_active.IndexOf(existing)] = existing with { Token = token.ToArray() };
+                _tokens = null;
+            }
 
             for (var index = 0; index < count; index++)
             {
-                var value = retired[index];
-
-                if (_retiring.ContainsKey(value)) continue;
-
-                if (_retiring.Count >= RetirementLimit)
-                    throw new TransportException(9, "Peer connection-ID retirement limit exceeded.");
-
-                _retiring.Add(value, _retire(value));
+                Retire(retired[index]);
             }
         }
 
@@ -191,6 +305,9 @@ namespace EmbedIO.Quic
             _retiring.Clear();
             _snapshotSource = null;
             _resetSnapshot = default;
+            _used.Clear();
+            _assigned.Clear();
+            _tokens = null;
         }
     }
 }

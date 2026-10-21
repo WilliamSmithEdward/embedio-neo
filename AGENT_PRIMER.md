@@ -1237,5 +1237,15 @@ the response frame. Truncated challenge/response data yields frame-encoding erro
 7; an unmatched complete response retains protocol-violation error 10, permitted
 by RFC 9000 section 19.18. The model, fuzz and independent-peer hooks are in the
 [development/testing record](docs/project/quic-development-and-testing.md).
-Server-initiated path validation and NAT rebinding remain separate integration
-work; public provider selection is unchanged.
+The unmerged engine also has bounded address-aware routing and server-initiated
+path validation. New peer addresses require authenticated 1-RTT traffic after
+handshake confirmation; only the newest non-probing packet steers ordinary output.
+Per-path amplification accounting, unique challenge attempts, a separate full-size
+proof after small address probes, a validated fallback and a bounded failed-path
+cooldown cover source-port rebinding. Responses target the path on which the
+challenge arrived; a response received on another path can validate the originally
+probed route. Application request endpoints retain the connection's initial
+identity, matching the existing HTTP/3 binding. `verify_path_validation.py` checks
+same-IP rebinding, blackholed-candidate fallback, sibling requests and drain/rebind.
+Broader address/CID combinations and platform acceptance remain development work;
+public provider selection is unchanged.

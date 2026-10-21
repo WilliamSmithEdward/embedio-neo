@@ -77,6 +77,7 @@ namespace EmbedIO.Quic
             LocalConnectionIdTests.Mutate(steps);
             cover?.Invoke("connection.local-id-bounds");
             PathControlTests.Mutate(steps);
+            PathValidationTests.Mutate(steps);
             cover?.Invoke("connection.path-controls");
             StatelessResetTests.Mutate(steps);
             cover?.Invoke("connection.stateless-reset");
@@ -102,6 +103,7 @@ namespace EmbedIO.Quic
             LocalConnectionIdTests.Mutate(steps);
             cover?.Invoke("connection.local-id-bounds");
             PathControlTests.Mutate(steps);
+            PathValidationTests.Mutate(steps);
             cover?.Invoke("connection.path-controls");
             StatelessResetTests.Mutate(steps);
             cover?.Invoke("connection.stateless-reset");

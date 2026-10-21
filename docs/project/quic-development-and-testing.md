@@ -1660,3 +1660,105 @@ before TLS compilation. Its log is retained; no package pin or verification
 check was relaxed. A local execution probe of that exact ARM64 base image could
 not run because this Docker host lacks ARM64 emulation. Hosted ARM64 acceptance
 remains necessary.
+
+
+## Address-aware path validation and NAT rebinding
+
+The next unmerged increment carries owned peer/local endpoint metadata through
+the serialized connection mailbox. An authenticated fresh packet can introduce a
+new peer path only after handshake confirmation; a packet from a different local
+endpoint is ignored. The highest received packet number governs whether a
+non-probing packet selects the active route. Each queued datagram retains its
+route, and output for a subsequently retired route is discarded.
+
+At most three active paths and three failed-endpoint cooldown entries are retained.
+Each path has its own received/sent byte accounting and three-times amplification
+budget until address validation. A source change probes both the new and previous
+active paths. Challenges use fresh eight-byte random values, at most three attempts
+per phase, no faster than a PTO with the initial-path floor, and a bounded lifetime
+even when transmission is blocked. Only actually transmitted challenges can be
+answered. A short probe proves the address but starts a new full-size proof phase;
+it does not establish a 1200-byte path. A matching response can arrive on another
+path. Failed candidates return to the last validated route, with a bounded
+cooldown that prevents immediate oscillation. Known late responses cannot revive
+retired routes. The completed/abandoned challenge history is bounded at 24 values.
+
+A path retains its selected peer CID. A new source using the same incoming CID
+can continue the associated outbound CID for NAT rebinding; an unrelated path
+requires an unused peer CID. Every used, non-retired peer reset token is retained,
+with bounded immutable token/path publication and endpoint-index cleanup. IP
+changes reset congestion and RTT training by recovery epoch: old-path ACK/loss
+still completes or retries reliable deliveries without modifying new-path flight,
+RTT, congestion growth or loss history. Port-only rebinding retains the existing
+congestion controller. The HTTP request/controller endpoint snapshot remains the
+original connection identity, as in the existing binding.
+
+`PathValidationTests` covers admission, ordering, per-path budget, unsent/nonmatching
+proofs, small/full proof phases, retry/fallback, stale responses, 500 candidate
+changes, peer CID/token selection and recovery epochs. Its engine case sends a
+new-path proof back through the original path. Its bounded mutation helper joins
+the core, recovery and lifecycle fuzz entry points.
+
+The independent `verify_path_validation.py` relay changes only the client's UDP
+source port. The preserved previous host completed two initial requests, then
+received no response on its rebound socket and timed out waiting for the same
+connection's ping. Both local Windows AES profiles now complete three successive
+source changes, full-size probes, a blackholed candidate within its amplification
+budget, fallback, ten controller requests across two connections, drain and socket
+rebinding. This is controlled same-IP NAT evidence; broader IP/CID combinations,
+browser/WebTransport and platform/package acceptance remain separate work. The
+script joins the Schannel, development and six package-consumer drivers.
+
+The received-reset test driver also retains already captured stdout/stderr when
+its final host assertion fails. A controlled failing exit after the real reset and
+drain sequence reproduced the old double-read losing both streams and verified
+that the corrected single-read retains them. This diagnostic correction does not
+establish the cause of the separately retained hosted Windows cleanup failure.
+
+
+Linux also passed the complete model/dispatcher suite, all three same-IP
+rebinding/fallback cipher profiles, three local-CID profiles and fifteen received
+reset profiles using the verified unchanged native SDK and same-version peer
+wheel. These local SDK checks are separate from exact-source package-consumer CI.
+The Windows repeat additionally verified unchanged request endpoint snapshots,
+401/403/200 authorization and cancellation of a blocked controller request opened
+before rebinding. Final source diagnostics, pinned scan, broader fuzzing and
+cross-platform package acceptance still apply to the completed increment.
+
+The subsequent CID increment retires obsolete routes after full proof and sends
+reliable peer-ID retirements through the validated route. Destination reservations
+are separate from reset-token eligibility, preventing two unsent unrelated paths
+from selecting one spare ID. Local retirement keeps a compact watermark with
+bounded still-active lower IDs; delayed lower frames cannot revive removed IDs.
+The model includes 1,000 higher-ID retirements while one lower path stays active.
+These transitions also join the existing peer-ID mutation entry point.
+
+A controlled simultaneous source-port/CID test stalled on its second migration
+before this increment: the new socket received no server bytes. Both Windows AES
+profiles now pass three such changes, full-size probes, the controller/auth/abort
+checks, bounded blackhole/fallback and cleanup. The maintained relay has separate
+same-IP NAT and simultaneous source-port/IP/CID modes. The IP change uses
+127.0.0.2 on its third move. Changing the relay socket before requesting the peer
+CID change is essential because the peer transmits immediately on that call.
+
+The prior source snapshot also completed 100,000 managed mutations, 10,000 cases
+per FsCheck property and 1,000 recovery and lifecycle traces on Windows and Linux.
+Its two-minute guided runs completed 91,946 libFuzzer and 51,668 AFL++ executions
+without saved crashes or hangs. AFL++ reported only 1.41% feedback stability;
+coverage growth is not reliable acceptance evidence until that is corrected.
+These earlier campaign counts do not validate the subsequent CID edits.
+
+Reordered NEW_CONNECTION_ID frames can retire the last still-active lower ID while
+the supplied replacement was already retired locally. Empty pools publish no reset
+token, block output using retired IDs and resume when a fresh replacement arrives. Regression cases also cover the local retirement budget and
+preservation of a usable close destination. Stateful CID mutation traces include
+reservation, transmission, local retirement, acknowledgment and replenishment.
+
+The combined wire snapshot passed four Windows and six Linux NAT/CID-IP cipher
+profiles. Each verifies ten controller requests across two independent connections,
+original endpoint identity, 401/403/200 authorization, cancellation of a request
+opened before migration, full-size probes, bounded blackhole/fallback and complete
+drain/rebind cleanup. Linux reused a verified unchanged native SDK and same-version
+peer wheel; this does not substitute for exact-source package-consumer CI.
+The model suite now has fifteen path-validation groups, including packet-level
+empty-ID-pool recovery and invalidation of queued probes for retired routes.

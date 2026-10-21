@@ -33,10 +33,13 @@ namespace EmbedIO.Quic
             bool Expired,
             ReadOnlyMemory<byte> ResetToken,
             string? ResetIdentity,
-            IReadOnlyList<ReadOnlyMemory<byte>> IssuedIds
+            IReadOnlyList<ReadOnlyMemory<byte>> IssuedIds,
+            IReadOnlyList<QuicPathRoute> Paths,
+            IReadOnlyList<ReadOnlyMemory<byte>> Tokens,
+            string[] TokenIdentities
         );
 
-        private sealed record Output(Entry? Entry, byte[] Bytes, IPEndPoint? Peer = null);
+        private sealed record Output(Entry? Entry, byte[] Bytes, IPEndPoint? Peer = null, ulong? PathId = null);
 
         private sealed class PeerGroup
         {
@@ -60,6 +63,7 @@ namespace EmbedIO.Quic
                 Peer = QuicConnectionEndpoints.Copy(peer);
                 Local = local == null ? null : QuicConnectionEndpoints.Copy(local);
                 Deadline = deadline;
+                Endpoints = new QuicConnectionEndpoints(Peer, Local);
                 Owner = new QuicConnectionOwner(
                     dispatcher._pool,
                     (packet, now) => create(
@@ -77,6 +81,7 @@ namespace EmbedIO.Quic
             internal string Original { get; }
             internal IPEndPoint Peer { get; }
             internal IPEndPoint? Local { get; }
+            internal QuicConnectionEndpoints Endpoints { get; }
             internal double Deadline { get; }
             internal QuicConnectionOwner Owner { get; }
 
@@ -85,7 +90,10 @@ namespace EmbedIO.Quic
             internal string? Id;
             internal string[] Aliases = [];
             internal IReadOnlyList<ReadOnlyMemory<byte>>? IssuedIds;
-            internal string? ResetIdentity;
+            internal IReadOnlyList<QuicPathRoute>? Paths;
+            internal IReadOnlyList<ReadOnlyMemory<byte>>? Tokens;
+            internal (IPEndPoint Peer, IPEndPoint? Local, string Token)[] ResetBindings = [];
+            internal readonly HashSet<(IPEndPoint Peer, IPEndPoint? Local)> Groups = [];
             internal bool Closing;
             internal bool Expired;
             internal TimeoutException? ExpiryFailure;
@@ -213,15 +221,18 @@ namespace EmbedIO.Quic
 
             if (entry != null)
             {
-                if (!entry.Peer.Equals(peer) || !Equals(entry.Local, local))
-                    return RouteReset(bytes, peer, local, now) || Reject();
-
                 if (!Synchronize(entry, now)) return RouteReset(bytes, peer, local, now) || Reject();
+
+                if (
+                    (!entry.Peer.Equals(peer) && (entry.State?.Established != true || (bytes[0] & 128) != 0))
+                    || !Equals(entry.Local, local)
+                )
+                    return RouteReset(bytes, peer, local, now) || Reject();
 
                 // Preserve authenticated-packet priority when a randomized reset
                 // header names a sibling. Only shared endpoint groups need this
                 // candidate lookup; forwarding follows failed authentication.
-                if (entry.Group.Count > 1)
+                if (_peerGroups.TryGetValue((peer, local), out var peers) && peers.Count > 1)
                 {
                     var candidate = FindReset(bytes, peer, local, now);
 
@@ -259,12 +270,13 @@ namespace EmbedIO.Quic
                 else _peerGroups.Add(groupKey, entry.Group);
 
                 entry.Group.Count++;
+                entry.Groups.Add(groupKey);
                 _entries.Add(entry);
                 _initials.Add((entry.Peer, entry.Local, id), entry);
                 Peak = Math.Max(Peak, _entries.Count);
             }
 
-            if (entry.Owner.Receive(bytes, resetOwner)) return true;
+            if (entry.Owner.Receive(bytes, resetOwner, Endpoints(entry, peer, local))) return true;
 
             return Reject();
         }
@@ -283,8 +295,24 @@ namespace EmbedIO.Quic
             return _resets.TryGetValue(key, out var entry) && Synchronize(entry, now) ? entry : null;
         }
 
-        private bool RouteReset(ReadOnlySpan<byte> bytes, IPEndPoint peer, IPEndPoint? local, double now) =>
-            FindReset(bytes, peer, local, now)?.Owner.Receive(bytes) == true;
+        private static QuicConnectionEndpoints Endpoints(Entry entry, IPEndPoint peer, IPEndPoint? local)
+        {
+            if (entry.Peer.Equals(peer) && Equals(entry.Local, local)) return entry.Endpoints;
+
+            var paths = Volatile.Read(ref entry.State)?.Paths;
+
+            if (paths != null)
+                foreach (var path in paths)
+                    if (path.Endpoints.Peer.Equals(peer) && Equals(path.Endpoints.Local, local)) return path.Endpoints;
+
+            return new QuicConnectionEndpoints(peer, local);
+        }
+
+        private bool RouteReset(ReadOnlySpan<byte> bytes, IPEndPoint peer, IPEndPoint? local, double now)
+        {
+            var entry = FindReset(bytes, peer, local, now);
+            return entry?.Owner.Receive(bytes, endpoints: Endpoints(entry, peer, local)) == true;
+        }
 
         private bool SendReset(ReadOnlySpan<byte> bytes, IPEndPoint peer, double now)
         {
@@ -365,6 +393,13 @@ namespace EmbedIO.Quic
                     var entry = output.Entry;
 
                     if (entry != null && (!_entries.Contains(entry) || !Synchronize(entry, ReadClock()))) continue;
+
+                    if (
+                        entry != null && output.PathId.HasValue && entry.State?.Paths.Any(
+                            path => path.Id == output.PathId.Value
+                        )
+                        != true
+                    ) continue;
 
                     var peer = output.Peer ?? entry?.Peer
                         ?? throw new InvalidOperationException("QUIC output has no peer.");
@@ -469,23 +504,70 @@ namespace EmbedIO.Quic
                 Accepted++;
             }
 
-            if (status != null && entry.ResetIdentity != status.ResetIdentity)
+            if (
+                status != null
+                && (!ReferenceEquals(entry.Paths, status.Paths) || !ReferenceEquals(entry.Tokens, status.Tokens))
+            )
             {
-                if (entry.ResetIdentity != null) _resets.Remove((entry.Peer, entry.Local, entry.ResetIdentity));
-
-                entry.ResetIdentity = null;
-
-                if (status.ResetIdentity != null)
+                if (
+                    status.Paths.Count > QuicPathValidation.Capacity
+                    || status.Tokens.Count > PeerConnectionIds.ActiveLimit
+                )
                 {
-                    if (!_resets.TryAdd((entry.Peer, entry.Local, status.ResetIdentity), entry))
-                    {
-                        Reject();
-                        Close(entry);
-                        return false;
-                    }
-
-                    entry.ResetIdentity = status.ResetIdentity;
+                    Reject();
+                    Close(entry);
+                    return false;
                 }
+
+                var endpoints = status.Paths.Count == 0
+                    ? [entry.Endpoints]
+                    : status.Paths
+                        .Select(static path => path.Endpoints)
+                        .ToArray();
+                var bindings = endpoints
+                    .SelectMany(
+                        endpoint => status.TokenIdentities.Select(
+                            token => (endpoint.Peer, endpoint.Local, Token: token)
+                        )
+                    )
+                    .Distinct()
+                    .ToArray();
+
+                if (bindings.Any(key => _resets.TryGetValue(key, out var owner) && !ReferenceEquals(owner, entry)))
+                {
+                    Reject();
+                    Close(entry);
+                    return false;
+                }
+
+                foreach (var key in entry.ResetBindings) _resets.Remove(key);
+
+                foreach (var key in bindings) _resets.Add(key, entry);
+
+                entry.ResetBindings = bindings;
+                entry.Paths = status.Paths;
+                entry.Tokens = status.Tokens;
+                var groups = endpoints
+                    .Select(static endpoint => (endpoint.Peer, endpoint.Local))
+                    .ToHashSet();
+                groups.Add((entry.Peer, entry.Local));
+
+                foreach (var key in entry.Groups
+                    .Where(key => !groups.Contains(key))
+                    .ToArray())
+                {
+                    if (--_peerGroups[key].Count == 0) _peerGroups.Remove(key);
+
+                    entry.Groups.Remove(key);
+                }
+
+                foreach (var key in groups)
+                    if (entry.Groups.Add(key))
+                    {
+                        if (!_peerGroups.TryGetValue(key, out var group)) _peerGroups.Add(key, group = new PeerGroup());
+
+                        group.Count++;
+                    }
             }
 
             if (status?.Closed == true)
@@ -512,6 +594,11 @@ namespace EmbedIO.Quic
                 var previous = entry.State;
                 var issuedIds = output.IssuedConnectionIds ?? previous?.IssuedIds ?? [output.ConnectionId];
                 var expired = previous?.Established != true && _clock() >= entry.Deadline;
+                var paths = output.ActivePaths ?? previous?.Paths ?? [];
+                var tokens = output.ResetTokens
+                    ?? (previous != null && previous.ResetToken.Equals(output.ResetToken)
+                        ? previous.Tokens
+                        : output.ResetToken.Length == 16 ? [output.ResetToken] : Array.Empty<ReadOnlyMemory<byte>>());
 
                 if (
                     previous == null
@@ -519,6 +606,8 @@ namespace EmbedIO.Quic
                     || previous.Closed != output.Closed
                     || !previous.ResetToken.Equals(output.ResetToken)
                     || !ReferenceEquals(previous.IssuedIds, issuedIds)
+                    || !ReferenceEquals(previous.Paths, paths)
+                    || !ReferenceEquals(previous.Tokens, tokens)
                     || expired
                 )
                     Volatile.Write(
@@ -530,7 +619,12 @@ namespace EmbedIO.Quic
                             expired,
                             output.ResetToken,
                             output.ResetToken.Length == 16 ? ResetIdentity(output.ResetToken.Span) : null,
-                            issuedIds
+                            issuedIds,
+                            paths,
+                            tokens,
+                            ReferenceEquals(previous?.Tokens, tokens)
+                                ? previous.TokenIdentities
+                                : [.. tokens.Select(token => ResetIdentity(token.Span))]
                         )
                     );
 
@@ -540,8 +634,13 @@ namespace EmbedIO.Quic
                     return;
                 }
 
-                foreach (var bytes in output.Datagrams)
+                for (var index = 0; index < output.Datagrams.Count; index++)
                 {
+                    var bytes = output.Datagrams[index];
+                    var path = output.OutputPaths != null && index < output.OutputPaths.Count
+                        ? output.OutputPaths[index]
+                        : null;
+
                     if (
                         _pendingPackets >= _outputPacketCapacity
                         || bytes.Length > _outputByteCapacity - _pendingBytes
@@ -553,7 +652,7 @@ namespace EmbedIO.Quic
                         continue;
                     }
 
-                    var pending = new Output(entry, bytes);
+                    var pending = new Output(entry, bytes, path?.Endpoints.Peer, path?.Id);
 
                     if (!_output.Writer.TryWrite(pending))
                         throw new InvalidOperationException("QUIC output queue lost capacity.");
@@ -587,13 +686,15 @@ namespace EmbedIO.Quic
                 if (!entry.Owner.Completion.IsCompleted) continue;
 
                 _entries.Remove(entry);
-                entry.Group.Count--;
 
-                if (entry.Group.Count == 0) _peerGroups.Remove((entry.Peer, entry.Local));
+                foreach (var key in entry.Groups)
+                    if (--_peerGroups[key].Count == 0) _peerGroups.Remove(key);
+
+                entry.Groups.Clear();
 
                 _initials.Remove((entry.Peer, entry.Local, entry.Original));
 
-                if (entry.ResetIdentity != null) _resets.Remove((entry.Peer, entry.Local, entry.ResetIdentity));
+                foreach (var key in entry.ResetBindings) _resets.Remove(key);
 
                 if (entry.Id != null)
                 {

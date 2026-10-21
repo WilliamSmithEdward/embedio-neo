@@ -224,6 +224,11 @@ namespace EmbedIO.Quic
                 try
                 {
                     ids.Add(sequence, prior, Id(kind), Token(kind));
+
+                    if ((kind & 2) != 0 && ids.Resolve(null, out var selected, out _))
+                        ids.MarkUsed(selected);
+
+                    if ((kind & 4) != 0) ids.RetireUnused([sequence]);
                 }
 
                 catch (TransportException error)
@@ -240,13 +245,63 @@ namespace EmbedIO.Quic
                     deliveries.Clear();
                 }
 
-                Check(ids.ActiveCount is >= 1 and <= 2 && ids.RetainedRetirements <= 4, "mutation bounds");
+                Check(ids.ActiveCount is >= 0 and <= 2 && ids.RetainedRetirements <= 4, "mutation bounds");
             }
 
             Check(ids.ActiveCount <= 2 && ids.RetainedRetirements <= 4, "failure bounds");
             ids.Dispose();
             ids.Dispose();
             Check(ids.ActiveCount == 0 && ids.RetainedRetirements == 0, "mutation retirement");
+            RetirementTrace(input);
+        }
+
+        private static void RetirementTrace(ReadOnlySpan<byte> input)
+        {
+            var deliveries = new List<Delivery>();
+            using var ids = new PeerConnectionIds(
+                Id(0),
+                sequence =>
+                {
+                    var delivery = new Delivery(2, Wire.Frame(0x19, sequence));
+                    deliveries.Add(delivery);
+                    return delivery;
+                },
+                true
+            );
+            ulong next = 1;
+
+            foreach (var value in input[..Math.Min(input.Length, 128)])
+            {
+                if ((value & 1) != 0)
+                {
+                    foreach (var delivery in deliveries) delivery.Acknowledged = true;
+
+                    deliveries.Clear();
+                    ids.Prune();
+                }
+
+                try
+                {
+                    ids.Add(next, 0, Id(next), Token(next));
+                    next++;
+                    Check(ids.Resolve(null, out var sequence, out _), "retirement trace has an unused replacement");
+
+                    if ((value & 2) != 0) ids.MarkUsed(sequence);
+
+                    ids.RetireUnused([(value & 4) != 0 ? sequence : 0]);
+                }
+
+                catch (TransportException error)
+                {
+                    Check(error.ErrorCode == 9, "retirement trace closes only on bounded retirement exhaustion");
+                    break;
+                }
+
+                Check(
+                    ids.ActiveCount == 1 && ids.RetainedRetirements <= PeerConnectionIds.RetirementLimit,
+                    "retirement trace retains one path with bounded history"
+                );
+            }
         }
 
         private static void Error(Action action, ulong expected)

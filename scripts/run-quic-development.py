@@ -112,6 +112,8 @@ def main():
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "local-connection-ids")])
         run("path-controls", [sys.executable, "test/EmbedIO.Quic/verify_path_controls.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "path-controls")])
+        run("path-validation", [sys.executable, "test/EmbedIO.Quic/verify_path_validation.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "path-validation")])
     if args.openssl or args.schannel:
         cipher_command = [sys.executable, "test/EmbedIO.Quic/verify_cipher_suites.py", "--dotnet", args.dotnet,
                           "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "cipher-suites")]

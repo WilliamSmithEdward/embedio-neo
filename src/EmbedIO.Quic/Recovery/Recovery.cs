@@ -22,6 +22,8 @@ namespace EmbedIO.Quic
         internal bool Reliable { get; }
         internal bool Eliciting { get; }
         internal bool PadToMinimum { get; init; }
+        internal QuicPathRoute? Path { get; init; }
+        internal bool PreferValidatedPath { get; init; }
         internal bool Acknowledged { get; set; }
         internal bool Queued { get; set; }
         internal bool ProbePending { get; set; }
@@ -57,7 +59,8 @@ namespace EmbedIO.Quic
             int Size,
             Delivery Delivery,
             bool InFlight,
-            bool ApplicationLimited
+            bool ApplicationLimited,
+            ulong Epoch
         );
 
         private readonly Dictionary<(int Level, ulong Number), Sent> _sent = [];
@@ -77,6 +80,7 @@ namespace EmbedIO.Quic
         private double _slowStartThreshold = double.PositiveInfinity;
         private double _nextPacedSend;
         private int _ptoCount;
+        private ulong _epoch;
         private double _lastTimeout = -1;
         private readonly List<Sent> _lostHistory = [];
         private readonly List<double> _acknowledgedTimes = [];
@@ -125,7 +129,10 @@ namespace EmbedIO.Quic
 
             if (_sent.Count >= MaximumActivePackets) throw new InvalidDataException("Recovery packet budget exceeded.");
 
-            _sent.Add((level, number), new Sent(level, number, now, size, delivery, inFlight, applicationLimited));
+            _sent.Add(
+                (level, number),
+                new Sent(level, number, now, size, delivery, inFlight, applicationLimited, _epoch)
+            );
 
             if (inFlight) BytesInFlight += size;
 
@@ -144,7 +151,9 @@ namespace EmbedIO.Quic
             foreach (var packet in late)
             {
                 packet.Delivery.Acknowledged = true;
-                _acknowledgedTimes.Add(packet.Time);
+
+                if (packet.Epoch == _epoch) _acknowledgedTimes.Add(packet.Time);
+
                 _lostHistory.RemoveAll(p => p.Level == packet.Level && p.Number == packet.Number);
                 _retired.Remove((packet.Level, packet.Number));
             }
@@ -153,9 +162,9 @@ namespace EmbedIO.Quic
                 .Where(p => p.Level == level && ranges.Any(r => p.Number >= r.Low && p.Number <= r.High))
                 .ToArray();
             _largestAcknowledged[level] = Math.Max(_largestAcknowledged[level] ?? 0, largest);
-            var sample = acknowledged.FirstOrDefault(p => p.Number == largest);
+            var sample = acknowledged.FirstOrDefault(p => p.Number == largest && p.Epoch == _epoch);
 
-            if (sample != null && acknowledged.Any(p => p.Delivery.Eliciting))
+            if (sample != null && acknowledged.Any(p => p.Epoch == _epoch && p.Delivery.Eliciting))
             {
                 var elapsed = Math.Max(now - sample.Time, 0.001);
                 _latestRtt = elapsed;
@@ -182,19 +191,29 @@ namespace EmbedIO.Quic
             {
                 _sent.Remove((packet.Level, packet.Number));
 
-                if (packet.InFlight) BytesInFlight -= packet.Size;
+                if (packet.InFlight && packet.Epoch == _epoch) BytesInFlight -= packet.Size;
 
                 packet.Delivery.Acknowledged = true;
-                _acknowledgedTimes.Add(packet.Time);
+
+                if (packet.Epoch == _epoch) _acknowledgedTimes.Add(packet.Time);
+
                 _lostHistory.RemoveAll(p => p.Level == packet.Level && p.Number == packet.Number);
 
-                if (packet.Time > _recoveryStart && packet.InFlight && !packet.ApplicationLimited)
+                if (
+                    packet.Epoch == _epoch
+                    && packet.Time > _recoveryStart
+                    && packet.InFlight
+                    && !packet.ApplicationLimited
+                )
                     CongestionWindow += CongestionWindow < _slowStartThreshold
                         ? packet.Size
                         : MaximumPacket * (double)packet.Size / CongestionWindow;
             }
 
-            if (acknowledged.Any(p => p.Delivery.Eliciting) || late.Any(p => p.Delivery.Eliciting))
+            if (
+                acknowledged.Any(p => p.Epoch == _epoch && p.Delivery.Eliciting)
+                || late.Any(p => p.Epoch == _epoch && p.Delivery.Eliciting)
+            )
             {
                 _ptoCount = 0;
                 _lastTimeout = -1;
@@ -269,7 +288,7 @@ namespace EmbedIO.Quic
             {
                 _sent.Remove((packet.Level, packet.Number));
 
-                if (packet.InFlight) BytesInFlight -= packet.Size;
+                if (packet.InFlight && packet.Epoch == _epoch) BytesInFlight -= packet.Size;
 
                 LostPackets++;
 
@@ -278,12 +297,13 @@ namespace EmbedIO.Quic
 
                 while (_retiredOrder.Count > _retiredLimit) _retired.Remove(_retiredOrder.Dequeue());
 
-                if (packet.Delivery.Eliciting && packet.Time > _historyFloor) _lostHistory.Add(packet);
+                if (packet.Epoch == _epoch && packet.Delivery.Eliciting && packet.Time > _historyFloor)
+                    _lostHistory.Add(packet);
 
                 if (packet.Delivery.Reliable && !packet.Delivery.Acknowledged) _repeat(packet.Delivery, false);
             }
 
-            if (lost.Any(p => p.InFlight && p.Time > _recoveryStart))
+            if (lost.Any(p => p.Epoch == _epoch && p.InFlight && p.Time > _recoveryStart))
             {
                 _recoveryStart = now;
                 CongestionWindow = Math.Max(2 * MaximumPacket, CongestionWindow / 2);
@@ -319,12 +339,33 @@ namespace EmbedIO.Quic
 
                 if (
                     packet.Time - first >= 3 * (_smoothedRtt + Math.Max(4 * _variation, 1) + MaximumAckDelay)
-                    && !_sent.Values.Any(p => p.Time >= first && p.Time <= packet.Time)
+                    && !_sent.Values.Any(p => p.Epoch == _epoch && p.Time >= first && p.Time <= packet.Time)
                 )
                     CongestionWindow = 2 * MaximumPacket;
             }
 
             return true;
+        }
+
+        internal void ChangePath(double now)
+        {
+            // Packet numbers and reliable deliveries belong to the connection.
+            // Old-path ACKs still retire them, but cannot train the new controller.
+            _epoch++;
+            BytesInFlight = 0;
+            CongestionWindow = 10 * MaximumPacket;
+            _minimumRtt = double.PositiveInfinity;
+            _latestRtt = _smoothedRtt = 333;
+            _variation = 166.5;
+            _firstSample = _slowStartThreshold = double.PositiveInfinity;
+            _recoveryStart = -1;
+            _nextPacedSend = now;
+            _ptoCount = 0;
+            _lastTimeout = -1;
+            _lostHistory.Clear();
+            _acknowledgedTimes.Clear();
+            _historyFloor = double.NegativeInfinity;
+            Array.Fill(_lastEliciting, now);
         }
 
         internal void Abandon()
@@ -345,7 +386,7 @@ namespace EmbedIO.Quic
                 .Where(p => p.Level == level)
                 .ToArray())
             {
-                if (packet.InFlight) BytesInFlight -= packet.Size;
+                if (packet.InFlight && packet.Epoch == _epoch) BytesInFlight -= packet.Size;
 
                 _sent.Remove((level, packet.Number));
             }

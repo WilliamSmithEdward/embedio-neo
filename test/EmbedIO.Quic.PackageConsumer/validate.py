@@ -148,6 +148,7 @@ def validate(args):
                  ("verify_stateless_reset.py", "stateless-reset", []),
                  ("verify_local_connection_ids.py", "local-connection-ids", []),
                  ("verify_path_controls.py", "path-controls", []),
+                 ("verify_path_validation.py", "path-validation", []),
                  ("verify_sni.py", "sni", []), ("verify_tls_listener.py", "publication", []),
                  ("verify_client_certificate.py", "certificate-policies", ["--profile", "full"]),
                  ("fuzz_client_certificate.py", "auth-fuzz", ["--cases", "256", "--seed", "1729"]))
