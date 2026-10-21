@@ -20,7 +20,7 @@ copying from those projects.
 
 | Stage | Implementation and validation |
 | --- | --- |
-| Core packet and connection owners | `QuicConnection` and `QuicConnectionSet` own packet/TLS/recovery state and bounded destination-ID routing in the source core. Factories supply TLS and applications; development wrappers add protocol error mapping and observations. Simple echo, multiplexed streams and H3 use the same stream owner. Production socket and policy integration remain pending. |
+| Core packet and connection owners | `QuicConnection` and `QuicConnectionDispatcher` own packet/TLS/recovery state and bounded destination-ID routing in the source core. Factories supply TLS and applications; development wrappers add protocol error mapping and observations. Simple echo, multiplexed streams and H3 use the same stream owner. Production socket and policy integration remain pending. |
 | Windows certificate selection | Complete ClientHello/SNI framing precedes a once-only certificate selector. A selected certificate is cloned for the native credential; the source remains application-owned. Focused tests exercise publication timing, selector errors and disposal during selection. The independent selection profile uses two non-exportable CNG key types and six aioquic cases; production policy/worker integration is pending. |
 | Windows TLS credentials | Original managed SSPI binding, provider-neutral TLS state and non-exportable CNG RSA/ECDSA test credentials. Native credential/context/buffer ownership, bounded ClientHello parsing and once-only traffic-secret installation are exercised before production integration. The development cipher profile remains AES-128-GCM/SHA-256. |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
@@ -64,8 +64,8 @@ corresponding host/test files.
 | Stream counts and retirement | `StreamCountWindow.cs`, `StreamCountTests.cs`, `StreamLifecycleTests.cs` | Independent closed-ID sets, 100,000 sequential retirements, implicit stream opening, delayed/late ACKs, repeated requests, closed references, pending session association, final-size checks and buffer disposal. |
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
-| Connection ownership | `QuicConnection.cs`, `QuicConnectionSet.cs`, `QuicConnectionLimits.cs`, `ConnectionCoreTests.cs`, `ConnectionSetTests.cs`, `SharedListener.cs`, `verify_connections.py` | Authentication before TLS allocation, configured stream credit, rejection after disposal, sibling cleanup after a failing disposer, capacity/deadline regressions, direct managed ownership mutations and simultaneous independent clients on one UDP port. |
-| Scheduled execution | `QuicExecutionPool.cs`, `QuicConnectionOwner.cs`, `ExecutionPoolTests.cs`, `ConnectionOwnerTests.cs` | Fixed worker count, one executing turn per owner, coalesced wakeups, fair requeueing, queued/in-flight input budgets, copied packet ownership, shutdown during native work and once-only cleanup. Lifecycle mutations and protected/corrupted packet inputs use the shared fuzz facade. Socket-listener integration remains pending. |
+| Connection ownership | `QuicConnection.cs`, `QuicConnectionDispatcher.cs`, `ReferenceConnectionSet.cs`, `QuicConnectionLimits.cs`, `ConnectionCoreTests.cs`, `ConnectionSetTests.cs`, `SharedListener.cs`, `verify_connections.py` | Authentication before TLS allocation, configured stream credit, rejection after disposal, sibling cleanup after a failing disposer, capacity/deadline regressions, direct managed ownership mutations and simultaneous independent clients on one UDP port. |
+| Scheduled execution | `QuicExecutionPool.cs`, `QuicConnectionOwner.cs`, `ExecutionPoolTests.cs`, `ConnectionOwnerTests.cs` | Fixed worker count, one executing turn per owner, coalesced wakeups, fair requeueing, queued/in-flight input budgets, copied packet ownership, shutdown during native work and once-only cleanup. Lifecycle mutations and protected/corrupted packet inputs use the shared fuzz facade. The shared UDP development listener now uses this scheduling path. |
 | TLS framing | `TlsClientHello.cs`, `TlsHelloTests.cs` | Complete handshake/vector boundaries, duplicate extensions, required transport parameters, malformed/truncated input, parameter limits and structured/raw mutations through FsCheck, deterministic mutation, SharpFuzz and AFL++. |
 | Native TLS boundary | `TlsSession.cs`, `OpenSslTls.cs`, `SchannelTls.cs`, `SchannelTests.cs`, `ProbeConnection.cs`, `NativeFuzz.cs` | Fresh TLS owners, structured TLS 1.3 and malformed Initial frame/CRYPTO mutations, unauthenticated-packet isolation, credential/context/buffer cleanup and amplification accounting. Schannel tests include invalid constructor inputs, fragmented native rejection and concurrent context disposal. Native libraries themselves are not coverage-instrumented. |
 | Independent transport peer | `verify.py` | aioquic positive/negative handshake, exact echo, corruption, ALPN, flow-control and packet-loss/reordering cases. |
@@ -665,15 +665,15 @@ executing packets against its internal mailbox bounds. Packet, timer, applicatio
 and disposal operations share the same registration, so native TLS state stays
 owned by one execution context. Closing stops later turns and suppresses output
 when the current turn observes closure; disposal waits for any publication already
-in progress and for native cleanup. The caller supplies a monotonic clock. This component is ready for socket routing
-integration; the existing development socket loop has not switched to it yet.
+in progress and for native cleanup. The caller supplies a monotonic clock.
+The shared UDP host now drives this component through `QuicConnectionDispatcher`.
 
 Local execution/packet ownership regressions, 10,000 FsCheck cases per property,
 100,000 managed mutations, 4,000 recovery/lifecycle traces and 72 existing
 independent-peer cases passed. Two concurrent first-flight cases passed with each
 of OpenSSL, Schannel RSA and Schannel ECDSA, followed by packet-key cleanup and
 Schannel native-resource checks. This is first-flight evidence for scheduled
-owners; the full peer cases still use the existing socket loop.
+owners. The scheduled shared-socket checks described below extend this evidence.
 
 The eighth managed target and lifecycle traces exercise worker/owner cleanup;
 both coverage runners instrument these source types. Fresh 60-second campaigns
@@ -682,6 +682,53 @@ or hangs. Ordinary build hashes remained unchanged. AFL reported 40.04% map
 stability with concurrent scheduling, so the execution counts do not imply
 deterministic edge coverage. Debug/Release diagnostics, changed-file formatting,
 source-quality and suppression guards passed.
+
+### Scheduled socket dispatch
+
+`QuicConnectionDispatcher` owns bounded pending/active admission and destination-ID
+routing for the shared UDP host. The socket loop drives receive, timer and output
+operations while the worker pool runs native TLS and per-connection processing.
+Original destination aliases are scoped to copied peer endpoints; issued IDs are
+registered before their first packet is sent. A different peer cannot use an
+existing issued ID until path validation is implemented. Handshake deadlines
+include queue wait and are rechecked before native execution and publication.
+Capacity remains reserved through native cleanup, even after expiry requests close.
+
+The output channel has global packet/byte bounds and per-owner bounds. Those
+counts include an active asynchronous send. Exhaustion drops UDP output for
+transport recovery without creating send tasks or blocking native workers.
+Only one socket-loop send runs at a time; each turn yields back to receive/timer
+processing. Shutdown waits for the active send and all native work, drains queued
+output, then reports unexpected owner/cleanup failures. The caller owns socket
+cancellation and must let an active send finish before disposing its socket.
+
+The earlier synchronous registry now lives only in `ReferenceConnectionSet.cs` in
+the development host for deterministic packet/native mutation checks. It is no
+longer part of the source core or the live UDP routing path. Both fuzz runners
+instrument the source dispatcher and the separate test reference.
+
+Regressions pass for a blocked TLS call with a healthy sibling, admission held
+through cleanup, queued handshake expiry without a timer tick, send backpressure
+including borrowed output, send failure, copied peer ports, foreign-peer issued
+IDs, invalid Initial authentication, observable native cleanup failures and
+callback timeouts distinct from handshake expiry. The ordinary CI self-test also
+runs the execution-pool, connection-owner and dispatcher regressions.
+
+All 84 independent-peer cases passed across OpenSSL and Schannel RSA/ECDSA,
+including twelve shared-listener scenarios: concurrent noise/loss, connection
+waves and port reuse, concurrent WebTransport and cancellation of a live owner.
+The final core also passed 100,000 managed mutations, 10,000 cases per property,
+4,000 generated actor traces and six scheduled native first flights. The eighth
+managed selector and lifecycle traces exercise dispatcher admission, routing,
+output bounds and final resource ownership. A dedicated binary seed retains
+mixed routing, timer, send and invalid-packet commands.
+
+Fresh 60-second campaigns completed 77,413 libFuzzer and 24,528 AFL++ executions
+with no retained crashes or hangs. AFL reported 5.16% map stability with concurrent
+scheduling; its edge percentage is not reliable coverage evidence. These runs
+exercise bounded failure/resource assertions, with deterministic regressions and
+independent peers providing separate behavioral evidence. Production HTTP/3
+integration remains separate from this shared development host.
 
 ## Remaining production acceptance work
 

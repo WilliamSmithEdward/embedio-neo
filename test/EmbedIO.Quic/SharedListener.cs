@@ -27,15 +27,26 @@ namespace EmbedIO.Quic
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(2));
             var authorization = webTransport ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) : string.Empty;
             using var provider = new DevelopmentTlsProvider(library, certificate, key);
-            using var connections = new ConnectionSet(
-                library,
-                certificate,
-                key,
-                webTransport,
-                authorization,
-                provider.Create
-            );
             var clock = Stopwatch.StartNew();
+            var observed = new System.Collections.Concurrent.ConcurrentBag<ProbeConnection>();
+            await using var connections = new QuicConnectionDispatcher(
+                (packet, now) =>
+                {
+                    var connection = new ProbeConnection(
+                        packet,
+                        library,
+                        certificate,
+                        key,
+                        webTransport,
+                        authorization,
+                        now,
+                        tlsFactory: provider.Create
+                    );
+                    observed.Add(connection);
+                    return connection;
+                },
+                () => clock.Elapsed.TotalMilliseconds
+            );
             var ready = new
             {
                 ready = true,
@@ -46,6 +57,8 @@ namespace EmbedIO.Quic
             Console.WriteLine(JsonSerializer.Serialize(ready));
             Task<UdpReceiveResult>? receive = null;
             Task<bool>? tick = null;
+            Task<bool>? output = null;
+            var completed = 0;
             var deadline = false;
 
             try
@@ -57,10 +70,14 @@ namespace EmbedIO.Quic
                     .WaitForNextTickAsync(stop.Token)
                     .AsTask();
 
+                output = connections
+                    .WaitForOutputAsync(stop.Token)
+                    .AsTask();
+
                 while (true)
                 {
                     await Task
-                        .WhenAny(receive, tick)
+                        .WhenAny(receive, tick, output)
                         .ConfigureAwait(false);
 
                     if (receive.IsCompleted)
@@ -68,13 +85,7 @@ namespace EmbedIO.Quic
                         try
                         {
                             var datagram = await receive.ConfigureAwait(false);
-                            await SendAsync(
-                                connections.Receive(
-                                    datagram.Buffer,
-                                    datagram.RemoteEndPoint,
-                                    clock.Elapsed.TotalMilliseconds
-                                )
-                            ).ConfigureAwait(false);
+                            connections.Receive(datagram.Buffer, datagram.RemoteEndPoint);
                         }
 
                         catch (SocketException error) when (error.SocketErrorCode == SocketError.ConnectionReset)
@@ -92,9 +103,21 @@ namespace EmbedIO.Quic
                     {
                         if (!await tick.ConfigureAwait(false)) break;
 
-                        await SendAsync(connections.Tick(clock.Elapsed.TotalMilliseconds)).ConfigureAwait(false);
+                        connections.Tick();
                         tick = timer
                             .WaitForNextTickAsync(stop.Token)
+                            .AsTask();
+                    }
+
+                    if (output.IsCompleted)
+                    {
+                        if (!await output.ConfigureAwait(false)) break;
+
+                        await connections
+                            .SendOneAsync(SendAsync)
+                            .ConfigureAwait(false);
+                        output = connections
+                            .WaitForOutputAsync(stop.Token)
                             .AsTask();
                     }
 
@@ -135,11 +158,24 @@ namespace EmbedIO.Quic
                     catch (OperationCanceledException) { }
                 }
 
-                connections.Dispose();
+                if (output != null)
+                {
+                    try
+                    {
+                        await output.ConfigureAwait(false);
+                    }
+
+                    catch (OperationCanceledException) { }
+                }
+
+                await connections
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+                completed = observed.Count(connection => connection.Complete);
                 var result = new
                 {
                     accepted = connections.Accepted,
-                    completed = connections.Completed,
+                    completed,
                     retired = connections.Retired,
                     active = connections.Active,
                     peak = connections.Peak,
@@ -151,21 +187,18 @@ namespace EmbedIO.Quic
                 Console.WriteLine(JsonSerializer.Serialize(result));
             }
 
-            return !deadline && connections.Completed >= expected ? 0 : 1;
+            return !deadline && completed >= expected ? 0 : 1;
 
-            async Task SendAsync(List<OutboundDatagram> packets)
+            async ValueTask SendAsync(OutboundDatagram packet)
             {
-                foreach (var packet in packets)
+                try
                 {
-                    try
-                    {
-                        await socket
-                            .SendAsync(packet.Bytes, packet.Peer, stop.Token)
-                            .ConfigureAwait(false);
-                    }
-
-                    catch (SocketException error) when (error.SocketErrorCode == SocketError.ConnectionReset) { }
+                    await socket
+                        .SendAsync(packet.Bytes, packet.Peer, stop.Token)
+                        .ConfigureAwait(false);
                 }
+
+                catch (SocketException error) when (error.SocketErrorCode == SocketError.ConnectionReset) { }
             }
         }
     }

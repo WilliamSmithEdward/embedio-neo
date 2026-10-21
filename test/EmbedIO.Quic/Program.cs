@@ -14,6 +14,15 @@ namespace EmbedIO.Quic
         {
             try
             {
+                if (arguments is ["dispatcher-self-test"])
+                {
+                    await DispatcherTests
+                        .RunAsync()
+                        .ConfigureAwait(false);
+                    Console.WriteLine(JsonSerializer.Serialize(new { dispatcher = "passed" }));
+                    return 0;
+                }
+
                 if (arguments is ["execution-native", var workerLibrary, var workerCertificate, var workerKey])
                 {
                     await ConnectionOwnerTests
@@ -62,6 +71,12 @@ namespace EmbedIO.Quic
                 if (arguments is ["self-test"])
                 {
                     SelfTests.Run();
+                    await ExecutionPoolTests
+                        .RunAsync()
+                        .ConfigureAwait(false);
+                    await DispatcherTests
+                        .RunAsync()
+                        .ConfigureAwait(false);
                     return 0;
                 }
 

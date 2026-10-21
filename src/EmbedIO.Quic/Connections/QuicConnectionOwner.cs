@@ -55,6 +55,7 @@
         }
 
         internal Task Completion => _execution.Completion;
+        internal Exception? CleanupFailure { get; private set; }
 
         internal int PendingBytes
         {
@@ -205,6 +206,16 @@
             try
             {
                 _connection?.Dispose();
+            }
+
+            catch (Exception error) when (
+                error is not OutOfMemoryException
+                    and not StackOverflowException
+                    and not AccessViolationException
+            )
+            {
+                CleanupFailure = error;
+                throw;
             }
 
             finally

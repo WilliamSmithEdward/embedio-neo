@@ -408,15 +408,20 @@ A bounded execution pool now serializes each connection's factory, packet,
 timer, application and cleanup work. Its mailbox counts both queued and executing
 input toward packet/byte limits; shutdown waits for active native calls. Direct
 lifecycle, packet-mutation and native first-flight checks exercise this scheduling
-boundary; socket-listener integration is still pending.
+boundary. The shared UDP development host now uses the scheduled dispatcher:
+handshake deadlines include queue time, routing is established before sending,
+and output limits include queued and in-flight sends. Shutdown waits for native
+work and sends, releases sibling owners and reports cleanup failures. Production
+listener/configuration and policy integration remain pending.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
 dispatch and full TLS/certificate parity remain pending.
 The source core owns packet processing and destination-ID routing through
-`QuicConnection` and `QuicConnectionSet`, with injected TLS/application factories
+`QuicConnection` and `QuicConnectionDispatcher`, with injected TLS/application factories
 and validated internal stream-count/idle configuration. All development protocols
-use the same stream owner. Registry shutdown releases all sibling owners before
+use the same stream owner. The synchronous registry is retained only in the
+development test host as a deterministic reference. Registry shutdown releases all sibling owners before
 reporting ordinary cleanup failures. Direct managed fuzzing exercises both owners
 without loading native TLS; independent peers validate the native path. The bounded
 development socket listener supplies admission limits, handshake deadlines and

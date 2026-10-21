@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 
 namespace EmbedIO.Quic
 {
-    // Test-only facade. Referencing the prototype never creates a socket or loads OpenSSL.
+    // Test-only facade. Referencing the core never creates a socket or loads OpenSSL.
     public static class QuicFuzzChecks
     {
         public const int TargetCount = 8;
@@ -60,6 +60,7 @@ namespace EmbedIO.Quic
                 case 7:
                     ExecutionPoolTests.Mutate(data);
                     ConnectionOwnerTests.Mutate(data);
+                    DispatcherTests.Mutate(data);
                     break;
 
                 default:
@@ -92,6 +93,7 @@ namespace EmbedIO.Quic
             cover?.Invoke("streams.async-closure");
             ExecutionPoolTests.Mutate(steps);
             ConnectionOwnerTests.Mutate(steps);
+            DispatcherTests.Mutate(steps);
             cover?.Invoke("connections.execution-ownership");
         }
 

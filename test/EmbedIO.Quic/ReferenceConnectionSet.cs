@@ -3,12 +3,8 @@ using System.Security.Cryptography;
 
 namespace EmbedIO.Quic
 {
-    internal sealed record OutboundDatagram(IPEndPoint Peer, byte[] Bytes);
-
-    // One event-loop owner. Original destination aliases include the peer endpoint;
-    // issued destination IDs select an owner before the peer address is checked.
-    internal delegate QuicConnection QuicConnectionFactory(ReadOnlySpan<byte> firstPacket, double now);
-
+    // Deterministic reference driver for malformed-packet and native TLS tests.
+    // The live UDP host uses the scheduled source dispatcher.
     internal class QuicConnectionSet : IDisposable
     {
         private readonly QuicConnectionFactory _createConnection;
