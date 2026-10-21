@@ -14,6 +14,11 @@ namespace EmbedIO.Quic
         {
             try
             {
+                if (arguments is ["serve-webserver", var hostLibrary, var hostCertificate, var hostKey])
+                    return await ProductionListenerHost
+                        .RunAsync(hostLibrary, hostCertificate, hostKey)
+                        .ConfigureAwait(false);
+
                 if (arguments is ["dispatcher-self-test"])
                 {
                     await DispatcherTests

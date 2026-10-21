@@ -22,7 +22,7 @@ half-close before reading. Pass the token to streaming, upload and application
 work; retain deadlines because disconnect detection is best effort. Generated
 bindings support AOT and omit the token from OpenAPI. The in-process testing
 context observes its caller token. See [request-abort cancellation](docs/guides/request-abort.md)
-for completion ownership, HTTP/2â€“3 resets, TLS/proxy limits and examples.
+for completion ownership, HTTP/2Ã¢â‚¬â€œ3 resets, TLS/proxy limits and examples.
 Canceled request-abort tokens keep their cancellation source until the token can
 be collected, so retained-token registrations and signaled wait handles remain
 usable. Parent registrations still detach at completion.
@@ -415,23 +415,32 @@ lifecycle, packet-mutation and native first-flight checks exercise this scheduli
 boundary. The shared UDP development host now uses the scheduled dispatcher:
 handshake deadlines include queue time, routing is established before sending,
 and output limits include queued and in-flight sends. Shutdown waits for native
-work and sends, releases sibling owners and reports cleanup failures. Production
-listener/configuration and policy integration remain pending.
+work and sends, releases sibling owners and reports cleanup failures. The library now
+also has an internal socket binding whose acceptance lifetime is separate from UDP
+ownership, preserving active traffic during HTTP/3 drain. Per-instance listener
+construction allows the real WebServer pipeline to validate that binding with
+development credentials; public provider selection remains unchanged.
 The replacement stream/datagram adapters now drive the library's HTTP/3 protocol
 from the development UDP host. Ordinary body-read cancellation preserves the
 existing distinction between local timeout (`H3_NO_ERROR`) and request cancellation;
 CONNECT streams retain their transport cancellation behavior. The new independent
 `test/EmbedIO.Quic/verify_http3.py` checks actual HTTP/3 uploads, complete timeout
-responses and healthy sibling requests. This does not enable the public listener
-or complete controller, authentication, WebTransport or credential integration.
+responses and healthy sibling requests. `test/EmbedIO.Quic/verify_listener.py` additionally
+exercises actual WebServer controllers, bearer authentication and policy authorization,
+request-abort cancellation, endpoint metadata isolation, active-response drain and UDP
+rebind through the new binding. OpenSSL and Windows non-exportable RSA/ECDSA profiles
+passed this development-host validation. It rejects TLS configurations outside its
+fixture profile. Public WebTransport and complete credential/configuration parity
+remain pending before changing the public listener default.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
-dispatch and full TLS/certificate parity remain pending.
+configuration and full TLS/certificate parity remain pending.
 The source core owns packet processing and destination-ID routing through
 `QuicConnection` and `QuicConnectionDispatcher`, with injected TLS/application factories
 and validated internal stream-count/idle configuration. Scheduled factories receive
-the connection owner; the async stream application uses its coalescing wake callback
+the connection owner and copies of the local/remote endpoint metadata; the async stream
+application uses its coalescing wake callback
 for application commands, so outgoing work need not wait for a peer packet or periodic timer.
 The shared development host also runs owned async stream handlers on that path.
 All development protocols use the same stream owner. The synchronous registry is retained only in the

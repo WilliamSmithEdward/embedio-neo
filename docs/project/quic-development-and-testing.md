@@ -811,14 +811,72 @@ retains the concurrent coverage limitation described above. These observations
 cover this development integration; they do not establish final provider,
 platform, browser, controller or authentication acceptance.
 
+## Actual WebServer listener integration
+
+`EmbedIOQuicListenerBinding` now owns the UDP socket and scheduled connection
+pool behind the existing HTTP/3 listener interfaces. Stopping acceptance leaves
+the socket available for accepted requests and GOAWAY; final disposal joins I/O,
+native owners and pending peers. The HTTP/3 session stops accepting before it
+joins connections and releases bindings. Existing providers retain their public
+selection and settings.
+
+Scheduled factories receive copied local and remote endpoints, including IPv6
+scope identifiers. Routing retains its own copies; changing request metadata
+cannot change the destination-ID map or later request metadata. Issued IDs stay
+bound to the admitted local/remote tuple. The library binding uses the listener's
+512 pending/256 active admission envelope, 128/16 incoming stream profile and a
+ten-second handshake deadline. It disables the development dispatcher's optional
+per-second admission quota while retaining the aggregate resource limits.
+
+The `serve-webserver` host constructs the real WebServer, HTTP/3 listener, bearer
+module and WebApi controller using the internal per-instance binding factory.
+`verify_listener.py` drives four simultaneous certificate-verified aioquic clients
+through route argument binding, missing/invalid bearer credentials, denied and
+accepted authorization policies, 128 KiB uploads, complete 408 timeout responses,
+stream-local request abort and healthy sibling requests. It mutates request
+endpoint objects and checks that later requests retain their original addresses.
+A separate accepted request completes a 128 KiB response after listener acceptance
+has stopped, followed by shutdown and a bind to the same UDP port. These checks
+passed on the OpenSSL and non-exportable Windows RSA/ECDSA development profiles.
+
+Deterministic regressions cover deep endpoint copying, local-destination routing,
+continued existing-owner traffic after admission stops, optional admission-window
+limits, canceled accepts, repeated concurrent stop/dispose and port ownership.
+Dispatcher fuzz mutations now vary local destinations and acceptance state while
+checking bounded output and final owner cleanup. The extended development command
+includes the actual WebServer peer fixture when an OpenSSL path is supplied.
+
+Validation repeated the 90 existing independent-peer cases and six scheduled
+native first flights, alongside 12 actual-controller clients, 12 request-abort
+cases and three active-response drain/rebind cycles. Managed checks passed
+100,000 mutations, 10,000 cases per property and 4,000 generated actor traces.
+The final listener source passed another 100,000 mutations and all three TLS
+profiles, including exact controller invocation counts after authorization.
+Existing HTTP/3, request-abort and native-datagram coverage reported 749 successes,
+zero failures and one Windows-inapplicable certificate-export skip out of 750.
+
+Final Debug/Release builds, SARIF/diagnostic checks, PrettyCSharp, all-source
+quality checks, suppression checks and AnalyzerGuard passed. All six packages
+passed content checks, and the compatibility audit again reported 142 cases /
+284 upstream/Neo comparisons with zero errors.
+
+The updated instrumented campaigns completed 71,651 libFuzzer executions in
+61 seconds and 25,342 AFL++ executions in 60 seconds, with no retained
+crashes or hangs. AFL's 5.83% map stability reflects concurrent scheduling;
+its edge percentage is not reliable coverage evidence.
+
+The host rejects TLS policy settings outside its development profile. These tests
+establish the integration path; supported-platform packaging, full certificate
+policy and public WebTransport acceptance still precede production selection.
+
 ## Remaining production acceptance work
 
-1. Promote the bounded shared listener into the production ownership/transport
-   interfaces, with application configuration, certificate lifetime and graceful
-   shutdown parity. Complete SNI/client-certificate/credential-reload behavior,
+1. Complete application configuration, certificate lifetime and platform acceptance
+   for the new internal socket binding. The real WebServer path now has initial
+   controller/authentication/cancellation/drain evidence with development credentials. Complete SNI/client-certificate/credential-reload behavior,
    non-exportable-key support on every supported platform, cipher-suite parity and
-   bounded native TLS worker scheduling. Its current admission limits and ten-second host deadline are
-   development-host bounds; the offline actor model is not a listener load test.
+   bounded native TLS worker scheduling. The listener uses bounded worker ownership;
+   the offline actor model is not a listener load test.
 2. Validate longer transfer/loss/endurance patterns and expose sustainable stream
    lifecycle through the production application transport boundary. The development
    host already replenishes stream counts and retires stream/application buffers.
@@ -827,8 +885,9 @@ platform, browser, controller or authentication acceptance.
 3. Complete transport/application error classification, stateless reset, Retry,
    path handling, post-handshake TLS, resumption and any intentionally supported
    0-RTT policy. Features outside the supported profile must fail explicitly.
-4. Production HTTP/3 provider integration, request dispatch, application auth,
-   WebTransport API/controller integration, cancellation and disposal parity.
+4. Finish production provider selection and public WebTransport API/controller
+   integration; broaden the actual WebServer auth/cancellation/disposal checks across
+   supported configurations and platforms.
 5. Independent peers on Windows/Linux/macOS, browser compatibility, dependency
    packaging, and startup/warm/tail-latency measurements. Windows embedded hosting
    leads; meaningful warm regressions are not accepted for cold-start gains.

@@ -17,7 +17,8 @@ namespace EmbedIO.Quic
     internal delegate QuicConnection ScheduledQuicConnectionFactory(
         ReadOnlySpan<byte> firstPacket,
         double now,
-        QuicConnectionOwner owner
+        QuicConnectionOwner owner,
+        QuicConnectionEndpoints endpoints
     );
 
     // Receive, Tick and SendOneAsync are driven by one socket-loop owner. Native
@@ -36,20 +37,23 @@ namespace EmbedIO.Quic
                 ScheduledQuicConnectionFactory create,
                 string original,
                 IPEndPoint peer,
+                IPEndPoint? local,
                 double deadline
             )
             {
                 ArgumentNullException.ThrowIfNull(dispatcher);
                 ArgumentNullException.ThrowIfNull(create);
                 Original = original;
-                Peer = new IPEndPoint(peer.Address, peer.Port);
+                Peer = QuicConnectionEndpoints.Copy(peer);
+                Local = local == null ? null : QuicConnectionEndpoints.Copy(local);
                 Deadline = deadline;
                 Owner = new QuicConnectionOwner(
                     dispatcher._pool,
                     (packet, now) => create(
                         packet,
                         now,
-                        Owner ?? throw new InvalidOperationException("Connection owner was not initialized.")
+                        Owner ?? throw new InvalidOperationException("Connection owner was not initialized."),
+                        new QuicConnectionEndpoints(Peer, Local)
                     ),
                     () => dispatcher.ConnectionClock(this),
                     output => dispatcher.Publish(this, output)
@@ -58,6 +62,7 @@ namespace EmbedIO.Quic
 
             internal string Original { get; }
             internal IPEndPoint Peer { get; }
+            internal IPEndPoint? Local { get; }
             internal double Deadline { get; }
             internal QuicConnectionOwner Owner { get; }
 
@@ -74,6 +79,7 @@ namespace EmbedIO.Quic
         private readonly ScheduledQuicConnectionFactory _create;
         private readonly Func<double> _clock;
         private readonly int _capacity;
+        private readonly int _attemptLimit;
         private readonly double _handshakeTimeout;
         private readonly int _outputPacketCapacity;
         private readonly int _outputByteCapacity;
@@ -81,7 +87,7 @@ namespace EmbedIO.Quic
         private readonly object _outputGate = new();
         private readonly HashSet<Entry> _entries = [];
         private readonly Dictionary<string, Entry> _issued = new(StringComparer.Ordinal);
-        private readonly Dictionary<(IPEndPoint Peer, string Id), Entry> _initials = [];
+        private readonly Dictionary<(IPEndPoint Peer, IPEndPoint? Local, string Id), Entry> _initials = [];
         private Task? _shutdown;
         private TaskCompletionSource? _sendFinished;
         private bool _sending;
@@ -99,7 +105,8 @@ namespace EmbedIO.Quic
             int workers = 2,
             double handshakeTimeout = 3000,
             int outputPacketCapacity = 256,
-            int outputByteCapacity = 1048576
+            int outputByteCapacity = 1048576,
+            int? admissionAttemptsPerSecond = null
         )
         {
             ArgumentNullException.ThrowIfNull(create);
@@ -117,6 +124,8 @@ namespace EmbedIO.Quic
             _create = create;
             _clock = clock;
             _capacity = capacity;
+            _attemptLimit = admissionAttemptsPerSecond ?? capacity;
+            ArgumentOutOfRangeException.ThrowIfNegative(_attemptLimit);
             _handshakeTimeout = handshakeTimeout;
             _outputPacketCapacity = outputPacketCapacity;
             _outputByteCapacity = outputByteCapacity;
@@ -130,6 +139,7 @@ namespace EmbedIO.Quic
             _pool = new QuicExecutionPool(workers, capacity);
         }
 
+        internal bool Accepting { get; set; } = true;
         internal int Active => _entries.Count;
         internal int Accepted { get; private set; }
         internal int Retired { get; private set; }
@@ -156,7 +166,7 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal bool Receive(ReadOnlySpan<byte> bytes, IPEndPoint peer)
+        internal bool Receive(ReadOnlySpan<byte> bytes, IPEndPoint peer, IPEndPoint? local = null)
         {
             ObjectDisposedException.ThrowIf(_closing, this);
             ArgumentNullException.ThrowIfNull(peer);
@@ -167,29 +177,35 @@ namespace EmbedIO.Quic
 
             var id = Convert.ToHexString(destination);
 
-            if (!_issued.TryGetValue(id, out var entry)) _initials.TryGetValue((peer, id), out entry);
+            if (!_issued.TryGetValue(id, out var entry)) _initials.TryGetValue((peer, local, id), out entry);
 
             if (entry != null)
             {
-                if (!entry.Peer.Equals(peer) || !Synchronize(entry, now)) return Reject();
+                if (!entry.Peer.Equals(peer) || !Equals(entry.Local, local) || !Synchronize(entry, now))
+                    return Reject();
             }
 
             else
             {
-                if (!initial || bytes.Length is < 1200 or > 65535 || _entries.Count >= _capacity) return Reject();
+                if (!Accepting || !initial || bytes.Length is < 1200 or > 65535 || _entries.Count >= _capacity)
+                    return Reject();
 
-                if (now >= _window + 1000)
+                if (_attemptLimit != 0)
                 {
-                    _window = now;
-                    _attempts = 0;
+                    if (now >= _window + 1000)
+                    {
+                        _window = now;
+                        _attempts = 0;
+                    }
+
+                    if (_attempts >= _attemptLimit) return Reject();
+
+                    _attempts++;
                 }
 
-                if (_attempts >= _capacity) return Reject();
-
-                _attempts++;
-                entry = new Entry(this, _create, id, peer, now + _handshakeTimeout);
+                entry = new Entry(this, _create, id, peer, local, now + _handshakeTimeout);
                 _entries.Add(entry);
-                _initials.Add((entry.Peer, id), entry);
+                _initials.Add((entry.Peer, entry.Local, id), entry);
                 Peak = Math.Max(Peak, _entries.Count);
             }
 
@@ -392,7 +408,7 @@ namespace EmbedIO.Quic
                 if (!entry.Owner.Completion.IsCompleted) continue;
 
                 _entries.Remove(entry);
-                _initials.Remove((entry.Peer, entry.Original));
+                _initials.Remove((entry.Peer, entry.Local, entry.Original));
 
                 if (entry.Id != null)
                 {

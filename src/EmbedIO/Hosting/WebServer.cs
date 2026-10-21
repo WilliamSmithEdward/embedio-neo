@@ -120,6 +120,20 @@ namespace EmbedIO
             Listener = CreateHttpListener(nativeHttp3);
         }
 
+        internal WebServer(
+            WebServerOptions options,
+            Func<EmbedIO.Internal.RequestPolicyResolver?, IHttpListener> http3Factory
+        ) : base(options)
+        {
+            if (http3Factory == null) throw new ArgumentNullException(nameof(http3Factory));
+
+            if (options.Mode != HttpListenerMode.EmbedIOHttp3)
+                throw new ArgumentException("A transport factory requires the HTTP/3 hosting mode.", nameof(options));
+
+            DrainStarted = _drainStarted.Token;
+            Listener = CreateHttpListener(http3Factory: http3Factory);
+        }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="WebServer"/> class.
         /// </summary>
@@ -496,7 +510,10 @@ namespace EmbedIO
             throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset and native QUIC support.");
         }
 
-        private IHttpListener CreateHttpListener(bool nativeHttp3 = false)
+        private IHttpListener CreateHttpListener(
+            bool nativeHttp3 = false,
+            Func<EmbedIO.Internal.RequestPolicyResolver?, IHttpListener>? http3Factory = null
+        )
         {
             var bodyPolicy = EmbedIO.Internal.RequestPolicyResolver.Create(Options);
 
@@ -509,30 +526,34 @@ namespace EmbedIO
             // A source replaces the fixed certificate settings, whose getter would otherwise load or register one.
             X509Certificate2? CertificateOrNull() => Options.CertificateSource != null ? null : Options.Certificate;
 
-            IHttpListener DoCreate() => Options.Mode switch
-            {
-                HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(
-                    CertificateOrNull(),
-                    Options.CertificateSource,
-                    false,
-                    nativeHttp3,
-                    bodyPolicy
-                ),
-                HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(
-                    CertificateOrNull(),
-                    Options.CertificateSource,
-                    true,
-                    nativeHttp3,
-                    bodyPolicy
-                ),
-                _ when (int)Options.Mode == 1 =>
-                    throw new NotSupportedException(
-                        "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."
-                    ),
-                _ => Options.CertificateSource != null
-                    ? new Net.HttpListener(Options.CertificateSource, bodyPolicy)
-                    : new Net.HttpListener(Options.Certificate, bodyPolicy)
-            };
+            IHttpListener DoCreate() =>
+                http3Factory != null
+                    ? http3Factory(bodyPolicy)
+                        ?? throw new InvalidOperationException("Transport factory returned no listener.")
+                    : Options.Mode switch
+                    {
+                        HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(
+                            CertificateOrNull(),
+                            Options.CertificateSource,
+                            false,
+                            nativeHttp3,
+                            bodyPolicy
+                        ),
+                        HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(
+                            CertificateOrNull(),
+                            Options.CertificateSource,
+                            true,
+                            nativeHttp3,
+                            bodyPolicy
+                        ),
+                        _ when (int)Options.Mode == 1 =>
+                            throw new NotSupportedException(
+                                "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."
+                            ),
+                        _ => Options.CertificateSource != null
+                            ? new Net.HttpListener(Options.CertificateSource, bodyPolicy)
+                            : new Net.HttpListener(Options.Certificate, bodyPolicy)
+                    };
 
             // Refuse TLS settings the selected listener cannot honor before creating it.
             var tlsPolicy = Options.TlsPolicy;

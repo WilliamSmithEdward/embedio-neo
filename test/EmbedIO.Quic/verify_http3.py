@@ -39,18 +39,23 @@ class HttpPeer(QuicConnectionProtocol):
                 if received.stream_ended and not future.done():
                     future.set_result((headers, bytes(body)))
 
-    async def request(self, path, data=None, incomplete=False):
+    def start_request(self, path, data=None, incomplete=False, headers=()):
         stream = self._quic.get_next_available_stream_id()
         future = asyncio.get_running_loop().create_future()
         self.responses[stream] = (future, [], bytearray())
         fields = [(b':method', b'GET' if data is None else b'POST'), (b':scheme', b'https'),
-                  (b':authority', b'localhost'), (b':path', path.encode())]
+                  (b':authority', getattr(self, 'authority', b'localhost')), (b':path', path.encode())]
+        fields.extend(headers)
         if data is not None:
             fields.append((b'content-length', str(len(data) + (1000000 if incomplete else 0)).encode()))
         self.http.send_headers(stream, fields, end_stream=data is None)
         if data is not None:
             self.http.send_data(stream, data, end_stream=not incomplete)
         self.transmit()
+        return stream, future
+
+    async def request(self, path, data=None, incomplete=False, headers=()):
+        stream, future = self.start_request(path, data, incomplete, headers)
         headers, body = await asyncio.wait_for(future, 5)
         return stream, dict(headers), body
 

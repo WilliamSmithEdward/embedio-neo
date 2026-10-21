@@ -46,6 +46,9 @@ namespace EmbedIO.Quic
             }
         }
 
+        internal X509Certificate2? NativeCertificate =>
+            OperatingSystem.IsWindows() ? _nativeCertificate?.BorrowCertificate() : null;
+
         internal TlsSession Create(byte[] parameters, string protocol)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);

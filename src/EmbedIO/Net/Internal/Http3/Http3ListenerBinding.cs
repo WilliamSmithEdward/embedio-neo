@@ -20,6 +20,8 @@ namespace EmbedIO.Net.Internal.Http3
     {
         internal abstract ValueTask<Http3AcceptedConnection> AcceptAsync(CancellationToken token);
 
+        internal virtual ValueTask StopAcceptingAsync() => DisposeAsync();
+
         public abstract ValueTask DisposeAsync();
 
         // The native binding supports none of the policy's settings but EnabledProtocols, which QUIC fixes at TLS 1.3;
@@ -311,6 +313,8 @@ namespace EmbedIO.Net.Internal.Http3
 
             private static byte[] Thumbprint(X509Certificate2 certificate) =>
                 certificate.GetCertHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+
+            internal override ValueTask StopAcceptingAsync() => new(_listener.StopAsync());
 
             public override async ValueTask DisposeAsync()
             {

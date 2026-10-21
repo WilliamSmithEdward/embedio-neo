@@ -86,6 +86,9 @@ def main():
         run("production-http3", [sys.executable, "test/EmbedIO.Quic/verify_http3.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--openssl", str(args.openssl.resolve()),
             "--output", str(report / "production-http3")])
+        run("production-listener", [sys.executable, "test/EmbedIO.Quic/verify_listener.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--openssl", str(args.openssl.resolve()),
+            "--output", str(report / "production-listener")])
     for index in range(args.rounds):
         seed = 1729 + index * 104729
         run(f"properties-{seed}", fuzz + ["--fscheck", str(seed), str(args.cases)])

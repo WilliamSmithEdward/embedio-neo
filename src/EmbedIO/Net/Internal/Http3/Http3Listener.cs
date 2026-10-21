@@ -24,6 +24,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly object _sync = new();
         private readonly ServerCertificateSource _certificates;
         private readonly bool _native;
+        private readonly Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, bool, Http3ListenerBinding> _bind;
         private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = [];
         private Session? _session;
@@ -40,7 +41,17 @@ namespace EmbedIO.Net.Internal.Http3
         { }
 
         internal Http3Listener(ServerCertificateSource certificates, bool native, RequestPolicyResolver? bodyPolicy)
+            : this(certificates, native, bodyPolicy, Http3ListenerBinding.Bind)
+        { }
+
+        internal Http3Listener(
+            ServerCertificateSource certificates,
+            bool native,
+            RequestPolicyResolver? bodyPolicy,
+            Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, bool, Http3ListenerBinding> bind
+        )
         {
+            _bind = bind ?? throw new ArgumentNullException(nameof(bind));
             _certificates = certificates ?? throw new ArgumentNullException(nameof(certificates));
             _native = native;
             _bodyPolicy = bodyPolicy;
@@ -130,7 +141,8 @@ namespace EmbedIO.Net.Internal.Http3
                     DeferContinue,
                     Telemetry,
                     _bodyPolicy,
-                    _dispatcher
+                    _dispatcher,
+                    _bind
                 );
             }
         }
@@ -304,7 +316,8 @@ namespace EmbedIO.Net.Internal.Http3
                 bool deferContinue,
                 EmbedIO.Internal.ServerTelemetry? telemetry,
                 RequestPolicyResolver? bodyPolicy,
-                Func<IHttpContextImpl, Task>? dispatcher
+                Func<IHttpContextImpl, Task>? dispatcher,
+                Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, bool, Http3ListenerBinding> bind
             )
             {
                 var session = new Session
@@ -339,7 +352,7 @@ namespace EmbedIO.Net.Internal.Http3
                     {
                         var listener = QuicEndpointReleases.Shared.Bind(
                             binding.Key,
-                            () => Http3ListenerBinding.Bind(binding.Key, certificates, policy, native)
+                            () => bind(binding.Key, certificates, policy, native)
                         );
                         session._listeners.Add(listener, (binding.Value.ToArray(), binding.Key));
                     }
@@ -450,7 +463,10 @@ namespace EmbedIO.Net.Internal.Http3
                                     .ConfigureAwait(false);
                             }
 
-                            catch (Exception error) when (error is QuicException or OperationCanceledException) { }
+                            catch (Exception error) when (
+                                Http3TransportFailure.IsTransport(error) || error is OperationCanceledException
+                            )
+                            { }
 
                             finally
                             {
@@ -707,9 +723,8 @@ namespace EmbedIO.Net.Internal.Http3
                     foreach (var listener in _listeners)
                     {
                         await listener.Key
-                            .DisposeAsync()
+                            .StopAcceptingAsync()
                             .ConfigureAwait(false);
-                        QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
                     }
 
                     await Task
@@ -727,9 +742,24 @@ namespace EmbedIO.Net.Internal.Http3
                 finally
                 {
                     _stop.Cancel();
-                    Contexts.Writer.TryComplete();
+                    var cleanup = Task.WhenAll(_listeners.Keys.Select(listener => listener
+                            .DisposeAsync()
+                            .AsTask()));
 
-                    while (Contexts.Reader.TryRead(out _)) { }
+                    try
+                    {
+                        await cleanup.ConfigureAwait(false);
+                    }
+
+                    finally
+                    {
+                        foreach (var listener in _listeners)
+                            QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
+
+                        Contexts.Writer.TryComplete();
+
+                        while (Contexts.Reader.TryRead(out _)) { }
+                    }
                 }
             }
 

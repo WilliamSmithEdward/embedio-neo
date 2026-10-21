@@ -39,6 +39,12 @@ namespace EmbedIO.Quic
             await ScheduledApplicationAsync([0, 42]).ConfigureAwait(false);
             await ScheduledApplicationAsync([1]).ConfigureAwait(false);
             await RoutingAndSendFailureAsync().ConfigureAwait(false);
+            await EndpointOwnershipAsync().ConfigureAwait(false);
+            await AdmissionWindowAsync(0).ConfigureAwait(false);
+            await AdmissionWindowAsync(1).ConfigureAwait(false);
+            await ProductionListenerLifecycleTests
+                .RunAsync()
+                .ConfigureAwait(false);
             Mutate([0, 1, 2, 3, 4, 5, 6, 7]);
             Mutate([255, 17, 2, 1]);
         }
@@ -49,7 +55,7 @@ namespace EmbedIO.Quic
             using var release = new ManualResetEventSlim();
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now, _) =>
+                (packet, now, _, _) =>
                 {
                     var blocked = packet[6] == 1;
                     return Connection(
@@ -123,7 +129,7 @@ namespace EmbedIO.Quic
             var now = 0.0;
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, time, _) => Connection(
+                (packet, time, _, _) => Connection(
                     packet,
                     time,
                     new ControlledTls(
@@ -188,7 +194,7 @@ namespace EmbedIO.Quic
             var factories = 0;
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, time, _) =>
+                (packet, time, _, _) =>
                 {
                     Interlocked.Increment(ref factories);
                     return Connection(
@@ -252,7 +258,7 @@ namespace EmbedIO.Quic
         {
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, time, _) => Connection(
+                (packet, time, _, _) => Connection(
                     packet,
                     time,
                     new ControlledTls(
@@ -334,7 +340,7 @@ namespace EmbedIO.Quic
         {
             var nativeFactories = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now, _) => new QuicConnection(
+                (packet, now, _, _) => new QuicConnection(
                     packet,
                     _ =>
                     {
@@ -364,7 +370,7 @@ namespace EmbedIO.Quic
         {
             var cleaned = 0;
             var dispatcher = new QuicConnectionDispatcher(
-                (packet, now, _) =>
+                (packet, now, _, _) =>
                 {
                     var fail = packet[6] == 1;
                     return Connection(
@@ -428,7 +434,7 @@ namespace EmbedIO.Quic
             var disposed = 0;
             var failure = new TimeoutException("callback timeout");
             var dispatcher = new QuicConnectionDispatcher(
-                (packet, now, _) => Connection(
+                (packet, now, _, _) => Connection(
                     packet,
                     now,
                     new ControlledTls(() => throw failure, () => Interlocked.Increment(ref disposed))
@@ -482,7 +488,7 @@ namespace EmbedIO.Quic
             var tls = new ConnectionCoreTests.ModelTls(true);
             Action? lateNotify = null;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now, owner) =>
+                (packet, now, owner, _) =>
                 {
                     lateNotify = owner.Notify;
                     return new QuicConnection(
@@ -561,7 +567,7 @@ namespace EmbedIO.Quic
             var disposed = 0;
             QuicConnection? connection = null;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now, _) =>
+                (packet, now, _, _) =>
                 {
                     connection = Connection(
                         packet,
@@ -639,6 +645,116 @@ namespace EmbedIO.Quic
             );
         }
 
+        private static async Task EndpointOwnershipAsync()
+        {
+            var ready = new TaskCompletionSource<QuicConnection>(TaskCreationOptions.RunContinuationsAsynchronously);
+            await using var dispatcher = new QuicConnectionDispatcher(
+                (packet, now, _, endpoints) =>
+                {
+                    Check(
+                        endpoints.Peer.Address.ScopeId == 3 && endpoints.Local?.Address.ScopeId == 4,
+                        "factory receives original scopes"
+                    );
+                    endpoints.Peer.Address.ScopeId = 9;
+
+                    var factoryLocal = endpoints.Local
+                        ?? throw new InvalidOperationException("Missing local endpoint.");
+                    factoryLocal.Address.ScopeId = 10;
+
+                    endpoints.Peer.Port = 1;
+                    var connection = Connection(
+                        packet,
+                        now,
+                        new ControlledTls(
+                            static () => { },
+                            static () => { }
+                        )
+                    );
+                    ready.TrySetResult(connection);
+                    return connection;
+                },
+                static () => 0,
+                capacity: 1,
+                workers: 1
+            );
+            var peer = new IPEndPoint(IPAddress.Parse("fe80::1%3"), 17001);
+            var local = new IPEndPoint(IPAddress.Parse("fe80::2%4"), 18001);
+            Check(dispatcher.Receive(Packet(1), peer, local), "scoped endpoints admitted");
+            peer.Address.ScopeId = 11;
+            local.Address.ScopeId = 12;
+            peer.Port = 17002;
+            local.Port = 18002;
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var connection = await ready.Task
+                .WaitAsync(stop.Token)
+                .ConfigureAwait(false);
+            Check(
+                await dispatcher
+                    .WaitForOutputAsync(stop.Token)
+                    .ConfigureAwait(false),
+                "scoped output ready"
+            );
+            await dispatcher
+                .SendOneAsync(output =>
+                {
+                    Check(output.Peer.Address.ScopeId == 3 && output.Peer.Port == 17001, "factory and caller mutations do not alter output route");
+                    return ValueTask.CompletedTask;
+                })
+                .ConfigureAwait(false);
+            var originalPeer = new IPEndPoint(IPAddress.Parse("fe80::1%3"), 17001);
+            var originalLocal = new IPEndPoint(IPAddress.Parse("fe80::2%4"), 18001);
+            byte[] forged = [0x40, .. connection.ServerId, 1];
+            Check(!dispatcher.Receive(forged, originalPeer, local), "issued ID cannot move local destination");
+            dispatcher.Accepting = false;
+            Check(!dispatcher.Receive(Packet(2), originalPeer, originalLocal), "stopped admission rejects new owner");
+            Check(
+                dispatcher.Receive(Packet(1, 1), originalPeer, originalLocal),
+                "stopped admission preserves existing aliases and endpoint copies"
+            );
+            await dispatcher
+                .DisposeAsync()
+                .ConfigureAwait(false);
+            Check(dispatcher.Active == 0 && dispatcher.FailedOwners == 0, "scoped routes release ownership");
+        }
+
+        private static async Task AdmissionWindowAsync(int limit)
+        {
+            var now = 0.0;
+            await using var dispatcher = new QuicConnectionDispatcher(
+                (packet, time, _, _) => Connection(
+                    packet,
+                    time,
+                    new ControlledTls(
+                        static () => { },
+                        static () => { }
+                    )
+                ),
+                () => now,
+                capacity: 1,
+                workers: 1,
+                admissionAttemptsPerSecond: limit
+            );
+            var invalid = Packet(1);
+            invalid[^1] ^= 1;
+            var peer = new IPEndPoint(IPAddress.Loopback, 17001);
+
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                Check(
+                    dispatcher.Receive(invalid, peer) == (limit == 0 || attempt == 0),
+                    "admission budget applies only when configured"
+                );
+                await UntilAsync(() =>
+                {
+                    dispatcher.Tick();
+                    return dispatcher.Active == 0;
+                }).ConfigureAwait(false);
+            }
+
+            now = 1000;
+            Check(dispatcher.Receive(invalid, peer), "configured admission budget renews after its window");
+        }
+
         internal static void Mutate(ReadOnlySpan<byte> data)
         {
             MutateAsync(data[..Math.Min(12, data.Length)].ToArray())
@@ -656,7 +772,7 @@ namespace EmbedIO.Quic
             var created = 0;
             var disposed = 0;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now, _) =>
+                (packet, now, _, _) =>
                 {
                     var connection = new QuicConnection(
                         packet,
@@ -680,7 +796,8 @@ namespace EmbedIO.Quic
                 outputByteCapacity: 2400
             );
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            dispatcher.Receive(Packet(1), new IPEndPoint(IPAddress.Loopback, 17001));
+            var local = new IPEndPoint(IPAddress.Loopback, 18001);
+            dispatcher.Receive(Packet(1), new IPEndPoint(IPAddress.Loopback, 17001), local);
             QuicFuzzChecks.Require(
                 await dispatcher
                     .WaitForOutputAsync(stop.Token)
@@ -695,7 +812,12 @@ namespace EmbedIO.Quic
 
                 if ((data[index] & 4) != 0) packet[^1] ^= 1;
 
-                dispatcher.Receive(packet, new IPEndPoint(IPAddress.Loopback, 17000 + owner));
+                dispatcher.Accepting = (data[index] & 32) == 0;
+                dispatcher.Receive(
+                    packet,
+                    new IPEndPoint(IPAddress.Loopback, 17000 + owner),
+                    (data[index] & 64) == 0 ? local : new IPEndPoint(IPAddress.Loopback, 18002)
+                );
 
                 if ((data[index] & 8) != 0) dispatcher.Tick();
 
