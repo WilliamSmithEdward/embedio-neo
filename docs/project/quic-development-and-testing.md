@@ -1116,10 +1116,18 @@ had inconsistent tails; both sets remain retained under `cipher-latency-01` and
 
 The independent Python HTTP/3 peer retains a terminal connection event. New
 requests fail immediately with that event's error after closure; pending requests
-still receive the same terminal event. A single stream reset leaves sibling and
-later requests usable. Three deterministic event-order regressions use the real
-QUIC/H3 objects with UDP transmission disabled, and the existing Windows Schannel
-step runs them through the pinned peer interpreter:
+receive the same error. When the pinned reference engine authenticates a peer close
+and enters draining, the helper notifies HTTP waiters immediately. It leaves the
+engine's drain timer and normal connection cleanup intact. A single stream reset
+leaves sibling and later requests usable.
+
+Four deterministic regressions use the real QUIC/H3 objects with UDP transmission
+disabled, including a complete encrypted in-memory handshake and a six-second drain.
+A separate full native-handshake run with the same slow reference drain completed
+all 16 inputs: five accepted identities, 11 expected rejections and 97 successful
+healthy-sibling requests. The five-second HTTP response deadline and existing
+case deadlines remain unchanged. The existing Windows Schannel step runs the
+regressions through the pinned peer interpreter:
 
 ```powershell
 python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py

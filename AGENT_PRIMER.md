@@ -444,7 +444,9 @@ CONNECT streams retain their transport cancellation behavior. The new independen
 `test/EmbedIO.Quic/verify_http3.py` checks actual HTTP/3 uploads, complete timeout
 responses and healthy sibling requests. Its request-lifetime regressions run with
 `python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py`
-in the pinned peer environment. `test/EmbedIO.Quic/verify_listener.py` additionally
+in the pinned peer environment. The helper reports an authenticated peer close to
+HTTP waiters when draining begins, while leaving the reference engine's drain timer
+and connection cleanup intact. `test/EmbedIO.Quic/verify_listener.py` additionally
 exercises actual WebServer controllers, bearer authentication and policy authorization,
 request-abort cancellation, endpoint metadata isolation, active-response drain and UDP
 rebind through the new binding. OpenSSL and Windows non-exportable RSA/ECDSA profiles

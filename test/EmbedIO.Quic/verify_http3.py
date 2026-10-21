@@ -8,6 +8,7 @@ from pathlib import Path
 from aioquic.asyncio import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.quic.configuration import QuicConfiguration
+from aioquic.quic.connection import QuicConnectionState
 from aioquic.tls import CipherSuite
 from aioquic.quic.events import ConnectionTerminated, StreamReset, StopSendingReceived
 from aioquic.h3.connection import H3Connection
@@ -23,6 +24,15 @@ class HttpPeer(QuicConnectionProtocol):
         self.responses = {}
         self.stopped = {}
         self._connection_error = None
+
+    def datagram_received(self, data, addr):
+        super().datagram_received(data, addr)
+        # The pinned reference engine authenticates CLOSE before entering DRAINING,
+        # but publishes ConnectionTerminated only after three probe timeouts. Notify
+        # HTTP waiters now without advancing its timer or completing its cleanup.
+        if (self._connection_error is None and self._quic._state == QuicConnectionState.DRAINING
+                and isinstance(self._quic._close_event, ConnectionTerminated)):
+            self.quic_event_received(self._quic._close_event)
 
     def quic_event_received(self, event):
         if isinstance(event, ConnectionTerminated):
