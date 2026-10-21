@@ -1602,3 +1602,61 @@ incorrectly assumed more than 10,000 entries; the corrected assertion checks the
 known document rather than guessing a count. These checks do not redate the
 separate frozen standards inventory. See [HTTP conformance](http-conformance.md)
 for capture commands.
+
+
+## Path-control response semantics
+
+The next same-path increment makes each `PATH_CHALLENGE` produce one
+`PATH_RESPONSE` with the exact eight-byte payload. The datagram is expanded to
+1200 bytes unless the unvalidated-address amplification budget requires a
+smaller response. Loss/PTO handling does not retransmit this response; a fresh
+challenge can elicit a fresh response. Malformed challenge or response data
+produces FRAME_ENCODING_ERROR (7). A complete unmatched response retains
+PROTOCOL_VIOLATION (10), which RFC 9000 section 19.18 explicitly permits.
+
+Nineteen of twenty deterministic cases failed on unchanged production source;
+the unmatched-response policy already passed. The candidate passes the twenty
+cases, including padding at the amplification boundary and response loss after
+acknowledging earlier deliveries. The fixture derives the application's actual
+sent packet-number range and uses distinct incoming numbers. Earlier fixture
+attempts that acknowledged the wrong packet space or reused incoming packet
+numbers are retained separately and are not production failure evidence.
+
+The locked independent peer appends an original challenge frame through its
+packet builder, retains its cryptography and first-response validator, and
+withholds later outgoing datagrams for two seconds. The preserved previous host
+repeated the same 38-byte response seven times without a new challenge. The
+candidate passed both Windows AES profiles: each peer observed one 1200-byte
+response, withheld seven subsequent datagrams, completed five healthy controller
+requests across both connections, then drained and rebound. The first peer-field
+collision and missing-probe fixture attempts are retained separately.
+
+`PathControlTests.Mutate` joins the existing core packet, recovery and lifecycle
+entry points, so managed mutation, FsCheck, trace and instrumented fuzz campaigns
+exercise exact/malformed path-control data. The independent script joins the
+Schannel, development and package-consumer drivers. These checks validate current
+path-control responses; endpoint migration, server challenge initiation and NAT
+rebinding still require their own state, routing and wire acceptance.
+
+
+Linux repeated the twenty model cases and complete dispatcher suite, all three
+path-control cipher profiles, three local-ID profiles, 15 received-reset cases
+and ten peer-ID cases. Windows repeated its model/dispatcher and both path/CID
+profiles. Both systems passed seed 1729 campaigns with 100,000 managed mutations,
+10,000 FsCheck cases per property and 1,000 recovery and lifecycle traces each.
+The new two-minute instrumented runs completed 71,157 libFuzzer executions and
+49,619 AFL++ executions without saved crashes or hangs. AFL++ reported 2.42%
+coverage stability; reliable feedback stability remains acceptance work, and
+these counts do not establish exhaustive coverage.
+
+An initial Windows instrumented run stopped before fuzzing because a concurrent
+compiler rebuild removed the ordinary DLL while its hash was being checked.
+The compiler/guided build phases were then sequenced and both campaigns passed.
+Separately, hosted static analysis caught two null-forgiving operators in the
+CID fixture; explicit missing-response failures replace them without a new
+suppression. The final local validation includes both suppression guards.
+The same hosted run's ARM64 builder stopped at a CentOS repository HTTP 403
+before TLS compilation. Its log is retained; no package pin or verification
+check was relaxed. A local execution probe of that exact ARM64 base image could
+not run because this Docker host lacks ARM64 emulation. Hosted ARM64 acceptance
+remains necessary.

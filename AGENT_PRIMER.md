@@ -1228,3 +1228,14 @@ to 64 MiB and the RFC update graph to 512 documents, and rejects XML DTD/entity
 markup. Offline controls run in CI's existing source-quality environment. See
 [HTTP conformance](docs/project/http-conformance.md) for isolated capture commands;
 new captures do not overwrite or redate the documented frozen inventory.
+
+
+Same-path `PATH_CHALLENGE` responses in the unmerged engine echo the exact eight
+bytes once and pad the UDP datagram to 1200 bytes, except where the existing
+unvalidated-address amplification budget requires less. Recovery does not repeat
+the response frame. Truncated challenge/response data yields frame-encoding error
+7; an unmatched complete response retains protocol-violation error 10, permitted
+by RFC 9000 section 19.18. The model, fuzz and independent-peer hooks are in the
+[development/testing record](docs/project/quic-development-and-testing.md).
+Server-initiated path validation and NAT rebinding remain separate integration
+work; public provider selection is unchanged.

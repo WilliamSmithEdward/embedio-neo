@@ -62,3 +62,6 @@ if ($LASTEXITCODE) { Get-Content "$output/stateless-reset.log"; throw 'Schannel 
 
 & $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_local_connection_ids.py --dotnet dotnet --assembly $assembly --output "$output/local-connection-ids" > "$output/local-connection-ids.log" 2>&1
 if ($LASTEXITCODE) { Get-Content "$output/local-connection-ids.log"; throw 'Schannel local connection-ID checks failed.' }
+
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_path_controls.py --dotnet dotnet --assembly $assembly --output "$output/path-controls" > "$output/path-controls.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/path-controls.log"; throw 'Schannel path-control checks failed.' }

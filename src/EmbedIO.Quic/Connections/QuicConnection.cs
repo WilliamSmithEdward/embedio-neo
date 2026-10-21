@@ -870,13 +870,7 @@ namespace EmbedIO.Quic
 
                 else if (type == 0x19) RetireLocalConnectionId(ref reader, destination);
 
-                else if (type == 0x1a)
-                {
-                    using var response = new MemoryStream();
-                    response.WriteByte(0x1b);
-                    response.Write(reader.Take(8));
-                    Send(2, response.ToArray());
-                }
+                else if (type is 0x1a or 0x1b) ReadPathControl(ref reader, type);
 
                 else
                     throw new InvalidDataException(
@@ -885,6 +879,32 @@ namespace EmbedIO.Quic
             }
 
             return acknowledge;
+        }
+
+        private void ReadPathControl(ref WireReader reader, ulong type)
+        {
+            ReadOnlySpan<byte> data;
+
+            try
+            {
+                data = reader.Take(8);
+            }
+
+            catch (InvalidDataException error)
+            {
+                throw new TransportException(7, error.Message);
+            }
+
+            // No challenge is outstanding until path initiation is integrated.
+            // RFC 9000 19.18 permits the existing protocol-violation policy.
+            if (type == 0x1b) throw new TransportException(10, "Unmatched path response.");
+
+            var response = new byte[9];
+            response[0] = 0x1b;
+            data.CopyTo(response.AsSpan(1));
+            // RFC 9000 8.2.2/13.3: exactly one response per received challenge;
+            // recovery may elicit fresh traffic, but must not repeat this frame.
+            QueueRepeat(new Delivery(2, response, false) { PadToMinimum = true }, false);
         }
 
         private void RetireLocalConnectionId(ref WireReader reader, ReadOnlySpan<byte> destination)
@@ -1162,6 +1182,15 @@ namespace EmbedIO.Quic
             Span<byte> encoded = stackalloc byte[4];
             BinaryPrimitives.WriteUInt32BigEndian(encoded, unchecked((uint)number));
             header.Write(encoded);
+
+            if (delivery.PadToMinimum)
+            {
+                var minimum = _addressValidated
+                    ? 1200
+                    : (int)Math.Min(1200, Math.Max(0, ReceivedBytes * 3 - SentBytes));
+                Array.Resize(ref payload, Math.Max(payload.Length, minimum - (int)header.Length - 16));
+            }
+
             return (header.ToArray(), numberOffset, payload);
         }
 

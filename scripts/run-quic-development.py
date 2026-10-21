@@ -110,6 +110,8 @@ def main():
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "stateless-reset")])
         run("local-connection-ids", [sys.executable, "test/EmbedIO.Quic/verify_local_connection_ids.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "local-connection-ids")])
+        run("path-controls", [sys.executable, "test/EmbedIO.Quic/verify_path_controls.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "path-controls")])
     if args.openssl or args.schannel:
         cipher_command = [sys.executable, "test/EmbedIO.Quic/verify_cipher_suites.py", "--dotnet", args.dotnet,
                           "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "cipher-suites")]

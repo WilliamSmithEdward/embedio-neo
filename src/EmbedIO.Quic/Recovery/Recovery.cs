@@ -21,6 +21,7 @@ namespace EmbedIO.Quic
         internal byte[] Bytes { get; }
         internal bool Reliable { get; }
         internal bool Eliciting { get; }
+        internal bool PadToMinimum { get; init; }
         internal bool Acknowledged { get; set; }
         internal bool Queued { get; set; }
         internal bool ProbePending { get; set; }
