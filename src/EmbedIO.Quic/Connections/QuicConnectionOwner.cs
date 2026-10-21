@@ -1,0 +1,216 @@
+﻿namespace EmbedIO.Quic
+{
+    internal sealed record QuicConnectionOutput(
+        ReadOnlyMemory<byte> ConnectionId,
+        IReadOnlyList<byte[]> Datagrams,
+        bool Established,
+        bool Closed
+    );
+
+    // The mailbox owns copied input until its turn completes. Factory, packet,
+    // timer, application and cleanup work all use the same serialized registration.
+    internal sealed class QuicConnectionOwner : IAsyncDisposable
+    {
+        private readonly object _gate = new();
+        private readonly Queue<byte[]> _packets = new();
+        private readonly QuicExecutionPool.Registration _execution;
+        private readonly QuicConnectionFactory _create;
+        private readonly Func<double> _clock;
+        private readonly Action<QuicConnectionOutput> _publish;
+        private readonly int _packetCapacity;
+        private readonly int _byteCapacity;
+        private QuicConnection? _connection;
+        private byte[] _id = [];
+        private bool _established;
+        private bool _reported;
+        private bool _closing;
+        private bool _tick;
+        private int _pendingBytes;
+        private int _pendingPackets;
+        private double _now;
+
+        internal QuicConnectionOwner(
+            QuicExecutionPool pool,
+            QuicConnectionFactory create,
+            Func<double> clock,
+            Action<QuicConnectionOutput> publish,
+            int packetCapacity = 64,
+            int byteCapacity = 262144
+        )
+        {
+            ArgumentNullException.ThrowIfNull(pool);
+            ArgumentNullException.ThrowIfNull(create);
+            ArgumentNullException.ThrowIfNull(clock);
+            ArgumentNullException.ThrowIfNull(publish);
+            ArgumentOutOfRangeException.ThrowIfLessThan(packetCapacity, 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(packetCapacity, 4096);
+            ArgumentOutOfRangeException.ThrowIfLessThan(byteCapacity, 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(byteCapacity, 16777216);
+            _create = create;
+            _clock = clock;
+            _publish = publish;
+            _packetCapacity = packetCapacity;
+            _byteCapacity = byteCapacity;
+            _execution = pool.Register(Execute, Cleanup);
+        }
+
+        internal Task Completion => _execution.Completion;
+
+        internal int PendingBytes
+        {
+            get
+            {
+                lock (_gate) return _pendingBytes;
+            }
+        }
+
+        internal int PendingPackets
+        {
+            get
+            {
+                lock (_gate) return _pendingPackets;
+            }
+        }
+
+        internal bool Receive(ReadOnlySpan<byte> bytes)
+        {
+            lock (_gate)
+            {
+                if (_closing || _execution.Closing) return false;
+
+                if (bytes.Length is < 1 or > 65535) return false;
+
+                if (_pendingPackets >= _packetCapacity || bytes.Length > _byteCapacity - _pendingBytes) return false;
+
+                _packets.Enqueue(bytes.ToArray());
+                _pendingPackets++;
+                _pendingBytes += bytes.Length;
+            }
+
+            return _execution.Wake();
+        }
+
+        internal void Notify() => _execution.Wake();
+
+        internal void Tick()
+        {
+            lock (_gate)
+            {
+                if (_closing) return;
+
+                _tick = true;
+            }
+
+            _execution.Wake();
+        }
+
+        private double ReadClock()
+        {
+            var now = _clock();
+
+            if (!double.IsFinite(now) || now < _now)
+                throw new InvalidOperationException("QUIC owner requires a monotonic clock.");
+
+            _now = now;
+            return now;
+        }
+
+        private void Execute()
+        {
+            byte[]? packet;
+            bool tick;
+
+            lock (_gate)
+            {
+                _packets.TryDequeue(out packet);
+                tick = _tick;
+                _tick = false;
+            }
+
+            try
+            {
+                if (packet != null && _connection == null)
+                {
+                    _connection = _create(packet, ReadClock())
+                        ?? throw new InvalidOperationException("QUIC factory returned no connection.");
+                    _id = _connection.ServerId.ToArray();
+                }
+
+                var connection = _connection;
+
+                if (connection == null) return;
+
+                var output = packet == null
+                    ? tick ? connection.Tick(ReadClock()) : connection.PumpApplications(ReadClock())
+                    : connection.Receive(packet, ReadClock());
+
+                if (packet != null && tick && !connection.Closed) output.AddRange(connection.Tick(ReadClock()));
+
+                if (
+                    !_execution.Closing
+                    && (!_reported || output.Count != 0 || connection.Established != _established || connection.Closed)
+                )
+                {
+                    _reported = true;
+                    _established = connection.Established;
+                    _publish(new QuicConnectionOutput(_id, output, _established, connection.Closed));
+                }
+
+                if (connection.Closed) RequestClose();
+            }
+
+            finally
+            {
+                bool pending;
+
+                lock (_gate)
+                {
+                    if (packet != null)
+                    {
+                        _pendingBytes -= packet.Length;
+                        _pendingPackets--;
+                    }
+
+                    pending = _packets.Count != 0 || _tick;
+                }
+
+                if (pending) _execution.Wake();
+            }
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            RequestClose();
+            return _execution.DisposeAsync();
+        }
+
+        internal void RequestClose()
+        {
+            lock (_gate) _closing = true;
+
+            _execution.RequestClose();
+        }
+
+        private void Cleanup()
+        {
+            lock (_gate)
+            {
+                _closing = true;
+                _packets.Clear();
+                _pendingBytes = 0;
+                _pendingPackets = 0;
+                _tick = false;
+            }
+
+            try
+            {
+                _connection?.Dispose();
+            }
+
+            finally
+            {
+                _connection = null;
+            }
+        }
+    }
+}

@@ -258,3 +258,7 @@ csharp_style_prefer_primary_constructors = false:warning
 [src/EmbedIO.Quic/Streams/AsyncStreamApplication.cs]
 # Owner-approved: preserve constructor syntax supported by the pinned scanner.
 csharp_style_prefer_primary_constructors = false:warning
+
+[src/EmbedIO.Quic/Connections/QuicExecutionPool.cs]
+# Owner-approved: preserve constructor syntax supported by the pinned scanner.
+csharp_style_prefer_primary_constructors = false:warning

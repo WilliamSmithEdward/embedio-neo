@@ -230,8 +230,8 @@ Run `--request-binding-selftest` to verify both corruption oracles. See
 
 ## EmbedIO.Quic
 
-The test-only QUIC core now participates in the existing fuzz campaigns. See the
+The QUIC development core participates in the existing fuzz campaigns. See the
 [development and testing record](../project/quic-development-and-testing.md) for
-all seven targets, multi-connection traces, managed coverage evidence, native TLS
+all eight targets, multi-connection traces, managed coverage evidence, native TLS
 mutation scope and extensive local commands. This does not activate a production
 provider or remove existing HTTP/3/MsQuic coverage.

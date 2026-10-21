@@ -404,6 +404,11 @@ UDP owner directly. The Windows development adapter selects and snapshots a borr
 certificate after a complete ClientHello, preserves bounded ASCII SNI spelling and
 isolates selector failures. Selection is once per handshake; a later publication
 applies to a new handshake. Production policy/worker integration remains pending.
+A bounded execution pool now serializes each connection's factory, packet,
+timer, application and cleanup work. Its mailbox counts both queued and executing
+input toward packet/byte limits; shutdown waits for active native calls. Direct
+lifecycle, packet-mutation and native first-flight checks exercise this scheduling
+boundary; socket-listener integration is still pending.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production

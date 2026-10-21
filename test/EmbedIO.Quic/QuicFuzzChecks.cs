@@ -6,7 +6,7 @@ namespace EmbedIO.Quic
     // Test-only facade. Referencing the prototype never creates a socket or loads OpenSSL.
     public static class QuicFuzzChecks
     {
-        public const int TargetCount = 7;
+        public const int TargetCount = 8;
         public const int MaximumInput = 4096;
 
         public static void Check(ReadOnlySpan<byte> data)
@@ -57,6 +57,11 @@ namespace EmbedIO.Quic
                     HeadersAndAcks(data);
                     break;
 
+                case 7:
+                    ExecutionPoolTests.Mutate(data);
+                    ConnectionOwnerTests.Mutate(data);
+                    break;
+
                 default:
                     throw new ArgumentOutOfRangeException(nameof(target));
             }
@@ -85,6 +90,9 @@ namespace EmbedIO.Quic
             QuicFuzzState.Run(steps, true, cover);
             AsyncStreamTests.ConnectionClosure(steps);
             cover?.Invoke("streams.async-closure");
+            ExecutionPoolTests.Mutate(steps);
+            ConnectionOwnerTests.Mutate(steps);
+            cover?.Invoke("connections.execution-ownership");
         }
 
         internal static void Require(bool condition, string invariant)

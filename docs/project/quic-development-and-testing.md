@@ -65,6 +65,7 @@ corresponding host/test files.
 | Lifetime | `ConnectionLifetime.cs` | Deadline regressions, monotonic phases, silent draining, bounded close responses and inability to revive a closed connection. |
 | H3 bridge and credit | `ConnectionStreams.cs`, `WebTransportApplication.cs` | Bounded malformed H3/datagram inputs, partial reset gaps, send-credit transitions, a healthy independent connection and exact datagram echo. |
 | Connection ownership | `QuicConnection.cs`, `QuicConnectionSet.cs`, `QuicConnectionLimits.cs`, `ConnectionCoreTests.cs`, `ConnectionSetTests.cs`, `SharedListener.cs`, `verify_connections.py` | Authentication before TLS allocation, configured stream credit, rejection after disposal, sibling cleanup after a failing disposer, capacity/deadline regressions, direct managed ownership mutations and simultaneous independent clients on one UDP port. |
+| Scheduled execution | `QuicExecutionPool.cs`, `QuicConnectionOwner.cs`, `ExecutionPoolTests.cs`, `ConnectionOwnerTests.cs` | Fixed worker count, one executing turn per owner, coalesced wakeups, fair requeueing, queued/in-flight input budgets, copied packet ownership, shutdown during native work and once-only cleanup. Lifecycle mutations and protected/corrupted packet inputs use the shared fuzz facade. Socket-listener integration remains pending. |
 | TLS framing | `TlsClientHello.cs`, `TlsHelloTests.cs` | Complete handshake/vector boundaries, duplicate extensions, required transport parameters, malformed/truncated input, parameter limits and structured/raw mutations through FsCheck, deterministic mutation, SharpFuzz and AFL++. |
 | Native TLS boundary | `TlsSession.cs`, `OpenSslTls.cs`, `SchannelTls.cs`, `SchannelTests.cs`, `ProbeConnection.cs`, `NativeFuzz.cs` | Fresh TLS owners, structured TLS 1.3 and malformed Initial frame/CRYPTO mutations, unauthenticated-packet isolation, credential/context/buffer cleanup and amplification accounting. Schannel tests include invalid constructor inputs, fragmented native rejection and concurrent context disposal. Native libraries themselves are not coverage-instrumented. |
 | Independent transport peer | `verify.py` | aioquic positive/negative handshake, exact echo, corruption, ALPN, flow-control and packet-loss/reordering cases. |
@@ -76,8 +77,9 @@ loads OpenSSL. No new production dependency group or library API is introduced.
 
 ## Fuzzing engines
 
-The seven managed target selectors are integers, packet protection, reassembly,
-recovery, lifetime, WebTransport bridge, and packet headers/ACKs/TLS ClientHello framing. Raw inputs are
+The eight managed target selectors are integers, packet protection, reassembly,
+recovery, lifetime, WebTransport bridge, packet headers/ACKs/TLS ClientHello framing,
+and scheduled connection ownership. Raw inputs are
 bounded to 4096 bytes. Stateful byte traces execute at most 128 commands; checked-in
 JSON traces and generated multi-connection campaigns use three actors and 48 steps.
 The packet-protection selector also drives a 128-command key-generation model.
@@ -89,7 +91,7 @@ The receive-history model allows up to 256 commands so coverage-guided inputs ca
 exercise retirement beyond the 128-range limit.
 Recovery histories and peer buffers remain bounded by the prototype's limits.
 
-- **FsCheck:** seven additional properties use arbitrary bounded byte arrays with
+- **FsCheck:** eight additional properties use arbitrary bounded byte arrays with
   deletion shrinking and replayable seeds. Existing URL, routing and multipart
   properties remain active. Each target runs separately so selection cannot starve
   a target. Default generated inputs are at most 256 bytes.
@@ -649,6 +651,37 @@ source-quality and analyzer guards passed. An isolated warm receive-loop compari
 against the preceding paged implementation observed unchanged allocation per
 operation and no slowdown in the tested 1/64/1200/65536-byte blocks; complete HTTP
 and listener latency acceptance remains outstanding.
+
+### Scheduled connection ownership
+
+`QuicExecutionPool` bounds active execution registrations and worker tasks. Each
+registration has at most one queued or executing turn. Wakeups during a turn
+coalesce into one later turn, queued behind other ready owners. Closing prevents
+new work; cleanup runs after the active turn, and pool shutdown awaits every owner
+before ending its workers. Ordinary execution and cleanup failures remain visible.
+
+`QuicConnectionOwner` copies admitted UDP payloads and counts both queued and
+executing packets against its internal mailbox bounds. Packet, timer, application
+and disposal operations share the same registration, so native TLS state stays
+owned by one execution context. Closing stops later turns and suppresses output
+when the current turn observes closure; disposal waits for any publication already
+in progress and for native cleanup. The caller supplies a monotonic clock. This component is ready for socket routing
+integration; the existing development socket loop has not switched to it yet.
+
+Local execution/packet ownership regressions, 10,000 FsCheck cases per property,
+100,000 managed mutations, 4,000 recovery/lifecycle traces and 72 existing
+independent-peer cases passed. Two concurrent first-flight cases passed with each
+of OpenSSL, Schannel RSA and Schannel ECDSA, followed by packet-key cleanup and
+Schannel native-resource checks. This is first-flight evidence for scheduled
+owners; the full peer cases still use the existing socket loop.
+
+The eighth managed target and lifecycle traces exercise worker/owner cleanup;
+both coverage runners instrument these source types. Fresh 60-second campaigns
+completed 148,194 libFuzzer and 25,737 AFL++ executions without retained crashes
+or hangs. Ordinary build hashes remained unchanged. AFL reported 40.04% map
+stability with concurrent scheduling, so the execution counts do not imply
+deterministic edge coverage. Debug/Release diagnostics, changed-file formatting,
+source-quality and suppression guards passed.
 
 ## Remaining production acceptance work
 

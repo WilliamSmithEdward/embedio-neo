@@ -14,6 +14,29 @@ namespace EmbedIO.Quic
         {
             try
             {
+                if (arguments is ["execution-native", var workerLibrary, var workerCertificate, var workerKey])
+                {
+                    await ConnectionOwnerTests
+                        .NativeAsync(workerLibrary, workerCertificate, workerKey)
+                        .ConfigureAwait(false);
+                    var result = new
+                    {
+                        scheduledNativeTls = "passed",
+                        connections = 2
+                    };
+                    Console.WriteLine(JsonSerializer.Serialize(result));
+                    return 0;
+                }
+
+                if (arguments is ["execution-self-test"])
+                {
+                    await ExecutionPoolTests
+                        .RunAsync()
+                        .ConfigureAwait(false);
+                    Console.WriteLine(JsonSerializer.Serialize(new { executionPool = "passed" }));
+                    return 0;
+                }
+
                 if (arguments is ["notification-self-test"])
                     return await AsyncStreamTests
                         .NotificationSelfTestAsync()
