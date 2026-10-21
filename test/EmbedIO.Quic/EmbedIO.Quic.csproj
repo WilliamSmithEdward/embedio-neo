@@ -8,7 +8,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
+    <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" Condition="'$(EmbedIOQuicPackageVersion)' == ''" />
+    <PackageReference Include="EmbedIO-Neo" VersionOverride="$(EmbedIOQuicPackageVersion)" Condition="'$(EmbedIOQuicPackageVersion)' != ''" />
+    <PackageReference Include="EmbedIO-Neo.Quic.Native" VersionOverride="$(EmbedIOQuicPackageVersion)" Condition="'$(EmbedIOQuicPackageVersion)' != ''" />
     <Compile Remove="$(MSBuildThisFileDirectory)../../src/Shared/AnalyzerUtilities.cs" />
   </ItemGroup>
   <!-- Optional local/CI native build; ordinary solution and package dependencies stay unchanged. -->
@@ -16,6 +18,9 @@
     <None Include="$(EmbedIOQuicNativeTlsDirectory)/libembedio_quic_tls.so" Condition="Exists('$(EmbedIOQuicNativeTlsDirectory)/libembedio_quic_tls.so')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="$(EmbedIOQuicNativeTlsDirectory)/libembedio_quic_tls.dylib" Condition="Exists('$(EmbedIOQuicNativeTlsDirectory)/libembedio_quic_tls.dylib')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="RequireQuicPackageAssets" BeforeTargets="PrepareForBuild" Condition="'$(EmbedIOQuicPackageVersion)' != ''">
+    <Error Condition="'$(EmbedIOQuicNativeTlsDirectory)' != ''" Text="Package-consumer validation must not copy a local native library manually." />
+  </Target>
   <Target Name="RequirePortableQuicTls" BeforeTargets="PrepareForBuild" Condition="'$(EmbedIOQuicNativeTlsDirectory)' != ''">
     <Error Condition="!Exists('$(EmbedIOQuicNativeTlsDirectory)/libembedio_quic_tls.so') And !Exists('$(EmbedIOQuicNativeTlsDirectory)/libembedio_quic_tls.dylib')" Text="The requested private QUIC TLS build is missing its native library." />
   </Target>

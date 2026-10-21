@@ -148,6 +148,7 @@ namespace EmbedIO.Quic
         internal int ExpiredHandshakes { get; private set; }
         internal int FailedOwners { get; private set; }
         internal Exception? LastOwnerFailure { get; private set; }
+        internal Exception? LastRejectedFailure { get; private set; }
         internal int DroppedOutput { get; private set; }
 
         internal int PendingOutputBytes
@@ -444,6 +445,9 @@ namespace EmbedIO.Quic
                 )
                 {
                     Rejected++;
+                    // Keep only the latest rejection; callers inspect this after
+                    // shutdown rather than logging on the packet-processing path.
+                    LastRejectedFailure = failure;
                 }
 
                 else

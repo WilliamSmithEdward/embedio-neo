@@ -80,6 +80,13 @@ namespace EmbedIO.Quic
                             .AsTask()
                     )
                     .ConfigureAwait(false);
+                QuicFuzzChecks.Require(
+                    listener.ClosedDiagnostics.StartsWith(
+                        "active=0;accepted=0;retired=0;peak=0;",
+                        StringComparison.Ordinal
+                    ),
+                    "retired-listener-diagnostics"
+                );
                 using var rebound = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
                 rebound.ExclusiveAddressUse = true;
                 rebound.Bind(original);

@@ -1319,3 +1319,57 @@ foreign dependencies/exports, missing protections and macOS deployment metadata.
 The portable CI artifacts now retain binaries, licenses, audit records and build
 receipts. Other RIDs, actual NuGet runtime-asset consumers, signing/AOT/browser
 acceptance and the provider transition remain outstanding.
+
+## Native package assembly and consumers
+
+The native runtime project is outside the ordinary solution and builds an
+unpublished `EmbedIO-Neo.Quic.Native` package. Its six runtime paths cover Linux
+glibc/musl and macOS, each x64/ARM64. It ships the private TLS library, required
+OpenSSL license, binary audits, build receipts and a complete inventory manifest;
+managed engine code remains in the modern core assembly. Core dependency groups
+and ordinary six-package output are unchanged in this development increment.
+The future dependency must remain modern-only to preserve legacy Framework
+AnyCPU behavior; [NuGet documents this native-package caveat](https://learn.microsoft.com/en-us/nuget/create-packages/native-files-in-net-packages).
+
+Staging checks exact source/archive identity, platform headers, audit/receipt
+consistency, licenses and bounded file inventories. The source comparison accepts
+only current bytes or CRLF-to-LF normalization. Package validation compares every
+native/provenance/notice path and byte with those staged inputs, checks the package
+identity/license and records both preview package hashes and their source commit.
+These consistency records are not build attestations. Explicit single-RID flags
+support local development; default staging/packaging/consumer CI requires all six
+RIDs and never publishes the previews.
+
+The new reusable workflow uses native hardware for each RID, immutable compiler
+and musl SDK image digests, exact signed Python packages and two concurrent jobs
+per matrix. After assembly, every RID must pass package-only portable, RID-specific
+and Native AOT consumers using a fresh mapped NuGet cache. The test applications
+cannot copy a locally built native library in package mode. The focused AOT
+consumer uses generated controller bindings and source-generated JSON, exercising
+normal WebServer HTTP/3 dispatch, bearer policy, 128 KiB upload/rejection,
+request-abort cancellation, healthy subsequent requests and owned cleanup with
+all three ciphers. The full reflection-based development harness separately keeps
+its wire, cipher, SNI, publication, certificate-policy, mutation and chain suites.
+
+Local Alpine 3.24 x64 validation used a musllinux-built asset with only the musl
+libc dependency. The actual library/development host passed 24 wire cases, all
+24 certificate-policy cases and 96 cipher vectors across the three forced-cipher
+WebServer profiles. The initial local package passed 24 portable wire cases and
+six RID-specific certificate-policy cases. All six focused package-only JIT/AOT
+cipher cases passed, including authorization, limits, abort and zero owned native
+resources. The expanded package driver then passed all nine portable/RID/AOT
+cipher cases and the full protocol/policy/mutation/issuer suites. These are local
+single-RID preview results; they do not establish all six RIDs, the oldest musl
+baseline, hardened macOS loading/signing, browser interoperability, whole-vendor
+instrumentation or endurance/latency acceptance.
+
+The current-head macOS 26 authentication campaign timed out in two unchanged
+hosted attempts on different inputs. Both retained peer traces show only outgoing
+Initial retransmissions and no received server flight; they do not implicate the
+later mutated certificate payload. Other wire/cipher/SNI/publication/policy checks
+in those jobs passed. No peer deadline, concurrency or rejection oracle was changed.
+The development host now reports post-disposal dispatcher counters and the latest
+rejected-owner exception, bounded to a 4 KiB diagnostic string. Formatting happens
+only when the retired listener is inspected. This is additional failure evidence,
+not a claimed correction of the unexplained macOS timeout. Exact-source hosted
+validation remains required before acceptance and provider retirement.

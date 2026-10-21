@@ -35,9 +35,10 @@ Install the hash-locked independent peer from
 The portable CI job builds this boundary and runs those checks on Linux and macOS.
 Configured jobs are not validation evidence until their exact-source runs pass.
 
-Public HTTP/3 provider selection remains unchanged. Native runtime packaging,
-older libc/musl support, all RID validation and the final provider transition are
-still development work; these sources do not add a runtime package dependency.
+Public HTTP/3 provider selection remains unchanged. Runtime assets are built into
+a separate, unpublished development package; ordinary solution packaging and core
+dependency groups remain unchanged. Supported-RID execution, oldest OS/libc,
+signing and the final provider transition still require validation.
 See [the development record](../../docs/project/quic-development-and-testing.md).
 
 ## Issuer chains and ownership checks
@@ -96,6 +97,59 @@ python3 -m unittest discover -s native/EmbedIO.Quic.Tls/tests -p 'test_*.py'
 
 Use fresh output directories. Native binaries, their license, binary audit and
 source/output receipt are retained by the portable workflow. These are inputs to
-runtime-asset packaging; the current sources do not yet add NuGet runtime assets
-or change the public HTTP/3 provider. See the development record for exact tests,
+runtime-asset packaging. The separate package described below supplies development
+NuGet runtime assets without changing public HTTP/3 provider selection. See the development record for exact tests,
 platform scope and remaining work.
+
+## Package assembly and actual consumers
+
+`EmbedIO.Quic.Native.csproj` builds the unpublished `EmbedIO-Neo.Quic.Native`
+package outside the ordinary solution. It contains only native runtime assets,
+build/audit records, a manifest and license/readme/icon files. It contains no
+managed implementation, build targets or package dependencies. The managed
+transport remains compiled into the modern core asset; Windows uses Schannel.
+The native package is separate so the .NET Standard dependency groups and legacy
+Framework AnyCPU behavior can be preserved during the eventual provider change.
+See [NuGet's native asset selection and Framework guidance](https://learn.microsoft.com/en-us/nuget/create-packages/native-files-in-net-packages).
+
+Install `requirements.txt` in the isolated build/validation Python environment
+with `python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt`.
+Its XML parser pin matches the existing formatter toolchain and is not shipped in
+any runtime package.
+
+`stage.py stage` requires exactly six audited outputs by default: `linux-x64`,
+`linux-arm64`, `linux-musl-x64`, `linux-musl-arm64`, `osx-x64` and `osx-arm64`.
+It checks their archive/source identity, ABI/header/RID, audited baseline, license
+and output hashes before writing a fresh staging directory. Source hashes accept
+only the current files or their CRLF-to-LF normalization for cross-platform
+checkouts. The manifest and receipts establish consistency, not build attestation
+or runtime/platform acceptance. The package target verifies that staging inventory
+before packing. `stage.py package` compares the actual ZIP payload paths/bytes,
+notices, package identity and license with the staged inputs.
+
+The reusable portable workflow builds the six assets on matching GitHub hardware,
+assembles one package and a local core preview, seals both hashes and the source
+commit, then runs `test/EmbedIO.Quic.PackageConsumer/validate.py` on each RID.
+Compiler and musl validation images use immutable digests; musl validation uses
+the pinned .NET SDK with Native AOT tools and exact signed Python APK packages.
+The native build and consumer matrices each allow at most two concurrent jobs.
+Configured matrix entries are not evidence of successful runs.
+
+The consumer uses a fresh NuGet cache and source mapping to isolate local previews
+from released packages with the same development version. Portable, RID-specific
+and Native AOT publishing must select the exact package library without a manual
+copy. Every mode runs all three ciphers through real HTTP/3, generated controllers,
+bearer authorization, bounded upload/rejection, request-abort cancellation, healthy
+subsequent requests and owned cleanup. The full development host also runs wire,
+cipher, SNI, live publication, certificate-policy, bounded mutation and issuer-chain
+suites through package references. The reflection-based full harness is not an
+AOT consumer; the focused generated-controller application is.
+
+For a local single-RID reproduction, staging accepts explicit `--rids <rid>`,
+packing requires `-p:EmbedIOQuicPreviewRid=<rid>`, feed sealing requires
+`--preview-rid <rid>` and the consumer requires `--preview`. These flags identify
+an incomplete development preview and are absent from distribution CI. Ordinary
+package validation requires all six RIDs. No preview is published by this workflow.
+Oldest libc/OS, signing/hardened-app loading, all-platform runtime results, malware
+validation of the final payload, browser tests, endurance and provider retirement
+remain part of the development goal.

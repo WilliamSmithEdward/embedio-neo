@@ -1,0 +1,2 @@
+# Baseline compiler only; build-tool dependencies are not shipped.
+FROM quay.io/pypa/musllinux_1_2_aarch64@sha256:0a7b18a1fce3dcfb1a6dd2ac99f077b78fb0f3cec8a2fed65bb999823c6a8fa0

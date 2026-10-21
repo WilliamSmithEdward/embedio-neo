@@ -1,0 +1,7 @@
+# Native hardware is required; the workflow does not use architecture emulation.
+FROM mcr.microsoft.com/dotnet/sdk@sha256:574e01812ecd2f33a79cb61b0398320abbd0589125b1e0a6fea00806ba630cb4
+RUN apk add --no-cache python3=3.14.8-r0 py3-pip=26.1.2-r0
+COPY requirements.txt /tmp/quic-validation-requirements.txt
+RUN python3 -m venv /opt/quic-validation && /opt/quic-validation/bin/python -m pip --isolated install --require-hashes --only-binary=:all: -r /tmp/quic-validation-requirements.txt
+ENV PATH="/opt/quic-validation/bin:$PATH"
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false

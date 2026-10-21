@@ -367,7 +367,10 @@ namespace EmbedIO.Quic
                 return dispatcher.Active == 0;
             }).ConfigureAwait(false);
             Check(
-                nativeFactories == 0 && dispatcher.Rejected > 0 && dispatcher.FailedOwners == 0,
+                nativeFactories == 0
+                    && dispatcher.Rejected > 0
+                    && dispatcher.FailedOwners == 0
+                    && dispatcher.LastRejectedFailure?.GetBaseException() is System.Security.Cryptography.CryptographicException,
                 "invalid authentication retires without TLS or listener failure"
             );
         }

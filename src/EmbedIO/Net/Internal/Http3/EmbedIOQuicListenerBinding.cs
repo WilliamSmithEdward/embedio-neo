@@ -77,6 +77,23 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
+        internal string ClosedDiagnostics
+        {
+            get
+            {
+                if (_shutdown?.IsCompleted != true)
+                    throw new InvalidOperationException("Await listener disposal before reading its diagnostics.");
+
+                var failure = _connections.LastRejectedFailure?.ToString();
+
+                if (failure?.Length > 4096) failure = failure[..4096];
+
+                return FormattableString.Invariant(
+                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};last-rejection={failure}"
+                );
+            }
+        }
+
         internal bool IsAccepting => Volatile.Read(ref _accepting) != 0;
         internal IPEndPoint LocalEndPoint => QuicConnectionEndpoints.Copy(_local);
 

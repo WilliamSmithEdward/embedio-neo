@@ -290,6 +290,7 @@ namespace EmbedIO.Quic
 
             var report = new
             {
+                transportDiagnostics = binding.ClosedDiagnostics,
                 retainedCallbackCertificates = retainedCallbacks.Length,
                 clientCertificateRequests = state.ClientCertificateRequests,
                 clientCertificateValidations = state.ClientCertificateValidations.ToArray(),

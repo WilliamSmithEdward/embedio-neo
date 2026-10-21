@@ -1101,8 +1101,8 @@ client-certificate policy must succeed first. Native buffers and handles remain
 bounded and owned by the serialized connection. Windows retains Schannel.
 
 Public HTTP/3 provider selection and package dependency groups are unchanged.
-Native runtime packaging, oldest supported libc/musl and remaining RID validation
-are pending. Build instructions and the exact archive pin are in
+A separate unpublished native runtime package and package-only consumers are in
+development; oldest supported libc/musl and remaining RID validation are pending. Build instructions and the exact archive pin are in
 [`native/EmbedIO.Quic.Tls`](native/EmbedIO.Quic.Tls/README.md). The portable CI job
 runs independent wire, SNI, publication, mutual TLS and bounded mutation checks on
 Linux and macOS; a configured job does not establish a successful run. Local Linux
@@ -1139,4 +1139,22 @@ above 2.27; Linux x64 CI builds in a digest-pinned manylinux compiler environmen
 and the tested artifact requires only GLIBC_2.17. macOS builds explicitly target
 15.0 and verify their load commands. Binary metadata does not establish all RID,
 musl, signing, package-consumer or runtime acceptance. The native artifacts and
-receipts are retained for that next stage; NuGet runtime assets remain pending.
+receipts are retained as package inputs. The unpublished `EmbedIO-Neo.Quic.Native`
+project stages exactly six Linux/macOS x64/ARM64 RIDs by default and checks the
+packed native bytes, license, manifest and source identity. It stays outside the
+ordinary solution; the six existing packages and core dependency groups remain
+unchanged until provider transition. This avoids placing native runtime assets in
+the legacy .NET Standard package graph.
+
+The portable workflow now builds on matching hardware, assembles one runtime
+package and validates portable/RID/Native AOT consumers with isolated local feeds
+and fresh caches. Generated controllers and source-generated JSON avoid reflection
+requirements in the focused AOT consumer. Its wire checks cover all three ciphers,
+bearer policy, bounded uploads/rejections, request-abort cancellation and cleanup;
+the package-based full harness retains the broader protocol and certificate suites.
+A local musl x64 preview passed the initial six JIT/AOT cipher profiles; exact
+later repeats are recorded in the development guide. Single-RID preview switches
+are local development aids, not distribution acceptance. All six RID runs, oldest
+OS/libc, native signing/loading, final-payload scans, browser and endurance/latency
+acceptance still apply. Public provider selection is unchanged and none of these
+native package changes is released.
