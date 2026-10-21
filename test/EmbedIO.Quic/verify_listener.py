@@ -7,6 +7,7 @@ import ssl
 from pathlib import Path
 from aioquic.asyncio import connect
 from aioquic.quic.configuration import QuicConfiguration
+from aioquic.tls import CipherSuite
 from verify import provenance
 from verify_http3 import HttpPeer
 
@@ -14,12 +15,16 @@ from verify_http3 import HttpPeer
 def configuration(args):
     config = QuicConfiguration(is_client=True, alpn_protocols=['h3'], server_name='localhost',
                                verify_mode=ssl.CERT_REQUIRED, idle_timeout=10, max_datagram_frame_size=65536)
+    if getattr(args, 'cipher', None):
+        config.cipher_suites = [CipherSuite[args.cipher]]
     config.load_verify_locations(cafile=str(args.output / 'certificate.pem'))
     return config
 
 
 async def client(args, port, index, barrier):
     async with connect('127.0.0.1', port, configuration=configuration(args), create_protocol=HttpPeer) as peer:
+        if getattr(args, 'cipher', None):
+            assert peer._quic.tls.key_schedule.cipher_suite == CipherSuite[args.cipher]
         peer.authority = f'127.0.0.1:{port}'.encode()
         await barrier.wait()
         async def expect(path, status, body=None, **kwargs):
@@ -92,6 +97,8 @@ async def main(args):
             for index in range(4):
                 group.create_task(client(args, ready['port'], index, barrier))
         async with connect('127.0.0.1', ready['port'], configuration=configuration(args), create_protocol=HttpPeer) as peer:
+            if getattr(args, 'cipher', None):
+                assert peer._quic.tls.key_schedule.cipher_suite == CipherSuite[args.cipher]
             peer.authority = f"127.0.0.1:{ready['port']}".encode()
             _, pending = peer.start_request('/drain')
             process.stdin.write(b'drain\n')
@@ -124,5 +131,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     for option in ('dotnet', 'assembly', 'openssl'):
         parser.add_argument('--' + option, required=True)
+    parser.add_argument('--cipher', choices=('AES_128_GCM_SHA256', 'AES_256_GCM_SHA384', 'CHACHA20_POLY1305_SHA256'))
     parser.add_argument('--output', type=Path, required=True)
     raise SystemExit(asyncio.run(main(parser.parse_args())))

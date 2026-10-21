@@ -115,6 +115,12 @@ namespace EmbedIO.Quic
                     return 0;
                 }
 
+                if (arguments is ["cipher-oracle", var cipherInput, var cipherOutput])
+                {
+                    CipherSuiteTests.Oracle(cipherInput, cipherOutput);
+                    return 0;
+                }
+
                 if (arguments is ["self-test"])
                 {
                     SelfTests.Run();

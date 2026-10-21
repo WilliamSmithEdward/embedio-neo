@@ -66,6 +66,7 @@ namespace EmbedIO.Quic
         private bool _started;
         private int _count;
         private int _readLevel;
+        private QuicCipherSuite? _cipherSuite;
         private readonly byte[]?[] _readSecrets = [null, null, null];
         private readonly byte[]?[] _writeSecrets = [null, null, null];
 
@@ -147,18 +148,11 @@ namespace EmbedIO.Quic
             using var certificate = new NativeRegion(nint.Size);
             var selected = _certificate ?? throw new InvalidOperationException("TLS credential has not been selected.");
             Marshal.WriteIntPtr(certificate.Address, selected.Handle);
-            // This development profile currently supports AES-128-GCM/SHA-256.
-            // Native cipher selection must match the existing packet-key profile.
-            using var aesName = NativeRegion.Text("AES");
+            // Windows negotiates its supported AES-GCM TLS 1.3 suites. Do not
+            // advertise a future native ChaCha profile until its secret contract is supported.
             using var chachaName = NativeRegion.Text("CHACHA20_POLY1305");
-            using var blocked = new NativeRegion(2 * Marshal.SizeOf<AlgorithmRestriction>());
+            using var blocked = new NativeRegion(Marshal.SizeOf<AlgorithmRestriction>());
             blocked.Structure(0, new AlgorithmRestriction
-            {
-                Usage = 2,
-                Algorithm = aesName.UnicodeName,
-                MaximumBits = 128
-            });
-            blocked.Structure(Marshal.SizeOf<AlgorithmRestriction>(), new AlgorithmRestriction
             {
                 Usage = 2,
                 Algorithm = chachaName.UnicodeName
@@ -167,7 +161,7 @@ namespace EmbedIO.Quic
             settings.Structure(0, new ProtocolRestriction
             {
                 DisabledProtocols = ~0x3000U,
-                AlgorithmCount = 2,
+                AlgorithmCount = 1,
                 Algorithms = blocked.Address
             });
             var input = new CredentialInput
@@ -406,9 +400,10 @@ namespace EmbedIO.Quic
 
                     if (slot.Type == 28)
                     {
-                        if (slot.Length < 430) throw Failure(80, "Truncated native traffic-secret buffer.");
+                        if (slot.Length < 398 || slot.Length > 512)
+                            throw Failure(80, "Invalid native traffic-secret buffer size.");
 
-                        InstallSecret(_secrets[i].Bytes);
+                        InstallSecret(_secrets[i].Bytes[..(int)slot.Length]);
                     }
                 }
             }
@@ -441,20 +436,27 @@ namespace EmbedIO.Quic
 
             if (kind == 0) return;
 
-            if (
-                kind is not (1 or 2)
-                || Name(secret[..128]) != "AES"
-                || Name(secret.Slice(128, 128)) != "ChainingModeGCM"
-                || Name(secret.Slice(256, 128)) != "SHA256"
-                || BinaryPrimitives.ReadUInt16LittleEndian(secret[384..]) != 16
-                || BinaryPrimitives.ReadUInt16LittleEndian(secret[386..]) != 12
-                || BinaryPrimitives.ReadUInt16LittleEndian(secret[396..]) != 32
-            )
-                throw Failure(40, "Unsupported TLS traffic-secret profile.");
+            if (kind is not (1 or 2)) throw Failure(40, "Unsupported TLS traffic-secret direction.");
 
+            QuicCipherSuite suite;
+
+            try
+            {
+                suite = ParseSecretProfile(secret);
+            }
+
+            catch (InvalidDataException error)
+            {
+                throw Failure(40, "Invalid native TLS traffic-secret profile.", error);
+            }
+
+            if (_cipherSuite != null && _cipherSuite != suite)
+                throw Failure(40, "TLS cipher suite changed during the handshake.");
+
+            _cipherSuite = suite;
             var keys = kind == 1 ? ReadKeys : WriteKeys;
             var seen = kind == 1 ? _readSecrets : _writeSecrets;
-            var value = secret.Slice(398, 32);
+            var value = secret.Slice(398, PacketKeys.SecretLength(suite));
 
             foreach (var previous in seen)
                 if (previous != null && CryptographicOperations.FixedTimeEquals(previous, value)) return;
@@ -463,10 +465,32 @@ namespace EmbedIO.Quic
 
             if (level == 0) throw Failure(10, "Unexpected replacement TLS secret.");
 
-            keys[level] = new PacketKeys(value);
+            keys[level] = new PacketKeys(value, cipherSuite: suite);
             seen[level] = value.ToArray();
 
             if (_recordDiagnostics && Diagnostics.Count < 64) Diagnostics.Add($"secret-direction={kind};level={level}");
+        }
+
+        internal static QuicCipherSuite ParseSecretProfile(ReadOnlySpan<byte> secret)
+        {
+            if (secret.Length < 398) throw new InvalidDataException("Truncated native traffic-secret metadata.");
+
+            var hash = Name(secret.Slice(256, 128));
+            var keySize = BinaryPrimitives.ReadUInt16LittleEndian(secret[384..]);
+            var size = BinaryPrimitives.ReadUInt16LittleEndian(secret[396..]);
+
+            if (
+                Name(secret[..128]) != "AES"
+                || Name(secret.Slice(128, 128)) != "ChainingModeGCM"
+                || BinaryPrimitives.ReadUInt16LittleEndian(secret[386..]) != 12
+                || !((hash == "SHA256" && keySize == 16 && size == 32)
+                    || (hash == "SHA384" && keySize == 32 && size == 48))
+            )
+                throw new InvalidDataException("Unsupported TLS traffic-secret profile.");
+
+            if (secret.Length - 398 < size) throw new InvalidDataException("Truncated native TLS traffic secret.");
+
+            return size == 48 ? QuicCipherSuite.Aes256GcmSha384 : QuicCipherSuite.Aes128GcmSha256;
         }
 
         private static string Name(ReadOnlySpan<byte> bytes) =>

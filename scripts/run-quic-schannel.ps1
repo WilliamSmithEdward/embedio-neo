@@ -48,3 +48,6 @@ if ($LASTEXITCODE) { Get-Content "$output/selection.log"; throw 'Schannel certif
 if ($LASTEXITCODE) { Get-Content "$output/client-certificate.log"; throw 'Schannel client-certificate policy checks failed.' }
 & $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/fuzz_client_certificate.py --dotnet dotnet --assembly $assembly --cases 16 --seed 1729 --output "$output/client-certificate-mutations" > "$output/client-certificate-mutations.log" 2>&1
 if ($LASTEXITCODE) { Get-Content "$output/client-certificate-mutations.log"; throw 'Schannel client-certificate mutations failed.' }
+
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_cipher_suites.py --dotnet dotnet --assembly $assembly --schannel --vectors 96 --output "$output/cipher-suites" > "$output/cipher-suites.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/cipher-suites.log"; throw 'Schannel cipher-suite checks failed.' }

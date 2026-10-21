@@ -385,11 +385,15 @@ library HTTP/3 protocol and uses OpenSSL 3.5.7 or the Windows SDK recordless Sch
 interface for TLS. In this unreleased branch, the .NET 10 library asset compiles the
 same internal engine sources; the standalone `EmbedIO.Quic` project remains an
 independent build boundary. The host no longer compiles copies of the HTTP/3 codecs. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
-credentials and AES-128-GCM/SHA-256. Its Schannel implementation now compiles in the
+credentials and negotiates AES-128-GCM/SHA-256 or AES-256-GCM/SHA-384. The packet core
+also implements ChaCha20-Poly1305/SHA-256, exercised through the OpenSSL peer profile;
+Windows Schannel does not advertise that profile. Its Schannel implementation compiles in the
 .NET 10 library under `Net/Internal/Http3/Tls`, with certificate-source and TLS-policy
 integration exercised by the actual WebServer fixture. Windows client-certificate
-policies now have direct controller, chain, callback and revocation checks; full cipher,
-resumption and supported-platform parity remain pending. The standalone
+policies now have direct controller, chain, callback and revocation checks. All three
+packet cipher profiles retain their hash and header key across key updates, with
+connection-wide authentication-failure limits. Resumption and supported-platform
+TLS/certificate parity remain pending. The standalone
 core and development host remain nonpackable. Existing package dependency groups
 and .NET Standard compilation are unchanged; the public listener still selects
 its existing providers. The fuzz harness exercises the library's engine source. It includes
@@ -397,8 +401,8 @@ loss recovery, NewReno congestion control and an H3/WebTransport echo adapter wi
 current reliable-reset framing, reusable receive windows and explicit connection
 closing/draining. Receive packet history advances with bounded ACK ranges and a
 permanent duplicate-rejection floor. Retired send records and acknowledgement
-history also compact within fixed bounds. Per-key AES-GCM usage limits and
-ACK-confirmed local/peer key generations replace the cumulative send-packet quota.
+history also compact within fixed bounds. Per-key encryption budgets (conservatively capped at the AES-GCM limit for
+all profiles) and ACK-confirmed local/peer key generations replace the cumulative send-packet quota.
 Completed stream records retire after receive/application completion and any required
 send acknowledgement; cumulative stream credit replenishes within resident bounds.
 The stream core accepts an owner-bound application adapter with explicit byte

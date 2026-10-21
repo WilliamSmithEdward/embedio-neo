@@ -16,6 +16,7 @@ namespace EmbedIO.Quic
             DisposedOwnerRejectsWork();
             ConfiguredStreamLimit();
             FailedCleanupReleasesSiblings();
+            AuthenticationLimits();
 
             foreach (var input in new byte[][]
             {
@@ -278,6 +279,51 @@ namespace EmbedIO.Quic
             Require(close.Integer() == 0x1c && close.Integer() == 4, "configured-stream-limit-error");
         }
 
+        private static void AuthenticationLimits()
+        {
+            foreach (var suite in Enum.GetValues<QuicCipherSuite>())
+            {
+                foreach (var invalidTag in new[] { true, false })
+                {
+                    using var keys = PacketKeys.Initial(Original, false);
+                    var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
+                    var tls = new ModelTls(true) { CipherSuite = suite };
+                    using var connection = new QuicConnection(
+                        first,
+                        _ => tls,
+                        static (port, _) => new StreamEchoApplication(port)
+                    );
+                    connection.Receive(first, 0);
+                    var limit =
+                        (tls.ReadKeys[2]
+                            ?? throw new InvalidOperationException("Missing model packet keys.")).AuthenticationLimit;
+                    var counter = typeof(QuicConnection).GetField(
+                        "_failedAuthentications",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+                    )
+                        ?? throw new InvalidOperationException("Missing authentication counter fixture.");
+                    counter.SetValue(connection, limit - (invalidTag ? 1UL : 0UL));
+                    var invalid = ApplicationPacket(connection.ServerId, Wire.Frame(1), 1, suite);
+
+                    if (invalidTag) invalid[^1] ^= 1;
+
+                    var output = connection.Receive(invalid, 1);
+                    Require(
+                        connection.Phase == ConnectionPhase.Closing && output.Count == 1,
+                        "cipher-authentication-limit"
+                    );
+                    using var peer = new PacketKeys(new byte[PacketKeys.SecretLength(suite)], cipherSuite: suite);
+                    var close = new WireReader(peer.Unprotect(output[0], 1 + Client.Length, 1, out _));
+                    Require(close.Integer() == 0x1c && close.Integer() == 0x0f, "cipher-authentication-error");
+                    Require(
+                        connection.Receive(ApplicationPacket(connection.ServerId, Wire.Frame(1), 2, suite), 2).Count
+                            == 0,
+                        "cipher-stop-after-authentication-limit"
+                    );
+                }
+            }
+        }
+
         private static void FailedCleanupReleasesSiblings()
         {
             var created = new List<ModelTls>();
@@ -324,14 +370,15 @@ namespace EmbedIO.Quic
         private static byte[] ApplicationPacket(
             ReadOnlySpan<byte> destination,
             ReadOnlySpan<byte> bytes,
-            uint number = 0
+            uint number = 0,
+            QuicCipherSuite cipherSuite = QuicCipherSuite.Aes128GcmSha256
         )
         {
             var header = new byte[1 + destination.Length + 4];
             header[0] = 0x43;
             destination.CopyTo(header.AsSpan(1));
             BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(1 + destination.Length), number);
-            using var keys = new PacketKeys(new byte[32]);
+            using var keys = new PacketKeys(new byte[PacketKeys.SecretLength(cipherSuite)], cipherSuite: cipherSuite);
             return keys.Protect(header, 1 + destination.Length, number, bytes);
         }
 
@@ -346,6 +393,7 @@ namespace EmbedIO.Quic
                 new(65536)
             ];
 
+            internal QuicCipherSuite CipherSuite { get; set; } = QuicCipherSuite.Aes128GcmSha256;
             internal int DisposeCalls { get; private set; }
 
             internal override void Add(int level, ulong offset, ReadOnlySpan<byte> bytes) =>
@@ -364,8 +412,8 @@ namespace EmbedIO.Quic
                 Wire.Parameter(parameters, 8, 16);
                 Wire.Parameter(parameters, 9, 16);
                 PeerParameters = parameters.ToArray();
-                ReadKeys[2] = new PacketKeys(new byte[32]);
-                WriteKeys[2] = new PacketKeys(new byte[32]);
+                ReadKeys[2] = new PacketKeys(new byte[PacketKeys.SecretLength(CipherSuite)], cipherSuite: CipherSuite);
+                WriteKeys[2] = new PacketKeys(new byte[PacketKeys.SecretLength(CipherSuite)], cipherSuite: CipherSuite);
                 Established = true;
             }
 

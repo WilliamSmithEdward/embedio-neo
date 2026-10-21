@@ -232,6 +232,8 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
+                if (_failedAuthentications != 0 && StopAtAuthenticationLimit(level, keys)) break;
+
                 byte[] plaintext;
                 ulong number;
 
@@ -246,12 +248,9 @@ namespace EmbedIO.Quic
                 {
                     RejectedPackets++;
 
-                    if (++_failedAuthentications >= _authenticationLimit)
-                    {
-                        _authenticationLimitReached = true;
-                        BeginClose(level, Wire.Frame(0x1c, 0x0f, 0, 0));
-                        break;
-                    }
+                    _failedAuthentications++;
+
+                    if (StopAtAuthenticationLimit(level, keys)) break;
 
                     position += length;
                     continue;
@@ -457,6 +456,20 @@ namespace EmbedIO.Quic
         }
 
         internal void CancelApplications() => _streams?.Dispose();
+
+        private bool StopAtAuthenticationLimit(int level, PacketKeys keys)
+        {
+            var limit = Math.Min(
+                _authenticationLimit,
+                (_tls.ReadKeys[2] ?? _tls.ReadKeys[1] ?? keys).AuthenticationLimit
+            );
+
+            if (_failedAuthentications < limit) return false;
+
+            _authenticationLimitReached = true;
+            BeginClose(level, Wire.Frame(0x1c, 0x0f, 0, 0));
+            return true;
+        }
 
         private void BeginClose(int level, byte[] payload)
         {

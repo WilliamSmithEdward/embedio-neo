@@ -8,6 +8,7 @@ from pathlib import Path
 from aioquic.asyncio import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.quic.configuration import QuicConfiguration
+from aioquic.tls import CipherSuite
 from aioquic.quic.events import ConnectionTerminated, StreamReset, StopSendingReceived
 from aioquic.h3.connection import H3Connection
 from aioquic.h3.events import HeadersReceived, DataReceived
@@ -63,8 +64,12 @@ class HttpPeer(QuicConnectionProtocol):
 async def client(args, port, index, barrier):
     config = QuicConfiguration(is_client=True, alpn_protocols=['h3'], server_name='localhost',
                                verify_mode=ssl.CERT_REQUIRED, idle_timeout=5, max_datagram_frame_size=65536)
+    if getattr(args, 'cipher', None):
+        config.cipher_suites = [CipherSuite[args.cipher]]
     config.load_verify_locations(cafile=str(args.output / 'certificate.pem'))
     async with connect('127.0.0.1', port, configuration=config, create_protocol=HttpPeer) as peer:
+        if getattr(args, 'cipher', None):
+            assert peer._quic.tls.key_schedule.cipher_suite == CipherSuite[args.cipher]
         await barrier.wait()
         _, headers, body = await peer.request('/health')
         assert headers[b':status'] == b'200' and body == b'production HTTP/3'
@@ -106,5 +111,6 @@ if __name__ == '__main__':
     parser.add_argument('--dotnet', default='dotnet')
     parser.add_argument('--assembly', required=True)
     parser.add_argument('--openssl', required=True)
+    parser.add_argument('--cipher', choices=('AES_128_GCM_SHA256', 'AES_256_GCM_SHA384', 'CHACHA20_POLY1305_SHA256'))
     parser.add_argument('--output', type=Path, required=True)
     raise SystemExit(asyncio.run(main(parser.parse_args())))

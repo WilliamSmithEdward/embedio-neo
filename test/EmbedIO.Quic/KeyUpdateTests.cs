@@ -6,8 +6,12 @@ namespace EmbedIO.Quic
     {
         internal static void Run()
         {
-            Protection();
-            Generations();
+            foreach (var suite in Enum.GetValues<QuicCipherSuite>())
+            {
+                Protection(suite);
+                Generations(suite);
+            }
+
             Policy();
             ReadOrdering();
             Limits();
@@ -19,9 +23,9 @@ namespace EmbedIO.Quic
             );
         }
 
-        private static void Protection()
+        private static void Protection(QuicCipherSuite suite)
         {
-            using var initial = new PacketKeys(new byte[32]);
+            using var initial = new PacketKeys(new byte[PacketKeys.SecretLength(suite)], cipherSuite: suite);
             using var next = initial.Next();
             var header = Convert.FromHexString("47010203040000002a");
             var payload = new byte[32];
@@ -51,9 +55,9 @@ namespace EmbedIO.Quic
             throw new InvalidOperationException("Old packet key authenticated updated ciphertext.");
         }
 
-        private static void Generations()
+        private static void Generations(QuicCipherSuite suite)
         {
-            var current = new PacketKeys(new byte[32]);
+            var current = new PacketKeys(new byte[PacketKeys.SecretLength(suite)], cipherSuite: suite);
 
             try
             {

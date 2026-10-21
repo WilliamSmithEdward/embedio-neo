@@ -166,8 +166,9 @@ namespace EmbedIO.Quic
 
         private static void Protection(ReadOnlySpan<byte> data)
         {
-            var secret = SHA256.HashData(data);
-            using var keys = new PacketKeys(secret);
+            var suite = (QuicCipherSuite)(0x1301 + (data.IsEmpty ? 0 : data[0] % 3));
+            var secret = suite == QuicCipherSuite.Aes256GcmSha384 ? SHA384.HashData(data) : SHA256.HashData(data);
+            using var keys = new PacketKeys(secret, cipherSuite: suite);
             using var next = keys.Next();
             var number = BinaryPrimitives.ReadUInt32BigEndian(secret);
             var header = new byte[13];

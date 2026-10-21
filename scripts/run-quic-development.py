@@ -103,6 +103,14 @@ def main():
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "certificate-policy")])
         run("schannel-client-certificate-policy", [sys.executable, "test/EmbedIO.Quic/verify_client_certificate.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "client-certificate-policy")])
+    if args.openssl or args.schannel:
+        cipher_command = [sys.executable, "test/EmbedIO.Quic/verify_cipher_suites.py", "--dotnet", args.dotnet,
+                          "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "cipher-suites")]
+        if args.openssl:
+            cipher_command += ["--openssl", str(args.openssl.resolve())]
+        if args.schannel:
+            cipher_command += ["--schannel"]
+        run("cipher-suites", cipher_command)
     for index in range(args.rounds):
         seed = 1729 + index * 104729
         run(f"properties-{seed}", fuzz + ["--fscheck", str(seed), str(args.cases)])

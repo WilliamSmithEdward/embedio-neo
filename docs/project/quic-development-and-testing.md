@@ -1022,7 +1022,95 @@ python test/EmbedIO.Quic/fuzz_client_certificate.py --dotnet dotnet `
 The retained DER and generated test-key fixture are required for exact input replay;
 the seed alone does not reproduce cryptographically generated certificates. Keep
 these local evidence directories ignored. Cross-platform client certificates,
-full cipher support and final production provider selection remain acceptance work.
+supported-platform TLS parity and final production provider selection remain acceptance work.
+
+## TLS 1.3 cipher profiles
+
+The packet core implements TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384 and
+TLS_CHACHA20_POLY1305_SHA256. Initial protection remains AES-128-GCM/SHA-256
+regardless of the negotiated handshake cipher. AES-256 uses SHA-384 and 48-byte
+traffic secrets; the other profiles use SHA-256 and 32-byte secrets. Key updates
+retain the negotiated profile and original header-protection key. Payload AEADs
+use .NET cryptography. The ChaCha header mask is an original single-block
+implementation of the operations specified by
+[RFC 9001 section 5.4.4](https://www.rfc-editor.org/rfc/rfc9001.html#section-5.4.4)
+and [RFC 8439](https://www.rfc-editor.org/rfc/rfc8439.html).
+
+The library Schannel profile negotiates both AES-GCM suites using Windows cipher
+policy. It validates native secret metadata and buffer lengths before installing
+keys, and rejects profile changes between directions or handshake levels. It does
+not advertise ChaCha through the Windows native binding. The development OpenSSL
+binding uses its public negotiated-cipher API for all three profiles. This is
+cipher interoperability evidence, not completed cross-platform certificate,
+packaging, browser or production-provider acceptance.
+
+[RFC 9001 section 6.6](https://www.rfc-editor.org/rfc/rfc9001.html#section-6.6)
+requires different integrity bounds. Failed authentications accumulate across all
+packet keys and generations: AES-GCM is capped at 2^52 and ChaCha20-Poly1305 at
+2^36. Reaching the applicable bound stops packet processing with
+AEAD_LIMIT_REACHED. The current internal per-key encryption budget remains a
+conservative 2^23 for every profile, and normal ACK-confirmed update initiation
+remains at 2^20 packets. A configured lower test budget survives key updates.
+
+`CipherSuiteTests` covers the RFC 9001 Appendix A.5 complete ChaCha packet and
+header mask, the RFC 8439 block vector, secret sizes, native metadata/truncation,
+key-update budgets and authentication bounds. Repeated-generation tests exercise
+all three suites. The shared protection mutation target selects among all three,
+so the managed mutation, FsCheck, libFuzzer and AFL++ entry points exercise the
+new profiles without adding production dependencies.
+
+`verify_cipher_suites.py` compares complete protected packets, updated packets and
+random ChaCha header samples against the pinned independent aioquic engine.
+Forced-cipher listener checks cover OpenSSL with all three suites and Schannel
+RSA/ECDSA with both AES suites. Each actual WebServer fixture retains controller,
+bearer authorization, upload cancellation, sibling isolation, response drain and
+port-rebind assertions. Run the complete local matrix with:
+
+```powershell
+python test/EmbedIO.Quic/verify_cipher_suites.py --dotnet dotnet `
+  --assembly test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll `
+  --openssl <OpenSSL-directory> --schannel --output TestResults/quic-ciphers
+```
+
+The local development driver includes this matrix; the existing Windows Schannel
+CI step includes a bounded two-credential AES matrix. Certificate-mutation failures
+now retain a qlog alongside their DER, test-key fixture and receipt for investigation.
+
+The final cipher source passed 384 independent packet/key-update vectors and all
+seven forced-cipher actual-WebServer profiles, plus 100,000 shared-core mutations
+and 10,000 cases per property. Debug/Release compiler reports, PrettyCSharp,
+formatter/analyzer checks and suppression guards pass for the independent core,
+development host, Fuzz and SharpFuzz projects. Evidence is retained under ignored
+`TestResults/quic-feasibility/continuation/cipher-functional-03` and
+`cipher-quality-04`. The same final source passed both 5,000-input Schannel
+first-flight campaigns, the full 23-case client-certificate matrix and 5,000 complete
+authentication mutations: 1,429 accepted pinned identities, 3,571 expected rejections
+and 1,225 successful healthy-sibling requests. The extended driver passed with
+both OpenSSL and Schannel enabled. The 750-case existing HTTP/3/request-abort/native
+datagram set passed with 749 successes and one Windows-inapplicable certificate-export
+skip. All six packages and 142 compatibility cases / 284 comparisons passed.
+
+Final coverage campaigns completed 52,569 libFuzzer executions and 24,976 AFL++
+executions with no retained crashes or hangs. AFL's 5.25% map stability under
+concurrent scheduling limits edge-percentage claims.
+Receipts and corpus/failure directories remain ignored. Full replacement acceptance
+remains below.
+
+A five-process-per-size Windows packet microbenchmark compared AES-128 protection
+and unprotection with `e4667e7`. Each process warmed for three seconds before
+4,096 measured batches of 32 pairs. Median-of-process results, before / after:
+
+| Payload bytes | Median pair ns | P95 batch pair ns | P99 batch pair ns | Allocated bytes/pair, rounded |
+| --- | ---: | ---: | ---: | ---: |
+| 128 | 687.5 / 681.25 | 771.875 / 700 | 1075 / 912.5 | 696 / 696 |
+| 1200 | 925 / 931.25 | 1021.875 / 1031.25 | 1412.5 / 1340.625 | 3912 / 3912 |
+
+The fresh-process first pair, including packet-key creation, rose from 8.087 to
+8.812 ms for 128 bytes and 8.055 to 8.913 ms for 1200 bytes. This captures primitive
+initialization/JIT cost on a shared development machine. It is not an endpoint,
+handshake or production tail-latency measurement. An earlier short-warmup sample
+had inconsistent tails; both sets remain retained under `cipher-latency-01` and
+`cipher-latency-02`. Full cold/warm/tail listener acceptance remains required.
 
 ## Remaining production acceptance work
 
@@ -1031,7 +1119,7 @@ full cipher support and final production provider selection remain acceptance wo
    controller/authentication/cancellation/drain evidence, plus Windows SNI and live
    certificate-publication checks through the actual policy factory. Complete
    client-certificate/revocation behavior on the other supported platforms, broaden
-   SNI/reload and non-exportable-key support, cipher-suite parity and
+   SNI/reload and non-exportable-key support, native cipher-policy parity and
    bounded native TLS worker scheduling. The listener uses bounded worker ownership;
    the offline actor model is not a listener load test.
 2. Validate longer transfer/loss/endurance patterns and expose sustainable stream

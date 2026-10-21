@@ -11,6 +11,7 @@ import random
 import time
 from pathlib import Path
 from aioquic.asyncio import connect
+from aioquic.quic.logger import QuicLogger
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization, hashes
 from verify import provenance
@@ -54,6 +55,7 @@ async def main(args):
 
     def open_peer(payload=None, mismatch=False):
         config = configuration(args.output / 'certificate.pem', 'localhost')
+        config.quic_logger = QuicLogger() if payload is not None else None
         config.load_cert_chain(str(args.output / 'client.pem'), str(args.output / ('other.key' if mismatch else 'client.key')))
         if payload is not None:
             class CertificateBytes:
@@ -63,6 +65,7 @@ async def main(args):
         peers = []
         def create(*values, **kwargs):
             peer = CertificatePeer(*values, **kwargs)
+            peer.mutation_trace = config.quic_logger
             peers.append(peer)
             return peer
         return connect('127.0.0.1', ready['port'], configuration=config, create_protocol=create), peers
@@ -115,9 +118,11 @@ async def main(args):
             except asyncio.CancelledError:
                 raise
             except BaseException as error:
+                if peers:
+                    (args.output / f'failure-{index}.qlog').write_text(json.dumps(peers[0].mutation_trace.to_dict()), encoding='utf-8')
                 (args.output / f'failure-{index}.der').write_bytes(payload)
                 (args.output / f'failure-{index}.json').write_text(json.dumps({'seed': args.seed, 'index': index,
-                    'kind': kind, 'failure': repr(error), 'sha256': hashlib.sha256(payload).hexdigest()}), encoding='utf-8')
+                    'kind': kind, 'failure': repr(error), 'termination': repr(peers[0].termination) if peers else None, 'sha256': hashlib.sha256(payload).hexdigest()}), encoding='utf-8')
                 raise
 
     try:

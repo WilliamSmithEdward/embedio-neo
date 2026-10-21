@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using EmbedIO.Internal;
 
 namespace EmbedIO.Quic
 {
@@ -19,6 +20,7 @@ namespace EmbedIO.Quic
         private nint _record;
         private int _readLevel;
         private int _writeLevel;
+        private QuicCipherSuite? _cipherSuite;
         private Exception? _callbackError;
         private Reassembly[] _input =
         [
@@ -44,7 +46,11 @@ namespace EmbedIO.Quic
                 _context = _api.Get<NewPointer>("SSL_CTX_new")(_api.Get<PointerResult>("TLS_method")());
                 Require(_context != 0, "TLS context");
                 Require(
-                    _api.Get<SetText>("SSL_CTX_set_ciphersuites")(_context, "TLS_AES_128_GCM_SHA256") == 1,
+                    _api.Get<SetText>("SSL_CTX_set_ciphersuites")(
+                        _context,
+                        "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256"
+                    )
+                        == 1,
                     "cipher suite"
                 );
                 Require(
@@ -163,32 +169,53 @@ namespace EmbedIO.Quic
 
         private int Secret(nint ssl, uint protection, int direction, nint data, nuint length, nint argument)
         {
-            if ((protection != 2 && protection != 3) || (direction != 0 && direction != 1) || length != 32)
-                return Fail("Unsupported TLS secret in probe.");
-
-            var level = protection == 2 ? 1 : 2;
-            var keys = direction == 0 ? ReadKeys : WriteKeys;
-
-            if (keys[level] != null) return Fail("TLS secret replacement is outside this milestone.");
-
-            var bytes = new byte[32];
-            Marshal.Copy(data, bytes, 0, bytes.Length);
-
             try
             {
-                keys[level] = new PacketKeys(bytes);
+                if ((protection != 2 && protection != 3) || (direction != 0 && direction != 1))
+                    return Fail("Unsupported TLS secret in probe.");
+
+                var cipher = _api.Get<NewPointer>("SSL_get_current_cipher")(ssl);
+
+                if (cipher == 0) return Fail("TLS cipher is unavailable.");
+
+                var identifyCipher = _api.Get<CipherId>("SSL_CIPHER_get_protocol_id");
+                var suite = (QuicCipherSuite)identifyCipher(cipher);
+                var size = PacketKeys.SecretLength(suite);
+
+                if (length != (nuint)size || (_cipherSuite != null && _cipherSuite != suite))
+                    return Fail("TLS cipher/secret mismatch in probe.");
+
+                _cipherSuite = suite;
+                var level = protection == 2 ? 1 : 2;
+                var keys = direction == 0 ? ReadKeys : WriteKeys;
+
+                if (keys[level] != null) return Fail("TLS secret replacement is outside this milestone.");
+
+                var bytes = new byte[size];
+                Marshal.Copy(data, bytes, 0, bytes.Length);
+
+                try
+                {
+                    keys[level] = new PacketKeys(bytes, cipherSuite: suite);
+                }
+
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(bytes);
+                }
+
+                if (direction == 0) _readLevel = level;
+
+                else _writeLevel = level;
+
+                return 1;
             }
 
-            finally
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
-                CryptographicOperations.ZeroMemory(bytes);
+                _callbackError = error;
+                return 0;
             }
-
-            if (direction == 0) _readLevel = level;
-
-            else _writeLevel = level;
-
-            return 1;
         }
 
         private int Parameters(nint ssl, nint data, nuint length, nint argument)
@@ -292,6 +319,9 @@ namespace EmbedIO.Quic
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int IntResult(nint pointer);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate ushort CipherId(nint pointer);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         private delegate int SetText(nint pointer, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
