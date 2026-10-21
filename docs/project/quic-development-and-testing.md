@@ -1750,8 +1750,9 @@ These earlier campaign counts do not validate the subsequent CID edits.
 
 Reordered NEW_CONNECTION_ID frames can retire the last still-active lower ID while
 the supplied replacement was already retired locally. Empty pools publish no reset
-token, block output using retired IDs and resume when a fresh replacement arrives. Regression cases also cover the local retirement budget and
-preservation of a usable close destination. Stateful CID mutation traces include
+token, block output using retired IDs and resume when a fresh replacement arrives.
+Regression cases also cover the local retirement budget and preservation of a
+usable close destination. Stateful CID mutation traces include
 reservation, transmission, local retirement, acknowledgment and replenishment.
 
 The combined wire snapshot passed four Windows and six Linux NAT/CID-IP cipher
@@ -1760,5 +1761,27 @@ original endpoint identity, 401/403/200 authorization, cancellation of a request
 opened before migration, full-size probes, bounded blackhole/fallback and complete
 drain/rebind cleanup. Linux reused a verified unchanged native SDK and same-version
 peer wheel; this does not substitute for exact-source package-consumer CI.
-The model suite now has fifteen path-validation groups, including packet-level
+The model suite now has sixteen path-validation groups, including packet-level
 empty-ID-pool recovery and invalidation of queued probes for retired routes.
+Connection-close cases also verify the response route and destination ID when
+an unvalidated current path lacks send allowance or a usable peer CID.
+
+### Connection-close fallback validation
+
+A packet-level close case failed before the fallback correction when the new
+path could not send 1,200 bytes, although the prior validated path could.
+The corrected path selection also covers a new path with enough allowance but
+no usable peer ID. Both cases assert one encrypted close response on the prior
+validated route with its original destination ID; bounded mutation inputs vary
+the new-path packet size. The path-validation model now passes all 16 groups.
+
+On the final local source, Windows and Linux each passed six independent NAT
+and simultaneous IP/CID-change profiles across the three supported cipher
+suites, plus the local-ID and reset profiles. Each platform passed 100,000
+managed mutations, 10,000 cases per FsCheck property, and 1,000 recovery and
+lifecycle traces. Windows completed 85,728 libFuzzer and 51,460 AFL++
+executions in separate two-minute campaigns with no saved crash or hang.
+AFL++ feedback stability was 1.51%, so that campaign is crash evidence rather
+than reliable coverage-growth evidence. The final source-quality, compiler,
+format and pinned scan gates passed. Browser, package and production-provider
+acceptance remain separate work.

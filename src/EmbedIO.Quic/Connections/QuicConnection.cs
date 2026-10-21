@@ -728,6 +728,11 @@ namespace EmbedIO.Quic
 
             if (Phase != ConnectionPhase.Active)
             {
+                var fallback = _paths?.Fallback;
+                var closingPath = _paths?.Current;
+
+                if (closingPath is { Allowance: < 1200 }) closingPath = fallback;
+
                 _pending.Clear();
                 _urgent.Clear();
                 _recovery.Abandon();
@@ -736,9 +741,9 @@ namespace EmbedIO.Quic
                 if (
                     Phase == ConnectionPhase.Closing
                     && _closePayload != null
-                    && (_paths != null
-                        ? _paths.Current.Allowance >= 1200
-                        : _addressValidated || SentBytes + 1200 <= ReceivedBytes * 3)
+                    && (closingPath != null
+                        ? closingPath.Allowance >= 1200
+                        : _paths == null && (_addressValidated || SentBytes + 1200 <= ReceivedBytes * 3))
                     && _lifetime.TakeCloseResponse(_now)
                 )
                 {
@@ -751,9 +756,19 @@ namespace EmbedIO.Quic
                     }
 
                     var close = new Delivery(_closeLevel, _closePayload, false, false);
-                    var path = _paths?.Current;
+                    var path = closingPath;
 
-                    if (!ResolveDestination(path, out var destination, out var sequence)) return output;
+                    if (!ResolveDestination(path, out var destination, out var sequence))
+                    {
+                        if (
+                            fallback == null
+                            || ReferenceEquals(path, fallback)
+                            || fallback.Allowance < 1200
+                            || !ResolveDestination(fallback, out destination, out sequence)
+                        ) return output;
+
+                        path = fallback;
+                    }
 
                     var packet = Protect(close, path, destination);
                     MarkDestination(sequence);

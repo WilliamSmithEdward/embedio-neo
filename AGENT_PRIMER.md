@@ -1246,6 +1246,10 @@ cooldown cover source-port rebinding. Responses target the path on which the
 challenge arrived; a response received on another path can validate the originally
 probed route. Application request endpoints retain the connection's initial
 identity, matching the existing HTTP/3 binding. `verify_path_validation.py` checks
-same-IP rebinding, blackholed-candidate fallback, sibling requests and drain/rebind.
-Broader address/CID combinations and platform acceptance remain development work;
+same-IP rebinding and simultaneous source-port/IP/CID changes, blackholed-candidate
+fallback, sibling requests and drain/rebind. Obsolete paths release peer IDs by
+reliable retirement on the validated route; reservations stay separate from reset-
+token eligibility until a packet is sent. A close response can use that validated
+route when the new path lacks send allowance or a usable peer ID. Broader loss,
+reordering, browser and platform/package acceptance remain development work;
 public provider selection is unchanged.

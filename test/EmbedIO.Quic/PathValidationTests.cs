@@ -44,6 +44,7 @@ namespace EmbedIO.Quic
             Reservations();
             EmptyPeerPool();
             EngineEmptyPeerPool();
+            ClosingPath();
             LocalRetirementLimit();
             RecoveryEpoch();
             Engine();
@@ -65,7 +66,7 @@ namespace EmbedIO.Quic
             var report = new
             {
                 pathValidation = "passed",
-                groups = 15
+                groups = 16
             };
             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report));
         }
@@ -532,6 +533,75 @@ namespace EmbedIO.Quic
             );
         }
 
+        private static void ClosingPath()
+        {
+            ClosePath(true, 1);
+            ClosePath(false, 1161);
+        }
+
+        private static void ClosePath(bool smallCandidate, int payloadLength)
+        {
+            byte[] original = [1, 2, 3, 4, 5, 6, 7, 8];
+            byte[] client = [9, 10, 11, 12, 13, 14, 15, 16];
+            using var keys = PacketKeys.Initial(original, false);
+            var first = NativeFuzz.Initial(keys, original, client, 0, [1]);
+            using var connection = new QuicConnection(
+                first,
+                static _ => new ConnectionCoreTests.ModelTls(true),
+                static (port, _) => new StreamEchoApplication(port)
+            );
+            connection.BeginRouting(Endpoint(18000));
+            connection.Receive(first, 0);
+            connection.BeginRouting(Endpoint(18000));
+            connection.Receive(ConnectionCoreTests.ApplicationPacket(connection.ServerId, Wire.Frame(1), 0), 100);
+            Check(connection.IssuedConnectionIds.Count > 1, "spare local ID is available for path close case");
+
+            if (smallCandidate)
+            {
+                byte[] spareId = [55];
+                byte[] token =
+                [
+                    55,
+                    .. new byte[15]
+                ];
+                byte[] frame =
+                [
+                    .. Wire.Frame(0x18, 1, 0),
+                    (byte)spareId.Length,
+                    .. spareId,
+                    .. token
+                ];
+                connection.BeginRouting(Endpoint(18000));
+                connection.Receive(ConnectionCoreTests.ApplicationPacket(connection.ServerId, frame, 1), 101);
+            }
+
+            var spare = connection.IssuedConnectionIds[1].ToArray();
+            var payload = new byte[payloadLength];
+            payload[0] = 1;
+            connection.BeginRouting(Endpoint(18001));
+            connection.Receive(ConnectionCoreTests.ApplicationPacket(spare, payload, smallCandidate ? 2U : 1U), 200);
+            Check(connection.ActivePaths?.Count == 2, "new path is admitted but unvalidated");
+            connection.BeginRouting(null);
+            var output = connection.CloseApplication(42, 201);
+            var routes = connection.OutputPaths;
+            Check(
+                connection.Phase == ConnectionPhase.Closing
+                    && connection.ClosePackets == 1
+                    && output.Count == 1
+                    && routes?.Count
+                    == 1
+                    && routes[0]?.Endpoints.Peer.Port
+                    == 18000
+                    && output[0]
+                        .AsSpan(1, client.Length)
+                        .SequenceEqual(client)
+                    && Plain(output[0], client)[0] == 0x1d,
+                smallCandidate
+                    ? "close uses fallback when current amplification is exhausted"
+                    : "close uses fallback when current path lacks a peer ID"
+            );
+        }
+
         private static void LocalRetirementLimit()
         {
             using var ids = new PeerConnectionIds(
@@ -727,6 +797,13 @@ namespace EmbedIO.Quic
 
             paths.Tick(100000);
             Check(paths.Count <= QuicPathValidation.Capacity, "mutation retirement bounds");
+
+            if (input.Length >= 3 && (input[0] & 31) == 0)
+            {
+                var smallCandidate = (input[1] & 1) != 0;
+                var payloadLength = smallCandidate ? 1 + input[2] : 400 + input[2];
+                ClosePath(smallCandidate, payloadLength);
+            }
         }
 
         private static void Check(bool condition, string name) =>
