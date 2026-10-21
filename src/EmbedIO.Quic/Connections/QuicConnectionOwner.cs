@@ -138,6 +138,7 @@ namespace EmbedIO.Quic
                 {
                     _connection = _create(packet, ReadClock())
                         ?? throw new InvalidOperationException("QUIC factory returned no connection.");
+                    _connection.UseExecutionClock(ReadClock);
                     _id = _connection.ServerId.ToArray();
                 }
 

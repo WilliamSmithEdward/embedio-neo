@@ -70,6 +70,7 @@ namespace EmbedIO.Quic
         internal bool IdleExpired => _lifetime.IdleExpired;
 
         private double _now;
+        private Func<double>? _executionClock;
         private int _ackDelayExponent = 3;
 
         internal int LostPackets => _recovery.LostPackets;
@@ -308,7 +309,7 @@ namespace EmbedIO.Quic
 
                     try
                     {
-                        _tls.Pump();
+                        PumpTls();
                     }
 
                     catch (InvalidDataException) when (_tls.AlertCode.HasValue)
@@ -318,6 +319,7 @@ namespace EmbedIO.Quic
                         break;
                     }
 
+                    now = _now;
                     ValidateParameters();
                     FlushCrypto();
 
@@ -469,6 +471,39 @@ namespace EmbedIO.Quic
             _authenticationLimitReached = true;
             BeginClose(level, Wire.Frame(0x1c, 0x0f, 0, 0));
             return true;
+        }
+
+        internal void UseExecutionClock(Func<double> clock)
+        {
+            ArgumentNullException.ThrowIfNull(clock);
+
+            if (_executionClock != null)
+                throw new InvalidOperationException("Connection already has an execution clock.");
+
+            _executionClock = clock;
+        }
+
+        private void PumpTls()
+        {
+            var clock = _executionClock;
+
+            if (clock == null || _tls.Established)
+            {
+                _tls.Pump();
+                return;
+            }
+
+            try
+            {
+                _tls.Pump();
+            }
+
+            finally
+            {
+                // Certificate selection and validation may block beyond a packet's
+                // arrival time. Closing/recovery must use the completion time.
+                _now = clock();
+            }
         }
 
         private void BeginClose(int level, byte[] payload)
@@ -1010,6 +1045,7 @@ namespace EmbedIO.Quic
             if (_disposed) return;
 
             _disposed = true;
+            _executionClock = null;
             _pending.Clear();
             _urgent.Clear();
             _recovery.Abandon();

@@ -84,6 +84,9 @@ async def case(args, mode, client, allowed):
     requests = []
     nonce = '/' + uuid.uuid4().hex
     async def serve_crl(reader, writer):
+        if mode == 'require-custom-online' and client == 'revoked':
+            # Exercise validation that outlives the loopback closing interval.
+            await asyncio.sleep(0.6)
         await serve_revocation(reader, writer, resources, requests)
     crl_server = await asyncio.start_server(serve_crl, '127.0.0.1', 0, limit=8192)
     crl_port = crl_server.sockets[0].getsockname()[1]

@@ -1126,3 +1126,9 @@ GET/POST. It preserves the existing policy assertions. Hosted macOS 26 ARM64
 revalidation passed all 24 certificate-policy cases, including online good/revoked
 checks, plus wire/SNI/publication, all three ciphers and 256 native-auth mutations
 in CI run 39638190853. This does not establish other macOS RIDs or native packaging.
+
+The owned connection refreshes its monotonic time after initial TLS processing,
+including application certificate policy, before starting a closing interval.
+Established packet processing does not take this extra clock reading. A delayed
+revocation responder exercises rejection after validation exceeds a loopback PTO;
+policy expectations, handshake limits and response deadlines remain enforced.

@@ -1276,3 +1276,16 @@ key identifiers in the generated chain fixture's TCP control. The corrected
 fixture passed all five local chain profiles with strict validation enabled;
 the original hosted failure is retained and a changed-source CI repeat is required.
 This is not acceptance of all native RIDs or final dependency packaging.
+
+## TLS completion time and portable runtime assets
+
+A Windows hosted revoked-client check timed out after policy had correctly
+refused the identity. A controlled local responder delay reproduced the missing
+wire rejection: initial TLS work could outlive a closing interval measured from
+packet arrival. The serialized owner now supplies its monotonic clock to the
+connection; initial TLS completion refreshes time before close/recovery work.
+Established packet processing avoids this additional clock read. The existing
+revoked-client fixture delays its local revocation responses by 600 ms and still
+requires the exact CRYPTO_ERROR, no controller invocation, cleanup and rebind.
+The full 23-case Windows policy suite and execution/dispatcher checks passed
+locally. Changed-source hosted and remaining platform results remain required.
