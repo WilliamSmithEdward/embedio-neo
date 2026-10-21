@@ -175,19 +175,21 @@ namespace EmbedIO.Quic
             byte[] parameters,
             string protocol,
             params (ushort Type, byte[] Value)[] extras
-        ) => NativeHello(parameters, protocol, false, extras);
+        ) => NativeHello(parameters, protocol, 0, extras);
 
         internal static byte[] NativeHello(
             byte[] parameters,
             string protocol,
-            bool prime256,
+            int keyShare,
             params (ushort Type, byte[] Value)[] extras
         )
         {
-            var group = prime256 ? (byte)23 : (byte)29;
+            ArgumentOutOfRangeException.ThrowIfNegative(keyShare);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(keyShare, 2);
+            var group = keyShare == 2 ? (byte)23 : (byte)29;
             byte[] point;
 
-            if (prime256)
+            if (keyShare == 2)
             {
                 using var agreement = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
                 var key = agreement.ExportParameters(false).Q;
@@ -197,6 +199,12 @@ namespace EmbedIO.Quic
                     ..key.X ?? throw new CryptographicException("Missing public X coordinate."),
                     ..key.Y ?? throw new CryptographicException("Missing public Y coordinate.")
                 ];
+            }
+
+            else if (keyShare == 1)
+            {
+                // Public test vector: RFC 7748 section 6.1, Alice's public key.
+                point = Convert.FromHexString("8520F0098930A754748B7DDCB43EF75A0DBF3A0D26381AF4EBA4A98EAA9B4E6A");
             }
 
             else

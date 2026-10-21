@@ -33,7 +33,7 @@ namespace EmbedIO.Quic
                 foreach (var protocol in new[] { "h3", OpenSslTls.ApplicationProtocol })
                     foreach (var parameterSize in new[] { 0, 2, 32 })
                         foreach (var name in new string?[] { null, "localhost" })
-                            foreach (var prime256 in new[] { false, true })
+                            foreach (var keyShare in new[] { 0, 1, 2 })
                                 foreach (var fragmented in new[] { false, true })
                                 {
                                     count++;
@@ -45,7 +45,7 @@ namespace EmbedIO.Quic
                                             protocol,
                                             parameterSize,
                                             name,
-                                            prime256,
+                                            keyShare,
                                             fragmented
                                         )
                                     ) failures++;
@@ -69,14 +69,14 @@ namespace EmbedIO.Quic
             string protocol,
             int parameterSize,
             string? name,
-            bool prime256,
+            int keyShare,
             bool fragmented
         )
         {
             var extensions = name == null
                 ? Array.Empty<(ushort Type, byte[] Value)>()
                 : [(Type: (ushort)0, Value: TlsHelloTests.ServerName(Encoding.ASCII.GetBytes(name)))];
-            var hello = TlsHelloTests.NativeHello([], protocol, prime256, extensions);
+            var hello = TlsHelloTests.NativeHello([], protocol, keyShare, extensions);
             string? error = null;
             var firstFlight = false;
             byte? alert = null;
@@ -141,7 +141,13 @@ namespace EmbedIO.Quic
                 protocol,
                 parameterSize,
                 serverName = name,
-                group = prime256 ? "P-256" : "X25519",
+                group = keyShare == 2 ? "P-256" : "X25519",
+                keyShare = keyShare switch
+                {
+                    0 => "basepoint",
+                    1 => "RFC7748-Alice",
+                    _ => "generated"
+                },
                 fragmented,
                 passed,
                 firstFlight,

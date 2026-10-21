@@ -166,6 +166,10 @@ jobs:
               --filter "$filter" --report-trx --results-directory "TestResults/native-module-process-$attempt" \
               --timeout 2m --minimum-expected-tests 7
           done
+      - name: Validate Windows recordless QUIC TLS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/run-quic-schannel.ps1
       - name: Run the regression suite
         shell: bash
         env:
@@ -215,10 +219,6 @@ jobs:
             exit 0
           fi
           exit "$status"
-      - name: Validate Windows recordless QUIC TLS
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: pwsh -NoProfile -File scripts/run-quic-schannel.ps1
       - name: Verify independent HPACK interoperability
         if: runner.os == 'Linux'
         shell: bash

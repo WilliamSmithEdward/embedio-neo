@@ -422,7 +422,8 @@ replacement will remove MsQuic from the production transport, but the current
 HTTP/3 provider remains in place. The [development and testing record](docs/project/quic-development-and-testing.md)
 tracks all fuzz engines, extensive local runs and remaining production acceptance. The Windows
 validation helper retains a bounded first-flight contract diagnostic when its native
-lifetime gate fails; the failure remains fatal. Shared HTTP lifecycle fuzzing distinguishes
+lifetime gate fails, including separate X25519 public-key profiles and read-only host
+TLS-policy evidence; the failure remains fatal. Shared HTTP lifecycle fuzzing distinguishes
 expected stopped-client disconnects from response failures and cleanup deadlines.
 Once the replacement is complete, remove MsQuic-specific quarantines/workarounds
 and review every open Neo issue; close issues only after validating their resolution.

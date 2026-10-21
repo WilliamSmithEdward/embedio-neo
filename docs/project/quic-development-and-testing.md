@@ -493,9 +493,14 @@ hash-locked aioquic peer for both credential profiles, native lifetime checks an
 A configured step is not a completed hosted result; inspect its exact-head run.
 
 On a native lifetime-check failure, the Windows helper retains a bounded
-`schannel-contract-probe` report. Its 96 first-flight cases vary RSA/ECDSA credentials,
+`schannel-contract-probe` report. Its 144 first-flight cases vary RSA/ECDSA credentials,
 short/long ALPN, SNI presence, transport-parameter lengths, X25519/P-256 shares and
-fragmented ClientHello delivery.
+fragmented ClientHello delivery. X25519 cases separately exercise the original
+basepoint and the public Alice key from [RFC 7748 section 6.1](https://www.rfc-editor.org/rfc/rfc7748.html#section-6.1).
+The helper also retains the OS version, configured TLS groups and legacy FIPS setting
+as read-only host evidence. Missing policy diagnostics are recorded explicitly.
+The native step precedes the ordinary regression suite within the existing Windows
+job; all existing gates, assertions and time allowances remain enforced.
 The original lifetime gate still fails. The diagnostic checks native first-flight
 key installation and cleanup; it is not a completed TLS handshake or peer result.
 
@@ -510,8 +515,10 @@ The correction passed 40 captured-trace replays and 10,000 lifecycle cases on Li
 .NET 10.0.13. Final argument-order and equivalent collection/style cleanups passed
 all cleanup and negative-oracle checks, both corpus traces and 200 Windows lifecycle
 cases. All 96 native diagnostic cases and existing native/core self-tests passed
-locally. Hosted Windows ALPN failure investigation remains open; local first-flight
-success does not establish hosted interoperability.
+locally. Hosted run 39528086800 passed all 48 P-256 cases and failed all 48 original
+X25519 cases, independently of ALPN, SNI, credential and fragmentation. The expanded
+144-case diagnostic passed locally. Hosted key-share investigation remains open;
+local first-flight success does not establish hosted interoperability.
 
 Use fresh output directories. Both `schannel-rsa` and `schannel-ecdsa` are validation
 selectors; no production listener setting selects them. The unused key-path argument

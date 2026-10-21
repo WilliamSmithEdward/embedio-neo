@@ -5,6 +5,16 @@ if (-not $IsWindows) { throw 'Schannel validation requires Windows.' }
 if ([string]::IsNullOrWhiteSpace($env:EMBEDIO_DATAGRAM_PEER_PYTHON)) { throw 'Provision the pinned independent peer first.' }
 if (Test-Path -LiteralPath $output) { throw 'Use a fresh Schannel validation output directory.' }
 New-Item -ItemType Directory $output | Out-Null
+# Read-only host policy evidence; unavailable diagnostics never replace the TLS gate.
+$policy = [ordered]@{ os = [Environment]::OSVersion.VersionString }
+try { $policy.curves = [string[]](Get-TlsEccCurve -ErrorAction Stop) }
+catch { $policy.curvesError = $_.Exception.Message }
+try {
+  $fipsPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy'
+  $policy.legacyFipsEnabled = Get-ItemPropertyValue -LiteralPath $fipsPath -Name Enabled -ErrorAction Stop
+}
+catch { $policy.legacyFipsError = $_.Exception.Message }
+$policy | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath "$output/host-policy.json" -Encoding utf8
 dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
 if ($LASTEXITCODE) { throw 'QUIC host restore failed.' }
 dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore -p:RunAnalyzers=true
