@@ -843,7 +843,21 @@ Deterministic regressions cover deep endpoint copying, local-destination routing
 continued existing-owner traffic after admission stops, optional admission-window
 limits, canceled accepts, repeated concurrent stop/dispose and port ownership.
 Dispatcher fuzz mutations now vary local destinations and acceptance state while
-checking bounded output and final owner cleanup. The extended development command
+checking bounded output and final owner cleanup.
+
+Seven additional failure-injection cases cover accepted-worker cleanup, synchronous
+and asynchronous sibling-binding failures, context-reader completion, restart after
+a failed drain, throwing cancellation callbacks and propagation of critical errors.
+The listener collects ordinary failures while completing teardown, preserves a single
+failure's type and stack, and reports multiple failures together. The dispatcher
+mutation target also exercises both synchronous and asynchronous binding failures.
+The teardown update passed all seven regressions, another 100,000 managed mutations,
+10,000 cases per property, all three actual-WebServer TLS profiles and the same
+750-case existing suite (749 successes, one inapplicable skip). Package and
+compatibility checks passed again. Its instrumented campaigns completed 56,208
+libFuzzer and 25,084 AFL++ executions with no retained crashes or
+hangs. AFL reported 6.17% map stability; the concurrent coverage limitation
+still applies. The extended development command
 includes the actual WebServer peer fixture when an OpenSSL path is supplied.
 
 Validation repeated the 90 existing independent-peer cases and six scheduled
@@ -860,7 +874,7 @@ quality checks, suppression checks and AnalyzerGuard passed. All six packages
 passed content checks, and the compatibility audit again reported 142 cases /
 284 upstream/Neo comparisons with zero errors.
 
-The updated instrumented campaigns completed 71,651 libFuzzer executions in
+The initial listener campaigns completed 71,651 libFuzzer executions in
 61 seconds and 25,342 AFL++ executions in 60 seconds, with no retained
 crashes or hangs. AFL's 5.83% map stability reflects concurrent scheduling;
 its edge percentage is not reliable coverage evidence.

@@ -45,6 +45,12 @@ namespace EmbedIO.Quic
             await ProductionListenerLifecycleTests
                 .RunAsync()
                 .ConfigureAwait(false);
+
+            if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                await ProductionListenerFailureTests
+                    .RunAsync()
+                    .ConfigureAwait(false);
+
             Mutate([0, 1, 2, 3, 4, 5, 6, 7]);
             Mutate([255, 17, 2, 1]);
         }
@@ -757,6 +763,9 @@ namespace EmbedIO.Quic
 
         internal static void Mutate(ReadOnlySpan<byte> data)
         {
+            if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                ProductionListenerFailureTests.Mutate(data);
+
             MutateAsync(data[..Math.Min(12, data.Length)].ToArray())
                 .GetAwaiter()
                 .GetResult();

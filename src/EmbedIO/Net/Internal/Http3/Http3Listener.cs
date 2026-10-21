@@ -200,14 +200,20 @@ namespace EmbedIO.Net.Internal.Http3
 
             finally
             {
-                session.Dispose();
-
-                lock (_sync)
+                try
                 {
-                    if (ReferenceEquals(_session, session))
+                    session.Dispose();
+                }
+
+                finally
+                {
+                    lock (_sync)
                     {
-                        _session = null;
-                        _stopping = false;
+                        if (ReferenceEquals(_session, session))
+                        {
+                            _session = null;
+                            _stopping = false;
+                        }
                     }
                 }
             }
@@ -708,57 +714,121 @@ namespace EmbedIO.Net.Internal.Http3
 
             private async Task ShutdownAsync(bool graceful, TimeSpan timeout)
             {
-                if (graceful)
-                {
-                    _stop.CancelAfter(timeout);
-                    _drain.Cancel();
-                }
-
-                else _stop.Cancel();
-
-                _acceptStop.Cancel();
+                var failures = new List<Exception>();
 
                 try
                 {
-                    foreach (var listener in _listeners)
+                    if (graceful)
                     {
-                        await listener.Key
-                            .StopAcceptingAsync()
-                            .ConfigureAwait(false);
+                        _stop.CancelAfter(timeout);
+                        Cancel(_drain);
                     }
 
-                    await Task
-                        .WhenAll(_accepts)
-                        .ConfigureAwait(false);
+                    else Cancel(_stop);
+
+                    Cancel(_acceptStop);
+
+                    foreach (var listener in _listeners)
+                    {
+                        try
+                        {
+                            await listener.Key
+                                .StopAcceptingAsync()
+                                .ConfigureAwait(false);
+                        }
+
+                        catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                        {
+                            Record(error);
+                            Cancel(_stop);
+                        }
+                    }
+
+                    await ObserveAsync(Task.WhenAll(_accepts)).ConfigureAwait(false);
                     Task[] connections;
 
                     lock (_gate) connections = [.. _connections.Values];
 
-                    await Task
-                        .WhenAll(connections)
-                        .ConfigureAwait(false);
+                    await ObserveAsync(Task.WhenAll(connections)).ConfigureAwait(false);
                 }
 
                 finally
                 {
-                    _stop.Cancel();
-                    var cleanup = Task.WhenAll(_listeners.Keys.Select(listener => listener
-                            .DisposeAsync()
-                            .AsTask()));
-
                     try
                     {
-                        await cleanup.ConfigureAwait(false);
+                        Cancel(_stop);
+
+                        foreach (var listener in _listeners)
+                        {
+                            try
+                            {
+                                await listener.Key
+                                    .DisposeAsync()
+                                    .ConfigureAwait(false);
+                            }
+
+                            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                            {
+                                Record(error);
+                            }
+
+                            finally
+                            {
+                                QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
+                            }
+                        }
                     }
 
                     finally
                     {
-                        foreach (var listener in _listeners)
-                            QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
-
                         Contexts.Writer.TryComplete();
 
                         while (Contexts.Reader.TryRead(out _)) { }
+                    }
+                }
+
+                if (failures.Count == 1)
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                        .Capture(failures[0])
+                        .Throw();
+
+                if (failures.Count != 0) throw new AggregateException("HTTP/3 listener shutdown failed.", failures);
+
+                void Cancel(CancellationTokenSource source)
+                {
+                    try
+                    {
+                        source.Cancel();
+                    }
+
+                    catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                    {
+                        Record(error);
+                    }
+                }
+
+                void Record(Exception error)
+                {
+                    if (error is AggregateException aggregate)
+                        foreach (var failure in aggregate.Flatten().InnerExceptions)
+                            if (!ExceptionPolicy.IsRecoverable(failure))
+                                System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                                    .Capture(failure)
+                                    .Throw();
+
+                    failures.Add(error);
+                }
+
+                async Task ObserveAsync(Task task)
+                {
+                    try
+                    {
+                        await task.ConfigureAwait(false);
+                    }
+
+                    catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                    {
+                        Record(task.Exception is { InnerExceptions.Count: > 1 } aggregate ? aggregate : error);
                     }
                 }
             }
@@ -766,8 +836,6 @@ namespace EmbedIO.Net.Internal.Http3
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-
-                Abort();
 
                 try
                 {

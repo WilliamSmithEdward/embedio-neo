@@ -22,7 +22,7 @@ half-close before reading. Pass the token to streaming, upload and application
 work; retain deadlines because disconnect detection is best effort. Generated
 bindings support AOT and omit the token from OpenAPI. The in-process testing
 context observes its caller token. See [request-abort cancellation](docs/guides/request-abort.md)
-for completion ownership, HTTP/2Ã¢â‚¬â€œ3 resets, TLS/proxy limits and examples.
+for completion ownership, HTTP/2ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ3 resets, TLS/proxy limits and examples.
 Canceled request-abort tokens keep their cancellation source until the token can
 be collected, so retained-token registrations and signaled wait handles remain
 usable. Parent registrations still detach at completion.
@@ -417,7 +417,10 @@ handshake deadlines include queue time, routing is established before sending,
 and output limits include queued and in-flight sends. Shutdown waits for native
 work and sends, releases sibling owners and reports cleanup failures. The library now
 also has an internal socket binding whose acceptance lifetime is separate from UDP
-ownership, preserving active traffic during HTTP/3 drain. Per-instance listener
+ownership, preserving active traffic during HTTP/3 drain. Ordinary binding or
+cancellation-callback failures are reported after session teardown;
+connection workers and sibling bindings still receive cleanup. A failed drain clears
+the previous session so the listener can restart. Per-instance listener
 construction allows the real WebServer pipeline to validate that binding with
 development credentials; public provider selection remains unchanged.
 The replacement stream/datagram adapters now drive the library's HTTP/3 protocol
