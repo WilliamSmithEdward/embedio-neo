@@ -1363,7 +1363,7 @@ single-RID preview results; they do not establish all six RIDs, the oldest musl
 baseline, hardened macOS loading/signing, browser interoperability, whole-vendor
 instrumentation or endurance/latency acceptance.
 
-The current-head macOS 26 authentication campaign timed out in two unchanged
+The earlier macOS 26 authentication campaign in run 39644578782 timed out in two unchanged
 hosted attempts on different inputs. Both retained peer traces show only outgoing
 Initial retransmissions and no received server flight; they do not implicate the
 later mutated certificate payload. Other wire/cipher/SNI/publication/policy checks
@@ -1373,3 +1373,77 @@ rejected-owner exception, bounded to a 4 KiB diagnostic string. Formatting happe
 only when the retired listener is inspected. This is additional failure evidence,
 not a claimed correction of the unexplained macOS timeout. Exact-source hosted
 validation remains required before acceptance and provider retirement.
+
+
+## Peer connection-ID retirement and current platform acceptance
+
+The connection now applies authenticated `NEW_CONNECTION_ID` frames.
+[RFC 9000 retirement watermarks](https://www.rfc-editor.org/rfc/rfc9000.html#section-5.1.2) select a live destination
+before the next response; `RETIRE_CONNECTION_ID` uses existing ACK/loss recovery.
+The helper owns copies of peer IDs and reset tokens, bounds active IDs to the
+advertised two and pending retirements to four, drops acknowledged references,
+and represents retired sequence history with a watermark. A 10,000-rotation model
+checks that state stays bounded. Invalid framing, conflicting active identities
+and exceeded limits retain their distinct transport error codes. Reset tokens
+are retained for active-ID consistency only; stateless reset is not implemented
+by this change.
+
+A controlled encrypted reference peer removed the original ID from its accepted
+set. Before correction, replies used that retired ID and the request failed while
+a separate connection remained healthy. After correction, independent wire checks
+passed eight Windows Schannel cases and ten Linux portable cases: both AES suites,
+Linux ChaCha20, 8/20-byte peer IDs, 16 rotations per positive case, exact retirement
+frames, invalid-frame closes, healthy siblings and drain/rebind. A packet model
+also verifies retirement retransmission after loss. Local CID issuance/retirement,
+path migration, Retry and stateless reset remain separate work.
+
+The helper joins the existing core model, state-machine and lifecycle fuzz paths,
+so all existing managed, FsCheck, libFuzzer and AFL++ entry points reach it. The
+local candidate passed 100,000 managed mutations with seed 1729 and 10,000 FsCheck
+cases per property. Short instrumented campaigns completed 44,022 libFuzzer and
+24,929 AFL++ executions with no reported crashes or hangs. AFL++ stability was
+4.74%; its reported bitmap is not a coverage percentage or proof of deterministic
+state coverage. Linux also repeated all 24 wire cases and a 5,000-handshake
+certificate campaign with seed 104729: 715 pinned identities accepted, 4,285 inputs
+refused, 1,272 healthy sibling requests and completed cleanup/drain/rebind. Native
+vendor coverage and sustained endurance/latency acceptance remain outstanding.
+
+CI run 39653100127, PR head `097a3045` and synthetic merge `52c88c77`, passed all
+six native builds and combined-package assembly. The Linux x64, Linux ARM64 and
+macOS ARM64 package-only consumer suites passed, including the nine focused
+portable/RID/AOT cipher profiles and full protocol/policy/certificate campaigns.
+The macOS authentication timeout did not recur in that run; its earlier no-flight
+cause remains unproven. Both musl jobs failed at Git's dubious-ownership check,
+before their consumer tests. Running Docker as the checkout owner's UID/GID,
+with disposable writable HOME/CLI directories, preserves the check. A local
+red/green reproduction then passed the complete 26-step musl x64 driver against
+the exact six-RID feed and synthetic source commit; ARM64 and changed-source
+hosted validation are still required.
+
+Intel macOS failed during peer dependency restore, before wire testing.
+[Cryptography 49 removed x86_64 macOS wheels](https://cryptography.io/en/latest/changelog/#v49-0-0);
+the pinned 50.0.2 has none. `build_peer_wheel.py` prepares an unpublished test
+wheel from its SHA-256-pinned source archive using the reviewed static OpenSSL
+3.5.9 SDK, Rust 1.99.1, the unchanged vendor Cargo lock and hash-locked Python
+build tools. It checks archive paths, wheel metadata/RECORD, retained vendor and
+OpenSSL licenses, architecture, shared dependency closure and actual backend
+version. The consumer requires matching workflow source, builder source hashes,
+wheel hash and the exact native build receipt from its package. It installs the
+specific local hashed wheel first, then the unchanged full peer dependency lock.
+No fallback version, unpinned source resolution or skipped Intel wire suite is
+introduced. This is test infrastructure, not an upstream-supported Intel wheel
+or a production package. Actual Intel hosted validation remains required.
+
+
+The source-wheel workflow was also exercised locally on Linux with the actual
+reviewed manylinux-built SDK. The wheel reported cryptography 50.0.2/OpenSSL 3.5.9,
+retained all three vendor licenses plus OpenSSL's license, and had no dynamic
+OpenSSL dependency. After installing it into a fresh peer environment and
+restoring the unchanged full hash lock, the final managed source passed its
+10,076-assertion self-test, ten CID wire cases, all 24 existing wire cases, all
+24 certificate-policy cases and 256 authentication mutations (37 pinned identities
+accepted, 219 inputs refused, 67 healthy sibling requests). All 22 native
+build/audit/package/wheel test methods passed on Linux without skips. This is a
+Linux source-build/integration proof, not Intel macOS acceptance. An initial local
+Ubuntu-native SDK attempt was correctly refused by the existing glibc baseline
+audit; the final proof used the reviewed manylinux builder.

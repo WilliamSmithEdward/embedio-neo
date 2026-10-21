@@ -153,3 +153,35 @@ package validation requires all six RIDs. No preview is published by this workfl
 Oldest libc/OS, signing/hardened-app loading, all-platform runtime results, malware
 validation of the final payload, browser tests, endurance and provider retirement
 remain part of the development goal.
+
+
+## Intel macOS test peer
+
+The pinned cryptography 50.0.2 dependency publishes no Intel macOS wheel. Its
+version remains unchanged. On that native builder, `build_peer_wheel.py` uses the
+same reviewed OpenSSL build's static SDK to prepare a separate test-only wheel
+from the exact pinned source archive. Rust 1.99.1, Cargo's unchanged locked
+packages and `peer-wheel-requirements.txt` constrain its build tools. The script
+verifies archive paths, wheel identity/RECORD, license retention, native module
+architecture/dependencies and the actual OpenSSL backend version. No QUIC engine
+implementation is taken from these dependencies.
+
+The dedicated `quic-peer-wheel-osx-x64` artifact is not part of the runtime feed
+or native package. The package consumer accepts it only for Intel macOS and checks
+its workflow source, builder source, archive/version pins, wheel hash and native
+build-receipt identity against the runtime package. It installs that specific
+hashed wheel, then restores the unchanged full peer lock. The static TLS-only
+build disables automatic legacy-provider loading in this test environment.
+Source-building does not establish upstream platform support; the real Intel
+consumer still has to pass its complete protocol, policy and AOT suites.
+
+To reproduce in the same fresh Intel macOS build environment, after `build.py`:
+
+```sh
+python3 native/EmbedIO.Quic.Tls/build_peer_wheel.py --native-work "$RUNNER_TEMP/embedio-quic-native" --native-output TestResults/quic-native --work "$RUNNER_TEMP/embedio-quic-peer" --output TestResults/quic-peer-wheel --source-commit "$(git rev-parse HEAD)"
+python3 test/EmbedIO.Quic.PackageConsumer/validate.py --rid osx-x64 --feed TestResults/quic-runtime-feed --peer-wheel-directory TestResults/quic-peer-wheel --output TestResults/quic-package-validation
+```
+
+Musl consumers run Docker as the checkout owner's UID/GID with disposable writable
+HOME and .NET CLI directories. This retains Git's ownership validation and leaves
+artifact files readable by the runner; it does not add a safe-directory exception.

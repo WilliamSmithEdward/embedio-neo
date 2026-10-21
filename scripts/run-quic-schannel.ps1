@@ -53,3 +53,6 @@ if ($LASTEXITCODE) { Get-Content "$output/client-certificate-mutations.log"; thr
 
 & $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_cipher_suites.py --dotnet dotnet --assembly $assembly --schannel --vectors 96 --output "$output/cipher-suites" > "$output/cipher-suites.log" 2>&1
 if ($LASTEXITCODE) { Get-Content "$output/cipher-suites.log"; throw 'Schannel cipher-suite checks failed.' }
+
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON test/EmbedIO.Quic/verify_peer_connection_ids.py --dotnet dotnet --assembly $assembly --output "$output/peer-connection-ids" > "$output/peer-connection-ids.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/peer-connection-ids.log"; throw 'Schannel peer connection-ID checks failed.' }

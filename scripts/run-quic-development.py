@@ -103,6 +103,9 @@ def main():
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "certificate-policy")])
         run("schannel-client-certificate-policy", [sys.executable, "test/EmbedIO.Quic/verify_client_certificate.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "client-certificate-policy")])
+    if args.schannel:
+        run("peer-connection-ids", [sys.executable, "test/EmbedIO.Quic/verify_peer_connection_ids.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "peer-connection-ids")])
     if args.openssl or args.schannel:
         cipher_command = [sys.executable, "test/EmbedIO.Quic/verify_cipher_suites.py", "--dotnet", args.dotnet,
                           "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "cipher-suites")]

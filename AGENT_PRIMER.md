@@ -1158,3 +1158,26 @@ are local development aids, not distribution acceptance. All six RID runs, oldes
 OS/libc, native signing/loading, final-payload scans, browser and endurance/latency
 acceptance still apply. Public provider selection is unchanged and none of these
 native package changes is released.
+
+
+The development connection now honors authenticated peer `NEW_CONNECTION_ID`
+retirement watermarks and retransmits `RETIRE_CONNECTION_ID` through the shared
+recovery owner. It retains at most two active peer IDs and four unacknowledged
+retirements, releases acknowledged records and uses the replacement ID before
+sending a close. These bounds remain constant over long-lived rotation. This
+handles peer destination IDs; local-issued ID rotation, migration, Retry and
+stateless reset remain separate acceptance work.
+
+CI run 39653100127 built all six native assets and assembled the combined package.
+Its complete package-consumer suites passed on Linux x64, Linux ARM64 and macOS
+ARM64. Both musl consumers stopped at Git checkout ownership validation; the
+owner-matched Docker correction subsequently passed the full local musl x64
+consumer against the same six-RID feed. Intel macOS stopped before wire testing
+because the pinned cryptography 50.0.2 peer dependency has no published x64 wheel.
+The workflow now prepares a separate, unpublished source-built test wheel of
+that same version against the reviewed static OpenSSL SDK, with pinned build
+tools, Cargo lock, wheel/source/native-receipt checks and retained licenses.
+Its actual Intel macOS run and both changed-source musl runs remain required.
+This wheel is test infrastructure, not a production dependency or an assertion of
+upstream Intel macOS support. See the development record for evidence and the
+remaining production, browser, endurance and latency work.

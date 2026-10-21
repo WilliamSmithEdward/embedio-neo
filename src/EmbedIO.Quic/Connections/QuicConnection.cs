@@ -45,6 +45,8 @@ namespace EmbedIO.Quic
 
         private readonly byte[] _originalId;
         private readonly byte[] _clientId;
+        private byte[] _destinationId;
+        private PeerConnectionIds? _peerIds;
         private readonly byte[] _serverId = RandomNumberGenerator.GetBytes(8);
         private readonly PacketKeys _initialRead;
         private readonly PacketKeys _initialWrite;
@@ -147,6 +149,7 @@ namespace EmbedIO.Quic
             _clientId = reader
                 .Take(length)
                 .ToArray();
+            _destinationId = _clientId;
             reader.Take(reader.Length(4096));
             var payloadLength = reader.Length(firstPacket.Length);
             var numberOffset = firstPacket.Length - reader.Remaining;
@@ -793,16 +796,7 @@ namespace EmbedIO.Quic
 
                 else if (type == 0x18)
                 {
-                    var sequence = reader.Integer();
-
-                    if (reader.Integer() > sequence) throw new InvalidDataException("Invalid retire-prior-to.");
-
-                    var size = reader.Byte();
-
-                    if (size is 0 or > 20) throw new InvalidDataException("Invalid connection ID.");
-
-                    reader.Take(size + 16);
-                    // Connection-ID retirement and path changes require listener coordination.
+                    ReadPeerConnectionId(ref reader);
                 }
 
                 else if (type == 0x1a)
@@ -820,6 +814,46 @@ namespace EmbedIO.Quic
             }
 
             return acknowledge;
+        }
+
+        private void ReadPeerConnectionId(ref WireReader reader)
+        {
+            try
+            {
+                var sequence = reader.Integer();
+                var retirePrior = reader.Integer();
+                var size = reader.Byte();
+
+                if (size is 0 or > 20) throw new TransportException(7, "Invalid peer connection-ID length.");
+
+                var id = reader.Take(size);
+                var token = reader.Take(16);
+                _peerIds ??= new PeerConnectionIds(_clientId, RetirePeerConnectionId);
+
+                try
+                {
+                    _peerIds.Add(sequence, retirePrior, id, token);
+                }
+
+                finally
+                {
+                    // A valid increased watermark also applies if a subsequent
+                    // retirement budget closes the connection. Never close on an old ID.
+                    if (!_peerIds.Current.SequenceEqual(_destinationId)) _destinationId = _peerIds.Current.ToArray();
+                }
+            }
+
+            catch (InvalidDataException error)
+            {
+                throw new TransportException(7, error.Message);
+            }
+        }
+
+        private Delivery RetirePeerConnectionId(ulong sequence)
+        {
+            var delivery = new Delivery(2, Wire.Frame(0x19, sequence));
+            QueueRepeat(delivery, false);
+            return delivery;
         }
 
         private byte[] LocalParameters()
@@ -1011,8 +1045,8 @@ namespace EmbedIO.Quic
             {
                 header.WriteByte(level == 0 ? (byte)0xc3 : (byte)0xe3);
                 header.Write([0, 0, 0, 1]);
-                header.WriteByte((byte)_clientId.Length);
-                header.Write(_clientId);
+                header.WriteByte((byte)_destinationId.Length);
+                header.Write(_destinationId);
                 header.WriteByte((byte)_serverId.Length);
                 header.Write(_serverId);
 
@@ -1029,7 +1063,7 @@ namespace EmbedIO.Quic
             else
             {
                 header.WriteByte(_keyUpdates.WritePhase ? (byte)0x47 : (byte)0x43);
-                header.Write(_clientId);
+                header.Write(_destinationId);
             }
 
             var numberOffset = (int)header.Length;
@@ -1049,6 +1083,7 @@ namespace EmbedIO.Quic
             _pending.Clear();
             _urgent.Clear();
             _recovery.Abandon();
+            _peerIds?.Dispose();
 
             try
             {

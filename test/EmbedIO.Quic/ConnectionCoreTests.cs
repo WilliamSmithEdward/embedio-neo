@@ -11,6 +11,7 @@ namespace EmbedIO.Quic
 
         internal static void Run()
         {
+            PeerConnectionIdTests.Run();
             AuthenticationPrecedesTls();
             InvalidLimitsPrecedeTls();
             DisposedOwnerRejectsWork();
@@ -32,6 +33,7 @@ namespace EmbedIO.Quic
         internal static void Mutate(ReadOnlySpan<byte> data)
         {
             data = data[..Math.Min(data.Length, 4096)];
+            PeerConnectionIdTests.Mutate(data);
             using var keys = PacketKeys.Initial(Original, false);
             var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
             var tls = new ModelTls(data.Length != 0 && (data[0] & 1) != 0);
@@ -367,7 +369,7 @@ namespace EmbedIO.Quic
             owners.Dispose();
         }
 
-        private static byte[] ApplicationPacket(
+        internal static byte[] ApplicationPacket(
             ReadOnlySpan<byte> destination,
             ReadOnlySpan<byte> bytes,
             uint number = 0,
