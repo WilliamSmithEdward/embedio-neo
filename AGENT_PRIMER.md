@@ -381,7 +381,8 @@ WebTransport is not supported by the public listener. The internal session core
 and native validation hosts do not make it available to applications. The independent
 EmbedIO.Quic generic transport core is under `src/EmbedIO.Quic`. Its separate
 `EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, references the actual
-library HTTP/3 protocol and uses OpenSSL 3.5.7 or the Windows SDK recordless Schannel
+library HTTP/3 protocol and uses a legacy development OpenSSL loader, the private
+OpenSSL 3.5.9 boundary on Unix, or the Windows SDK recordless Schannel
 interface for TLS. In this unreleased branch, the .NET 10 library asset compiles the
 same internal engine sources; the standalone `EmbedIO.Quic` project remains an
 independent build boundary. The host no longer compiles copies of the HTTP/3 codecs. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
@@ -1088,3 +1089,25 @@ passing run. See [property testing](docs/guides/property-testing.md) and
 SSE wire EOF can arrive before the server handler finishes disposing its subscription.
 Lifetime tests must await handler completion before asserting released subscriber slots;
 a successful server shutdown alone does not join every request continuation.
+
+### Portable EmbedIO.Quic TLS development
+
+The internal Linux/macOS TLS adapter uses an original private polling ABI over
+pinned OpenSSL 3.5.9 built with `no-quic`; the managed engine owns the transport.
+The common TLS factory preserves per-handshake certificate-source snapshots, SNI,
+client-certificate modes and managed chain/revocation/callback policy. Packet keys
+and peer parameters alone do not admit application traffic: TLS Finished and
+client-certificate policy must succeed first. Native buffers and handles remain
+bounded and owned by the serialized connection. Windows retains Schannel.
+
+Public HTTP/3 provider selection and package dependency groups are unchanged.
+Native runtime packaging, oldest supported libc/musl and remaining RID validation
+are pending. Build instructions and the exact archive pin are in
+[`native/EmbedIO.Quic.Tls`](native/EmbedIO.Quic.Tls/README.md). The portable CI job
+runs independent wire, SNI, publication, mutual TLS and bounded mutation checks on
+Linux and macOS; a configured job does not establish a successful run. Local Linux
+validation passed 24 wire cases, six SNI cases, live publication, 24 certificate
+policy cases and 5,000 native-auth mutations, plus six common-factory JIT/NativeAOT
+wire cases and 3,072 wrapper-sanitizer ownership lifecycles. Those initial proofs
+used the recorded development build; final restricted native-build validation is
+recorded separately in the development guide. None of this work is released.

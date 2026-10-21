@@ -530,10 +530,16 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/aot-smoke.yml
 
+  quic-portable:
+    name: Portable QUIC TLS
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
+    uses: ./.github/workflows/quic-portable.yml
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, test, compatibility, static-analysis, build, mac-catalyst, android, maui-https, aot-smoke]
+    needs: [changes, test, compatibility, static-analysis, build, mac-catalyst, android, maui-https, aot-smoke, quic-portable]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -551,7 +557,7 @@ jobs:
           # skip, a failure or a cancellation fails the gate.
           docs_only = results['changes']['result'] == 'success' and os.environ['CODE_CHANGED'] == 'false'
           pull_request = os.environ['EVENT_NAME'] == 'pull_request'
-          gated = {'test', 'compatibility', 'mac-catalyst', 'android', 'maui-https', 'aot-smoke'}
+          gated = {'test', 'compatibility', 'mac-catalyst', 'android', 'maui-https', 'aot-smoke', 'quic-portable'}
           for name, job in results.items():
               optional = (docs_only and name in gated) or (pull_request and name == 'android')
               expected = 'skipped' if optional else 'success'

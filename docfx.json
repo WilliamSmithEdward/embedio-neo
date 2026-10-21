@@ -39,6 +39,7 @@
           "MIGRATION.md",
           "AGENT_PRIMER.md",
           "docs/**/*.md",
+          "native/**/README.md",
           "docs/**/toc.yml"
         ]
       },

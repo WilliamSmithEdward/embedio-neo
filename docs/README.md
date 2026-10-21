@@ -272,6 +272,7 @@ points for existing links.
 - [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance.
 
 - [QUIC development and testing record](project/quic-development-and-testing.md): implementation stages, fuzz targets, extensive local campaigns, validation ledger and MsQuic retirement checklist.
+- [Portable QUIC TLS build](../native/EmbedIO.Quic.Tls/README.md): pinned TLS-only native source builds, ownership boundary and current platform/packaging limits.
 - [EmbedIO.Quic implementation](project/quic-engine-feasibility.md): EmbedIO.Quic recovery, congestion, receive-window/lifecycle and H3/WebTransport implementation with OpenSSL TLS and independent peers; no production provider activation.
 - [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): decision to await a current-wire provider, test-only evidence and resumption gates.
 

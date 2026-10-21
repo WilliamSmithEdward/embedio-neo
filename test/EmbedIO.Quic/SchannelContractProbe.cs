@@ -30,7 +30,7 @@ namespace EmbedIO.Quic
                     elliptic
                 );
 
-                foreach (var protocol in new[] { "h3", OpenSslTls.ApplicationProtocol })
+                foreach (var protocol in new[] { "h3", DevelopmentOpenSslTls.ApplicationProtocol })
                     foreach (var parameterSize in new[] { 0, 2, 32 })
                         foreach (var name in new string?[] { null, "localhost" })
                             foreach (var keyShare in new[] { 0, 1, 2 })

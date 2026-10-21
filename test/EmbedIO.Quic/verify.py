@@ -236,8 +236,8 @@ def provenance(args):
         if path.exists():
             files.add(path)
     libraries = {}
-    for name in ("libssl-3-x64.dll", "libcrypto-3-x64.dll", "libssl.so.3", "libcrypto.so.3"):
-        path = Path(args.openssl) / name
+    for name in ("libssl-3-x64.dll", "libcrypto-3-x64.dll", "libssl.so.3", "libcrypto.so.3", "libembedio_quic_tls.so"):
+        path = (Path(args.assembly).parent if args.openssl.startswith('portable-') else Path(args.openssl)) / name
         if path.exists():
             libraries[name] = hashlib.sha256(path.read_bytes()).hexdigest()
     provider = {"kind": "openssl", "platform": platform.platform()}

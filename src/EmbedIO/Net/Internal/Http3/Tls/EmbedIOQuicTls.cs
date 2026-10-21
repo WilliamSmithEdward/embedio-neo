@@ -1,6 +1,5 @@
 ﻿#if NET10_0_OR_GREATER
 using System;
-using System.Runtime.Versioning;
 using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -8,7 +7,6 @@ using EmbedIO.Quic;
 
 namespace EmbedIO.Net.Internal.Http3
 {
-    [SupportedOSPlatform("windows")]
     internal static class EmbedIOQuicTls
     {
         internal static Func<byte[], TlsSession> CreateFactory(
@@ -20,6 +18,9 @@ namespace EmbedIO.Net.Internal.Http3
             policy?.EnsureSupported(true, false);
 
             policy?.Lock();
+
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) OpenSslTls.EnsureAvailable();
+
             Func<X509Certificate2?, X509Certificate2Collection, bool>? validate = policy?.RequestsClientCertificate
                 == true
                 ? (certificate, additional) => ValidateClientCertificate(policy, certificate, additional)
@@ -29,13 +30,25 @@ namespace EmbedIO.Net.Internal.Http3
                 // Capture the fallback per handshake, before a fragmented ClientHello
                 // or a later publication can change this connection's selection.
                 var fallback = certificates.Current;
-                return new SchannelTls(
-                    name => SelectCertificate(policy, fallback, name),
-                    parameters,
-                    "h3",
-                    false,
-                    validate
-                );
+
+                if (OperatingSystem.IsWindows())
+                    return new SchannelTls(
+                        name => SelectCertificate(policy, fallback, name),
+                        parameters,
+                        "h3",
+                        false,
+                        validate
+                    );
+
+                if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                    return new OpenSslTls(
+                        name => SelectCertificate(policy, fallback, name),
+                        parameters,
+                        "h3",
+                        validate
+                    );
+
+                throw new PlatformNotSupportedException("Recordless TLS requires a desktop platform.");
             };
         }
 

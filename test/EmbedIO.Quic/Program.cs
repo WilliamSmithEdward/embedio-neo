@@ -36,7 +36,7 @@ namespace EmbedIO.Quic
                 )
                     return await ProductionListenerHost
                         .RunAsync(
-                            "schannel-rsa",
+                            OperatingSystem.IsWindows() ? "schannel-rsa" : "portable-rsa",
                             clientServerCertificate,
                             clientServerKey,
                             clientCertificatePolicy: certificateMode
@@ -53,7 +53,7 @@ namespace EmbedIO.Quic
                 )
                     return await ProductionListenerHost
                         .RunAsync(
-                            "schannel-rsa",
+                            OperatingSystem.IsWindows() ? "schannel-rsa" : "portable-rsa",
                             fuzzServerCertificate,
                             fuzzServerKey,
                             clientCertificatePolicy: "require-pin",

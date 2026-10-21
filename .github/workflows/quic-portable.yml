@@ -1,0 +1,66 @@
+name: Portable QUIC TLS
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    name: Portable TLS (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        os: [ubuntu-24.04, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - name: Build pinned private TLS boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s native/EmbedIO.Quic.Tls/tests -p test_build.py
+          python3 native/EmbedIO.Quic.Tls/build.py --work "$RUNNER_TEMP/embedio-quic-native" --output TestResults/quic-native --jobs 3
+      - name: Provision pinned independent peer
+        run: python3 scripts/setup_datagram_peer.py
+      - name: Build actual library and development host
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
+          dotnet publish test/EmbedIO.Quic/EmbedIO.Quic.csproj --no-restore -c Release -o TestResults/quic-host -p:EmbedIOQuicNativeTlsDirectory="$PWD/TestResults/quic-native"
+      - name: Validate wire, certificate policies and bounded mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          host=TestResults/quic-host/EmbedIO.Quic.Development.dll
+          "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify.py --dotnet dotnet --assembly "$host" --openssl portable-rsa --output TestResults/quic-native-wire
+          "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_cipher_suites.py --dotnet dotnet --assembly "$host" --openssl portable-rsa --vectors 32 --output TestResults/quic-native-ciphers
+          "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_sni.py --dotnet dotnet --assembly "$host" --output TestResults/quic-native-sni
+          "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_tls_listener.py --dotnet dotnet --assembly "$host" --output TestResults/quic-native-publication
+          "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/verify_client_certificate.py --dotnet dotnet --assembly "$host" --profile full --output TestResults/quic-native-client-certificate
+          "$EMBEDIO_DATAGRAM_PEER_PYTHON" test/EmbedIO.Quic/fuzz_client_certificate.py --dotnet dotnet --assembly "$host" --cases 256 --seed 1729 --output TestResults/quic-native-auth-fuzz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: portable-quic-tls-${{ matrix.os }}
+          path: |
+            TestResults/quic-native/build-receipt.json
+            TestResults/quic-native/OpenSSL-LICENSE.txt
+            TestResults/quic-native-*/
+            ${{ runner.temp }}/embedio-quic-native/*.log
+          if-no-files-found: error

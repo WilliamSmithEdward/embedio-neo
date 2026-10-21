@@ -49,7 +49,7 @@ namespace EmbedIO.Quic
                     var bytes = new byte[random.Next(0, 513)];
                     random.NextBytes(bytes);
                     var hello = index % 3 == 2
-                        ? TlsHelloTests.NativeHello(bytes, OpenSslTls.ApplicationProtocol)
+                        ? TlsHelloTests.NativeHello(bytes, DevelopmentOpenSslTls.ApplicationProtocol)
                         : bytes;
                     input = index % 3 == 1
                         ? bytes
@@ -147,7 +147,7 @@ namespace EmbedIO.Quic
                 ]
             })
             {
-                var hello = TlsHelloTests.NativeHello(parameters, OpenSslTls.ApplicationProtocol);
+                var hello = TlsHelloTests.NativeHello(parameters, DevelopmentOpenSslTls.ApplicationProtocol);
                 byte[] crypto =
                 [
                     .. Wire.Frame(6, 0, (ulong)hello.Length),

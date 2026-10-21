@@ -53,11 +53,19 @@ namespace EmbedIO.Quic
             if (lifetimeSeconds is < 30 or > 1800 || (lifetimeSeconds != 30 && clientCertificatePolicy == null))
                 throw new ArgumentOutOfRangeException(nameof(lifetimeSeconds));
 
-            if (certificatePolicy && (library != "schannel-sni" || !OperatingSystem.IsWindows()))
-                throw new NotSupportedException("Certificate policy validation requires the Schannel SNI fixture.");
+            if (
+                certificatePolicy
+                && !((library == "schannel-sni" && OperatingSystem.IsWindows())
+                    || (library == "portable-sni" && (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())))
+            )
+                throw new NotSupportedException("Certificate policy validation requires an owned SNI fixture.");
 
-            if (clientCertificatePolicy != null && (library != "schannel-rsa" || !OperatingSystem.IsWindows()))
-                throw new NotSupportedException("Client-certificate validation requires the Windows fixture.");
+            if (
+                clientCertificatePolicy != null
+                && !((library == "schannel-rsa" && OperatingSystem.IsWindows())
+                    || (library == "portable-rsa" && (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())))
+            )
+                throw new NotSupportedException("Client-certificate validation requires an owned native fixture.");
 
             var state = new ProductionListenerState();
             using var expectedClient = clientCertificatePolicy != null
@@ -74,7 +82,17 @@ namespace EmbedIO.Quic
             using var replacement = certificatePolicy && OperatingSystem.IsWindows()
                 ? new SchannelTestCertificate(certificatePath + ".replacement.pem", true)
                 : null;
-            var replacementCertificate = OperatingSystem.IsWindows() ? replacement?.BorrowCertificate() : null;
+            using var portableReplacement = certificatePolicy
+                && (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+                ? DevelopmentTlsProvider.CreatePortableCertificate(
+                    certificatePath + ".replacement.pem",
+                    key + ".replacement.pem",
+                    "localhost"
+                )
+                : null;
+            var replacementCertificate = OperatingSystem.IsWindows()
+                ? replacement?.BorrowCertificate()
+                : portableReplacement;
             var tlsPolicy = certificatePolicy
                 ? new ServerTlsPolicy
                 {
@@ -101,7 +119,7 @@ namespace EmbedIO.Quic
                     ?? imported
                     ?? throw new InvalidOperationException("Missing development certificate.")
             );
-            var createTls = OperatingSystem.IsWindows() && provider.NativeCertificate != null
+            var createTls = provider.NativeCertificate != null
                 ? EmbedIOQuicTls.CreateFactory(source, tlsPolicy)
                 : parameters => provider.Create(parameters, "h3");
             await using var binding = new EmbedIOQuicListenerBinding(new IPEndPoint(IPAddress.Loopback, 0), createTls);

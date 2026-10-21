@@ -1,5 +1,6 @@
 """Independent public-client checks of recordless TLS certificate selection."""
 import argparse
+import os
 import asyncio
 import json
 from pathlib import Path
@@ -9,7 +10,7 @@ from verify import case, provenance
 
 
 async def main(args):
-    args.openssl = "schannel-sni"
+    args.openssl = 'schannel-sni' if os.name == 'nt' else 'portable-sni'
     args.output.mkdir(parents=True, exist_ok=False)
     subprocess.run([args.dotnet, args.assembly, "certificate", str(args.output)], check=True, capture_output=True)
     default = args.output / "certificate.pem"

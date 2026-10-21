@@ -1,5 +1,6 @@
 """Seeded concurrent full-handshake native client-certificate mutations."""
 import argparse
+import os
 import asyncio
 import collections
 import hashlib
@@ -199,5 +200,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if not 1 <= args.cases <= 100000 or not 1 <= args.seed <= 2147483647:
         parser.error('Cases or seed are outside supported bounds')
-    args.openssl = 'schannel-rsa'
+    args.openssl = 'schannel-rsa' if os.name == 'nt' else 'portable-rsa'
     raise SystemExit(asyncio.run(main(args)))

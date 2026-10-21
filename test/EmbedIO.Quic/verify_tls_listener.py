@@ -1,5 +1,6 @@
 """Independent certificate policy and reload checks through the actual HTTP/3 listener."""
 import argparse
+import os
 import asyncio
 import importlib.metadata
 import json
@@ -109,7 +110,7 @@ async def main(args):
     if len(pins) != 1 or importlib.metadata.version('aioquic') != pins[0]:
         raise RuntimeError('Independent peer does not match the repository dependency lock')
     args.output.mkdir(parents=True, exist_ok=False)
-    process = await asyncio.create_subprocess_exec(args.dotnet, args.assembly, 'serve-webserver-policy', 'schannel-sni',
+    process = await asyncio.create_subprocess_exec(args.dotnet, args.assembly, 'serve-webserver-policy', args.openssl,
         str(args.output / 'certificate.pem'), str(args.output / 'unused-key.pem'), stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     ready = {}
@@ -156,5 +157,5 @@ if __name__ == '__main__':
         parser.add_argument('--' + option, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
-    args.openssl = 'schannel-sni'
+    args.openssl = 'schannel-sni' if os.name == 'nt' else 'portable-sni'
     raise SystemExit(asyncio.run(main(args)))

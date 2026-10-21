@@ -29,13 +29,13 @@ namespace EmbedIO.Quic
             : base(
                 firstPacket,
                 parameters => tlsFactory != null
-                    ? tlsFactory(parameters, webTransport ? "h3" : OpenSslTls.ApplicationProtocol)
-                    : new OpenSslTls(
+                    ? tlsFactory(parameters, webTransport ? "h3" : DevelopmentOpenSslTls.ApplicationProtocol)
+                    : new DevelopmentOpenSslTls(
                         library,
                         certificate,
                         key,
                         parameters,
-                        webTransport ? "h3" : OpenSslTls.ApplicationProtocol
+                        webTransport ? "h3" : DevelopmentOpenSslTls.ApplicationProtocol
                     ),
                 (operations, features) => applicationFactory != null
                     ? applicationFactory(operations)
@@ -77,9 +77,13 @@ namespace EmbedIO.Quic
         internal bool NativeTlsStarted =>
             OperatingSystem.IsWindows() && Tls is SchannelTls schannel
                 ? schannel.NativeContextCreated
-                : Tls is OpenSslTls;
+                : Tls is OpenSslTls or DevelopmentOpenSslTls;
         internal IReadOnlyList<string> TlsDiagnostics =>
-            OperatingSystem.IsWindows() && Tls is SchannelTls schannel ? schannel.Diagnostics : [];
+            OperatingSystem.IsWindows() && Tls is SchannelTls schannel
+                ? schannel.Diagnostics
+                : (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) && Tls is OpenSslTls portable
+                    ? portable.Diagnostics
+                    : [];
 
         internal override List<byte[]> Receive(ReadOnlySpan<byte> datagram, double now)
         {

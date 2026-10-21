@@ -1,5 +1,6 @@
 """Independent mutual-TLS checks through the actual HTTP/3 WebServer."""
 import argparse
+import os
 import asyncio
 import datetime
 import contextlib
@@ -9,6 +10,7 @@ import json
 from pathlib import Path
 from aioquic.asyncio import connect
 from cryptography import x509
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
@@ -114,7 +116,7 @@ async def case(args, mode, client, allowed):
         selected_client = kind or client
         config = configuration(output / 'certificate.pem', 'localhost')
         if selected_client != 'missing':
-            source = 'client' if selected_client in ('mismatch', 'missing-intermediate', 'malformed') else selected_client
+            source = 'client' if selected_client in ('mismatch', 'missing-intermediate', 'malformed', 'unsupported-key') else selected_client
             config.load_cert_chain(str(output / (source + '.pem')), str(output / (('other' if selected_client == 'mismatch' else source) + '.key')))
             if selected_client == 'missing-intermediate':
                 config.certificate_chain = []
@@ -125,12 +127,28 @@ async def case(args, mode, client, allowed):
                     def public_bytes(self, encoding):
                         return b'\x30\x03\x01\x01\xff'
                 config.certificate = MalformedCertificate()
+            if selected_client == 'unsupported-key':
+                original = config.certificate.public_bytes(serialization.Encoding.DER)
+                curve = bytes.fromhex('06082a8648ce3d030107')
+                assert original.count(curve) == 1
+                unsupported = original.replace(curve, bytes.fromhex('06082a8648ce3c030107'))
+                decoded = x509.load_der_x509_certificate(unsupported)
+                try:
+                    decoded.public_key()
+                except UnsupportedAlgorithm:
+                    pass
+                else:
+                    raise AssertionError('Fixture must contain an unsupported public key')
+                class UnsupportedKeyCertificate:
+                    def public_bytes(self, encoding):
+                        return unsupported
+                config.certificate = UnsupportedKeyCertificate()
         def create(*values, **kwargs):
             peer = CertificatePeer(*values, **kwargs)
             peers.append(peer)
             return peer
         return connect('127.0.0.1', ready['port'], configuration=config, create_protocol=create)
-    sibling = not allowed and mode == 'require-pin' and client in ('missing', 'other', 'mismatch', 'malformed')
+    sibling = not allowed and mode == 'require-pin' and client in ('missing', 'other', 'mismatch', 'malformed', 'unsupported-key')
     async with contextlib.AsyncExitStack() as connections:
         try:
             async with asyncio.timeout(8):
@@ -165,6 +183,8 @@ async def case(args, mode, client, allowed):
                     expected = 0x174 if client == 'missing' else 0x12a
                     if client == 'mismatch':
                         expected = 0x133
+                    if client == 'malformed' and os.name != 'nt':
+                        expected = 0x132
                     assert rejection == expected, (label, rejection, expected)
                     if healthy is not None:
                         await request(healthy, '/health', 200, b'controller HTTP/3')
@@ -195,7 +215,7 @@ async def case(args, mode, client, allowed):
     reports = [json.loads(line) for line in stdout.splitlines() if line.startswith(b'{')]
     report = reports[-1] if reports else {}
     validations = [json.loads(value) for value in report.get('clientCertificateValidations', [])]
-    callbacks = (0 if client in ('missing', 'mismatch', 'malformed') or mode in ('none', 'allow', 'require') else 1) + int(sibling)
+    callbacks = (0 if client in ('missing', 'mismatch', 'malformed', 'unsupported-key') or mode in ('none', 'allow', 'require') else 1) + int(sibling)
     observations_ok = len(validations) == callbacks and all(value['chain'] is True
         and value['errors'] == 'RemoteCertificateChainErrors'
         and value['revocation'] == ('Online' if mode in ('require-online', 'require-custom-online') else 'NoCheck')
@@ -236,6 +256,8 @@ async def main(args):
         ('require-pin', 'mismatch', False), ('require-pin', 'malformed', False),
         ('require-online', 'client', True), ('require-custom-online', 'client', True),
         ('require-custom-online', 'revoked', False), ('require-custom-root', 'revoked', True)]
+    if os.name != 'nt':
+        cases.append(('require-pin', 'unsupported-key', False))
     if args.profile == 'ci':
         cases = [('allow-pin', 'missing', True), ('require-pin', 'client', True),
                  ('require-pin', 'missing', False), ('require-custom-root', 'expired', False),
@@ -246,7 +268,7 @@ async def main(args):
         if not results[-1]['passed']:
             break
     receipt = {**provenance(args), 'passed': len(results) == len(cases) and all(result['passed'] for result in results),
-               'cases': results, 'scope': 'Windows library TLS client-certificate policy through actual WebServer/controller/auth/drain path.'}
+               'cases': results, 'scope': 'Library TLS client-certificate policy through actual WebServer/controller/auth/drain path; platform and native-library hashes are recorded above.'}
     (args.output / 'receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
     return 0 if receipt['passed'] else 1
 
@@ -258,5 +280,5 @@ if __name__ == '__main__':
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--profile', choices=('full', 'ci'), default='full')
     args = parser.parse_args()
-    args.openssl = 'schannel-rsa'
+    args.openssl = 'schannel-rsa' if os.name == 'nt' else 'portable-rsa'
     raise SystemExit(asyncio.run(main(args)))

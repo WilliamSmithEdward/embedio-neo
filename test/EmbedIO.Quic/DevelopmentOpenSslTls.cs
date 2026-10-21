@@ -7,7 +7,7 @@ namespace EmbedIO.Quic
 {
     // Only OpenSSL's published third-party QUIC TLS API is used. This class owns
     // native handles and callback buffers; it contains no QUIC transport implementation.
-    internal sealed class OpenSslTls : TlsSession
+    internal sealed class DevelopmentOpenSslTls : TlsSession
     {
         internal const string ApplicationProtocol = "embedio-quic-probe";
         private readonly NativeApi _api;
@@ -30,7 +30,7 @@ namespace EmbedIO.Quic
         ];
         private bool _disposed;
 
-        internal OpenSslTls(
+        internal DevelopmentOpenSslTls(
             string directory,
             string certificate,
             string privateKey,

@@ -1194,3 +1194,49 @@ relevant validation, close resolved issues, and record concrete remaining work o
 specific validation gaps on issues kept open. Keep existing outcome replies
 current and avoid duplicate notifications. No issue is closed by this document
 or by the development host alone.
+
+## Portable TLS policy boundary
+
+The internal portable adapter uses OpenSSL 3.5.9 only for TLS through a small
+original polling ABI. Owned native queues carry CRYPTO output, packet-key secrets
+and peer parameters; managed code owns SafeHandle lifetime, bounded reassembly,
+packet keys and application certificate policy. Key material and exported server
+credentials are cleared after transfer. Borrowed native peer certificates become
+independent DER copies before managed validation. The common factory captures
+fallback certificates per handshake and preserves existing SNI, certificate
+publication, trust, revocation and callback behavior. Windows still uses Schannel.
+
+Initial Linux x64 / glibc 2.39 validation of the development build passed 24 wire
+cases, six SNI cases, live certificate publication, 24 mutual-TLS policy cases,
+96 cipher vectors and all three forced-cipher WebServer profiles. A deterministic
+5,000-input encrypted certificate/key campaign passed with 715 accepted pinned
+identities, 4,285 rejections and 1,227 healthy concurrent requests; drain and rebind
+also passed. A retained input replay passed. A minimal consumer referencing the
+actual EmbedIO assembly and common TLS factory passed 128 KiB echo/ping with each
+of the three cipher suites under both JIT and NativeAOT, with zero retained native
+contexts or queued blocks. Wrapper-instrumented ASan/UBSan/LeakSanitizer checked
+3,072 ownership lifecycles, including bounded queues and premature certificate
+queries. The initial vendor archives were not compiler-instrumented; this is not
+whole-vendor sanitizer coverage or an endurance/performance acceptance.
+
+The reproducible native build and license/receipt output are documented in
+[`native/EmbedIO.Quic.Tls`](../../native/EmbedIO.Quic.Tls/README.md). The new build
+configuration additionally disables automatic system configuration and dynamic
+module loading; its exact binaries require separate repeat validation. Portable
+CI is configured on Linux and macOS with independent peers, SNI/publication,
+mutual TLS and bounded authentication mutations. This paragraph records configured
+scope, not a completed hosted run. Native RID packaging, older libc/musl, other
+architectures, remaining TLS/transport behavior and full memory/endurance/latency
+acceptance remain open. Public provider selection and dependencies are unchanged;
+production MsQuic removal and the subsequent issue audit are still pending.
+
+The restricted Linux build repeat passed the same 24 wire cases, six SNI cases,
+live publication, 24 client-certificate cases, 96 vectors and three forced-cipher
+WebServer profiles. Its 5,000-input authentication campaign passed with 715
+accepted pinned identities, 4,285 rejections and 1,223 healthy concurrent requests,
+plus drain/rebind and the retained input replay. Six fresh common-factory JIT and
+NativeAOT wire cases also passed with zero retained native contexts/buffers. The
+Windows Schannel CI script passed after the test-loader rename. Build-tool archive
+regressions cover ordinary file contents/permissions and refusal of traversal,
+foreign roots, links and special files. These are Linux x64/glibc 2.39 and Windows
+local results; hosted macOS validation and distributable native assets are pending.
