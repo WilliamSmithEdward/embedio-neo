@@ -1505,9 +1505,82 @@ Only that exact leading identity row is removed. Actual external, repeated,
 malformed, path-traversing and dynamic OpenSSL loads still fail. Regression tests
 cover these distinctions and preservation of failed-audit evidence. The expanded
 native build/audit/package/wheel suite passed all 26 methods locally on Windows
-with its existing symlink-only skip. The next actual Intel run must confirm the
-dependency inventory and complete consumer suites; no platform acceptance is
-inferred from source compilation alone.
+with its existing symlink-only skip. The subsequent hosted run and retained dependency inventory are recorded below;
+source compilation alone does not establish platform acceptance.
+
+
+## Server-issued IDs and emitted resets
+
+The next engine increment supplies two active 16-byte server connection IDs.
+The initial token is an authenticated server transport parameter; a spare and
+replacement IDs travel in NEW_CONNECTION_ID frames through existing recovery.
+Each ID has a monotonically increasing sequence. Retirement checks the highest
+sequence actually sent and rejects retirement of the packet's own destination.
+Duplicate retired sequences do not grow retained history. Retired announcement
+deliveries stop retransmitting, while lost active announcements retain the same
+ID/token. Active state and immutable published alias lists remain bounded at two.
+
+The socket owner installs all active aliases from immutable worker snapshots,
+removes retired aliases, and updates routing before sending related datagrams.
+The original handshake ID remains stable metadata for admission accounting. It
+does not remain an active routing alias after retirement. The fixed ID width is
+16 bytes in this unreleased engine profile; peer-issued destination IDs still
+support their independently negotiated lengths. IDs are random 128-bit values;
+a listener-owned HMAC secret derives their 16-byte reset tokens. Connection
+cleanup borrows this capability and listener disposal clears the secret after
+all workers stop. Listener-secret persistence across restarts is not implemented.
+
+For unknown eligible short headers, reset output is shorter than its trigger,
+uses an unpredictable prefix and the derived token, and never exceeds 43 bytes.
+Triggers of at most 43 bytes receive one byte less; packets too small for the
+fixed ID and protected sample suffix are discarded. Known IDs and mismatched
+endpoint associations do not cause stateless responses. A global 64-attempt
+allowance per 1,000 milliseconds and a bounded control share of the existing
+output queue limit this work. Copied destination endpoints and normal queue
+accounting preserve output ownership and teardown.
+
+The preserved previous host passed health requests but failed the new initial
+ID/token assertion. The Windows candidate then passed both AES profiles, each
+with 32 server-ID rotations, two independently verified retired-ID reset outputs,
+71 healthy controller requests, drain and rebind. Active-ID invalid ciphertext
+did not produce stateless output. Sibling requests continued through rotation
+and retired-token responses. The model suite passed 10,000 retirements, immutable
+snapshot/token ownership, sent-sequence bounds, destination prohibition, lost
+announcement retransmission and duplicate retirement. Dispatcher controls passed
+rate/output limits, endpoint copying, ordinary handshake progress behind a reset
+burst and complete alias/output cleanup. A truncated RETIRE_CONNECTION_ID sequence produces FRAME_ENCODING_ERROR (7),
+while an unissued sequence or the carrying destination produces
+PROTOCOL_VIOLATION (10). The malformed-sequence regression failed with the previous
+error code before the parser correction.
+
+Windows also passed all 24 existing wire cases, eight peer-ID cases, ten received
+reset cases and 24 certificate-policy cases. Linux passed the new rotation/reset
+suite on all three cipher profiles, plus 15 received-reset, ten peer-ID, 24 wire
+and 24 certificate-policy cases. All 26 native tooling test methods passed on
+Linux without skips. Model/dispatcher checks also passed after the malformed-frame
+correction. These are local development results; final exact-source and hosted
+acceptance remain separate.
+
+With seed 1729, the increment passed 100,000 managed mutations, 10,000 FsCheck
+cases per property and 1,000 traces each for recovery and lifecycle. Two-minute
+instrumented runs completed 82,504 libFuzzer executions and 51,866 AFL++ executions
+with no saved crashes or hangs. AFL++ reported only 2.21% coverage stability;
+its execution count does not establish stable feedback or exhaustive coverage.
+The old short-header mutation fixture was updated to construct the engine's
+16-byte ID width after a retained seed exposed its obsolete eight-byte assumption.
+No production parser check or mutation invariant was removed.
+
+For the earlier pushed source `61fcc167`, run 39671061660 passed all six native
+builds and the Intel macOS peer wheel's metadata audit. Its retained inventory
+identifies `@rpath/cryptography.hazmat.bindings._rust.abi3.so` as the module's own
+install name; actual imports are `/usr/lib/libiconv.2.dylib` and
+`/usr/lib/libSystem.B.dylib`. The combined six-RID package and all six complete package-consumer suites then
+passed, including Intel macOS and both musl architectures. These hosted results
+apply to `61fcc167`, before the server-issued-ID increment. The ordinary Android
+MAUI job failed while preparing an emulator ZIP, before starting the application;
+the unchanged failed-job retry passed on attempt two. The first failure and
+retry provenance are retained.
+
 
 ## Standards capture controls
 

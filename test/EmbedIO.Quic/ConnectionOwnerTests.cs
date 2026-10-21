@@ -57,7 +57,10 @@ namespace EmbedIO.Quic
                     if (Interlocked.Increment(ref processed) == 2) completed.TrySetResult();
                 }),
                 static () => 0,
-                static output => QuicFuzzChecks.Require(output.ConnectionId.Length == 8, "execution-packet-identity"),
+                static output => QuicFuzzChecks.Require(
+                    output.ConnectionId.Length == QuicConnectionIdIssuer.Length,
+                    "execution-packet-identity"
+                ),
                 packetCapacity: 2,
                 byteCapacity: first.Length + second.Length
             );
@@ -213,7 +216,7 @@ namespace EmbedIO.Quic
                 output =>
                 {
                     Check(
-                        output.ConnectionId.Length == 8 && output.Datagrams.Count != 0,
+                        output.ConnectionId.Length == QuicConnectionIdIssuer.Length && output.Datagrams.Count != 0,
                         "output belongs to connection"
                     );
 

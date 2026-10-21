@@ -181,6 +181,8 @@ namespace EmbedIO.Quic
                 ConnectionCoreTests.ApplicationPacket(connection.ServerId, frame.ToArray()),
                 101
             );
+            // The spare local ID shares the existing paced control queue.
+            output.AddRange(connection.Tick(110));
             Check(
                 output.Count != 0
                     && output.All(

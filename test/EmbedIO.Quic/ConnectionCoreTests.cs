@@ -12,6 +12,7 @@ namespace EmbedIO.Quic
         internal static void Run()
         {
             PeerConnectionIdTests.Run();
+            LocalConnectionIdTests.Run();
             StatelessResetTests.Run();
             AuthenticationPrecedesTls();
             InvalidLimitsPrecedeTls();
@@ -35,6 +36,7 @@ namespace EmbedIO.Quic
         {
             data = data[..Math.Min(data.Length, 4096)];
             PeerConnectionIdTests.Mutate(data);
+            LocalConnectionIdTests.Mutate(data);
             StatelessResetTests.Mutate(data);
             using var keys = PacketKeys.Initial(Original, false);
             var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);

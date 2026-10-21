@@ -106,9 +106,10 @@ def main():
     if args.schannel:
         run("peer-connection-ids", [sys.executable, "test/EmbedIO.Quic/verify_peer_connection_ids.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "peer-connection-ids")])
-    if args.schannel:
         run("stateless-reset", [sys.executable, "test/EmbedIO.Quic/verify_stateless_reset.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "stateless-reset")])
+        run("local-connection-ids", [sys.executable, "test/EmbedIO.Quic/verify_local_connection_ids.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "local-connection-ids")])
     if args.openssl or args.schannel:
         cipher_command = [sys.executable, "test/EmbedIO.Quic/verify_cipher_suites.py", "--dotnet", args.dotnet,
                           "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "cipher-suites")]

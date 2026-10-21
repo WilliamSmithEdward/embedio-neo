@@ -9,7 +9,8 @@ namespace EmbedIO.Quic
         IReadOnlyList<byte[]> Datagrams,
         bool Established,
         bool Closed,
-        ReadOnlyMemory<byte> ResetToken = default
+        ReadOnlyMemory<byte> ResetToken = default,
+        IReadOnlyList<ReadOnlyMemory<byte>>? IssuedConnectionIds = null
     );
 
     // The mailbox owns copied input until its turn completes. Factory, packet,
@@ -27,6 +28,7 @@ namespace EmbedIO.Quic
         private QuicConnection? _connection;
         private byte[] _id = [];
         private ReadOnlyMemory<byte> _resetToken;
+        private IReadOnlyList<ReadOnlyMemory<byte>>? _issuedIds;
         private bool _established;
         private bool _reported;
         private bool _closing;
@@ -41,7 +43,8 @@ namespace EmbedIO.Quic
             Func<double> clock,
             Action<QuicConnectionOutput> publish,
             int packetCapacity = 64,
-            int byteCapacity = 262144
+            int byteCapacity = 262144,
+            IQuicConnectionIdSource? connectionIds = null
         )
         {
             ArgumentNullException.ThrowIfNull(pool);
@@ -52,6 +55,7 @@ namespace EmbedIO.Quic
             ArgumentOutOfRangeException.ThrowIfGreaterThan(packetCapacity, 4096);
             ArgumentOutOfRangeException.ThrowIfLessThan(byteCapacity, 1);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(byteCapacity, 16777216);
+            ConnectionIds = connectionIds;
             _create = create;
             _clock = clock;
             _publish = publish;
@@ -60,6 +64,7 @@ namespace EmbedIO.Quic
             _execution = pool.Register(Execute, Cleanup);
         }
 
+        internal IQuicConnectionIdSource? ConnectionIds { get; }
         internal Task Completion => _execution.Completion;
         internal Exception? CleanupFailure { get; private set; }
 
@@ -178,6 +183,7 @@ namespace EmbedIO.Quic
                 if (packet != null && tick && !connection.Closed) output.AddRange(connection.Tick(ReadClock()));
 
                 var resetToken = connection.ResetToken;
+                var issuedIds = connection.IssuedConnectionIds;
 
                 if (
                     !_execution.Closing
@@ -185,13 +191,17 @@ namespace EmbedIO.Quic
                         || output.Count != 0
                         || connection.Established != _established
                         || connection.Closed
-                        || !resetToken.Equals(_resetToken))
+                        || !resetToken.Equals(_resetToken)
+                        || !ReferenceEquals(issuedIds, _issuedIds))
                 )
                 {
                     _reported = true;
                     _established = connection.Established;
                     _resetToken = resetToken;
-                    _publish(new QuicConnectionOutput(_id, output, _established, connection.Closed, _resetToken));
+                    _issuedIds = issuedIds;
+                    _publish(
+                        new QuicConnectionOutput(_id, output, _established, connection.Closed, _resetToken, _issuedIds)
+                    );
                 }
 
                 if (connection.Closed) RequestClose();

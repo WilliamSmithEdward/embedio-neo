@@ -47,7 +47,9 @@ namespace EmbedIO.Quic
         private readonly byte[] _clientId;
         private byte[] _destinationId;
         private PeerConnectionIds? _peerIds;
-        private readonly byte[] _serverId = RandomNumberGenerator.GetBytes(8);
+        private readonly byte[] _serverId;
+        private readonly LocalConnectionIds _localIds;
+        private readonly QuicConnectionIdIssuer? _ownedIdIssuer;
         private readonly PacketKeys _initialRead;
         private readonly PacketKeys _initialWrite;
         private readonly TlsSession _tls;
@@ -90,6 +92,7 @@ namespace EmbedIO.Quic
         private ulong _peerStreamData;
 
         internal ReadOnlySpan<byte> ServerId => _serverId;
+        internal IReadOnlyList<ReadOnlyMemory<byte>> IssuedConnectionIds => _localIds.Snapshot;
         internal ReadOnlyMemory<byte> ResetToken => _peerIds?.ResetToken ?? default;
         internal bool StatelessResetReceived { get; private set; }
         internal bool DatagramAuthenticated { get; private set; }
@@ -111,7 +114,8 @@ namespace EmbedIO.Quic
             int keyUpdateInterval = KeyUpdateState.DefaultInterval,
             int encryptionLimit = PacketKeys.MaximumEncryptions,
             ulong authenticationLimit = 1UL << 52,
-            QuicConnectionLimits? limits = null
+            QuicConnectionLimits? limits = null,
+            IQuicConnectionIdSource? connectionIds = null
         )
         {
             ArgumentNullException.ThrowIfNull(tlsFactory);
@@ -166,6 +170,12 @@ namespace EmbedIO.Quic
             {
                 _initialRead.Unprotect(firstPacket[..(numberOffset + payloadLength)], numberOffset, 0, out _);
                 _initialWrite = PacketKeys.Initial(_originalId, true);
+                _ownedIdIssuer = connectionIds == null ? new QuicConnectionIdIssuer() : null;
+                var issuer = connectionIds
+                    ?? _ownedIdIssuer
+                    ?? throw new InvalidOperationException("Missing connection-ID issuer.");
+                _serverId = issuer.Create();
+                _localIds = new LocalConnectionIds(issuer, _serverId, delivery => QueueRepeat(delivery, false));
                 _tls = tlsFactory(LocalParameters());
             }
 
@@ -173,6 +183,8 @@ namespace EmbedIO.Quic
             {
                 _initialRead.Dispose();
                 _initialWrite?.Dispose();
+                _localIds?.Dispose();
+                _ownedIdIssuer?.Dispose();
                 throw;
             }
         }
@@ -223,7 +235,7 @@ namespace EmbedIO.Quic
             {
                 var remaining = datagram[position..];
 
-                if (!TryHeader(remaining, out var level, out var length, out var numberOffset))
+                if (!TryHeader(remaining, out var level, out var length, out var numberOffset, out var destination))
                 {
                     if (position == 0 && DetectReset(datagram)) break;
 
@@ -321,7 +333,7 @@ namespace EmbedIO.Quic
 
                 if (fresh)
                 {
-                    var acknowledge = Frames(level, plaintext, number >= _keyUpdates.ReadMinimum);
+                    var acknowledge = Frames(level, plaintext, number >= _keyUpdates.ReadMinimum, destination);
 
                     if (acknowledge && Phase == ConnectionPhase.Active) AcknowledgeReceived(level);
 
@@ -353,6 +365,7 @@ namespace EmbedIO.Quic
                         _recovery.HandshakeConfirmed = true;
                         _recovery.Discard(1);
                         Send(2, Wire.Frame(0x1e));
+                        _localIds.Activate();
 
                         _streams = new ConnectionStreams(
                             (bytes, reliable) =>
@@ -686,10 +699,38 @@ namespace EmbedIO.Quic
             return output;
         }
 
-        private bool TryHeader(ReadOnlySpan<byte> packet, out int level, out int length, out int numberOffset) =>
-            PacketHeader.TryRead(packet, _originalId, _serverId, _clientId, out level, out length, out numberOffset);
+        private bool TryHeader(
+            ReadOnlySpan<byte> packet,
+            out int level,
+            out int length,
+            out int numberOffset,
+            out ReadOnlySpan<byte> destination
+        )
+        {
+            level = length = numberOffset = 0;
 
-        private bool Frames(int level, ReadOnlySpan<byte> plaintext, bool currentReadKeys)
+            if (!PacketHeader.TryDestination(packet, out destination, out _)) return false;
+
+            if (!_localIds.Contains(destination) && ((packet[0] & 128) == 0 || !destination.SequenceEqual(_originalId)))
+                return false;
+
+            return PacketHeader.TryRead(
+                packet,
+                _originalId,
+                destination,
+                _clientId,
+                out level,
+                out length,
+                out numberOffset
+            );
+        }
+
+        private bool Frames(
+            int level,
+            ReadOnlySpan<byte> plaintext,
+            bool currentReadKeys,
+            ReadOnlySpan<byte> destination
+        )
         {
             var reader = new WireReader(plaintext);
             var acknowledge = false;
@@ -827,6 +868,8 @@ namespace EmbedIO.Quic
                     ReadPeerConnectionId(ref reader);
                 }
 
+                else if (type == 0x19) RetireLocalConnectionId(ref reader, destination);
+
                 else if (type == 0x1a)
                 {
                     using var response = new MemoryStream();
@@ -842,6 +885,23 @@ namespace EmbedIO.Quic
             }
 
             return acknowledge;
+        }
+
+        private void RetireLocalConnectionId(ref WireReader reader, ReadOnlySpan<byte> destination)
+        {
+            ulong sequence;
+
+            try
+            {
+                sequence = reader.Integer();
+            }
+
+            catch (InvalidDataException error)
+            {
+                throw new TransportException(7, error.Message);
+            }
+
+            _localIds.Retire(sequence, destination);
         }
 
         private void ReadPeerConnectionId(ref WireReader reader)
@@ -889,6 +949,7 @@ namespace EmbedIO.Quic
             using var output = new MemoryStream();
             Wire.Parameter(output, 0, _originalId);
             Wire.Parameter(output, 1, (ulong)_limits.IdleTimeoutMilliseconds);
+            Wire.Parameter(output, 2, _localIds.InitialToken);
             Wire.Parameter(output, 3, 1472);
             Wire.Parameter(output, 4, 262144);
             Wire.Parameter(output, 5, 65536);
@@ -1077,8 +1138,8 @@ namespace EmbedIO.Quic
                 header.Write([0, 0, 0, 1]);
                 header.WriteByte((byte)_destinationId.Length);
                 header.Write(_destinationId);
-                header.WriteByte((byte)_serverId.Length);
-                header.Write(_serverId);
+                header.WriteByte((byte)_localIds.Current.Length);
+                header.Write(_localIds.Current);
 
                 if (level == 0)
                 {
@@ -1114,6 +1175,8 @@ namespace EmbedIO.Quic
             _urgent.Clear();
             _recovery.Abandon();
             _peerIds?.Dispose();
+            _localIds.Dispose();
+            _ownedIdIssuer?.Dispose();
 
             try
             {

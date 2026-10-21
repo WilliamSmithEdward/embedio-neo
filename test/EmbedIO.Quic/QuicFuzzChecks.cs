@@ -74,6 +74,8 @@ namespace EmbedIO.Quic
             steps = steps[..Math.Min(steps.Length, MaximumInput)];
             RecoveryRetentionTests.Mutate(steps);
             PeerConnectionIdTests.Mutate(steps);
+            LocalConnectionIdTests.Mutate(steps);
+            cover?.Invoke("connection.local-id-bounds");
             StatelessResetTests.Mutate(steps);
             cover?.Invoke("connection.stateless-reset");
             cover?.Invoke("connection.peer-id-bounds");
@@ -95,6 +97,8 @@ namespace EmbedIO.Quic
             steps = steps[..Math.Min(steps.Length, MaximumInput)];
             QuicFuzzState.Run(steps, true, cover);
             PeerConnectionIdTests.Mutate(steps);
+            LocalConnectionIdTests.Mutate(steps);
+            cover?.Invoke("connection.local-id-bounds");
             StatelessResetTests.Mutate(steps);
             cover?.Invoke("connection.stateless-reset");
             cover?.Invoke("connection.peer-id-bounds");
@@ -287,7 +291,11 @@ namespace EmbedIO.Quic
                     && destination.SequenceEqual(original),
                 "initial-destination"
             );
-            byte[] shortPacket = [0x40, 1, 2, 3, 4, 5, 6, 7, 8];
+            var shortPacket = new byte[1 + QuicConnectionIdIssuer.Length];
+            shortPacket[0] = 0x40;
+
+            for (var index = 1; index < shortPacket.Length; index++) shortPacket[index] = (byte)index;
+
             Require(
                 PacketHeader.TryDestination(shortPacket, out destination, out initial)
                     && !initial

@@ -16,11 +16,13 @@ namespace EmbedIO.Quic
             destination = default;
             initial = false;
 
-            if (packet.Length < 9 || (packet[0] & 64) == 0) return false;
+            if (packet.Length < 6 || (packet[0] & 64) == 0) return false;
 
             if ((packet[0] & 128) == 0)
             {
-                destination = packet.Slice(1, 8);
+                if (packet.Length < 1 + QuicConnectionIdIssuer.Length) return false;
+
+                destination = packet.Slice(1, QuicConnectionIdIssuer.Length);
                 return true;
             }
 

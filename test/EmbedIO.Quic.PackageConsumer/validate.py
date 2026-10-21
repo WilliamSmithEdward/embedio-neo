@@ -146,6 +146,7 @@ def validate(args):
                  ("verify_cipher_suites.py", "ciphers", ["--openssl", "portable-rsa", "--vectors", "32"]),
                  ("verify_peer_connection_ids.py", "peer-connection-ids", []),
                  ("verify_stateless_reset.py", "stateless-reset", []),
+                 ("verify_local_connection_ids.py", "local-connection-ids", []),
                  ("verify_sni.py", "sni", []), ("verify_tls_listener.py", "publication", []),
                  ("verify_client_certificate.py", "certificate-policies", ["--profile", "full"]),
                  ("fuzz_client_certificate.py", "auth-fuzz", ["--cases", "256", "--seed", "1729"]))

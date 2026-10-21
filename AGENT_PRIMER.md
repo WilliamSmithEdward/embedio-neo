@@ -1165,8 +1165,8 @@ retirement watermarks and retransmits `RETIRE_CONNECTION_ID` through the shared
 recovery owner. It retains at most two active peer IDs and four unacknowledged
 retirements, releases acknowledged records and uses the replacement ID before
 sending a close. These bounds remain constant over long-lived rotation. This
-handles peer destination IDs; local-issued ID rotation, migration, Retry and
-server reset emission remain separate acceptance work.
+handles peer destination IDs. Server-issued IDs and reset emission are described
+below; migration and Retry remain separate acceptance work.
 
 CI run 39653100127 built all six native assets and assembled the combined package.
 Its complete package-consumer suites passed on Linux x64, Linux ARM64 and macOS
@@ -1177,10 +1177,13 @@ because the pinned cryptography 50.0.2 peer dependency has no published x64 whee
 The workflow now prepares a separate, unpublished source-built test wheel of
 that same version against the reviewed static OpenSSL SDK, with pinned build
 tools, Cargo lock, wheel/source/native-receipt checks and retained licenses.
-Its actual Intel macOS run and both changed-source musl runs remain required.
-This wheel is test infrastructure, not a production dependency or an assertion of
-upstream Intel macOS support. See the development record for evidence and the
-remaining production, browser, endurance and latency work.
+Subsequent run 39671061660 at `61fcc167` passed all six native builds, the
+combined package and all six complete consumers, including Intel macOS and both
+musl architectures. Its Android emulator download failed before app startup;
+the unchanged failed-job retry passed on attempt two. This wheel remains test
+infrastructure, not a production dependency or an assertion of upstream Intel
+macOS support. See the development record for evidence and the remaining
+production, browser, endurance and latency work.
 
 
 The unmerged engine now recognizes received stateless resets using tokens for
@@ -1191,10 +1194,32 @@ uses endpoint-bound keyed token identities when a randomized header does not
 identify its connection. Shared-endpoint candidates first preserve authentication
 by the issued-ID owner; only failure permits forwarding to the token owner. This
 adds no token hash to the usual single-connection packet path. Reset routes and endpoint
-groups retire with connection ownership. This does not supply server-issued ID
-rotation, server reset emission or path migration; those remain development work.
+groups retire with connection ownership. Server-issued IDs and reset emission
+are described below; path migration remains development work.
 The new model, dispatcher, independent-peer and fuzz checks are recorded in the
 development/testing guide. Public provider selection remains unchanged.
+
+
+The unmerged engine issues fixed 16-byte random server IDs and maintains two
+active IDs per connection. The initial reset token travels in authenticated
+server transport parameters; a spare ID and replacements use reliable
+NEW_CONNECTION_ID deliveries. RETIRE_CONNECTION_ID rejects unissued sequences
+and retirement of the carrying packet's destination. Immutable routing metadata
+adds and removes every active alias before related output is sent. A private
+listener secret derives reset tokens; connection cleanup does not discard that
+secret, and listener disposal clears it after workers stop. Secrets are not
+persisted across listener restarts.
+
+Unknown valid short-header packets can receive a smaller stateless reset. These
+responses have a global 64-attempt-per-second allowance and a small bounded
+share of the output queue. Active IDs use ordinary connection processing.
+Model tests cover 10,000 retirements, loss, bounds, malformed frames and cleanup;
+Windows reference peers passed 32 rotations and two retired-ID reset emissions
+on each AES profile, and Linux passed the same checks on all three cipher profiles.
+This remains unmerged development: public provider selection, runtime dependency
+groups, and supported application configuration are unchanged. Local regression/fuzz results, the low AFL++ feedback-stability limitation and
+final changed-source acceptance for this increment are recorded in the testing guide.
+
 
 The development-only standards capture tool uses the hash-locked
 `.github/requirements/standards-capture.txt` parser dependency. It permits only
