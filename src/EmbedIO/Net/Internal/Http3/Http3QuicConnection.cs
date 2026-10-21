@@ -98,6 +98,31 @@ namespace EmbedIO.Net.Internal.Http3
             );
         }
 
+        internal static async Task RunTransportForListenerAsync(
+            Http3TransportConnection connection,
+            Func<Http3QuicExchange, Task> dispatch,
+            CancellationToken abortToken,
+            CancellationToken drainToken,
+            TimeSpan drainTimeout
+        )
+        {
+            ArgumentNullException.ThrowIfNull(connection);
+            ArgumentNullException.ThrowIfNull(dispatch);
+
+            if (drainTimeout <= TimeSpan.Zero || drainTimeout.TotalMilliseconds > uint.MaxValue - 1)
+                throw new ArgumentOutOfRangeException(nameof(drainTimeout));
+
+            await using (connection.ConfigureAwait(false))
+            using (var session = new Http3QuicConnection(connection, dispatch, abortToken, true))
+            {
+                session._drainToken = drainToken;
+                session._drainTimeout = drainTimeout;
+                await session
+                    .RunCoreAsync()
+                    .ConfigureAwait(false);
+            }
+        }
+
         internal static async Task RunNativeAsync(
             MsQuicNativeConnection connection,
             Func<Http3QuicExchange, Task> dispatch,
@@ -324,7 +349,7 @@ namespace EmbedIO.Net.Internal.Http3
                 );
             }
 
-            catch (QuicException)
+            catch (Exception error) when (Http3TransportFailure.IsTransport(error))
             {
                 CancelRequests(_stop);
             }
@@ -360,7 +385,10 @@ namespace EmbedIO.Net.Internal.Http3
                             .ConfigureAwait(false);
                     }
 
-                    catch (Exception error) when (error is QuicException or OperationCanceledException) { }
+                    catch (Exception error) when (
+                        Http3TransportFailure.IsTransport(error) || error is OperationCanceledException
+                    )
+                    { }
 
                     Task[] workers;
 
@@ -493,8 +521,8 @@ namespace EmbedIO.Net.Internal.Http3
 
             catch (OperationCanceledException) when (deadline.IsCancellationRequested) { }
 
-            catch (QuicException error) when (
-                error.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted)
+            catch (Exception error) when (
+                Http3TransportFailure.IsTransport(error) && !Http3TransportFailure.IsStream(error)
             )
             {
                 CancelRequests(_stop);
@@ -570,11 +598,11 @@ namespace EmbedIO.Net.Internal.Http3
 
             catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
 
-            catch (QuicException error)
+            catch (Exception error) when (Http3TransportFailure.IsTransport(error))
             {
                 if (!_token.IsCancellationRequested)
                 {
-                    if (error.QuicError is QuicError.StreamAborted or QuicError.OperationAborted)
+                    if (Http3TransportFailure.IsStream(error))
                     {
                         if (critical) Fail(new Http3ProtocolException(0x104, "Peer aborted a critical stream."));
                     }
@@ -692,8 +720,7 @@ namespace EmbedIO.Net.Internal.Http3
                     _admitted.Add(stream.Id);
                 }
 
-                if (request.Method != "CONNECT" && stream is SystemQuicTransportStream runtimeStream)
-                    runtimeStream.EnableApplicationBodyCancellation(requestToken);
+                if (request.Method != "CONNECT") stream.EnableApplicationBodyCancellation(requestToken);
 
                 // Isolate even callbacks that block before returning their Task.
                 if (Interlocked.Increment(ref _applicationCount) > MaximumApplications)
@@ -845,8 +872,9 @@ namespace EmbedIO.Net.Internal.Http3
         private static void ObserveDirection(Task direction, CancellationTokenSource requestStop, bool reading = false)
         {
             if (
-                direction.IsFaulted && direction.Exception?.InnerException is QuicException error
-                && (!reading || error.QuicError != QuicError.OperationAborted)
+                direction.IsFaulted && direction.Exception?.InnerException is Exception error
+                && Http3TransportFailure.IsTransport(error)
+                && (!reading || !Http3TransportFailure.IsLocalReadAbort(error))
             ) CancelRequests(requestStop);
         }
 
@@ -861,7 +889,10 @@ namespace EmbedIO.Net.Internal.Http3
 
             var error = direction.Exception?.InnerException;
 
-            if (error is QuicException || (error is OperationCanceledException && requestStop.IsCancellationRequested))
+            if (
+                Http3TransportFailure.IsTransport(error)
+                || (error is OperationCanceledException && requestStop.IsCancellationRequested)
+            )
                 return null;
 
             return error;
@@ -1146,10 +1177,7 @@ namespace EmbedIO.Net.Internal.Http3
         {
             if (error is OperationCanceledException && _token.IsCancellationRequested) return;
 
-            if (
-                error is QuicException quic
-                && quic.QuicError is not (QuicError.StreamAborted or QuicError.OperationAborted)
-            )
+            if (Http3TransportFailure.IsTransport(error) && !Http3TransportFailure.IsStream(error))
                 CancelRequests(_stop);
 
             else if (!_token.IsCancellationRequested)

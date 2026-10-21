@@ -16,7 +16,6 @@ from pathlib import Path
 import socket
 import ssl
 import subprocess
-import xml.etree.ElementTree as ET
 
 from aioquic.asyncio import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
@@ -225,9 +224,12 @@ def provenance(args):
                  if path.is_file() and path.suffix in (".cs", ".csproj", ".json")
                  and not {"bin", "obj"}.intersection(path.relative_to(engine).parts))
     files = {path for path in files if path.is_file()}
-    for item in ET.parse(project / "EmbedIO.Quic.csproj").iter("Compile"):
-        included = project / item.attrib["Include"]
-        files.update(included.parent.glob(included.name))
+    # The host references the actual library. Include its source and shared
+    # inputs rather than assuming every Compile item is a linked source file.
+    for directory in (root / "src/EmbedIO", root / "src/Shared", root / "src/EmbedIO.Generators"):
+        files.update(path for path in directory.rglob("*")
+                     if path.is_file() and path.suffix in (".cs", ".csproj", ".json")
+                     and not {"bin", "obj"}.intersection(path.relative_to(directory).parts))
     for name in ("global.json", "Directory.Build.props", "Directory.Build.targets", "Directory.Packages.props",
                  ".editorconfig", "test/EmbedIO.Conformance/drivers/requirements.txt"):
         path = root / name
@@ -249,7 +251,7 @@ def provenance(args):
                                       for name in ("secur32.dll", "schannel.dll", "ncrypt.dll")}}
     return {"libraries": libraries, "tlsProvider": provider,
             "assemblySha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
-            "engineAssemblySha256": hashlib.sha256((Path(args.assembly).parent / "EmbedIO.Quic.dll").read_bytes()).hexdigest(),
+            "engineAssemblySha256": hashlib.sha256((Path(args.assembly).parent / "EmbedIO.dll").read_bytes()).hexdigest(),
             "sdk": subprocess.run([args.dotnet, "--version"], check=True, capture_output=True, text=True).stdout.strip(),
             "sourceHashes": {path.resolve().relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                              for path in sorted(files)}}

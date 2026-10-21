@@ -380,12 +380,16 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 WebTransport is not supported by the public listener. The internal session core
 and native validation hosts do not make it available to applications. The independent
 EmbedIO.Quic generic transport core is under `src/EmbedIO.Quic`. Its separate
-`EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, links the HTTP/3
-adapter and uses OpenSSL 3.5.7 or the Windows SDK recordless Schannel interface
-for TLS. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
+`EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, references the actual
+library HTTP/3 protocol and uses OpenSSL 3.5.7 or the Windows SDK recordless Schannel
+interface for TLS. In this unreleased branch, the .NET 10 library asset compiles the
+same internal engine sources; the standalone `EmbedIO.Quic` project remains an
+independent build boundary. The host no longer compiles copies of the HTTP/3 codecs. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
 credentials and AES-128-GCM/SHA-256; it does not establish production certificate,
-SNI, client-certificate, resumption or supported-platform parity. Both projects remain nonpackable; current
-shipping packages have no dependency on them. The fuzz harness uses both. It includes
+SNI, client-certificate, resumption or supported-platform parity. The standalone
+core and development host remain nonpackable. Existing package dependency groups
+and .NET Standard compilation are unchanged; the public listener still selects
+its existing providers. The fuzz harness exercises the library's engine source. It includes
 loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
 current reliable-reset framing, reusable receive windows and explicit connection
 closing/draining. Receive packet history advances with bounded ACK ranges and a
@@ -413,6 +417,13 @@ handshake deadlines include queue time, routing is established before sending,
 and output limits include queued and in-flight sends. Shutdown waits for native
 work and sends, releases sibling owners and reports cleanup failures. Production
 listener/configuration and policy integration remain pending.
+The replacement stream/datagram adapters now drive the library's HTTP/3 protocol
+from the development UDP host. Ordinary body-read cancellation preserves the
+existing distinction between local timeout (`H3_NO_ERROR`) and request cancellation;
+CONNECT streams retain their transport cancellation behavior. The new independent
+`test/EmbedIO.Quic/verify_http3.py` checks actual HTTP/3 uploads, complete timeout
+responses and healthy sibling requests. This does not enable the public listener
+or complete controller, authentication, WebTransport or credential integration.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
@@ -420,8 +431,8 @@ dispatch and full TLS/certificate parity remain pending.
 The source core owns packet processing and destination-ID routing through
 `QuicConnection` and `QuicConnectionDispatcher`, with injected TLS/application factories
 and validated internal stream-count/idle configuration. Scheduled factories receive
-a coalescing wake callback; the async stream application uses it for application
-commands, so outgoing work need not wait for a peer packet or periodic timer.
+the connection owner; the async stream application uses its coalescing wake callback
+for application commands, so outgoing work need not wait for a peer packet or periodic timer.
 The shared development host also runs owned async stream handlers on that path.
 All development protocols use the same stream owner. The synchronous registry is retained only in the
 development test host as a deterministic reference. Registry shutdown releases all sibling owners before

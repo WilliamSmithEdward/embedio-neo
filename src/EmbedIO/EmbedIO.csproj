@@ -49,6 +49,11 @@
     <PackageReference Include="System.Threading.RateLimiting" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <Compile Include="../EmbedIO.Quic/**/*.cs" Exclude="../EmbedIO.Quic/bin/**;../EmbedIO.Quic/obj/**" Link="Quic/%(RecursiveDir)%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="EmbedIO.Quic.Development" Condition="'$(SignAssembly)' != 'true'" />
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Include="../Shared/RequestAbortToken.cs" Link="Internal/RequestAbortToken.cs" />
     <Compile Include="../Shared/ResponseCookieFormatter.cs" Link="Internal/ResponseCookieFormatter.cs" />

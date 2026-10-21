@@ -1,6 +1,12 @@
-﻿using System.Net;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace EmbedIO.Quic
 {
@@ -11,7 +17,7 @@ namespace EmbedIO.Quic
     internal delegate QuicConnection ScheduledQuicConnectionFactory(
         ReadOnlySpan<byte> firstPacket,
         double now,
-        Action notify
+        QuicConnectionOwner owner
     );
 
     // Receive, Tick and SendOneAsync are driven by one socket-loop owner. Native
@@ -40,13 +46,15 @@ namespace EmbedIO.Quic
                 Deadline = deadline;
                 Owner = new QuicConnectionOwner(
                     dispatcher._pool,
-                    (packet, now) => create(packet, now, Notify),
+                    (packet, now) => create(
+                        packet,
+                        now,
+                        Owner ?? throw new InvalidOperationException("Connection owner was not initialized.")
+                    ),
                     () => dispatcher.ConnectionClock(this),
                     output => dispatcher.Publish(this, output)
                 );
             }
-
-            private void Notify() => Owner.Notify();
 
             internal string Original { get; }
             internal IPEndPoint Peer { get; }

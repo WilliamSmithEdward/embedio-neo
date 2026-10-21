@@ -482,15 +482,15 @@ namespace EmbedIO.Quic
             var tls = new ConnectionCoreTests.ModelTls(true);
             Action? lateNotify = null;
             await using var dispatcher = new QuicConnectionDispatcher(
-                (packet, now, notify) =>
+                (packet, now, owner) =>
                 {
-                    lateNotify = notify;
+                    lateNotify = owner.Notify;
                     return new QuicConnection(
                         packet,
                         _ => tls,
                         (operations, _) =>
                         {
-                            var application = new AsyncStreamApplication(operations, notify);
+                            var application = new AsyncStreamApplication(operations, owner.Notify);
                             ready.TrySetResult(application);
                             return application;
                         },

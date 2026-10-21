@@ -1,4 +1,9 @@
-﻿using System.Threading.Channels;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace EmbedIO.Quic
 {
@@ -452,6 +457,6 @@ namespace EmbedIO.Quic
             _closed.TrySetResult();
         }
 
-        public override void Dispose() => FailAll(new IOException("QUIC connection owner was disposed."));
+        public override void Dispose() => FailAll(new QuicConnectionFailure(0, false, false));
     }
 }

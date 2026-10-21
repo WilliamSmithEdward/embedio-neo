@@ -1,4 +1,7 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+using System.Collections.Generic;
+
+namespace EmbedIO.Quic
 {
     // The connection owns packet-key generations and the TLS session together.
     // Native providers publish managed state; packet processing never queries a

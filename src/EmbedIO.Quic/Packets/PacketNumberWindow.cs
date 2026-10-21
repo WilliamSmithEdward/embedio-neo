@@ -1,4 +1,8 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace EmbedIO.Quic
 {
     // RFC 9000 section 13.2.3: discarded ACK history raises a permanent acceptance floor.
     internal sealed class PacketNumberWindow

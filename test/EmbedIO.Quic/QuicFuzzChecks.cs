@@ -45,6 +45,7 @@ namespace EmbedIO.Quic
                     break;
 
                 case 5:
+                    ProductionTransportTests.Mutate(data);
                     AsyncStreamTests.ConfiguredCapacity(data);
                     AsyncStreamTests.Mutate(data);
                     StreamApplicationTests.Mutate(data);

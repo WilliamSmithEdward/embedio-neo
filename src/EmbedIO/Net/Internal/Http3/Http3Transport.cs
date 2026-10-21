@@ -37,6 +37,8 @@ namespace EmbedIO.Net.Internal.Http3
 
         internal abstract void CompleteWrites();
 
+        internal virtual void EnableApplicationBodyCancellation(CancellationToken requestCancellation) { }
+
         internal abstract ValueTask WriteAsync(
             ReadOnlyMemory<byte> buffer,
             bool completeWrites,
@@ -91,7 +93,7 @@ namespace EmbedIO.Net.Internal.Http3
 
         // Enabled only after an ordinary request has been admitted. Initial fields,
         // control streams and tunnels retain the provider's normal cancellation behavior.
-        internal void EnableApplicationBodyCancellation(CancellationToken requestCancellation)
+        internal override void EnableApplicationBodyCancellation(CancellationToken requestCancellation)
         {
             _requestCancellation = requestCancellation;
             _applicationBody = true;

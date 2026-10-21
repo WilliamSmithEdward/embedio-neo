@@ -248,7 +248,9 @@ namespace EmbedIO.Net.Internal.Http3
                 );
             }
 
-            catch (Exception error) when (error is QuicException or OperationCanceledException)
+            catch (Exception error) when (
+                Http3TransportFailure.IsTransport(error) || error is OperationCanceledException
+            )
             {
                 _outputFailed = true;
                 _owner.Failed(error);

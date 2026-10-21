@@ -1,4 +1,6 @@
-﻿namespace EmbedIO.Quic
+﻿using System.IO;
+
+namespace EmbedIO.Quic
 {
     internal sealed class TransportException(ulong errorCode, string message) : IOException(message)
     {

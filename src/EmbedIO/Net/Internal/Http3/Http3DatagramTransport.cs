@@ -20,6 +20,7 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private IDisposable? _owner;
         private ReadOnlyMemory<byte> _payload;
+        private int _disposed;
 
         internal Http3DatagramPacket(ReadOnlyMemory<byte> payload, IDisposable owner)
         {
@@ -27,30 +28,50 @@ namespace EmbedIO.Net.Internal.Http3
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));
         }
 
+        internal Http3DatagramPacket(byte[] payload)
+        {
+            ArgumentNullException.ThrowIfNull(payload);
+            _payload = payload;
+        }
+
         internal ReadOnlyMemory<byte> Payload =>
-            Volatile.Read(ref _owner) != null
+            Volatile.Read(ref _disposed) == 0
                 ? _payload
                 : throw new ObjectDisposedException(nameof(Http3DatagramPacket));
 
         internal void StripHeader(int length) => _payload = Payload.Slice(length);
 
-        public void Dispose() =>
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+
+            _payload = default;
             Interlocked
                 .Exchange(ref _owner, null)
                 ?.Dispose();
+        }
+    }
+
+    internal abstract class Http3DatagramTransport
+    {
+        internal abstract int MaximumSendLength { get; }
+
+        internal abstract Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload);
+
+        internal abstract ValueTask<Http3DatagramPacket?> ReceiveAsync(CancellationToken token);
     }
 
     // HTTP/3 application datagrams over the native MsQuic connection: native send
     // states map to HTTP/3 ones and received packets keep their native storage.
-    internal sealed class Http3DatagramTransport
+    internal sealed class MsQuicHttp3DatagramTransport : Http3DatagramTransport
     {
         private readonly MsQuicNativeDatagrams _datagrams;
 
-        internal Http3DatagramTransport(MsQuicNativeDatagrams datagrams) => _datagrams = datagrams;
+        internal MsQuicHttp3DatagramTransport(MsQuicNativeDatagrams datagrams) => _datagrams = datagrams;
 
-        internal int MaximumSendLength => _datagrams.MaxSendLength;
+        internal override int MaximumSendLength => _datagrams.MaxSendLength;
 
-        internal Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload) => _datagrams.TrySend(
+        internal override Http3DatagramSendStatus TrySend(ReadOnlyMemory<byte> payload) => _datagrams.TrySend(
             payload,
             out _
         ) switch
@@ -62,7 +83,7 @@ namespace EmbedIO.Net.Internal.Http3
             _ => Http3DatagramSendStatus.Closed
         };
 
-        internal async ValueTask<Http3DatagramPacket?> ReceiveAsync(CancellationToken token)
+        internal override async ValueTask<Http3DatagramPacket?> ReceiveAsync(CancellationToken token)
         {
             var packet = await _datagrams
                 .ReceiveAsync(token)

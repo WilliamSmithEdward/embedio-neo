@@ -48,9 +48,14 @@ linked sources, console commands, native TLS bindings or test helpers.
 
 Tests, peers, native TLS/console socket ownership and HTTP application adapters remain under
 `test/EmbedIO.Quic`, whose executable assembly is `EmbedIO.Quic.Development`.
-A project reference and one explicit friend assembly connect the host to the core;
-both projects remain nonpackable and production packages do not yet reference
-them. The table names implementation files in those source groups and their
+The standalone core build and host remain nonpackable. For the current production
+protocol integration, the .NET 10 `EmbedIO` asset compiles the same internal engine
+sources, and the unsigned development host references that library through an
+explicit friend assembly. It no longer compiles copies of HTTP/3/WebTransport
+codecs. This preserves existing package dependency groups and .NET Standard
+compilation while exercising the actual library protocol. Default listener
+selection remains unchanged. Native TLS and final platform packaging still require
+acceptance. The table names implementation files in those source groups and their
 corresponding host/test files.
 
 | Surface | Files | Test approach |
@@ -481,6 +486,7 @@ After the ordinary Release build, Windows development checks include:
 
 ```powershell
 $hostDll = 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll'
+python test/EmbedIO.Quic/verify_http3.py --dotnet dotnet --assembly $hostDll --openssl schannel-rsa --output TestResults/quic-production-http3
 dotnet $hostDll schannel-self-test
 python test/EmbedIO.Quic/verify.py --dotnet dotnet --assembly $hostDll --openssl schannel-rsa --output TestResults/quic-schannel-rsa
 python test/EmbedIO.Quic/verify_webtransport.py --dotnet dotnet --assembly $hostDll --openssl schannel-ecdsa --peer TestResults/quic-feasibility/webtransport-peer.exe --output TestResults/quic-schannel-ecdsa-h3
@@ -760,6 +766,50 @@ coverage limitation described above.
 
 These are development transport integrations; the production HTTP/3 listener,
 controllers and authentication path still require integration and acceptance.
+
+## Actual library HTTP/3 transport integration
+
+The scheduled owner now backs `EmbedIOQuicTransportConnection` and
+`EmbedIOQuicTransportStream`; the existing HTTP/3 protocol consumes them through
+an owned transport entry point. Closing retains the owner until closing/draining
+finishes. HTTP/3 recognizes the engine's stream and connection failures with the
+same request/critical-stream decisions used for the existing providers. The
+native datagram adapter retains its existing ownership and status behavior; the
+engine adapter returns owned payloads without an extra payload copy.
+
+The development shared UDP host can run this actual protocol with
+`serve-many-production-h3`. Its independent aioquic peer performs seven requests
+per client: a health request, a 128 KiB echo, an unfinished upload that receives a
+complete 408 response, and four concurrent subsequent requests. It checks the
+local read timeout's `STOP_SENDING` code `H3_NO_ERROR`, normal certificate
+verification, response bytes and final connection retirement. This host still
+uses development TLS/UDP configuration and a direct exchange callback; it does
+not validate production listener configuration, controllers or authentication.
+
+Deterministic and mutation tests cover local/request/raw-stream cancellation,
+borrowed-buffer release, completion detaching the caller token, failure
+classification and bounded datagram status/ownership. The ordinary self-test
+runs these regressions. FsCheck, byte mutation, libFuzzer and AFL++ use the shared
+transport oracle. Coverage scripts instrument the actual library once, including
+the engine and HTTP/3 adapters, and verify that ordinary assemblies stay intact.
+
+Final-source checks passed 90 independent-peer cases across OpenSSL and Schannel
+RSA/ECDSA, including 84 requests through the actual HTTP/3 protocol. Managed
+validation passed 100,000 mutations, 10,000 cases per property, 4,000 generated
+actor traces and six scheduled native first flights. The existing HTTP/3 and
+request-abort suite reported 690 successes and two skips out of 692 cases; a
+subsequent configured independent-peer/datagram run passed all 59 cases, covering
+the peer-related skip. The remaining skipped certificate-export fallback case
+is not applicable to Windows' native certificate-context loading.
+
+Both library targets, Debug/Release core/host/fuzz builds, PrettyCSharp, diagnostic
+and source-quality gates passed. All six packages passed content checks, and the
+compatibility audit completed 142 cases / 284 upstream/Neo comparisons with zero
+errors. Updated coverage instrumentation completed 68,043 libFuzzer and 24,279
+AFL++ executions with no retained crashes or hangs. AFL's 4.91% map stability
+retains the concurrent coverage limitation described above. These observations
+cover this development integration; they do not establish final provider,
+platform, browser, controller or authentication acceptance.
 
 ## Remaining production acceptance work
 

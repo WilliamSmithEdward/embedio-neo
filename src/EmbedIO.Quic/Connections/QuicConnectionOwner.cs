@@ -1,4 +1,8 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace EmbedIO.Quic
 {
     internal sealed record QuicConnectionOutput(
         ReadOnlyMemory<byte> ConnectionId,

@@ -9,6 +9,7 @@ namespace EmbedIO.Quic
 
         internal static void Run()
         {
+            ProductionTransportTests.Run();
             TlsHelloTests.Run();
             ConnectionCoreTests.Run();
 

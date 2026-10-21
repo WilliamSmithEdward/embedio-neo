@@ -2,7 +2,7 @@
 {
     internal static class AsyncStreamTests
     {
-        private sealed class Peer : IDisposable
+        internal sealed class Peer : IDisposable
         {
             internal bool CanQueue = true;
             internal ulong? ClosedCode;

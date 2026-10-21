@@ -1,4 +1,9 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace EmbedIO.Quic
 {
     internal sealed class ConnectionStreams : IDisposable
     {

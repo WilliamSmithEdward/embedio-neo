@@ -1,4 +1,7 @@
-﻿using System.Buffers.Binary;
+﻿using System;
+using System.Buffers.Binary;
+using System.IO;
+using System.Linq;
 
 namespace EmbedIO.Quic
 {

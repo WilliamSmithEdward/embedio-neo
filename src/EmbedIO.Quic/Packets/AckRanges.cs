@@ -1,4 +1,8 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace EmbedIO.Quic
 {
     internal static class AckRanges
     {

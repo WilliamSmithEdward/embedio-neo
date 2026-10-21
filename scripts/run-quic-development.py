@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import shutil
+import sys
 import signal
 import time
 import uuid
@@ -33,7 +34,7 @@ def main():
                 "workingTree": subprocess.check_output(["git", "status", "--porcelain"], text=True).splitlines(),
                 "configuration": {key: str(value) if isinstance(value, Path) else value for key, value in vars(args).items()},
                 "runs": runs, "passed": False}
-    files = sorted(path for folder in ("src/EmbedIO.Quic", "test/EmbedIO.Quic", "test/EmbedIO.Fuzz")
+    files = sorted(path for folder in ("src/EmbedIO.Quic", "src/EmbedIO", "src/Shared", "test/EmbedIO.Quic", "test/EmbedIO.Fuzz")
                    for path in Path(folder).rglob("*.cs")
                    if not {"bin", "obj"}.intersection(path.parts))
     manifest["sourceHashes"] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
@@ -73,7 +74,8 @@ def main():
     # Freeze managed harness outputs; subsequent editor builds cannot change a running campaign.
     harness = report / "harness"
     run("build", [args.dotnet, "build", "test/EmbedIO.Fuzz", "-c", "Release", "--no-restore"])
-    shutil.copytree(repo / "test/EmbedIO.Fuzz/bin/Release/net10.0", harness)
+    shutil.copytree(repo / "test/EmbedIO.Fuzz/bin/Release/net10.0", harness,
+                    ignore=shutil.ignore_patterns("EmbedIO.Quic.dll", "EmbedIO.Quic.pdb"))
     manifest["assemblyHashes"] = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in harness.glob("*.dll")}
     save()
     fuzz = [args.dotnet, str(harness / "EmbedIO.Fuzz.dll")]
@@ -81,6 +83,9 @@ def main():
     run("self-test", native + ["self-test"])
     if args.openssl:
         run("certificate", native + ["certificate", str(report / "certificate")])
+        run("production-http3", [sys.executable, "test/EmbedIO.Quic/verify_http3.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--openssl", str(args.openssl.resolve()),
+            "--output", str(report / "production-http3")])
     for index in range(args.rounds):
         seed = 1729 + index * 104729
         run(f"properties-{seed}", fuzz + ["--fscheck", str(seed), str(args.cases)])

@@ -1,4 +1,6 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+
+namespace EmbedIO.Quic
 {
     // Invoked only by the connection owner. Application consumption returns
     // receive credit; retirement additionally waits for the transport's ACKs.

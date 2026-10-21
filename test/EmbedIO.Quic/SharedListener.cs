@@ -15,7 +15,8 @@ namespace EmbedIO.Quic
             bool webTransport,
             int expected,
             int port,
-            bool asyncStreams = false
+            bool asyncStreams = false,
+            bool productionHttp3 = false
         )
         {
             if (expected is < 1 or > 64 || port is < 0 or > 65535)
@@ -31,14 +32,27 @@ namespace EmbedIO.Quic
             var clock = Stopwatch.StartNew();
             var observed = new System.Collections.Concurrent.ConcurrentBag<ProbeConnection>();
             var applications = new System.Collections.Concurrent.ConcurrentBag<(AsyncStreamEcho Echo, Task Task)>();
+            var productionApplications =
+                new System.Collections.Concurrent.ConcurrentBag<(ProductionHttp3Application Http3, Task Task)>();
             var connections = new QuicConnectionDispatcher(
-                (packet, now, notify) =>
+                (packet, now, owner) =>
                 {
                     StreamApplication CreateApplication(StreamOperations operations)
                     {
-                        var application = new AsyncStreamApplication(operations, notify);
-                        var echo = new AsyncStreamEcho(application, closeAfterEcho: true);
-                        applications.Add((echo, echo.RunAsync(stop.Token)));
+                        var application = new AsyncStreamApplication(operations, owner.Notify);
+
+                        if (productionHttp3)
+                        {
+                            var http3 = new ProductionHttp3Application();
+                            productionApplications.Add((http3, http3.RunAsync(application, owner, stop.Token)));
+                        }
+
+                        else
+                        {
+                            var echo = new AsyncStreamEcho(application, closeAfterEcho: true);
+                            applications.Add((echo, echo.RunAsync(stop.Token)));
+                        }
+
                         return application;
                     }
 
@@ -47,12 +61,12 @@ namespace EmbedIO.Quic
                         library,
                         certificate,
                         key,
-                        webTransport,
+                        webTransport || productionHttp3,
                         authorization,
                         now,
                         asyncStreams: asyncStreams,
                         tlsFactory: provider.Create,
-                        applicationFactory: asyncStreams ? CreateApplication : null
+                        applicationFactory: asyncStreams || productionHttp3 ? CreateApplication : null
                     );
                     observed.Add(connection);
                     return connection;
@@ -198,7 +212,11 @@ namespace EmbedIO.Quic
                 // Factories have finished, so this includes every application owner,
                 // even when native shutdown reported an error.
                 var handlers = Task
-                    .WhenAll(applications.Select(application => application.Task))
+                    .WhenAll(
+                        applications
+                            .Select(application => application.Task)
+                            .Concat(productionApplications.Select(application => application.Task))
+                    )
                     .WaitAsync(TimeSpan.FromSeconds(5));
                 var shutdown = Task.WhenAll(owners, handlers);
                 await shutdown.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
@@ -207,9 +225,11 @@ namespace EmbedIO.Quic
 
                 else if (shutdown.IsCanceled) failures.Add(new TaskCanceledException(shutdown));
 
-                completed = asyncStreams
-                    ? applications.Count(application => application.Echo.Completed > 0)
-                    : observed.Count(connection => connection.Complete);
+                completed = productionHttp3
+                    ? productionApplications.Count(application => application.Http3.Completed > 0)
+                    : asyncStreams
+                        ? applications.Count(application => application.Echo.Completed > 0)
+                        : observed.Count(connection => connection.Complete);
                 var result = new
                 {
                     accepted = connections.Accepted,

@@ -1,4 +1,7 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+using System.Collections.Generic;
+
+namespace EmbedIO.Quic
 {
     // Closed ranges compact around at most Capacity live/implicitly opened
     // streams. Cumulative credit advances without retaining each completed ID.

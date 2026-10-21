@@ -1,4 +1,9 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace EmbedIO.Quic
 {
     internal sealed class QuicStreamFailure(ulong errorCode, bool remote) : IOException("QUIC stream was aborted.")
     {

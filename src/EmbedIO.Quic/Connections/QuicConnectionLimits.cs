@@ -1,4 +1,6 @@
-﻿namespace EmbedIO.Quic
+﻿using System;
+
+namespace EmbedIO.Quic
 {
     internal sealed record QuicConnectionLimits
     {
