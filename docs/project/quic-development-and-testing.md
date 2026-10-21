@@ -1112,6 +1112,19 @@ handshake or production tail-latency measurement. An earlier short-warmup sample
 had inconsistent tails; both sets remain retained under `cipher-latency-01` and
 `cipher-latency-02`. Full cold/warm/tail listener acceptance remains required.
 
+## Independent HTTP/3 peer request lifetime
+
+The independent Python HTTP/3 peer retains a terminal connection event. New
+requests fail immediately with that event's error after closure; pending requests
+still receive the same terminal event. A single stream reset leaves sibling and
+later requests usable. Three deterministic event-order regressions use the real
+QUIC/H3 objects with UDP transmission disabled, and the existing Windows Schannel
+step runs them through the pinned peer interpreter:
+
+```powershell
+python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py
+```
+
 ## Remaining production acceptance work
 
 1. Complete application configuration, certificate lifetime and platform acceptance

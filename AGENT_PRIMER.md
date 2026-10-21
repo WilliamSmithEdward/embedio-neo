@@ -22,7 +22,7 @@ half-close before reading. Pass the token to streaming, upload and application
 work; retain deadlines because disconnect detection is best effort. Generated
 bindings support AOT and omit the token from OpenAPI. The in-process testing
 context observes its caller token. See [request-abort cancellation](docs/guides/request-abort.md)
-for completion ownership, HTTP/2ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“3 resets, TLS/proxy limits and examples.
+for completion ownership, HTTP/2 and HTTP/3 resets, TLS/proxy limits and examples.
 Canceled request-abort tokens keep their cancellation source until the token can
 be collected, so retained-token registrations and signaled wait handles remain
 usable. Parent registrations still detach at completion.
@@ -442,7 +442,9 @@ from the development UDP host. Ordinary body-read cancellation preserves the
 existing distinction between local timeout (`H3_NO_ERROR`) and request cancellation;
 CONNECT streams retain their transport cancellation behavior. The new independent
 `test/EmbedIO.Quic/verify_http3.py` checks actual HTTP/3 uploads, complete timeout
-responses and healthy sibling requests. `test/EmbedIO.Quic/verify_listener.py` additionally
+responses and healthy sibling requests. Its request-lifetime regressions run with
+`python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py`
+in the pinned peer environment. `test/EmbedIO.Quic/verify_listener.py` additionally
 exercises actual WebServer controllers, bearer authentication and policy authorization,
 request-abort cancellation, endpoint metadata isolation, active-response drain and UDP
 rebind through the new binding. OpenSSL and Windows non-exportable RSA/ECDSA profiles

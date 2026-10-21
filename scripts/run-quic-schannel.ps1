@@ -23,6 +23,8 @@ if ($LASTEXITCODE) { throw 'QUIC host restore failed.' }
 dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore -p:RunAnalyzers=true
 if ($LASTEXITCODE) { throw 'QUIC host build failed.' }
 $assembly = 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll'
+& $env:EMBEDIO_DATAGRAM_PEER_PYTHON -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py > "$output/http-peer.log" 2>&1
+if ($LASTEXITCODE) { Get-Content "$output/http-peer.log"; throw 'Independent HTTP/3 peer regression checks failed.' }
 dotnet $assembly schannel-self-test > "$output/lifetime.log" 2>&1
 if ($LASTEXITCODE) {
   Get-Content "$output/lifetime.log"

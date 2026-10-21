@@ -22,8 +22,11 @@ class HttpPeer(QuicConnectionProtocol):
         self.http = H3Connection(self._quic)
         self.responses = {}
         self.stopped = {}
+        self._connection_error = None
 
     def quic_event_received(self, event):
+        if isinstance(event, ConnectionTerminated):
+            self._connection_error = repr(event)
         if isinstance(event, StopSendingReceived):
             self.stopped[event.stream_id] = event.error_code
         if isinstance(event, (ConnectionTerminated, StreamReset)):
@@ -41,6 +44,8 @@ class HttpPeer(QuicConnectionProtocol):
                     future.set_result((headers, bytes(body)))
 
     def start_request(self, path, data=None, incomplete=False, headers=()):
+        if self._connection_error is not None:
+            raise ConnectionError(self._connection_error)
         stream = self._quic.get_next_available_stream_id()
         future = asyncio.get_running_loop().create_future()
         self.responses[stream] = (future, [], bytearray())
