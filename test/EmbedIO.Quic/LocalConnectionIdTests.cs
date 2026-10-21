@@ -62,8 +62,8 @@ namespace EmbedIO.Quic
             var eligible = new byte[128];
             eligible[0] = 0x40;
             id.CopyTo(eligible.AsSpan(1));
-            var a = first.Reset(eligible)!;
-            var b = first.Reset(eligible)!;
+            var a = first.Reset(eligible) ?? throw new QuicFuzzFailure("local-id-first-reset-missing");
+            var b = first.Reset(eligible) ?? throw new QuicFuzzFailure("local-id-second-reset-missing");
             Check(
                 !a
                     .AsSpan(0, a.Length - 16)
