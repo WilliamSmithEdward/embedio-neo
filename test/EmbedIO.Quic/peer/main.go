@@ -283,6 +283,11 @@ func run() error {
 	}
 	if *mode == "connection-fault" || *mode == "datagram-fault" || *mode == "idle" {
 		if *mode == "datagram-fault" {
+			// The server answers this echo only after its handler has accepted the
+			// session, so the fault below cannot race that acceptance.
+			if err = echoOnce(ctx, conn, session); err != nil {
+				return err
+			}
 			if err = conn.SendDatagram(integer(1 << 60)); err != nil {
 				return err
 			}
@@ -485,6 +490,29 @@ func run() error {
 		if _, e = io.ReadAll(session); e != nil {
 			return e
 		}
+	}
+	return nil
+}
+// echoOnce sends a short payload on a new bidirectional session stream and checks the echo.
+func echoOnce(ctx context.Context, conn *quic.Conn, session *quic.Stream) error {
+	stream, err := conn.OpenStreamSync(ctx)
+	if err != nil {
+		return err
+	}
+	payload := []byte("accepted")
+	prefix := append(integer(0x41), integer(uint64(session.StreamID()))...)
+	if err = write(stream, append(prefix, payload...)); err != nil {
+		return err
+	}
+	if err = stream.Close(); err != nil {
+		return err
+	}
+	echoed, err := io.ReadAll(stream)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(echoed, payload) {
+		return errors.New("bidirectional echo mismatch")
 	}
 	return nil
 }

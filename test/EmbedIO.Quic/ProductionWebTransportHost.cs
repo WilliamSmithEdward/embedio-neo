@@ -93,9 +93,20 @@ namespace EmbedIO.Quic
             }
 
             var token = context.CancellationToken;
-            var session = await webTransport
-                .AcceptWebTransportAsync(token)
-                .ConfigureAwait(false);
+            WebTransportSession session;
+            try
+            {
+                session = await webTransport
+                    .AcceptWebTransportAsync(token)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception error)
+            {
+                // The connection can end while the 200 is still being sent.
+                Log($"session accept failed: {error.GetType().Name}");
+                throw;
+            }
+
             Interlocked.Increment(ref counts.Accepted);
             Log(
                 $"session accepted: datagrams can send={session.Datagrams.CanSend} limit={session.Datagrams.MaximumPayloadLength}"

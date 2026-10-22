@@ -25,7 +25,7 @@ EXPECTATIONS = {
     "missing-reset": {"acceptedSessions": 0, "refusedSessions": 0},
     "large": {"acceptedSessions": 1, "bidirectionalEchoes": 1, "unidirectionalEchoes": 1},
     "credit": {"acceptedSessions": 1, "bidirectionalEchoes": 1, "unidirectionalEchoes": 1},
-    "datagram-fault": {"acceptedSessions": 1},
+    "datagram-fault": {"acceptedSessions": 1, "bidirectionalEchoes": 1},
     "idle": {"acceptedSessions": 1},
     "sustained": {"acceptedSessions": 1, "bidirectionalEchoes": 1, "unidirectionalEchoes": 1, "datagramsEchoed": 1},
     "sustained-credit": {"acceptedSessions": 1, "bidirectionalEchoes": 1, "unidirectionalEchoes": 1},
