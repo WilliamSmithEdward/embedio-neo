@@ -189,9 +189,13 @@ namespace EmbedIO.Tests
 
                 await closed.Task.WaitAsync(TimeSpan.FromSeconds(10));
                 await Task.WhenAny(running, Task.Delay(500));
-                Assert.That(running.IsCompleted, Is.False, "The server stopped.");
-                Assert.That(monitored.FatalCalls, Is.Zero);
-                Assert.That(server.Listener.IsListening, Is.True);
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(running.IsCompleted, Is.False, "The server stopped.");
+                    Assert.That(monitored.FatalCalls, Is.Zero);
+                    Assert.That(server.Listener.IsListening, Is.True);
+                }
+
                 using var health = new System.Net.Http.HttpClient();
                 Assert.That(await health.GetStringAsync(url + "plain"), Is.EqualTo("healthy"));
             }
