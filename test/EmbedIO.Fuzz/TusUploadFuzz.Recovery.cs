@@ -44,7 +44,12 @@ internal static partial class TusUploadFuzz
                 tail.Flush(true);
             }
 
-            await File.WriteAllTextAsync(args[2], upload.Location);
+            // Publish the marker by renaming a finished file. The parent reads it as soon as
+            // the name exists, and Windows refuses that read while this process still holds
+            // the file open for writing.
+            var pending = args[2] + ".tmp";
+            await File.WriteAllTextAsync(pending, upload.Location);
+            File.Move(pending, args[2]);
             await Task.Delay(Timeout.InfiniteTimeSpan);
             return true;
         }
