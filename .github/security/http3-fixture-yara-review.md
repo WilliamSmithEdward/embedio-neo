@@ -39,3 +39,11 @@ William explicitly approved this narrow acceptance after reviewing the explanati
 A paginated query of open GitHub code-scanning alerts found no corresponding alert.
 The malware workflow supplies artifacts rather than creating code-scanning alerts,
 so no matching dismissal can be performed or claimed. William explicitly waived matching-alert dismissal only for these two findings because no matching alerts exist. The exception does not cover other findings or the all-green-checks rule. The original red PR remains unmerged; integration requires every check on the final corrected head to pass.
+
+## Request-input fixture no longer matches
+
+On 2026-10-22 the request-input fixture moved from a server-side System.Net.Quic
+listener onto the shared EmbedIO.Quic test host, and its reflection moved into the
+shared test helpers. The same rule in the pinned YARA-X 1.21.0 / YARA Forge 20261018
+bundle no longer matches it, so its path was removed from the acceptance. The
+direction-watcher fixture and its acceptance are unchanged.

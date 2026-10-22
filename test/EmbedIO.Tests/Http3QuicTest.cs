@@ -13,6 +13,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
@@ -23,7 +24,7 @@ namespace EmbedIO.Tests
         public void EnforceRequiredQuicCoverage()
         {
             if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") != "1") return;
-            Assert.That(QuicListener.IsSupported && QuicConnection.IsSupported, Is.True,
+            Assert.That(QuicConnection.IsSupported, Is.True,
                 "This CI job requires QUIC; missing native prerequisites must not become skipped coverage.");
             Assert.That(typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection"), Is.Not.Null,
                 "Required transport coverage must use the modern asset.");
@@ -36,7 +37,7 @@ namespace EmbedIO.Tests
         [TestCase(0, 4, true)]
         public async Task HttpClientExchangesExactHttp3Bodies(int size, int concurrency, bool head)
         {
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
             { Assert.Ignore("The netstandard asset exposes framing but no direct QUIC transport."); return; }
@@ -55,31 +56,18 @@ namespace EmbedIO.Tests
             using var generated = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
             using var cert = X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pkcs12), null, X509KeyStorageFlags.Exportable);
             Assert.That(cert.Export(X509ContentType.Pkcs12).Length, Is.GreaterThan(0), "The OpenSSL QUIC backend must be able to export its synthetic TLS key.");
-            await using var listener = await QuicListener.ListenAsync(new QuicListenerOptions
-            {
-                ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
-                ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
-                ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
-                {
-                    DefaultCloseErrorCode = 0x100,
-                    DefaultStreamErrorCode = 0x10c,
-                    MaxInboundBidirectionalStreams = 32,
-                    MaxInboundUnidirectionalStreams = 8,
-                    ServerAuthenticationOptions = new SslServerAuthenticationOptions { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = cert }
-                })
-            }, deadline.Token);
+            await using var host = EngineQuicHost.Start(cert);
             var assembly = typeof(WebServer).Assembly;
             var exchange = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange", true) ?? throw new AssertionException("Missing HTTP/3 test target.");
-            var connection = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection", true) ?? throw new AssertionException("Missing HTTP/3 test target.");
             var handler = (typeof(Http3QuicTest).GetMethod(nameof(Handle), Flags) ?? throw new AssertionException("Missing HTTP/3 test target.")).MakeGenericMethod(exchange).CreateDelegate(typeof(Func<,>).MakeGenericType(exchange, typeof(Task)));
             var server = Task.Run(async () =>
             {
-                var accepted = await listener.AcceptConnectionAsync(deadline.Token);
-                await ((Task)(connection.GetMethod("RunAsync", Flags)?.Invoke(null, new object[] { accepted, handler, deadline.Token }) ?? throw new AssertionException("Missing HTTP/3 test target.")));
+                var accepted = await host.AcceptTransportAsync(deadline.Token);
+                await EngineQuicHost.RunAsync(accepted, handler, deadline.Token);
             });
             using var transport = new SocketsHttpHandler { SslOptions = new SslClientAuthenticationOptions { RemoteCertificateValidationCallback = (_, peer, _, _) => peer?.GetCertHashString() == cert.GetCertHashString() } };
             using var client = new HttpClient(transport);
-            var uri = new Uri($"https://127.0.0.1:{listener.LocalEndPoint.Port}/echo");
+            var uri = new Uri($"https://127.0.0.1:{host.LocalEndPoint.Port}/echo");
             var calls = Enumerable.Range(0, concurrency).Select(async index =>
             {
                 var payload = Encoding.UTF8.GetBytes(new string((char)('a' + index), size));
@@ -129,7 +117,7 @@ namespace EmbedIO.Tests
         public async Task WireErrorsUseTheCorrectScopeAndCode(string scenario, long code, bool connectionError)
         {
             ArgumentNullException.ThrowIfNull(scenario);
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
             { Assert.Ignore("The netstandard asset exposes framing but no direct QUIC transport."); return; }
@@ -196,19 +184,7 @@ namespace EmbedIO.Tests
             using var generated = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
             using var cert = X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pkcs12), null, X509KeyStorageFlags.Exportable);
             Assert.That(cert.Export(X509ContentType.Pkcs12).Length, Is.GreaterThan(0), "The OpenSSL QUIC backend must be able to export its synthetic TLS key.");
-            await using var listener = await QuicListener.ListenAsync(new QuicListenerOptions
-            {
-                ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
-                ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
-                ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
-                {
-                    DefaultCloseErrorCode = 0x100,
-                    DefaultStreamErrorCode = 0x10c,
-                    MaxInboundBidirectionalStreams = 32,
-                    MaxInboundUnidirectionalStreams = 8,
-                    ServerAuthenticationOptions = new SslServerAuthenticationOptions { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = cert }
-                })
-            }, deadline.Token);
+            await using var host = EngineQuicHost.Start(cert);
             var assembly = typeof(WebServer).Assembly;
             var exchange = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange", true) ?? throw new AssertionException("Missing HTTP/3 test target.");
             var connection = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection", true) ?? throw new AssertionException("Missing HTTP/3 test target.");
@@ -216,16 +192,14 @@ namespace EmbedIO.Tests
             var sessionReady = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             var server = Task.Run(async () =>
             {
-                await using var accepted = await listener.AcceptConnectionAsync(deadline.Token);
-                var session = Activator.CreateInstance(connection, Flags, null, new object[] { accepted, handler, deadline.Token }, null)
-                    ?? throw new AssertionException("Missing connection owner.");
-                using var owner = (IDisposable)session;
+                await using var accepted = await host.AcceptTransportAsync(deadline.Token);
+                using var session = EngineQuicHost.CreateConnection(accepted, handler, deadline.Token);
                 sessionReady.SetResult(session);
-                await ((Task)(connection.GetMethod("RunCoreAsync", Flags)?.Invoke(session, null) ?? throw new AssertionException("Missing connection runner.")));
+                await EngineQuicHost.RunCoreAsync(session);
             });
             await using var client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
             {
-                RemoteEndPoint = listener.LocalEndPoint,
+                RemoteEndPoint = host.LocalEndPoint,
                 DefaultCloseErrorCode = 0x100,
                 DefaultStreamErrorCode = 0x10c,
                 MaxInboundUnidirectionalStreams = scenario == "dynamic-no-credit" ? 2 : 8,

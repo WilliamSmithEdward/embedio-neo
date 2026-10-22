@@ -2409,6 +2409,28 @@ Locally on Windows, the full suite with these corrections (wildcard case exclude
 reported 7,610 cases: 7,588 passed, 22 skipped, none failed. Hosted acceptance of
 the three corrections is pending.
 
+Hosted CI `39734248524` on `8cffe1d0` passed the Windows and Linux regression
+suites. macOS failed two cases: the quarantined raw-runtime rebind case of the
+earlier provider, and `CombinedDrainAbortsAFullUndispatchedQueue(False)`, whose
+100-millisecond drain did not finish within the test's 5-second bound. Two earlier
+macOS runs failed the same way. The case takes about 4.5 seconds on Windows as
+well, but a local timing probe put only 0.15 to 0.43 seconds of that in the drain;
+the rest is the test waiting for its 288 requests to fail. When the bound is
+missed, the test now lists the internal tasks still pending, by field path, and
+how long the drain really takes (waiting at most 25 more seconds), then fails as
+before. The cause on macOS is not yet known.
+
+### HTTP/3 fixtures on the EmbedIO.Quic binding
+
+Eight test files ran the HTTP/3 connection layer over a server-side
+System.Net.Quic listener. They now accept connections through the production
+EmbedIO.Quic listener binding, through the shared `EngineQuicHost` test helper, so
+their protocol assertions exercise the provider that ships; the BCL `QuicConnection`
+and `HttpClient` remain the independent clients. The backpressure reset cases
+accepted only the BCL's `QuicException` for a writer ended by `STOP_SENDING`; they
+now accept any `IOException`, which the stream failures of both providers are. The
+227 cases of the affected classes pass locally.
+
 ## Open-issue resolution baseline
 
 The open-issue inventory on 2026-10-21 contains eight issues. This is a

@@ -230,7 +230,20 @@ namespace EmbedIO.Tests
                     cancelDrain.Cancel();
                     await Assert.ThatAsync(async () => await drain.WaitAsync(TimeSpan.FromSeconds(5)), Throws.InstanceOf<OperationCanceledException>());
                 }
-                else await drain.WaitAsync(TimeSpan.FromSeconds(5));
+                else
+                {
+                    // On a miss, name the shutdown stages still pending and measure how long
+                    // the drain really takes (bounded) before failing the same way.
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
+                    if (await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(5))) != drain)
+                    {
+                        var pending = PendingTaskReport.Describe(server.Listener, 8);
+                        var finished = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(25))) == drain;
+                        TestContext.Error.WriteLine($"Combined drain pending at 5 s:{pending}\nDrain finished: {finished} after {clock.Elapsed}");
+                        throw new TimeoutException("The combined drain did not finish within 5 seconds.");
+                    }
+                    await drain;
+                }
                 foreach (var request in requests)
                     await Assert.ThatAsync(async () => { using var response = await request; }, Throws.InstanceOf<HttpRequestException>());
                 Assert.That(queue.Reader.Count, Is.Zero);
