@@ -2089,3 +2089,34 @@ three-by-1-MiB upload transport failure and macOS route/socket failures remain
 under investigation. A local Linux probe completed 100 fresh public servers
 and 300 exact 1-MiB echo uploads without reproducing that transport error;
 that result does not establish a cause or correction for the hosted failure.
+
+
+## Shared UDP destination errors
+
+A controlled local Linux diagnostic enabled the kernel's UDP error queue on an
+actual public listener socket. A send to a disposed loopback UDP endpoint then
+reported asynchronous ConnectionRefused on receive, ended the listener and caused
+a subsequent healthy HTTP/3 request to fail. Linux documents that an unconnected
+UDP socket can report an asynchronous error from a previous datagram. The
+application's shared socket must keep that path error separate from listener
+lifetime.
+
+Receive, send and shutdown observation now recognize ConnectionReset,
+ConnectionRefused, HostUnreachable, HostDown and NetworkUnreachable as datagram
+path failures. Recovery/idle handling remains per connection; these errors do
+not prove a peer's QUIC state. An internal counter is included in the existing
+closed-listener diagnostics. Other socket errors and incomplete sends retain
+their previous failure handling; production does not enable the Linux error queue.
+
+The new ordinary-listener Linux regression waits for three real ICMP errors to
+be observed and verifies both existing-client and fresh-client requests after
+each one. A separate regression disposes the actual UDP socket and requires the
+listener to stop, retaining the fatal resource-failure boundary. Both passed in
+three local Linux runs (six cases, no skips). Windows passed the disposal case;
+the Linux-only ICMP fixture was the one expected platform skip.
+
+These local checks do not establish the cause of every hosted macOS failure.
+At source `01db12dd`, CI 39706770816 again reported ten macOS suite failures,
+including unreachable-route cases, and the same concurrent 1-MiB upload transport
+error on both Windows and Linux. All suites discovered 7,600 cases. The original
+logs remain retained; final-source desktop CI must establish each correction.

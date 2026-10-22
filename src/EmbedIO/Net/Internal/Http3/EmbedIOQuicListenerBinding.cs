@@ -37,6 +37,7 @@ namespace EmbedIO.Net.Internal.Http3
         private Task? _shutdown;
         private Task? _acceptanceStopped;
         private int _accepting = 1;
+        private long _datagramPathErrors;
 
         internal EmbedIOQuicListenerBinding(IPEndPoint endpoint, Func<byte[], TlsSession> createTls)
         {
@@ -89,11 +90,12 @@ namespace EmbedIO.Net.Internal.Http3
                 if (failure?.Length > 4096) failure = failure[..4096];
 
                 return FormattableString.Invariant(
-                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};issued-routes={_connections.IssuedRoutes};last-rejection={failure}"
+                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};issued-routes={_connections.IssuedRoutes};datagram-path-errors={DatagramPathErrors};last-rejection={failure}"
                 );
             }
         }
 
+        internal long DatagramPathErrors => Interlocked.Read(ref _datagramPathErrors);
         internal bool IsAccepting => Volatile.Read(ref _accepting) != 0;
         internal IPEndPoint LocalEndPoint => QuicConnectionEndpoints.Copy(_local);
 
@@ -243,7 +245,10 @@ namespace EmbedIO.Net.Internal.Http3
                                 );
                         }
 
-                        catch (SocketException error) when (error.SocketErrorCode == SocketError.ConnectionReset) { }
+                        catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
+                        {
+                            Interlocked.Increment(ref _datagramPathErrors);
+                        }
 
                         receive = Receive();
                     }
@@ -329,7 +334,10 @@ namespace EmbedIO.Net.Internal.Http3
                         throw new InvalidOperationException("UDP send did not consume its datagram.");
                 }
 
-                catch (SocketException error) when (error.SocketErrorCode == SocketError.ConnectionReset) { }
+                catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
+                {
+                    Interlocked.Increment(ref _datagramPathErrors);
+                }
             }
 
             async Task ObserveAsync(Task? pending)
@@ -343,7 +351,10 @@ namespace EmbedIO.Net.Internal.Http3
 
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
 
-                catch (SocketException error) when (error.SocketErrorCode == SocketError.ConnectionReset) { }
+                catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
+                {
+                    Interlocked.Increment(ref _datagramPathErrors);
+                }
 
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                 {
@@ -351,6 +362,15 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
         }
+
+        // A shared unconnected socket can report a previous destination's ICMP
+        // failure on either receive or send. Loss recovery remains per connection.
+        private static bool IsDatagramPathError(SocketError error) =>
+            error is SocketError.ConnectionReset
+                or SocketError.ConnectionRefused
+                or SocketError.HostUnreachable
+                or SocketError.HostDown
+                or SocketError.NetworkUnreachable;
 
         private sealed class Peer : Http3AcceptedConnection
         {

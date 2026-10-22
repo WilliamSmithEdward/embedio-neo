@@ -1322,3 +1322,12 @@ Artifacts retain the local native build receipt and binary audit. This does not
 change NuGet asset selection, campaign assertions or deadlines. Actual Unix fuzz
 replay and bounded state-machine evidence is recorded in the development/testing
 record; final platform failures and sustained latency acceptance remain open.
+
+
+The unmerged EmbedIO.Quic listener isolates UDP reset/refused/unreachable-path
+errors to their datagram operation. The shared listener keeps accepting healthy
+connections and existing recovery handles lost output. Its internal shutdown
+summary counts these path errors. Other socket failures, cancellation and resource
+ownership retain their existing terminal behavior. A real Linux ICMP fixture and
+an independent disposed-socket control cover the distinction; complete desktop
+CI acceptance, including the separate upload transport failure, remains pending.
