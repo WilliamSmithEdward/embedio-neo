@@ -10,9 +10,17 @@ import sys
 from unittest.mock import patch
 import zipfile
 
+from defusedxml import ElementTree as ET
+
 spec = importlib.util.spec_from_file_location("native_stage", Path(__file__).resolve().parents[1] / "stage.py")
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+
+# The repository's package version, read as package_feed.seal reads it, so these
+# fixtures follow version changes. OTHER_VERSION stands for any different version.
+VERSION = ET.parse(module.ROOT.parents[1] / "Directory.Build.props", forbid_dtd=True,
+                   forbid_entities=True, forbid_external=True).findtext(".//Version")
+OTHER_VERSION = "0.0.1"
 
 
 class StageTests(unittest.TestCase):
@@ -127,7 +135,7 @@ class StageTests(unittest.TestCase):
                          "embedio_neo_icons.png": (repository / "images/embedio_neo_icons.png").read_bytes(),
                          "[Content_Types].xml": b"metadata", "_rels/.rels": b"relationships",
                          "package/services/metadata/core-properties/nuget.psmdcp": b"properties",
-                         "EmbedIO-Neo.Quic.Native.nuspec": b'<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd"><metadata><id>EmbedIO-Neo.Quic.Native</id><version>2.16.0</version><license type="expression">MIT AND Apache-2.0</license></metadata></package>'})
+                         "EmbedIO-Neo.Quic.Native.nuspec": ('<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd"><metadata><id>EmbedIO-Neo.Quic.Native</id><version>' + VERSION + '</version><license type="expression">MIT AND Apache-2.0</license></metadata></package>').encode()})
         with zipfile.ZipFile(destination, "w") as bundle:
             for name, data in contents.items():
                 bundle.writestr(name, data)
@@ -139,7 +147,7 @@ class StageTests(unittest.TestCase):
             output, package = root / "output", root / "native.nupkg"
             module.stage(output, [self.asset(root)], ["linux-x64"])
             self.package(output, package)
-            result = module.verify_package(package, output, ["linux-x64"], "2.16.0")
+            result = module.verify_package(package, output, ["linux-x64"], VERSION)
             self.assertEqual(result["rids"], ["linux-x64"])
             self.assertEqual(result["sha256"], module.digest(package.read_bytes()))
             self.assertFalse(result["completeDistribution"])
@@ -157,7 +165,7 @@ class StageTests(unittest.TestCase):
                 elif changed == "notice":
                     contents["LICENSE"] = b"changed"
                 elif changed == "version":
-                    contents[nuspec] = contents[nuspec].replace(b"2.16.0", b"2.15.0")
+                    contents[nuspec] = contents[nuspec].replace(VERSION.encode(), OTHER_VERSION.encode())
                 elif changed == "license":
                     contents[nuspec] = contents[nuspec].replace(b"MIT AND Apache-2.0", b"MIT")
                 elif changed == "dependency":
@@ -178,7 +186,7 @@ class StageTests(unittest.TestCase):
                             warnings.simplefilter("ignore", UserWarning)
                             bundle.writestr("LICENSE", contents["LICENSE"])
                 with self.assertRaises(ValueError):
-                    module.verify_package(package, output, ["linux-x64"], "2.16.0")
+                    module.verify_package(package, output, ["linux-x64"], VERSION)
 
 
     def test_preview_feed_checks_source_and_legacy_dependency_groups(self):
@@ -194,7 +202,7 @@ class StageTests(unittest.TestCase):
                 output, feed = root / "output", root / "feed"
                 feed.mkdir()
                 module.stage(output, [self.asset(root)], ["linux-x64"])
-                native = feed / "EmbedIO-Neo.Quic.Native.2.16.0.nupkg"
+                native = feed / f"EmbedIO-Neo.Quic.Native.{VERSION}.nupkg"
                 contents = self.package(output, native)
                 name = "EmbedIO-Neo.Quic.Native.nuspec"
                 contents[name] = contents[name].replace(b"</metadata>", ('<repository commit="' + head + '" /></metadata>').encode())
@@ -202,9 +210,9 @@ class StageTests(unittest.TestCase):
                     for path, data in contents.items():
                         bundle.writestr(path, data)
                 source_head = "1" * 40 if changed == "source" else head
-                version = "2.15.0" if changed == "version" else "2.16.0"
+                version = OTHER_VERSION if changed == "version" else VERSION
                 standard = "Foreign" if changed == "standard" else "System.Text.Json"
-                native_version = '2.15.0' if changed == 'native-version' else version
+                native_version = OTHER_VERSION if changed == 'native-version' else version
                 native_dependency = '<dependency id="EmbedIO-Neo.Quic.Native" version="' + native_version + '" />'
                 modern = ('<dependency id="Foreign" />' if changed == 'modern' else
                           '' if changed == 'native-missing' else native_dependency)
@@ -214,7 +222,7 @@ class StageTests(unittest.TestCase):
                 if changed == 'native-legacy':
                     core = core.replace('</group><group targetFramework="net10.0">',
                                         native_dependency + '</group><group targetFramework="net10.0">')
-                with zipfile.ZipFile(feed / "EmbedIO-Neo.2.16.0.nupkg", "w") as bundle:
+                with zipfile.ZipFile(feed / f"EmbedIO-Neo.{VERSION}.nupkg", "w") as bundle:
                     bundle.writestr("EmbedIO-Neo.nuspec", core.encode())
                 if changed == "foreign":
                     (feed / "unexpected.pem").write_bytes(b"foreign")
