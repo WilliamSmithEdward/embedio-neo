@@ -1,4 +1,4 @@
-# Semgrep 1.180.0 and complete wheel-only dependency closure.
+# Semgrep 1.181.0 and complete wheel-only dependency closure.
 # Resolved for Ubuntu x86_64 / Python 3.12; CI-only, never packaged.
 # Install with --require-hashes --only-binary=:all:.
 annotated-types==0.8.0 --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
@@ -56,7 +56,7 @@ rpds-py==2026.9.1 --hash=sha256:addeda51556dac7c1a2f14cda62db8b621cd12afba3091d0
 ruamel.yaml==0.19.1 --hash=sha256:27592957fedf6e0b62f281e96effd28043345e0e66001f97683aa9a40c667c93
 ruamel.yaml.clib==0.2.15 --hash=sha256:11e5499db1ccbc7f4b41f0565e4f799d863ea720e01d3e99fa0b7b5fcd7802c9
 semantic-version==2.10.0 --hash=sha256:de78a3b8e0feda74cabc54aab2da702113e33ac9d9eb9d2389bcf1f58b7d9177
-semgrep==1.180.0 --hash=sha256:16db2e2706ab814a975eeec25debfad49abba846b7c513d88e041447152f8447
+semgrep==1.181.0 --hash=sha256:05d79ad777fae86f6d914a67bedec1b9e2c3e637f61d49a4ef557e2bf69fed01 --hash=sha256:3defc5f3e0a76c5735c0edc1a1ccb903471b0558d8687bcb22ad75bb20923afe --hash=sha256:4c0905288ccf9ee5330e766f1c677a31642a4cc0aac5a95097e7563f3f3a92fa --hash=sha256:6dedd7d72dd7f7bd314439f469e143d57d84508c57c29246793378cccc2b90dc --hash=sha256:9af2325bfd58fa24936a7776277da067d563f6bb5dbe2184d7fb923e1a2b6134 --hash=sha256:9ef478d031105158e97a4491ecd349ecea011193e6b4be618d515a0a71bb6884 --hash=sha256:c142ec04a2ed144970cb0a92f6877651dd3c088505eec737bb7f4db7ae5f0ffa --hash=sha256:c3d7295bfd26f994231d82145888bd0a73ef0ad66ffb0c0341f0350a90ac3136
 sse-starlette==3.5.0 --hash=sha256:3e6e1070df3f0f5d9cea81496de92dbb72f6721871d99748ece67441dd8b7997
 starlette==1.7.0 --hash=sha256:67f8e99895493dd2911a03f11314af6ceebeae4e704bb9f43dfc6a9db151c93e
 tomli==2.4.1 --hash=sha256:136443dbd7e1dee43c68ac2694fde36b2849865fa258d39bf822c10e8068eac5
