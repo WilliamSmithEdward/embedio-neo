@@ -232,14 +232,16 @@ namespace EmbedIO.Tests
                 }
                 else
                 {
-                    // On a miss, name the shutdown stages still pending and measure how long
-                    // the drain really takes (bounded) before failing the same way.
+                    // On a miss, name the shutdown stages still pending and the state of each
+                    // QUIC connection, and measure how long the drain really takes (bounded)
+                    // before failing the same way.
                     var clock = System.Diagnostics.Stopwatch.StartNew();
                     if (await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(5))) != drain)
                     {
                         var pending = PendingTaskReport.Describe(server.Listener, 8);
+                        var quic = PendingTaskReport.DescribeQuicConnections(server.Listener);
                         var finished = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(25))) == drain;
-                        TestContext.Error.WriteLine($"Combined drain pending at 5 s:{pending}\nDrain finished: {finished} after {clock.Elapsed}");
+                        TestContext.Error.WriteLine($"Combined drain pending at 5 s:{pending}\nQUIC connections at 5 s:{quic}\nDrain finished: {finished} after {clock.Elapsed}");
                         throw new TimeoutException("The combined drain did not finish within 5 seconds.");
                     }
                     await drain;

@@ -2423,6 +2423,16 @@ missed, the test now lists the internal tasks still pending, by field path, and
 how long the drain really takes (waiting at most 25 more seconds), then fails as
 before. The cause on macOS is not yet known.
 
+CI `39738902765` on `87af9981` failed the same case on macOS with that report. At
+5 seconds the QUIC side was still waiting for one connection task, the listener
+loops and its own shutdown; the drain finished after 5.13 seconds. Every HTTP/3
+connection closes with its own 5-second deadline, which also covers the QUIC
+closing period of three probe timeouts, so a closing period of about 5 seconds on
+that runner would explain the timing; this is not yet confirmed. The report now
+also lists each QUIC connection's phase, closing deadline, RTT estimate and closing
+period. A local run that forced the report showed one active connection with a
+12 ms smoothed RTT and a 282 ms closing period, and a drain of 0.41 seconds.
+
 ### HTTP/3 fixtures on the EmbedIO.Quic binding
 
 Eight test files ran the HTTP/3 connection layer over a server-side

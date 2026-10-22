@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using NUnit.Framework;
 
 namespace EmbedIO.Tests.TestObjects
 {
@@ -19,18 +21,15 @@ namespace EmbedIO.Tests.TestObjects
         internal static string Describe(object root, int depth = 6)
         {
             var report = new StringBuilder();
-            var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
             var entries = 0;
-            Visit(root, root.GetType().Name, depth);
-            return entries == 0 ? "no pending tasks" : report.ToString();
-
-            void Visit(object value, string path, int remaining)
-            {
-                if (entries >= MaximumEntries || !seen.Add(value)) return;
-
-                if (value is Task task)
+            Walk(
+                root,
+                depth,
+                (value, path) =>
                 {
-                    if (!task.IsCompleted)
+                    if (value is not Task task) return entries < MaximumEntries;
+
+                    if (!task.IsCompleted && entries < MaximumEntries)
                     {
                         report
                             .Append('\n')
@@ -40,10 +39,109 @@ namespace EmbedIO.Tests.TestObjects
                         entries++;
                     }
 
-                    return;
-                }
+                    return false;
+                },
+                report
+            );
+            return entries == 0 ? "no pending tasks" : report.ToString();
+        }
 
-                if (remaining == 0) return;
+        // Reports each QUIC connection owner the graph holds: whether it has finished,
+        // its connection phase, the closing deadline against the owner's own clock and
+        // the RTT estimate behind the closing period (three probe timeouts).
+        internal static string DescribeQuicConnections(object root, int depth = 12)
+        {
+            var report = new StringBuilder();
+            var entries = 0;
+            Walk(
+                root,
+                depth,
+                (value, path) =>
+                {
+                    if (value is Task || entries >= MaximumEntries) return false;
+
+                    if (value.GetType().FullName != "EmbedIO.Quic.QuicConnectionOwner") return true;
+
+                    report
+                        .Append('\n')
+                        .Append(path)
+                        .Append(": ")
+                        .Append(QuicState(value));
+                    entries++;
+                    return false;
+                },
+                report
+            );
+            return entries == 0 ? "no QUIC connections" : report.ToString();
+        }
+
+        private static string QuicState(object owner)
+        {
+            var state = new StringBuilder();
+
+            try
+            {
+                var clock = EngineInternals.Field(owner, "_clock") as Func<double>;
+                state
+                    .Append("completion=")
+                    .Append((EngineInternals.Property(owner, "Completion") as Task)?.Status)
+                    .Append(" closing=")
+                    .Append(EngineInternals.Field(owner, "_closing"))
+                    .Append(" now=")
+                    .Append(Milliseconds(clock?.Invoke()));
+
+                if (EngineInternals.Field(owner, "_connection") is not { } connection)
+                    return state
+                        .Append(" connection=released")
+                        .ToString();
+
+                var lifetime = EngineInternals.Field(connection, "_lifetime")
+                    ?? throw new AssertionException("Missing connection lifetime.");
+                var recovery = EngineInternals.Field(connection, "_recovery")
+                    ?? throw new AssertionException("Missing connection recovery.");
+                return state
+                    .Append(" phase=")
+                    .Append(EngineInternals.Property(connection, "Phase"))
+                    .Append(" deadline=")
+                    .Append(Milliseconds(EngineInternals.Field(lifetime, "_deadline")))
+                    .Append(" idle-expired=")
+                    .Append(EngineInternals.Property(lifetime, "IdleExpired"))
+                    .Append(" srtt=")
+                    .Append(Milliseconds(EngineInternals.Field(recovery, "_smoothedRtt")))
+                    .Append(" rttvar=")
+                    .Append(Milliseconds(EngineInternals.Field(recovery, "_variation")))
+                    .Append(" latest=")
+                    .Append(Milliseconds(EngineInternals.Field(recovery, "_latestRtt")))
+                    .Append(" ack-delay=")
+                    .Append(Milliseconds(EngineInternals.Property(recovery, "MaximumAckDelay")))
+                    .Append(" retention=")
+                    .Append(Milliseconds(EngineInternals.Property(recovery, "KeyRetention")))
+                    .ToString();
+            }
+
+            // Report a renamed member instead of replacing the failure being diagnosed.
+            catch (AssertionException missing)
+            {
+                return state
+                    .Append(" unreadable: ")
+                    .Append(missing.Message)
+                    .ToString();
+            }
+        }
+
+        private static string? Milliseconds(object? value) =>
+            value is double milliseconds ? milliseconds.ToString("F1", CultureInfo.InvariantCulture) : null;
+
+        // Visits library objects and the collections they hold. The callback returns
+        // whether to follow the visited object's own fields and items.
+        private static void Walk(object root, int depth, Func<object, string, bool> visit, StringBuilder report)
+        {
+            var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            Visit(root, root.GetType().Name, depth);
+
+            void Visit(object value, string path, int remaining)
+            {
+                if (!seen.Add(value) || !visit(value, path) || remaining == 0) return;
 
                 var type = value.GetType();
 
