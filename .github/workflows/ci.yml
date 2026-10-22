@@ -579,8 +579,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {os: ubuntu-24.04, rid: linux-x64}
-          - {os: macos-15, rid: osx-arm64}
+          - {os: ubuntu-24.04, rid: linux-x64, nuget-cache: true}
+          # macOS runners have killed the cache step's dotnet nuget locals call with
+          # exit 137 (#401), so this leg restores without the NuGet cache.
+          - {os: macos-15, rid: osx-arm64, nuget-cache: false}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -590,7 +592,7 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-          cache: true
+          cache: ${{ matrix.nuget-cache }}
           cache-dependency-path: '**/packages.lock.json'
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
