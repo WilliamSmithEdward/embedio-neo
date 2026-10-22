@@ -304,7 +304,8 @@ namespace EmbedIO.Quic
                 Func<Http3QuicExchange, IPEndPoint, IPEndPoint, Task> dispatch,
                 CancellationToken abort,
                 CancellationToken drain,
-                WebTransportOptions? webTransport = null
+                WebTransportOptions? webTransport = null,
+                TimeSpan? requestHeadersTimeout = null
             )
             {
                 using var registration = abort.Register(() =>

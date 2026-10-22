@@ -72,6 +72,10 @@ namespace EmbedIO.Net.Internal.Http3
         // WebTransport settings, or null to serve none. Set before Start.
         internal WebTransportOptions? WebTransport { get; set; }
 
+        // How long each stream a client opens may take to complete its header; null applies
+        // the default RequestHeadersTimeout of 30 seconds. Set before Start.
+        internal TimeSpan? RequestHeadersTimeout { get; set; }
+
         public bool IsListening
         {
             get
@@ -136,6 +140,7 @@ namespace EmbedIO.Net.Internal.Http3
                     DeferContinue,
                     Telemetry,
                     WebTransport,
+                    RequestHeadersTimeout,
                     _bodyPolicy,
                     _dispatcher,
                     _bind
@@ -301,6 +306,7 @@ namespace EmbedIO.Net.Internal.Http3
             private RequestPolicyResolver? _bodyPolicy;
             private EmbedIO.Internal.ServerTelemetry? _telemetry;
             private WebTransportOptions? _webTransport;
+            private TimeSpan? _requestHeadersTimeout;
             private Func<IHttpContextImpl, Task>? _dispatcher;
 
             private Session() { }
@@ -315,6 +321,7 @@ namespace EmbedIO.Net.Internal.Http3
                 bool deferContinue,
                 EmbedIO.Internal.ServerTelemetry? telemetry,
                 WebTransportOptions? webTransport,
+                TimeSpan? requestHeadersTimeout,
                 RequestPolicyResolver? bodyPolicy,
                 Func<IHttpContextImpl, Task>? dispatcher,
                 Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> bind
@@ -325,6 +332,7 @@ namespace EmbedIO.Net.Internal.Http3
                     _deferContinue = deferContinue,
                     _telemetry = telemetry,
                     _webTransport = webTransport,
+                    _requestHeadersTimeout = requestHeadersTimeout,
                     _bodyPolicy = bodyPolicy,
                     _dispatcher = dispatcher
                 };
@@ -528,7 +536,8 @@ namespace EmbedIO.Net.Internal.Http3
                             ),
                             _stop.Token,
                             _drain.Token,
-                            _webTransport
+                            _webTransport,
+                            _requestHeadersTimeout
                         )
                         .ConfigureAwait(false);
                 }

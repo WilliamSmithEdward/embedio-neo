@@ -24,6 +24,12 @@
   The earlier `System.Net.Quic` and internal MsQuic server providers, their bind
   retry and their CI quarantines were removed. See the
   [HTTP/3 guide](docs/guides/http3.md).
+- `RequestHeadersTimeout` also bounds HTTP/3, as Kestrel's does: each stream the
+  client opens must complete its header within it, 30 seconds by default. A request
+  stream that misses it is reset with `H3_REQUEST_REJECTED`, other streams with
+  `H3_STREAM_CREATION_ERROR`; before, an HTTP/3 stream could wait for its header for
+  as long as its connection stayed open. An `EmbedIOHttp3` server now accepts the
+  option. See [request limits](docs/guides/request-limits.md#connection-limits).
 
 ### Fixed
 

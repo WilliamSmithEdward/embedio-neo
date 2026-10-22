@@ -189,6 +189,9 @@ earlier bindings. Failed peer TLS handshakes do not stop healthy acceptance.
 The listener bounds pending application contexts at 256, active connections at
 256, and each connection's inbound request-stream credit at 128. These limits
 are internal defaults in this increment, not tuned performance recommendations.
+Each stream the client opens must complete its header within
+`RequestHeadersTimeout`, 30 seconds by default; see
+[connection limits](request-limits.md#connection-limits).
 
 `Stop` and disposal cancel active requests, release pending accepts and close
 bindings. A directly used `IHttpListener` can restart after Stop; WebServer itself

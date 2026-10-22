@@ -472,7 +472,8 @@ namespace EmbedIO.Net.Internal.Http3
                 Func<Http3QuicExchange, IPEndPoint, IPEndPoint, Task> dispatch,
                 CancellationToken abort,
                 CancellationToken drain,
-                WebTransportOptions? webTransport = null
+                WebTransportOptions? webTransport = null,
+                TimeSpan? requestHeadersTimeout = null
             )
             {
                 var (application, features) = await _ready.Task
@@ -489,7 +490,8 @@ namespace EmbedIO.Net.Internal.Http3
                         abort,
                         drain,
                         TimeSpan.FromMilliseconds(uint.MaxValue - 1),
-                        webTransport
+                        webTransport,
+                        requestHeadersTimeout
                     )
                     .ConfigureAwait(false);
             }

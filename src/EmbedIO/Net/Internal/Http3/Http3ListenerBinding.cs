@@ -39,7 +39,8 @@ namespace EmbedIO.Net.Internal.Http3
             Func<Http3QuicExchange, IPEndPoint, IPEndPoint, Task> dispatch,
             CancellationToken abort,
             CancellationToken drain,
-            WebTransportOptions? webTransport = null
+            WebTransportOptions? webTransport = null,
+            TimeSpan? requestHeadersTimeout = null
         );
 
         internal abstract ValueTask RejectAsync(CancellationToken token);

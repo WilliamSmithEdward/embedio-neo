@@ -377,7 +377,7 @@ namespace EmbedIO
         /// <param name="this">The options instance.</param>
         /// <param name="maximumConnections">The maximum open connections, or null for no limit.</param>
         /// <param name="requestHeadersTimeout">The deadline for a new connection's first request head,
-        /// or null for the default of 30 seconds.</param>
+        /// and for each HTTP/3 stream's header, or null for the default of 30 seconds.</param>
         /// <param name="keepAliveTimeout">The idle deadline between requests, or null for the existing
         /// behavior.</param>
         /// <returns>The options instance.</returns>

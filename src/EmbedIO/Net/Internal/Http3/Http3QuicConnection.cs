@@ -52,6 +52,24 @@ namespace EmbedIO.Net.Internal.Http3
         private Exception? _failure;
         private int _critical;
 
+        // RequestHeadersTimeout, as Kestrel applies it to HTTP/3: each stream the peer opens
+        // must complete its header in time, that is its stream type, its WebTransport signal
+        // and session, or a request's decoded HEADERS. Guarded by _sync; the heartbeat
+        // resets streams past their deadline.
+        private readonly Dictionary<long, PendingHeader> _pendingHeaders = [];
+        private long _headerTimeout = HeaderTicks(
+            TimeSpan.FromMilliseconds(TcpConnectionPolicy.DefaultHeaderTimeoutMilliseconds)
+        );
+
+        // Position in Http3HeaderHeartbeat's list, or -1 when not registered.
+        internal int HeartbeatSlot = -1;
+
+        private readonly struct PendingHeader(Http3TransportStream stream, long deadline)
+        {
+            internal Http3TransportStream Stream { get; } = stream;
+            internal long Deadline { get; } = deadline;
+        }
+
         // Matches the HTTP/2 concurrent-stream limit and QUIC's inbound
         // bidirectional stream limit (EmbedIOQuicListenerBinding), so one number
         // bounds concurrent application work per connection on both protocols.
@@ -110,7 +128,8 @@ namespace EmbedIO.Net.Internal.Http3
             CancellationToken abortToken,
             CancellationToken drainToken,
             TimeSpan drainTimeout,
-            WebTransportOptions? webTransport = null
+            WebTransportOptions? webTransport = null,
+            TimeSpan? requestHeadersTimeout = null
         )
         {
             ArgumentNullException.ThrowIfNull(connection);
@@ -119,11 +138,17 @@ namespace EmbedIO.Net.Internal.Http3
             if (drainTimeout <= TimeSpan.Zero || drainTimeout.TotalMilliseconds > uint.MaxValue - 1)
                 throw new ArgumentOutOfRangeException(nameof(drainTimeout));
 
+            if (requestHeadersTimeout is { } timeout && timeout <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(requestHeadersTimeout));
+
             await using (connection.ConfigureAwait(false))
             using (var session = new Http3QuicConnection(connection, dispatch, abortToken, true, webTransport))
             {
                 session._drainToken = drainToken;
                 session._drainTimeout = drainTimeout;
+
+                if (requestHeadersTimeout is { } headers) session._headerTimeout = HeaderTicks(headers);
+
                 await session
                     .RunCoreAsync()
                     .ConfigureAwait(false);
@@ -165,6 +190,8 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_datagrams != null)
                     background = [.. background.Append(ReadDatagramsAsync())];
 
+                Http3HeaderHeartbeat.Add(this);
+
                 while (!_token.IsCancellationRequested)
                 {
                     var stream = await _connection.Value
@@ -192,6 +219,11 @@ namespace EmbedIO.Net.Internal.Http3
                                 // CancelActiveRequests may already have taken its snapshot.
                                 if (_token.IsCancellationRequested) scope.Stop.Cancel();
                             }
+
+                            _pendingHeaders.Add(
+                                stream.Id,
+                                new PendingHeader(stream, System.Diagnostics.Stopwatch.GetTimestamp() + _headerTimeout)
+                            );
 
                             // The worker yields to the thread pool before any stream work.
                             _workers.Add(stream.Id, ProcessStreamAsync(stream, scope));
@@ -235,6 +267,8 @@ namespace EmbedIO.Net.Internal.Http3
 
             finally
             {
+                Http3HeaderHeartbeat.Remove(this);
+
                 try
                 {
                     _datagrams?.Dispose();
@@ -495,6 +529,8 @@ namespace EmbedIO.Net.Internal.Http3
                     if (!type.HasValue)
                         return; // A partial/absent type may be abandoned.
 
+                    // A WebTransport stream's header also names its session; it is routed,
+                    // and its deadline cleared, when this worker ends.
                     if (type == WebTransportProtocol.UnidirectionalStreamType && _webTransport != null)
                     {
                         handedOff = true;
@@ -503,6 +539,9 @@ namespace EmbedIO.Net.Internal.Http3
                             .ConfigureAwait(false);
                         return;
                     }
+
+                    // The type is the whole header of any other stream.
+                    lock (_sync) _pendingHeaders.Remove(streamId);
 
                     if (type == 1) throw new Http3ProtocolException(0x103, "Client initiated a push stream.");
 
@@ -598,6 +637,7 @@ namespace EmbedIO.Net.Internal.Http3
                         _workers.Remove(streamId);
                         _requests.Remove(streamId);
                         _admitted.Remove(streamId);
+                        _pendingHeaders.Remove(streamId);
                     }
                 }
             }
@@ -666,6 +706,9 @@ namespace EmbedIO.Net.Internal.Http3
 
                 lock (_sync)
                 {
+                    // The request's headers are complete; its header deadline ends here.
+                    _pendingHeaders.Remove(stream.Id);
+
                     if (_draining)
                         throw new Http3StreamException(stream.Id, 0x10b, "Request arrived during connection drain.");
 
@@ -946,6 +989,43 @@ namespace EmbedIO.Net.Internal.Http3
             // Connection cancellation runs request callbacks; never under the gate.
             if (failure != null) Fail(failure);
         }
+
+        // Called by Http3HeaderHeartbeat about once a second. A stream still missing its header
+        // past the deadline is reset: a bidirectional one with H3_REQUEST_REJECTED, which tells
+        // the client the request was not processed, a unidirectional one with
+        // H3_STREAM_CREATION_ERROR (RFC 9114 sections 8.1 and 6.2).
+        internal void ExpireHeaders(long now)
+        {
+            List<Http3TransportStream>? expired = null;
+
+            lock (_sync)
+            {
+                if (_pendingHeaders.Count == 0 || _token.IsCancellationRequested) return;
+
+                foreach (var pending in _pendingHeaders.Values)
+                    if (pending.Deadline <= now) (expired ??= []).Add(pending.Stream);
+
+                if (expired == null) return;
+
+                foreach (var stream in expired) _pendingHeaders.Remove(stream.Id);
+            }
+
+            foreach (var stream in expired)
+            {
+                if (stream.Type == Http3StreamType.Bidirectional) AbortStream(stream, 0x10b);
+
+                else
+                    try
+                    {
+                        stream.Abort(Http3AbortDirection.Read, 0x103);
+                    }
+
+                    catch (ObjectDisposedException) { }
+            }
+        }
+
+        private static long HeaderTicks(TimeSpan timeout) =>
+            (long)Math.Min(timeout.TotalSeconds * System.Diagnostics.Stopwatch.Frequency, long.MaxValue / 2);
 
         private void SettleRequest(long streamId)
         {

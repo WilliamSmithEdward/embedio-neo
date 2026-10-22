@@ -501,10 +501,11 @@ namespace EmbedIO
         {
             var bodyPolicy = EmbedIO.Internal.RequestPolicyResolver.Create(Options);
 
-            // QUIC connections are not governed by the TCP connection limits.
-            if (Options.Mode == HttpListenerMode.EmbedIOHttp3 && Options.HasConnectionLimits)
+            // QUIC connections are not governed by the TCP connection limits;
+            // RequestHeadersTimeout applies to HTTP/3 streams as well.
+            if (Options.Mode == HttpListenerMode.EmbedIOHttp3 && Options.HasTcpOnlyConnectionLimits)
                 throw new NotSupportedException(
-                    "MaximumConnections, RequestHeadersTimeout and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode."
+                    "MaximumConnections and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode."
                 );
 
             // WebTransport is served over HTTP/3 only.
@@ -583,6 +584,7 @@ namespace EmbedIO
                     quic.TlsPolicy = tlsPolicy;
                     quic.Telemetry = Telemetry;
                     quic.WebTransport = Options.WebTransport;
+                    quic.RequestHeadersTimeout = Options.RequestHeadersTimeout;
                 }
             }
 #endif

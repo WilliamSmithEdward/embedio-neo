@@ -326,6 +326,8 @@ namespace EmbedIO.Net.Internal
                 tcp.Telemetry = telemetry;
                 quic.Telemetry = telemetry;
                 quic.WebTransport = webTransport;
+                // The TCP policy carries the configured or default RequestHeadersTimeout.
+                quic.RequestHeadersTimeout = TimeSpan.FromMilliseconds(connections.HeaderTimeoutMilliseconds);
                 quic.DeferContinue = deferContinue;
                 var session = new Session(tcp, quic);
 
