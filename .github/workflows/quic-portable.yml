@@ -52,6 +52,9 @@ jobs:
   portable:
     name: Portable TLS (${{ matrix.rid }})
     needs: [package]
+    # A skipped native job (reused artifacts) would otherwise skip this job too,
+    # because a skip propagates down the needs chain.
+    if: ${{ always() && !cancelled() && needs.package.result == 'success' }}
     strategy:
       fail-fast: false
       max-parallel: 2
