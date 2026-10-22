@@ -391,7 +391,11 @@ also implements ChaCha20-Poly1305/SHA-256, exercised through the OpenSSL peer pr
 Windows Schannel does not advertise that profile. Its Schannel implementation compiles in the
 .NET 10 library under `Net/Internal/Http3/Tls`, with certificate-source and TLS-policy
 integration exercised by the actual WebServer fixture. Windows client-certificate
-policies now have direct controller, chain, callback and revocation checks. All three
+policies now have direct controller, chain, callback and revocation checks. Packet
+payloads use .NET AES-GCM or ChaCha20-Poly1305, and key derivation uses .NET HKDF;
+there is no custom TLS or AEAD implementation. The QUIC-specific ChaCha header
+mask is an original single-block implementation with vector and independent-peer
+coverage. All three
 packet cipher profiles retain their hash and header key across key updates, with
 connection-wide authentication-failure limits. Resumption and supported-platform
 TLS/certificate parity remain pending. The standalone

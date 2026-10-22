@@ -12,10 +12,11 @@ sequence and its evidence; the final acceptance list describes work still outsta
 
 See [the feasibility profile](quic-engine-feasibility.md) for standards references,
 exact dependency pins, bounds and independent-peer setup. The implementation is
-standards-based, not a formally separated clean-room project. OpenSSL supplies
-TLS in the cross-platform development profile; a separate Windows adapter uses
+standards-based, not a formally separated clean-room project. The proposed
+Linux/macOS runtime packages carry pinned OpenSSL for TLS; Windows uses
 Schannel's public recordless SSPI interface. .NET cryptography supplies AES-GCM,
-AES and HKDF. Our code owns the transport.
+ChaCha20-Poly1305, AES and HKDF. Our code owns the transport and the small
+QUIC-specific ChaCha header-protection mask described below.
 William permits consulting MsQuic and other open-source implementations where
 their licenses permit it; implementation code must be original, with no verbatim
 copying from those projects.
