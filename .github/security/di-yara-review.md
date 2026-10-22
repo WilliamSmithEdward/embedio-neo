@@ -696,3 +696,18 @@ net10.0 assembly SHA-256: `54760b5fb8a02fec09810b2d02bf512f5378644cc16ecfa244a2b
 netstandard2.0 assembly SHA-256: `97908cd90a39200dca5223110dac1b778428271f634ff8e68131ceec33f8bee4`, match offset `0x758d`.
 
 Paginated open/fixed/dismissed GitHub code-scanning alert queries expose no matching YARA alert. William explicitly approved: "Approve both 2.16.0 paths and the unavailable-alert waiver." No dismissal is claimed. Local hashes identify reviewed precommit bytes, not future CI/release builds. Final exact-byte reviews, independent full scans and all CI gates remain required. Every other finding, scanner error and stale acceptance remains fatal. This approval is restricted to the two version-qualified 2.16.0 paths above. Evidence remains under ignored TestResults/release-2.16.0/yara-review and local-yara.
+
+## 2.16.1 HTTP/1 patch release revalidation
+
+Written acceptance covers only `GODMODERULES_IDDQD_God_Mode_Rule` on:
+
+- `dist/EmbedIO-Neo.DependencyInjection.2.16.1-unpacked/lib/net10.0/EmbedIO.DependencyInjection.dll`
+- `dist/EmbedIO-Neo.DependencyInjection.2.16.1-unpacked/lib/netstandard2.0/EmbedIO.DependencyInjection.dll`
+
+2.16.1 is built from v2.16.0 with one HTTP/1 listener correction; DI source and scanner pins are unchanged. The pinned YARA-X 1.21.0 (`yara-x-cli 1.21.0`) and YARA Forge 20261018 full rules (archive SHA-256 `c6a860533194d8c1209bc066c6dc6df9ecb0a2f9b7fc4104a5d87d0d3a651b73`, as pinned in `.github/security/yara.json`) were run with printed strings in the pinned `mcr.microsoft.com/dotnet/sdk:10.0.402-noble@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2` container without network access. Each assembly matches only `Injection.pdb` in compiler RSDS/CodeView metadata, once. No other rule matched either assembly.
+
+Local precommit package SHA-256: `004da86d3695cc09078aac8940da0e72070c255290807217bc00233fefaab057`.
+net10.0 assembly SHA-256: `9129f87f5090a7438991b8da6cb475b559b613fb433b72ab1c3cba35c0bbba2c`, match offset `0x6c96`.
+netstandard2.0 assembly SHA-256: `980c1108c984e47434f8f18236823d13f0991164a4a6ddb3aa4f48ae6001fee7`, match offset `0x7581`.
+
+The local offsets differ from the CI-built 2.16.0 offsets because the local build path differs. Paginated open/fixed/dismissed GitHub code-scanning alert queries on 2026-10-22 expose no YARA alert at all. William explicitly approved, choosing "Approve 2.16.1 paths" to move this acceptance to the two 2.16.1 paths with the same waiver for the alert GitHub does not expose. No dismissal is claimed. Local hashes identify reviewed precommit bytes, not CI or release builds; final exact-byte reviews, independent full scans and all CI gates remain required. Every other finding, scanner error and stale acceptance remains fatal. This approval is restricted to the two version-qualified 2.16.1 paths above. Evidence remains under ignored TestResults/patch-2.16.1/logs/pack-01.

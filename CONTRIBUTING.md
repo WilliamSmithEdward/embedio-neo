@@ -35,9 +35,9 @@ and partial-file naming conventions.
 The core library, test helpers, and JsonServer target .NET Standard 2.0 and .NET 10.
 The tests target .NET 10.
 
-The full regression suite has a 12-minute scheduling budget on Linux/macOS and
-an 8-minute budget on ordinary Windows PRs and 12 minutes on instrumented Windows main pushes. These host-wide deadlines do not replace individual
-test assertions or the minimum discovered-test count.
+The full regression suite has a 12-minute scheduling budget on all three desktop
+platforms. These host-wide deadlines do not replace individual test assertions or
+the minimum discovered-test count.
 
 CI requires the Mac Catalyst smoke job and the Windows, Mac Catalyst and Android
 MAUI HTTPS platform jobs to succeed on every code change. The Android lifecycle
@@ -83,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7600
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7601
 ```
 
 Keep dependency versions explicit in `Directory.Packages.props`. Pin CI actions
@@ -97,10 +97,9 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 7600 executed/reported test cases to catch accidental discovery loss; update
-that baseline deliberately when adding or removing tests. The full regression and coverage
-suite budget is eight minutes on ordinary Windows PRs and twelve minutes on Linux/macOS
-and instrumented Windows main pushes. Linux coverage
+least 7601 executed/reported test cases to catch accidental discovery loss; update
+that baseline deliberately when adding or removing tests. The full regression and
+coverage suite budget is twelve minutes on all three desktop platforms. Linux coverage
 run 38970758078 stopped near its eight-minute boundary with 6,522 of 6,695 cases
 reported and zero reported case failures; the uninstrumented final PR suite
 reported all 6,695 cases in about six minutes. The longer Linux coverage allowance
@@ -121,17 +120,17 @@ original incomplete runs remain retained and a complete final-source run is requ
 Windows main coverage run 39207894817 likewise reported 7,427 of 7,600 cases in
 two unchanged eight-minute runs, with zero reported case failures; all 70 new cases
 passed in both. The uninstrumented final PR suite completed all 7,600 cases.
-Instrumented Windows main pushes use twelve minutes; ordinary Windows PRs stay at
-eight minutes. The enclosing Windows main job allows twenty minutes for setup,
-the instrumented suite and adjacent checks; ordinary Windows PR jobs stay at
-fifteen minutes. Per-case deadlines and the test minimum remain unchanged. A
-complete successful main run is still required.
+The initial allowance applied only to instrumented Windows main pushes. Later
+ordinary Windows PR runs 39285832178 and 39286334993 stopped at eight minutes
+with 7,425 and 7,421 of 7,600 cases reported, respectively, and zero reported case
+failures. Windows PRs now receive the same twelve-minute suite and twenty-minute
+job allowance as main and Unix. Original incomplete reports remain retained;
+complete successful final-source runs are required.
 Per-case deadlines, assertions, iterations, coverage and the discovery minimum
 remain enforced; this is a whole-run allowance, not a failure exemption. NUnit 5
 async assertions must be awaited.
-The Test job allows 20 minutes on macOS/Linux and Windows main pushes, and 15 on
-ordinary Windows PRs, so each suite
-budget plus setup fits: CI 38479185526 finished all 6,056 macOS cases one
+The Test job allows 20 minutes on every desktop platform so each suite budget
+plus setup fits: CI 38479185526 finished all 6,056 macOS cases one
 second before a 15-minute job limit cancelled it (approved 2026-10-13).
 
 CI also runs test-only MAUI Mac Catalyst and Android apps outside the ordinary
