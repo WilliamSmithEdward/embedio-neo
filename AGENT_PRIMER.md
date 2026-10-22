@@ -1344,6 +1344,11 @@ readers and probes malformed extension pairs. Local self-test and seeded core-fu
 evidence is in the [development and testing record](docs/project/quic-development-and-testing.md);
 public session integration and final hosted acceptance are still pending.
 
+The unmerged async-stream owner now ignores inbound STREAM/RESET/STOP events
+after connection closure without creating another stream owner; outbound operations
+continue to report the original connection failure. A local close-race regression
+passes, but final hosted Linux/macOS acceptance remains pending.
+
 
 Source-reference fuzz, conformance and load-benchmark hosts now opt into that
 same test-only native copy target. Unix real-HTTP/3 fuzz and manual latency jobs

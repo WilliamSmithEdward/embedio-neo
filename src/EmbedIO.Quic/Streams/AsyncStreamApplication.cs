@@ -189,30 +189,46 @@ namespace EmbedIO.Quic
             lock (_gate)
             {
                 CheckOpen();
-
-                if (_streams.TryGetValue(id, out var stream)) return stream;
-
-                if (_streams.Count >= _operations.StreamCapacity)
-                    throw new InvalidDataException("Async stream owner limit exceeded.");
-
-                stream = new AsyncQuicStream(id, Notify);
-                _streams.Add(id, stream);
-
-                if ((id & 1) == 0 && !_accepted.Writer.TryWrite(stream))
-                    throw new InvalidDataException("Unaccepted stream limit exceeded.");
-
-                return stream;
+                return GetStreamCore(id);
             }
         }
 
-        internal override void Open(ulong id) => GetStream(id);
+        private AsyncQuicStream? GetInboundStream(ulong id)
+        {
+            lock (_gate)
+            {
+                // A packet accepted before connection close may finish parsing
+                // after the application has released all of its stream owners.
+                if (_failure != null) return null;
 
-        internal override void Stream(ulong id, byte[] bytes, bool fin) => GetStream(id).Receive(bytes, fin);
+                return GetStreamCore(id);
+            }
+        }
+
+        private AsyncQuicStream GetStreamCore(ulong id)
+        {
+            if (_streams.TryGetValue(id, out var stream)) return stream;
+
+            if (_streams.Count >= _operations.StreamCapacity)
+                throw new InvalidDataException("Async stream owner limit exceeded.");
+
+            stream = new AsyncQuicStream(id, Notify);
+            _streams.Add(id, stream);
+
+            if ((id & 1) == 0 && !_accepted.Writer.TryWrite(stream))
+                throw new InvalidDataException("Unaccepted stream limit exceeded.");
+
+            return stream;
+        }
+
+        internal override void Open(ulong id) => _ = GetInboundStream(id);
+
+        internal override void Stream(ulong id, byte[] bytes, bool fin) => GetInboundStream(id)?.Receive(bytes, fin);
 
         internal override void Reset(ulong id, ulong error, ulong reliableSize) =>
-            GetStream(id).PeerReset(error, reliableSize);
+            GetInboundStream(id)?.PeerReset(error, reliableSize);
 
-        internal override void Stop(ulong id, ulong error) => GetStream(id).PeerStopped(error);
+        internal override void Stop(ulong id, ulong error) => GetInboundStream(id)?.PeerStopped(error);
 
         internal override void WritesClosed(ulong id)
         {

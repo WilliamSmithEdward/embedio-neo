@@ -2301,6 +2301,27 @@ change listener behavior. Its focused observer case passed, as did the eleven
 selected WebSocket and concurrent-upload cases. New-head hosted evidence is
 still required before concluding either platform failure is resolved.
 
+Hosted CI `39722515237` on `a0eeda69` passed the Windows regression suite but
+failed Linux and macOS. Linux completed 7,588 successes, one failure and 17
+not-executed/skipped cases out of 7,606. The sole failure was a concurrent
+HTTP/3 listener stop: a late STREAM frame reached `AsyncStreamApplication.GetStream`
+after connection closure and raised `QuicConnectionFailure` during shutdown.
+The local async-stream regression reproduced that exception before the correction;
+the owner now discards inbound stream events after closure without creating new
+owners, while outbound operations keep reporting the original connection failure.
+The QUIC self-test passed 10,076 assertions locally after the correction. This
+has not yet passed hosted CI.
+
+macOS completed 7,578 successes, four failures and 24 not-executed/skipped cases
+out of 7,606. Two cases reported `HostUnreachable`, one drain case timed out,
+and a stalled HTTP/3 body-read case saw `H3_REQUEST_CANCELLED` instead of a
+complete 408 response. The bounded accept-loop diagnostic was not present in
+that hosted run; it is committed for the next head. The exact TRX files and Linux
+job log are retained under ignored
+`TestResults/quic-feasibility/continuation/webtransport-public-01/ci-heada0-*`.
+The macOS causes and intermittent 408 reset remain unresolved; neither a local
+focused pass nor the async-stream correction establishes their resolution.
+
 ## Open-issue resolution baseline
 
 The open-issue inventory on 2026-10-21 contains eight issues. This is a

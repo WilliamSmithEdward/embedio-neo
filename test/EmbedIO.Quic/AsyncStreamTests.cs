@@ -832,6 +832,12 @@
                 );
             }
 
+            // A packet already queued by the listener may still carry STREAM frames
+            // when the application has completed connection-close notification.
+            peer.Streams.Receive(0, 0, [1], false);
+            peer.Streams.Receive(4, 0, [2], true);
+            Check(peer.Application.Retained == 0, "late-stream-after-close-has-no-new-owner");
+
             peer.Dispose();
             peer.Dispose();
             Check(
