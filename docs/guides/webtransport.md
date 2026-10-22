@@ -248,6 +248,13 @@ bytes, then ends the session stream; the session's streams are reset.
 and `CloseReason` then hold what the peer or the server sent, or `null` when the
 session ended without a close, for example when the connection was lost.
 
+When the client's connection ends before the session does, the request is canceled
+as well. A call waiting with the request's token then either returns as it does at
+the end of a session, with `null`, or throws `OperationCanceledException`,
+depending on which the server notices first. Firefox 157 ends sessions this way: it
+closes its connection right after the page calls `close()`, so the server records
+no close code.
+
 During a graceful drain the server sends each session a drain capsule, asking its
 peer to finish, and lets the sessions run until the drain deadline. Draft-02 has no
 drain capsule, so its peers ignore it. Stopping the server ends every session.
@@ -290,7 +297,11 @@ A Chromium 152 browser on Windows opened a draft-02 session from a page on
 `http://localhost`, pinning a 10-day ECDSA certificate with
 `serverCertificateHashes`: it echoed a datagram, a bidirectional stream and a
 unidirectional stream, and both sides recorded the close code and reason the page
-sent. No other browser was tested. The
+sent. On Linux, headless Chromium 156 and Firefox 157, driven by Playwright 1.64.0,
+ran the same page against the packaged server and echoed all three; Chromium's
+close code reached the server and Firefox's did not, as described under Closing.
+Playwright's WebKit build does not implement WebTransport. Safari and browsers on
+macOS were not tested. The
 [development record](../project/quic-development-and-testing.md) has the details.
 
 Not implemented: application protocol negotiation with `WT-Available-Protocols` and

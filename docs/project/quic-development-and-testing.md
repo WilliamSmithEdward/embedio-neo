@@ -2641,7 +2641,26 @@ the Go image and the peer's modules. In CI `39794451873` all modes passed on bot
 platforms. The macOS job needed one rerun: after its modes passed, `dotnet nuget
 locals` exited 137 in `setup-dotnet`'s cache cleanup, the failure #401 tracks.
 
-Not covered yet: browsers other than Chromium, and a browser on Linux or macOS.
+On Linux, the same page and harness ran in the pinned SDK 10.0.402 container against
+the packages from CI run `39811758731` (its `quic-runtime-feed` artifact, source
+`cff98439`). An ordinary consumer project restored `EmbedIO-Neo` and
+`EmbedIO-Neo.Quic.Native` 2.16.0 from that feed only; package-source mapping kept
+nuget.org's public 2.16.0 out. Playwright 1.64.0 drove headless browsers:
+
+- Chromium 156.0.8078.4 echoed the datagram and both streams, and the server
+  recorded close code 7 and reason "done".
+- Firefox 157.0 echoed the datagram and both streams in all nine sessions, but the
+  server never received a close code. Firefox's own log (`MOZ_LOG` for its HTTP/3
+  stack) shows it closing the whole QUIC connection with H3_NO_ERROR about 3 ms
+  after the page's `close()`. The server then either ended the session without a
+  code, so `AcceptStreamAsync` returned `null`, or canceled the request first, so it
+  threw `OperationCanceledException`; six instrumented runs split three and three.
+  Neither leaves anything waiting, and the guide now describes both. tshark could
+  not decrypt past the handshake with Firefox's key log, so the missing close
+  capsule rests on Firefox's log and the server's observations, not on a capture.
+- Playwright's WebKit 27.2 build has no `WebTransport` (`ReferenceError`).
+
+Not covered yet: Safari, and browsers on macOS.
 
 ## Endurance
 
@@ -2683,7 +2702,7 @@ yet: the work that resolves them is not on `main` until this pull request merges
 
 | Issue | Disposition on this source | Before closing |
 | --- | --- | --- |
-| [#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414) | Implemented: the session core is wired to HTTP/3, the public API, limits and guide exist, and opening a stream that fails after credit was reserved now returns the reservation. quic-go modes pass on Windows, Linux and macOS; Chromium 152 completed a draft-02 session on Windows. | A browser on Linux or macOS, and the merge. |
+| [#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414) | Implemented: the session core is wired to HTTP/3, the public API, limits and guide exist, and opening a stream that fails after credit was reserved now returns the reservation. quic-go modes pass on Windows, Linux and macOS; Chromium 152 completed a draft-02 session on Windows, and Chromium 156 and Firefox 157 did on Linux. | The merge. Safari and browsers on macOS were not tested. |
 | [#303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303) | EmbedIO.Quic implements current-wire `RESET_STREAM_AT`, so the MsQuic request (microsoft/msquic#6376) no longer gates WebTransport. The peer's reset, outbound-reset and missing-reset modes pass on Windows, Linux and macOS; the migration guide and standards matrix now state the support and its limits. | The merge. |
 | [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278) | The server no longer uses `System.Net.Quic`, so its send-buffer retention reaches only the BCL test client. The endurance run under Endurance above kept quiesced heap, handles and memory outside the GC within the ranges they held from the start, over nine server generations and 264,958 HTTP/3 requests. | The merge. The run was 18 minutes, on Windows only. |
 | [#202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202) | The bind retry and the rebind quarantine went with the MsQuic provider, and the restart cases run without them. They passed on Windows, Linux and macOS in CI `39748091670`. | The merge. |
