@@ -35,12 +35,14 @@ Install the hash-locked independent peer from
 The portable CI job builds this boundary and runs those checks on Linux and macOS.
 Configured jobs are not validation evidence until their exact-source runs pass.
 
-The unmerged ordinary HTTP/3 binding now selects EmbedIO.Quic; released packages
-retain their previous provider. Runtime assets are built into
-a separate, unpublished development package. The unmerged modern core now depends
-on that asset-only package; .NET Standard dependencies remain unchanged. CI and
-Publish input assembly include all six runtime assets, but supported-RID execution,
-oldest OS/libc, signing and the final provider transition still require validation.
+The ordinary HTTP/3 binding selects EmbedIO.Quic; released packages through 2.16.1
+retain their previous provider. Runtime assets are built into the asset-only
+`EmbedIO-Neo.Quic.Native` package, not yet published; the modern core depends on
+it, and .NET Standard dependencies remain unchanged. CI and Publish include all six
+runtime assets, and CI runs the package consumers on each of the six runtime
+identifiers. They passed once on macOS 14. Execution on the oldest glibc and musl
+versions the builds target, and macOS signing and hardened-runtime loading, are not
+validated.
 See [the development record](../../docs/project/quic-development-and-testing.md).
 
 ## Issuer chains and ownership checks
@@ -168,9 +170,10 @@ packing requires `-p:EmbedIOQuicPreviewRid=<rid>`, feed sealing requires
 `--preview-rid <rid>` and the consumer requires `--preview`. These flags identify
 an incomplete development preview and are absent from distribution CI. Ordinary
 package validation requires all six RIDs. No preview is published by this workflow.
-Oldest libc/OS, signing/hardened-app loading, all-platform runtime results, malware
-validation of the final payload, browser tests, endurance and provider retirement
-remain part of the development goal.
+The oldest glibc and musl versions and macOS signing and hardened-runtime loading
+remain unvalidated. Runtime results on all six RIDs and macOS 14, the malware scan of
+the seven-package payload, browser sessions and endurance runs are recorded in the
+development record, and the earlier providers are removed.
 
 
 ## Intel macOS test peer

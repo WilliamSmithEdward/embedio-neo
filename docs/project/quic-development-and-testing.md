@@ -2,13 +2,13 @@
 
 This record covers the development path, test architecture, reproducible local
 campaigns and remaining acceptance work for the original C# QUIC engine. It is
-maintained with the implementation. The feature is pending in draft PR #506.
-The ordinary HTTP/3 binding now selects EmbedIO.Quic with its own TLS capability
-check and transitive runtime delivery. The earlier provider remains in internal
-comparison paths until replacement acceptance and removal. The later sections
-record the cutover evidence and remaining platform/application work. No package release or
-public WebTransport API is implied by this record. The sections retain the implementation
-sequence and its evidence; the final acceptance list describes work still outstanding.
+maintained with the implementation, which [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506) added; no
+released package contains it yet. The ordinary HTTP/3 binding selects EmbedIO.Quic with
+its own TLS capability check and transitive runtime delivery, the earlier providers are
+removed, and servers can opt in to public WebTransport sessions. The sections keep the
+implementation sequence and its evidence in order, so an earlier section describes the
+source as it was then. [Remaining production acceptance work](#remaining-production-acceptance-work)
+and the [open-issue audit](#open-issue-audit) give the current state.
 
 See [the feasibility profile](quic-engine-feasibility.md) for standards references,
 exact dependency pins, bounds and independent-peer setup. The implementation is
@@ -1138,6 +1138,34 @@ python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py
 ```
 
 ## Remaining production acceptance work
+
+Validated before the merge, each recorded in its own section:
+
+- On all six runtime identifiers in CI, the package consumers: portable, RID-specific
+  and Native AOT publishing, three cipher profiles, missing-runtime controls,
+  generated controllers, authorization, limits and abort, and the wire, cipher,
+  connection-ID, stateless-reset, path, SNI, publication, client-certificate and
+  authentication-fuzz suites. The same set passed once on macOS 14
+  ([Oldest macOS](#oldest-macos)).
+- The independent quic-go peer's 15 public WebTransport modes, in CI on Linux and
+  macOS; draft-02 browser sessions from Chromium on Windows and Linux and from Firefox
+  on Linux.
+- 30-minute endurance runs on Windows and Linux ([Endurance](#endurance)).
+
+Still open after the merge:
+
+1. The transport/TLS profile: Retry, post-handshake TLS, resumption and 0-RTT are not
+   implemented, and features outside the supported profile fail explicitly.
+   Non-exportable keys work on Windows only; Unix TLS needs an exportable key.
+2. Bounded native TLS worker scheduling under sustained load, beyond the endurance runs.
+3. Startup, warm and tail-latency measurement. Windows embedded hosting leads, and a
+   meaningful warm regression is not accepted for a cold-start gain.
+4. Endurance longer than 30 minutes, and on macOS.
+5. Execution on the oldest glibc and musl versions the native builds target, and
+   macOS signing and hardened-runtime loading.
+6. Safari and browsers on macOS, and Alt-Svc discovery.
+
+The list this replaced, kept for its history:
 
 1. Complete application configuration, certificate lifetime and platform acceptance
    for the new internal socket binding. The real WebServer path now has initial
@@ -2662,6 +2690,46 @@ nuget.org's public 2.16.0 out. Playwright 1.64.0 drove headless browsers:
 
 Not covered yet: Safari, and browsers on macOS.
 
+## Oldest macOS
+
+The native build targets macOS 14.0. A one-off CI run on the `macos-14` image
+(macOS 14.8.9, image 20260831.0302.1) ran the package consumers against packages
+built from `242127bc`'s product source (run `39825588810`). The portable and
+RID-specific consumers passed with all three cipher profiles and their
+missing-runtime controls. The Native AOT publish failed to link: .NET 10.0.13's
+`libSystem.Security.Cryptography.Native.Apple.a` references Swift libraries such as
+`swift_math` and `swift_errno` (`__swift_FORCE_LOAD_$_swift_math`) that the image's
+default Xcode 15.4 does not have, and every later step was skipped. Microsoft lists
+the latest Xcode command line tools as the macOS prerequisite for Native AOT. With
+`DEVELOPER_DIR` set to the image's Xcode 16.2 (16C5032a, Apple clang 16.0.0, SDK
+15.2), run `39833142236` on the same product source passed all 33 steps on macOS
+14.8.9, including the AOT publish, the AOT runs and the full protocol suites. Both
+runs came from throwaway branches, not a CI leg; GitHub retires the macOS 14 image
+on 2 November 2026.
+
+## Last CI fixes
+
+Three failures on `1d97aa8e` were corrected before the merge:
+
+- The Security report failed on a Semgrep parse error, not a finding. Semgrep 1.181.0
+  cannot parse C# primary constructors, and `PendingHeader`, added with the HTTP/3
+  header timeout, declared one, so `Http3QuicConnection.cs` went unscanned. Semgrep
+  only parses a file when a rule's literal pre-filter matches it, which is why other
+  primary constructors in the source have not failed the report. `PendingHeader` is
+  now a positional `readonly record struct`, which the pinned image parses.
+- On macOS the production interop's `datagram-fault` mode counted no accepted
+  session although the peer passed. The peer sent its invalid datagram as soon as it
+  read the 200, and the server closed the connection with H3_DATAGRAM_ERROR before
+  the handler's `AcceptWebTransportAsync` returned. The peer now completes one stream
+  echo first, which the server can only answer after accepting the session; the
+  rebuilt peer passed all 15 modes on Windows, and `datagram-fault` ten more times.
+- `CombinedDrainAbortsAFullUndispatchedQueue(True)` failed on macOS: the canceled
+  drain had not thrown within 5 seconds. A canceled drain still waits for the
+  transports to stop, and a QUIC connection holds that through its closing period.
+  The canceled case now gets the allowance the uncanceled case already had: what
+  remains of the closing period plus one second, with the pending stages reported on
+  a miss.
+
 ## Endurance
 
 The load benchmark's endurance mode ran on Windows against `750176f0`, with server
@@ -2694,17 +2762,55 @@ source and passed in ten runs with the correction. The benchmark also still
 expected the 90-second limit from before v2 for a connection's first request; it now
 expects the default `RequestHeadersTimeout` of 30 seconds.
 
+### 30-minute runs
+
+Two later runs used the load benchmark README's plan: idle, steady load for five
+minutes, the fault mix for four, WebSockets for two, three drains under mixed load,
+five restarts, mixed load for seven minutes and idle, with server CPUs 0-3 and client
+CPUs 4-7. Linux ran in the digest-pinned .NET SDK 10.0.402 container (runtime 10.0.13)
+limited to those eight CPUs, with the CI-built TLS library (SHA-256 `cdbba337...`) and,
+for the clients' .NET `HttpClient`, the libmsquic 2.6.2 package CI pins.
+
+| | Windows, `242127bc` | Linux, `4338b9e0` |
+| --- | --- | --- |
+| Steps passed | 8 of 8 | 8 of 8 |
+| Client errors | 0 | 0 |
+| Validated requests | 3,371,913 | 5,043,237 |
+| Of them over HTTP/3 | 481,648 | 484,934 |
+| Quiesced managed heap, first after warm-up to last | 3,664 to 3,741 KiB | 3,402 to 3,450 KiB |
+| Handles, first to last | 571 to 592 | 134 to 134 |
+| Threads, first to last | 18 to 22 | 20 to 24 |
+| Private memory outside the GC's committed memory, first to last | 21.9 to 24.6 MiB | 212.9 to 249.7 MiB |
+
+On Linux, memory outside the GC rose from 213 MiB after the fault mix to 254 MiB after
+the third drain cycle, then held between 246 and 251 MiB through the restarts, seven
+minutes of mixed load and the final idle; it did not grow with the 2.44 million
+mixed-load requests. That fits a native allocator reaching its high-water mark better
+than per-request retention, but 30 minutes cannot rule out slow growth. Apart from
+tests, the two revisions differ only in how `PendingHeader` is declared (see
+[Last CI fixes](#last-ci-fixes)).
+
+The benchmark's server used to ask `System.Net.Quic` whether QUIC is supported, which
+loads MsQuic into the server process although EmbedIO.Quic never uses it. `4338b9e0`
+removed that probe. The Windows run predates it: its startup record shows the .NET
+runtime's msquic.dll 2.5.11 loaded, unused, in the server.
+During the Linux run's steady load, a census of the benchmark processes found
+libmsquic mapped only in the client and the EmbedIO TLS library only in the server.
+Two earlier Linux attempts are not results: one built a source export with CRLF line
+endings, which failed IDE0055, and the next lacked the client's libmsquic, so no
+HTTP/3 request left the client.
+
 ## Open-issue audit
 
 On 2026-10-22, after the provider removal and the public WebTransport sessions,
-each of the eight open issues was rechecked against this source. None is closed
-yet: the work that resolves them is not on `main` until this pull request merges.
+each of the eight open issues was rechecked against this source. The issues whose
+column below says the merge is all that remains are closed when this work merges.
 
 | Issue | Disposition on this source | Before closing |
 | --- | --- | --- |
 | [#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414) | Implemented: the session core is wired to HTTP/3, the public API, limits and guide exist, and opening a stream that fails after credit was reserved now returns the reservation. quic-go modes pass on Windows, Linux and macOS; Chromium 152 completed a draft-02 session on Windows, and Chromium 156 and Firefox 157 did on Linux. | The merge. Safari and browsers on macOS were not tested. |
 | [#303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303) | EmbedIO.Quic implements current-wire `RESET_STREAM_AT`, so the MsQuic request (microsoft/msquic#6376) no longer gates WebTransport. The peer's reset, outbound-reset and missing-reset modes pass on Windows, Linux and macOS; the migration guide and standards matrix now state the support and its limits. | The merge. |
-| [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278) | The server no longer uses `System.Net.Quic`, so its send-buffer retention reaches only the BCL test client. The endurance run under Endurance above kept quiesced heap, handles and memory outside the GC within the ranges they held from the start, over nine server generations and 264,958 HTTP/3 requests. | The merge. The run was 18 minutes, on Windows only. |
+| [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278) | The server no longer uses `System.Net.Quic`, so its send-buffer retention reaches only the BCL test client. The runs under Endurance above, 18 and 30 minutes on Windows and 30 on Linux, finished without a client error over more than 1.2 million HTTP/3 requests; quiesced heap and handles held their early levels, and on Linux memory outside the GC rose during the drains and then held flat. | The merge. Nothing ran longer than 30 minutes or on macOS. |
 | [#202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202) | The bind retry and the rebind quarantine went with the MsQuic provider, and the restart cases run without them. They passed on Windows, Linux and macOS in CI `39748091670`. | The merge. |
 | [#398](https://github.com/WilliamSmithEdward/embedio-neo/issues/398) | The failing path, `QuicListener` loading its credential, no longer exists on the server; EmbedIO.Quic acquires its Schannel credential itself, and the quarantine is gone. Windows Test passed in both runs on the new binding (`39738902765`, `39748091670`). | The merge; reopen if the engine shows a credential failure. |
 | [#399](https://github.com/WilliamSmithEdward/embedio-neo/issues/399) | The native MsQuic listener and the tests that failed are removed. | The merge. |

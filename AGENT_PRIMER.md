@@ -368,7 +368,7 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 | Mode | Serves | Requirements |
 | --- | --- | --- |
 | `EmbedIO` (default) | HTTP/1.1 and HTTP/2 over TCP | HTTP/2 needs TLS with ALPN (`net10.0` asset) or cleartext prior knowledge |
-| `EmbedIOHttp3` | HTTP/3 over QUIC/UDP only | `net10.0`, HTTPS prefixes, a certificate with its private key, TLS 1.3; the unmerged replacement uses owned native TLS assets on Unix and Schannel on Windows |
+| `EmbedIOHttp3` | HTTP/3 over QUIC/UDP only | `net10.0`, HTTPS prefixes, a certificate with its private key, TLS 1.3; EmbedIO.Quic uses owned native TLS assets on Unix and Schannel on Windows; released 2.16.x packages use `System.Net.Quic` |
 | `EmbedIOCombined` | Both of the above on the same HTTPS prefixes | Everything HTTP/3 needs; both bindings must succeed |
 
 - HTTP/2 needs no opt-in in the default mode.
@@ -377,7 +377,7 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 - There is no automatic Alt-Svc advertisement; clients must be told HTTP/3 is
   available. See the [HTTP/3 guide](docs/guides/http3.md).
 
-In this unmerged branch the HTTP/3 listener serves opt-in WebTransport sessions:
+The HTTP/3 listener serves opt-in WebTransport sessions:
 `WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a
 session through `IWebTransportContext` and use its `WebTransportSession` streams and
 datagrams. It speaks draft-ietf-webtrans-http3-16 and the draft-02 handshake
@@ -404,7 +404,7 @@ packet cipher profiles retain their hash and header key across key updates, with
 connection-wide authentication-failure limits. Resumption and supported-platform
 TLS/certificate parity remain pending. The standalone
 core and development host remain nonpackable. .NET Standard compilation remains
-unchanged. In this unmerged branch, ordinary .NET 10 HTTP/3 and combined listeners
+unchanged. Ordinary .NET 10 HTTP/3 and combined listeners
 select EmbedIO.Quic and its runtime packages carry the owned Unix TLS library.
 The fuzz harness exercises the library's engine source. It includes
 loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
@@ -463,7 +463,7 @@ cancellation-callback failures are reported after session teardown;
 connection workers and sibling bindings still receive cleanup. A failed drain clears
 the previous session so the listener can restart. Per-instance listener
 construction allows the real WebServer pipeline to validate that binding with
-development credentials. The current unmerged binding selection is described below.
+development credentials. The current binding selection is described below.
 The replacement stream/datagram adapters now drive the library's HTTP/3 protocol
 from the development UDP host. Ordinary body-read cancellation preserves the
 existing distinction between local timeout (`H3_NO_ERROR`) and request cancellation;
@@ -508,7 +508,7 @@ rent pages as data arrives and clear/return them after consumption, read abort,
 reliable-reset suffix discard, retirement or connection shutdown; empty streams do
 not reserve full payload windows. Discard retains offset/final-size validation and
 keeps application-delivered bytes under explicit consumption ownership. It has
-no separate public engine API. The unmerged ordinary WebServer binding uses
+no separate public engine API. The ordinary WebServer binding uses
 EmbedIO.Quic, and this source no longer contains the System.Net.Quic or MsQuic
 server providers. The [development and testing record](docs/project/quic-development-and-testing.md)
 tracks all fuzz engines, extensive local runs and remaining production acceptance. The Windows
@@ -1211,7 +1211,7 @@ macOS support. See the development record for evidence and the remaining
 production, browser, endurance and latency work.
 
 
-The unmerged engine now recognizes received stateless resets using tokens for
+The engine recognizes received stateless resets using tokens for
 peer IDs it has actually used; unused and retired IDs do not qualify. Valid
 packet authentication takes precedence. A recognized reset enters silent draining
 and cancels active application work, including request-abort tokens. The dispatcher
@@ -1222,10 +1222,10 @@ adds no token hash to the usual single-connection packet path. Reset routes and 
 groups retire with connection ownership. Server-issued IDs and reset emission
 are described below; path migration remains development work.
 The new model, dispatcher, independent-peer and fuzz checks are recorded in the
-development/testing guide; see the current unmerged binding selection below.
+development/testing guide; see the current binding selection below.
 
 
-The unmerged engine issues fixed 16-byte random server IDs and maintains two
+The engine issues fixed 16-byte random server IDs and maintains two
 active IDs per connection. The initial reset token travels in authenticated
 server transport parameters; a spare ID and replacements use reliable
 NEW_CONNECTION_ID deliveries. RETIRE_CONNECTION_ID rejects unissued sequences
@@ -1241,8 +1241,7 @@ share of the output queue. Active IDs use ordinary connection processing.
 Model tests cover 10,000 retirements, loss, bounds, malformed frames and cleanup;
 Windows reference peers passed 32 rotations and two retired-ID reset emissions
 on each AES profile, and Linux passed the same checks on all three cipher profiles.
-This remains unmerged development; runtime delivery and application acceptance
-continue as described below. Local regression/fuzz results, the low AFL++ feedback-stability limitation and
+Runtime delivery and application acceptance are described below. Local regression/fuzz results, the low AFL++ feedback-stability limitation and
 final changed-source acceptance for this increment are recorded in the testing guide.
 
 
@@ -1255,14 +1254,14 @@ markup. Offline controls run in CI's existing source-quality environment. See
 new captures do not overwrite or redate the documented frozen inventory.
 
 
-Same-path `PATH_CHALLENGE` responses in the unmerged engine echo the exact eight
+Same-path `PATH_CHALLENGE` responses in the engine echo the exact eight
 bytes once and pad the UDP datagram to 1200 bytes, except where the existing
 unvalidated-address amplification budget requires less. Recovery does not repeat
 the response frame. Truncated challenge/response data yields frame-encoding error
 7; an unmatched complete response retains protocol-violation error 10, permitted
 by RFC 9000 section 19.18. The model, fuzz and independent-peer hooks are in the
 [development/testing record](docs/project/quic-development-and-testing.md).
-The unmerged engine also has bounded address-aware routing and server-initiated
+The engine also has bounded address-aware routing and server-initiated
 path validation. New peer addresses require authenticated 1-RTT traffic after
 handshake confirmation; only the newest non-probing packet steers ordinary output.
 Per-path amplification accounting, unique challenge attempts, a separate full-size
@@ -1284,9 +1283,8 @@ when validation ends; production networking does not require this fixture setup.
 The earlier isolated default-selection probe verified ordinary .NET 10 HTTP/3
 WebServer modes through `EmbedIOQuicListenerBinding`, using Schannel on Windows
 and the private pinned OpenSSL TLS runtime on Linux/macOS. That selection and its
-actual TLS capability checks are now integrated into the unmerged source as
-described below. Full replacement acceptance is still required; no released
-package selects this snapshot.
+actual TLS capability checks are integrated as described below; no released
+package selects them yet.
 
 Recovery now accumulates pacing credit at the RTT/congestion-window rate, capped
 at the initial ten-packet window and independently constrained by congestion.
@@ -1297,7 +1295,7 @@ The model, actual WebServer regression, independent-peer and fuzz evidence is in
 the development/testing record. The open-issue audit remains outstanding.
 
 
-The unmerged .NET 10 core now declares the owned `EmbedIO-Neo.Quic.Native`
+The .NET 10 core declares the owned `EmbedIO-Neo.Quic.Native`
 runtime dependency. It has no managed runtime-wrapper assembly; Windows still
 uses Schannel. .NET Standard dependency groups remain unchanged. Package-only
 applications and the development host reference only the core package, and their
@@ -1312,19 +1310,20 @@ source/managed scan remains required. Publish likewise requires the seventh
 runtime package in its scan input. No release is authorized.
 
 
-Ordinary unmerged `EmbedIOHttp3` / `EmbedIOCombined` construction now selects
+Ordinary `EmbedIOHttp3` / `EmbedIOCombined` construction selects
 EmbedIO.Quic through the public WebServer API. Startup checks a 64-bit desktop
 TLS path directly: Schannel requires Windows 11 / Server 2022 and later, while
 Linux/macOS must load the expected private ABI/version. Missing Unix libraries
 fail before binding; the server no longer needs BCL QUIC to be available on this
 path. Normal package consumers prove portable/RID/AOT delivery and missing-runtime
-refusal without an injected binding. The private macOS build now targets 14.0;
-metadata checks do not substitute for downlevel runtime execution. Released v2.16.0
-still uses the previous provider; this source no longer contains it. Tests that
+refusal without an injected binding. The private macOS build targets 14.0, and the
+package consumers passed on macOS 14. Released packages through 2.16.1
+still use the previous provider; this source no longer contains it. Tests that
 drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through the
 EmbedIO.Quic binding; the BCL client remains the independent test client.
-Final platform acceptance, lifetime/latency work and the open-issue audit remain
-outstanding.
+The [development record](docs/project/quic-development-and-testing.md) lists the
+platform, browser and endurance results, the open-issue audit and the work that
+remains, such as latency measurement and the oldest glibc and musl versions.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified
@@ -1344,15 +1343,14 @@ close checks.
 The QUIC bridge fuzz target round-trips input-derived server SETTINGS through the
 HTTP/3 and WebTransport readers and probes malformed extension pairs. Local
 self-test and seeded core-fuzz
-evidence is in the [development and testing record](docs/project/quic-development-and-testing.md);
-final hosted acceptance is still pending.
+evidence is in the [development and testing record](docs/project/quic-development-and-testing.md).
 
-The unmerged async-stream owner now ignores inbound STREAM/RESET/STOP events
+The async-stream owner ignores inbound STREAM/RESET/STOP events
 after connection closure without creating another stream owner; outbound operations
 continue to report the original connection failure. A local close-race regression
-passes, and the next hosted Linux suite passed; final hosted acceptance remains pending.
+passes, as do the hosted suites.
 
-The unmerged EmbedIO.Quic listener now enables UDP destination reporting before it
+The EmbedIO.Quic listener enables UDP destination reporting before it
 binds. On macOS a datagram could arrive without its destination before the first
 receive, and the listener stopped, so clients saw "No route to host". A wildcard
 (dual-mode) HTTP/3 prefix also stopped at its first receive on macOS, where .NET
@@ -1374,7 +1372,7 @@ replay and bounded state-machine evidence is recorded in the development/testing
 record; final platform failures and sustained latency acceptance remain open.
 
 
-The unmerged EmbedIO.Quic listener isolates UDP reset/refused/unreachable-path
+The EmbedIO.Quic listener isolates UDP reset/refused/unreachable-path
 errors to their datagram operation. The shared listener keeps accepting healthy
 connections and existing recovery handles lost output. Its internal shutdown
 summary counts these path errors. Other socket failures, cancellation and resource

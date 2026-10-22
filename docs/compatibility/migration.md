@@ -798,8 +798,8 @@ deployment migration, including removed runtime adapters and HTTP.sys configurat
 
 HTTP/3 remains opt-in through `EmbedIOHttp3`, or `EmbedIOCombined` for TCP and QUIC
 hosting together, with the documented .NET 10, certificate and platform
-prerequisites. Released v2.16.0 runs HTTP/3 on System.Net.Quic and unmerged
-PR #506 on the EmbedIO.Quic engine; both are distinct from the removed
+prerequisites. Released packages through 2.16.1 run HTTP/3 on System.Net.Quic,
+and the current source on the EmbedIO.Quic engine; both are distinct from the removed
 System.Net.HttpListener backend. Implementation retirement does
 not establish final program, extension or platform acceptance. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
 and [HTTP/3 guide](../guides/http3.md) for the remaining validation scope.

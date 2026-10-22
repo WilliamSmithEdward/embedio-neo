@@ -10,12 +10,13 @@ implementation. The engine includes loss recovery, NewReno congestion control an
 an HTTP/3/WebTransport adapter. It adds no public listener mode, and public
 WebTransport APIs remain unavailable.
 
-In unmerged [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506)
+Since [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506)
 the ordinary HTTP/3 binding uses EmbedIO.Quic, and the earlier `System.Net.Quic`
 and native MsQuic providers are removed; see
 [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
-Interoperability, platform and performance acceptance of the replacement remain
-open, and released v2.16.0 still uses `System.Net.Quic`.
+Released packages through 2.16.1 still use `System.Net.Quic`. The
+[development record](quic-development-and-testing.md) lists the interoperability,
+platform and endurance validation and what remains.
 
 ## Scope and provenance
 

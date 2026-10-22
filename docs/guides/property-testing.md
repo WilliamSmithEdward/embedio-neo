@@ -55,6 +55,6 @@ a score does not establish comprehensive parser coverage.
 The QUIC engine's test facade participates in the existing fuzz campaigns. See the
 [development and testing record](../project/quic-development-and-testing.md) for
 all eight targets, multi-connection traces, managed coverage evidence, native TLS
-mutation scope and extensive local commands. The unmerged ordinary HTTP/3 binding
-now selects EmbedIO.Quic; legacy comparison coverage remains until replacement
-acceptance and removal. Fuzz configuration alone does not establish that acceptance.
+mutation scope and extensive local commands. The ordinary HTTP/3 binding selects
+EmbedIO.Quic; the earlier server providers are removed, and the BCL QUIC client
+remains only as a test client. Fuzz configuration alone does not establish acceptance.

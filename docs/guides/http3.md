@@ -1,15 +1,15 @@
 # HTTP/3 listener (Neo v2)
 
 `HttpListenerMode.EmbedIOHttp3` serves normal WebServer modules over QUIC,
-including request bodies, routing, responses and sessions. The unmerged
-[PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506) changes its
-ordinary transport to EmbedIO.Quic; the released v2.16.0 source uses the earlier
-provider. The [development record](../project/quic-development-and-testing.md)
-distinguishes completed validation from remaining replacement acceptance.
+including request bodies, routing, responses and sessions. Its transport is
+EmbedIO.Quic, added by [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506), which no released
+package contains yet; released packages through 2.16.1 use the earlier
+`System.Net.Quic` provider. The [development record](../project/quic-development-and-testing.md)
+records what has been validated and what remains.
 
 ## Requirements
 
-For the unmerged replacement, use the .NET 10 library asset in a 64-bit desktop
+Use the .NET 10 library asset in a 64-bit desktop
 process. Windows uses [Schannel TLS 1.3](https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-)
 (Windows 11 / Server 2022 and later).
 Linux/macOS use the owned `EmbedIO-Neo.Quic.Native` runtime dependency, selected
@@ -17,10 +17,13 @@ transitively by NuGet; publish for the deployment RID when producing a targeted
 application. Server startup checks that TLS path directly, without relying on
 BCL QUIC availability. Missing Unix assets fail with `PlatformNotSupportedException`;
 an incompatible private ABI/version also fails before listening. The .NET Standard
-asset continues to reject HTTP/3. Final platform/oldest-OS acceptance remains
-pending; see [native runtime preparation](../../native/EmbedIO.Quic.Tls/README.md).
+asset continues to reject HTTP/3. CI runs the package consumers on all six runtime
+identifiers, and they passed once on macOS 14, the oldest macOS the native build
+targets; the oldest glibc and musl versions it targets are untested. See
+[native runtime preparation](../../native/EmbedIO.Quic.Tls/README.md).
 
-For the released provider, use a host where `QuicListener.IsSupported` is true.
+For the provider in released packages through 2.16.1, use a host where
+`QuicListener.IsSupported` is true.
 Windows requires TLS 1.3 and Linux/macOS require the system MsQuic prerequisite.
 The following runtime and native-library notes apply to that earlier provider.
 On Windows, .NET bundles MsQuic, so use runtime 10.0.13 or later. It is the .NET
@@ -83,16 +86,16 @@ cancellation stops queue admission and aborts the remaining responses, including
 requests waiting in the bounded queue. Shared TCP endpoints keep accepting for
 sibling listeners while refusing new requests for the draining listener. V2 uses
 the original TCP HTTP engine; both inherited listener backends are removed.
-The unmerged ordinary HTTP/3 binding selects EmbedIO.Quic, and this source no
-longer contains the earlier providers. Alt-Svc discovery and final
-resource/performance acceptance remain separate work; TCP replacement does not
-establish their completion.
+The ordinary HTTP/3 binding selects EmbedIO.Quic, and this source no
+longer contains the earlier providers. Alt-Svc discovery and resource and
+performance acceptance beyond the recorded endurance runs remain separate work;
+TCP replacement does not establish their completion.
 
 <a id="runtime-memory-limitation"></a>
 ## Earlier provider runtime memory limitation
 
 This limitation concerns the previous `System.Net.Quic` provider, which is still
-used by released v2.16.0. It does not establish the replacement engine's lifetime
+used by released packages through 2.16.1. It does not establish the replacement engine's lifetime
 or memory behavior; that has its own acceptance work.
 
 The tested .NET 10.0.12 `System.Net.Quic` retains a native send-buffer allocation
@@ -199,7 +202,7 @@ retains its existing one-run lifecycle. Prefix changes require a stopped listene
 A simultaneous restart while cleanup is running is rejected explicitly.
 
 Stopping releases each UDP endpoint before it returns, so a new listener can bind
-it at once. The released v2.16.0 provider retried such a bind for up to a second
+it at once. The provider in released packages through 2.16.1 retried such a bind for up to a second
 because its native QUIC library could keep the port bound briefly after disposal;
 this source has no retry. The
 [QUIC listener disposal and rebind record](../project/quic-lifetime.md) keeps the
@@ -285,6 +288,6 @@ References: [RFC 9220](https://www.rfc-editor.org/rfc/rfc9220.html) and
 
 ## WebTransport
 
-In the unmerged replacement, a server configured with `WithWebTransport` also
+A server configured with `WithWebTransport` also
 accepts WebTransport sessions over this listener. See
 [WebTransport over HTTP/3](webtransport.md).

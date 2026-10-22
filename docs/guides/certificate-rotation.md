@@ -123,14 +123,14 @@ requires the .NET 10 asset.
 
 ### HTTP/3 transport selection
 
-The unmerged EmbedIO.Quic replacement captures the current fallback certificate
+EmbedIO.Quic captures the current fallback certificate
 per handshake before parsing the ClientHello. SNI selection and client-certificate
 policy use that same production factory. Windows retains non-exportable Schannel
 key support; Unix TLS uses an owned PKCS#12 copy and requires an exportable key.
 Existing established connections retain their original certificate selection.
 
 The following native-configuration behavior concerns the earlier MsQuic provider
-in released v2.16.0; this source no longer contains it.
+in released packages through 2.16.1; this source no longer contains it.
 The native MsQuic binding loads a certificate into an MsQuic configuration once,
 so it builds a new configuration when the next connection arrives after a
 different certificate was published. Republishing a certificate with the same

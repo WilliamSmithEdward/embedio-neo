@@ -7,7 +7,7 @@ integration. Nothing here is reachable from a listener, no setting is advertised
 no public API or dependency is added and both library targets are unchanged in
 shape. It is not a WebTransport implementation and claims no interoperability.
 
-Status in unmerged [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506):
+Status since [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506):
 the HTTP/3 listener now drives this core for servers that opt in, over EmbedIO.Quic's
 datagrams and current-wire reliable reset. The
 [WebTransport guide](../guides/webtransport.md) describes the public API and the
