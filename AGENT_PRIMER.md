@@ -1331,3 +1331,12 @@ summary counts these path errors. Other socket failures, cancellation and resour
 ownership retain their existing terminal behavior. A real Linux ICMP fixture and
 an independent disposed-socket control cover the distinction; complete desktop
 CI acceptance, including the separate upload transport failure, remains pending.
+
+
+Concurrent HTTP/3 upload regressions now retain a bounded test-only observation
+of exceptions caught inside the QUIC owner. Collection is enabled only for those
+upload cases; failed-case output keeps at most 16 records of 4,096 characters.
+The fixture detaches its process-level observer after completion and reports
+observation failures explicitly, without adding production logging, payload/key capture or runtime dependencies. A zero-record
+failure remains possible and is useful evidence. The repeated hosted upload
+protocol error still needs a confirmed cause and correction.

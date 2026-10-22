@@ -2120,3 +2120,45 @@ At source `01db12dd`, CI 39706770816 again reported ten macOS suite failures,
 including unreachable-route cases, and the same concurrent 1-MiB upload transport
 error on both Windows and Linux. All suites discovered 7,600 cases. The original
 logs remain retained; final-source desktop CI must establish each correction.
+
+
+## Retaining the upload failure's underlying exception
+
+The repeated hosted upload protocol error has not yet reproduced locally. A
+complete disposable Linux diagnostic run reported 7,602 cases: 7,576 successes,
+25 skips and one failure. All three upload cases passed. The single failure was
+the existing metadata test correctly rejecting temporary console tracing in the
+instrumented core. That temporary build was isolated from tracked source and
+is not a successful production acceptance run; CI's independent Python peer
+environment was also not provisioned there.
+
+A second disposable Linux build used the ordinary `dotnet test --project`
+command, four logical processors and 80 repetitions of each existing upload
+case. All 240 iterations across the three reported cases passed in 80.835
+seconds, preserving the original sizes, concurrency and assertions. These
+results do not establish a cause, a fix or latency benchmark acceptance.
+
+The ordinary test fixture now observes first-chance InvalidDataException and
+the engine's transport/key-update exceptions whose stacks identify EmbedIO.Quic.
+Collection is selected only for the three concurrent-upload cases. It retains at
+most 16 records, each limited to 4,096 characters, and prints them only when that
+case fails. Rethrows can produce multiple notifications for one exception. No
+production source, wire error, payload/key logging, dependency or test deadline
+changes. Fixture completion detaches the process-level observer; per-case
+selection clears the prior records. Zero records are reported when no matching
+exception was observed rather than inventing a server-side cause. Recoverable
+observation failures are reported explicitly and cannot replace the original
+test exception.
+
+Two regression cases exercise the actual packet-number parser's exception,
+record limits, unrelated-exception filtering, per-case reset and disposal.
+The initial seven-case affected selection passed on Linux without skips and
+on Windows with six successes and the one existing Linux-only fixture skip.
+A disposable controlled-failure run also verified the full NUnit reporting path:
+one intentional upload case remained failed with its original assertion and
+actual parser stack retained, while the two ordinary upload cases passed.
+An initial control assumed one notification per exception; fresh reflection
+invocation produced two, so the control verifies bounded retained observations
+without depending on CLR rethrow notification counts. The original records remain
+retained. Hosted exact-source validation and the actual upload correction remain
+outstanding.
