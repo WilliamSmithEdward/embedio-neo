@@ -2000,3 +2000,34 @@ suites passed. Six local package-count controls checked ordinary six-package and
 native seven-package acceptance plus missing, wrong and extra package rejection,
 including rejection of the seven-package input by the old guard. Those synthetic
 inputs validate the guard only; they are not binary malware-scan evidence.
+
+
+## Source-built Native AOT runtime delivery
+
+At source checkpoint `8400dbc8`, CI 39704632250's Linux Native AOT job published
+successfully but failed when public HTTP/3 construction could not load
+`libembedio_quic_tls.so`. Its source-reference fixture had not imported the shared
+native TLS copy target. This is distinct from package-only AOT runtime delivery,
+which already passed through NuGet selection.
+
+The fixture now imports that explicit test-only target. CI orders the AOT job
+after its native build and verifies/reuses the same Linux artifact. A standalone
+AOT invocation instead builds and audits the pinned TLS source for its executing
+host. Neither path changes a production package or allows a package-mode manual
+copy. The fixture's independent BCL HTTP/3 client retains its own pinned MsQuic
+prerequisite, including the Windows AOT client DLL copy.
+
+A clean Linux source snapshot restored in locked mode, published with Native AOT
+and warnings treated as errors, verified the copied library byte for byte, then
+passed all 40 existing fixture checks under runtime 10.0.13 with dynamic code
+disabled. These include exact HTTP/1.1, HTTP/2 and HTTP/3, generated controllers,
+authorization/JWT, per-request DI, streaming, cancellation, sessions, WebSockets,
+shutdown, caching, idempotency and resumable uploads. This local source fixture
+used the unchanged source-matched Linux asset; it is not new platform-matrix or
+standalone workflow execution evidence. Two local negative targets also rejected
+a missing library and manual copying in package mode. The standalone branch's
+exact native build command also completed on a local Linux host, including its
+pinned source/archive verification and binary ABI/export/dependency audit. That
+locally compiled binary is a host build, not a new distribution asset. The
+original hosted failure is retained; actual final-head CI and complete standalone
+workflow execution remain required.

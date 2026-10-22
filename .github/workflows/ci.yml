@@ -570,9 +570,11 @@ jobs:
 
   aot-smoke:
     name: Native AOT
-    needs: [changes]
+    needs: [changes, quic-native]
     if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/aot-smoke.yml
+    with:
+      reuse-native-artifacts: true
 
   quic-native:
     name: QUIC runtime inputs

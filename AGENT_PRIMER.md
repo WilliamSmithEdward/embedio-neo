@@ -1298,3 +1298,10 @@ metadata checks do not substitute for downlevel runtime execution. Released v2.1
 and the remaining internal comparison path still use the previous provider.
 Final platform acceptance, WebTransport/browser integration, lifetime/latency
 work and the complete old-provider retirement/issue audit remain outstanding.
+
+The source-built Native AOT smoke imports the same explicit test-only Unix TLS
+copy hook as the NUnit and development hosts. Ordinary CI supplies its verified
+same-run Linux asset; standalone AOT runs build and audit the pinned TLS source
+locally. This hook is for source-reference fixtures only. Package applications
+continue to use NuGet-selected assets. The AOT fixture's BCL HTTP/3 client still
+requires its separate MsQuic prerequisite; the EmbedIO.Quic server does not.

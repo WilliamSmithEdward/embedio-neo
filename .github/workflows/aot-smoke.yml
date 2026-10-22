@@ -2,6 +2,11 @@ name: Native AOT
 
 on:
   workflow_call:
+    inputs:
+      reuse-native-artifacts:
+        description: Use the source-verified native TLS artifact already built in this run
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
@@ -34,8 +39,36 @@ jobs:
       - name: Install the Linux native toolchain
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang zlib1g-dev
-      # The host serves HTTP/3, which needs native MsQuic on Linux; the same pinned package as CI.
-      - name: Install pinned Linux QUIC prerequisite
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: runner.os == 'Linux'
+        with:
+          python-version: '3.14.6'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: runner.os == 'Linux' && inputs.reuse-native-artifacts
+        with:
+          name: quic-native-linux-x64
+          path: TestResults/quic-aot-native
+      - name: Verify the shared server TLS runtime
+        if: runner.os == 'Linux' && inputs.reuse-native-artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
+          python3 native/EmbedIO.Quic.Tls/stage.py asset --output TestResults/quic-aot-native --rids linux-x64
+      - name: Build the standalone smoke's server TLS runtime
+        if: runner.os == 'Linux' && !inputs.reuse-native-artifacts
+        shell: bash
+        run: >-
+          python3 native/EmbedIO.Quic.Tls/build.py --work TestResults/quic-aot-native-build
+          --output TestResults/quic-aot-native --jobs 2
+      - name: Select the source-build server TLS runtime
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          test -f TestResults/quic-aot-native/libembedio_quic_tls.so
+          printf 'EmbedIOQuicNativeTlsDirectory=%s/TestResults/quic-aot-native\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+      # The independent BCL HTTP/3 client still requires this pinned system library.
+      - name: Install pinned Linux QUIC client prerequisite
         if: runner.os == 'Linux'
         shell: bash
         run: |
