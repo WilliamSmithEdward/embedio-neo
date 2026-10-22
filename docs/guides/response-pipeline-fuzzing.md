@@ -17,7 +17,7 @@ dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --state-machines
 dotnet run --project test/EmbedIO.Fuzz -c Release --no-build -- --response-pipeline-selftest
 ```
 
-HTTP/3 additionally requires working native QUIC support; an explicitly selected
+HTTP/3 additionally requires a working .NET HTTP/3 client (MsQuic); an explicitly selected
 HTTP/3 campaign fails when it is unavailable. Replay the matching corpus on a
 prepared host:
 

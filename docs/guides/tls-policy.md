@@ -173,12 +173,12 @@ prefixes and their `Host` header.
 
 ## What each listener supports
 
-| Setting | TCP, .NET 10 asset | TCP, .NET Standard 2.0 asset | HTTP/3, default binding | HTTP/3, native binding |
-| --- | --- | --- | --- | --- |
-| Client certificates and validator | Yes | Yes | Yes | No: refuses to start |
-| `CheckCertificateRevocation` | Yes | Yes | Yes | No: refuses to start with client certificates |
-| `EnabledProtocols` | Yes | Yes | TLS 1.3 only | TLS 1.3 only |
-| `ServerCertificateSelector` (SNI) | Yes | No: refuses to start | Yes | No: refuses to start |
+| Setting | TCP, .NET 10 asset | TCP, .NET Standard 2.0 asset | HTTP/3 |
+| --- | --- | --- | --- |
+| Client certificates and validator | Yes | Yes | Yes |
+| `CheckCertificateRevocation` | Yes | Yes | Yes |
+| `EnabledProtocols` | Yes | Yes | TLS 1.3 only |
+| `ServerCertificateSelector` (SNI) | Yes | No: refuses to start | Yes |
 
 A server refuses a setting it cannot honor when it is created, rather than ignoring
 it. Combined hosting applies one policy to both its TCP and QUIC listeners.

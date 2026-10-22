@@ -1201,6 +1201,9 @@ specific validation gaps on issues kept open. Keep existing outcome replies
 current and avoid duplicate notifications. No issue is closed by this document
 or by the development host alone.
 
+The providers and their workarounds were removed on 2026-10-22; see
+[retiring the earlier HTTP/3 providers](#retiring-the-earlier-http3-providers).
+
 ## Portable TLS policy boundary
 
 The internal portable adapter uses OpenSSL 3.5.9 only for TLS through a small
@@ -2448,3 +2451,72 @@ removed; close only issues whose specific concern is then verified resolved.
 | [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278) | Provider memory retention/endurance: compare the replacement under sustained load and preserve any distinct actionable finding. |
 | [#202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202) | Prior QUIC lifetime workarounds: remove each obsolete workaround and confirm equivalent resource cleanup. |
 | [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181) | Broader modern HTTP-engine program; evaluate all remaining acceptance items separately from the provider replacement. |
+
+## Retiring the earlier HTTP/3 providers
+
+On 2026-10-22 the source dropped both earlier HTTP/3 server providers: the
+`System.Net.Quic` binding and the internal native MsQuic binding with its API,
+listener, connection, stream, datagram and transport classes. The internal
+`WebServer(WebServerOptions, bool nativeHttp3)` comparison constructor and the
+`native` switches of `Http3Listener`, `CombinedHttpListener` and
+`ServerTlsPolicy.EnsureSupported` went with them, as did the refusals that existed
+only for the native binding (client certificates and SNI selection). Two internal
+enums replace `QuicStreamType` and `QuicAbortDirection` in the HTTP/3 transport
+boundary, so the server no longer references `System.Net.Quic` at all.
+
+The workarounds for the earlier providers are gone too. `QuicEndpointReleases`
+retried a bind for up to a second because MsQuic could keep a disposed listener's
+port bound; the EmbedIO.Quic binding releases its socket before stopping returns.
+The accept loop's catch for handshake failures that the BCL reported through
+`AcceptConnectionAsync` is unreachable with a binding that hands over connections
+before their handshake, and was removed. `Http3TransportFailure` recognizes only
+the engine's stream and connection failures. The pooled-write comment in
+`Http3QuicExchange` now cites the engine's own copy (`ConnectionStreams.TryWrite`
+copies each chunk before a write completes) instead of MsQuic's buffer handling.
+
+Tests:
+
+- The MsQuic-only suites were deleted: the native API lifetime, explicit abort,
+  standalone module, listener callback fault, native datagram, standalone peer,
+  lifetime campaign and ownership audit fixtures, the native web server test, the
+  raw-runtime rebind test, the endpoint-release unit tests and the dependency
+  evidence helper.
+- Eight fixtures that drove the HTTP/3 layer over a server-side `QuicListener` now
+  accept through `EmbedIOQuicListenerBinding` (see "HTTP/3 fixtures on the
+  EmbedIO.Quic binding" above). The direction-watcher cases use the engine's
+  failure types.
+- Cases parameterized by the native flag keep their engine variant; the native
+  binding fixture became `Http3ListenerBindingTest`, now covering rejected
+  handshakes, drain, multi-endpoint rollback and stop-during-accept on the engine.
+- The datagram router cases run over the engine's datagram transport, and the
+  application datagram interop case runs against the independent aioquic peer
+  through the ordinary HTTP/3 listener.
+- The retirement gate's drained and contended restart scenarios became ordinary
+  `Http3ListenerRestartTest` cases, with no retry left to bridge a failure; its
+  idle and served scenarios duplicated existing rebind tests. The multi-connection
+  fuzz campaign checks post-drain rebinding for HTTP/3 as well.
+- Gates check `QuicConnection.IsSupported` only: the BCL `HttpClient` and
+  `QuicConnection` remain the independent clients and still need MsQuic.
+
+CI drops the native module lifetime step, the quarantine classifier for the
+raw-runtime rebind case and the Windows credential failure of
+[#398](https://github.com/WilliamSmithEdward/embedio-neo/issues/398), the MsQuic
+jobs of `diagnostics.yml` (only the runtime close probe remains) and the SDK
+canary's rebind exclusion. The pinned MsQuic installs stay, for the test client.
+The regression floor is the new discovery count, 7,428. The native module
+lifetime and native dependency probe projects, the MsQuic parts of the runtime
+close probe, the benchmark's send-buffer and retention probes, the HTTP/3 write
+benchmark and its driver, the native lifetime campaign script and the stream
+lifetime peer were removed, and the conformance image no longer installs MsQuic.
+The benchmark harness still records `System.Net.Quic` provenance, and its Kestrel
+baseline still runs an MsQuic server; both concern the comparison, not EmbedIO.
+
+Locally on Windows, the solution and the six affected projects outside it built
+without warnings; the 446 affected cases passed; the datagram interop case passed
+against aioquic 1.6.1; the full suite reported 7,427 cases (the wildcard-bind case
+excluded, as before): 7,424 passed, 3 skipped, none failed. The Windows Schannel
+QUIC validation script and the EmbedIO.Quic self-test (10,076 primitive assertions)
+passed. A recursive scan of every tracked file with the pinned YARA-X 1.21.0 and
+YARA Forge 20261018 rules matched only the remaining accepted entries, so the
+acceptances for the removed benchmark, the removed probe and the two rewritten
+fixtures were removed. Hosted acceptance is pending.

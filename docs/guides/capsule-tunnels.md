@@ -117,12 +117,12 @@ ordinary CONNECT destinations. .NET 10 uses public TLS send shutdown; the
 netstandard asset binds the same public runtime API when available. A runtime
 without it rejects TLS handoff before sending the success head. TLS 1.2 closure is defined by [RFC 5246 section 7.2.1](https://www.rfc-editor.org/rfc/rfc5246.html#section-7.2.1); TLS 1.3 supports independent closure under [RFC 8446 section 6.1](https://www.rfc-editor.org/rfc/rfc8446.html#section-6.1). macOS server-side SslStream currently negotiates TLS 1.2; the .NET 10 Network.framework TLS 1.3 option applies to clients only. See [the runtime explanation](https://devblogs.microsoft.com/dotnet/dotnet-10-networking-improvements/).
 
-## Native HTTP datagrams
+## HTTP datagrams
 
-The native HTTP/3 development candidate also exposes `HttpTunnel.Datagrams` after
-explicit tunnel acceptance. Public provider selection has not yet switched to
-that candidate; the normal current provider returns null. Native provider
-activation and final platform acceptance remain development work.
+In unmerged PR #506, HTTP/3 runs on EmbedIO.Quic and an accepted tunnel exposes
+`HttpTunnel.Datagrams` (RFC 9297) when both peers negotiate HTTP datagrams. The
+released v2.16.0 provider returns null. Final platform acceptance remains
+development work.
 
 On a supporting backend, `HttpDatagramChannel.ReceiveAsync` returns an owned
 `HttpDatagram`, or null when incoming delivery ends. An empty payload is a valid
@@ -134,7 +134,7 @@ not delivered or acknowledged: datagrams can be lost, reordered or duplicated.
 Other results distinguish absent negotiation, an excessive payload, a full local
 send queue and closed output. There is no automatic retry or reliable fallback.
 The selected extension must define whether and how reliable DATAGRAM capsules
-are used when native datagrams are unavailable.
+are used when QUIC datagrams are unavailable.
 
 For an already accepted `HttpTunnel tunnel`, this echo loop uses the public
 channel and returns each packet owner promptly. Its unreliable policy drops
@@ -172,7 +172,7 @@ remain the application's responsibility.
 
 Both HTTP peers and the QUIC transport must negotiate support. Per-request
 queues hold at most 16 packets, with a connection-wide router bound of 128 packets
-and 256 KiB in addition to the native transport receive budget. Excess packets
+and 256 KiB in addition to the QUIC transport's own receive budget. Excess packets
 are discarded without failing a healthy connection. These are bounds on this new
 unreliable channel; existing WebSocket buffering defaults are unchanged.
 

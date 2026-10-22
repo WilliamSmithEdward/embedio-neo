@@ -14,7 +14,7 @@ trap cleanup_server EXIT
 
 start_server() {
   phase=$1
-  coproc SERVER { cd "$out" && exec dotnet /tmp/conformance/EmbedIO.Conformance.dll serve --http "$http" --https "$https" --h3 "$h3" "${provider_args[@]}" --log --cert-out "$out/conformance-cert.pem" 2> "$out/server-$phase.stderr.log"; }
+  coproc SERVER { cd "$out" && exec dotnet /tmp/conformance/EmbedIO.Conformance.dll serve --http "$http" --https "$https" --h3 "$h3" --log --cert-out "$out/conformance-cert.pem" 2> "$out/server-$phase.stderr.log"; }
   server_pid=$SERVER_PID
   exec 3>&"${SERVER[1]}" 4<&"${SERVER[0]}" || exit 2
   local ready="" identity=false line deadline=$((SECONDS + 60))

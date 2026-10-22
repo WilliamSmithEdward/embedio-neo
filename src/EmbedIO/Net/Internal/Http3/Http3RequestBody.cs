@@ -147,9 +147,9 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
 
-            // A canceled transport read may have consumed part of a frame and
-            // System.Net.Quic aborts that direction. Preserve output, but never
-            // resume the input parser from an uncertain boundary.
+            // A canceled transport read may have consumed part of a frame, and the
+            // transport aborts that direction. Preserve output, but never resume
+            // the input parser from an uncertain boundary.
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 _inputAbandoned = true;

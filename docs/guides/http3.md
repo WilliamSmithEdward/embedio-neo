@@ -83,11 +83,12 @@ cancellation stops queue admission and aborts the remaining responses, including
 requests waiting in the bounded queue. Shared TCP endpoints keep accepting for
 sibling listeners while refusing new requests for the draining listener. V2 uses
 the original TCP HTTP engine; both inherited listener backends are removed.
-The unmerged ordinary HTTP/3 binding selects EmbedIO.Quic. A legacy native
-comparison path remains internally until replacement acceptance and removal are
-complete. Alt-Svc discovery and final resource/performance acceptance remain
-separate work; TCP replacement does not establish their completion.
+The unmerged ordinary HTTP/3 binding selects EmbedIO.Quic, and this source no
+longer contains the earlier providers. Alt-Svc discovery and final
+resource/performance acceptance remain separate work; TCP replacement does not
+establish their completion.
 
+<a id="runtime-memory-limitation"></a>
 ## Earlier provider runtime memory limitation
 
 This limitation concerns the previous `System.Net.Quic` provider, which is still
@@ -194,15 +195,12 @@ bindings. A directly used `IHttpListener` can restart after Stop; WebServer itse
 retains its existing one-run lifecycle. Prefix changes require a stopped listener.
 A simultaneous restart while cleanup is running is rejected explicitly.
 
-Restarting on an endpoint this process released moments ago is bridged by a
-bounded retry: the native QUIC library can keep the UDP port bound briefly after
-disposal returns (a deferred socket close on macOS, and recently accepted
-connections on every platform), so a bind that fails with `AddressAlreadyInUse`
-for an endpoint released within the last second is retried every millisecond
-until that second ends. Other errors, endpoints this process did not release and
-conflicts that persist beyond the window fail as before. This is a Neo v2
-workaround for a native dependency limit, tracked for retirement in
-[QUIC listener disposal, rebind and workaround retirement](../project/quic-lifetime.md).
+Stopping releases each UDP endpoint before it returns, so a new listener can bind
+it at once. The released v2.16.0 provider retried such a bind for up to a second
+because its native QUIC library could keep the port bound briefly after disposal;
+this source has no retry. The
+[QUIC listener disposal and rebind record](../project/quic-lifetime.md) keeps the
+history.
 Application response `KeepAlive=false` initiates the connection driver's bounded
 GOAWAY drain with its existing 30-second application-triggered deadline. A
 listener drain has a separate host-specified abort deadline.

@@ -33,7 +33,7 @@ namespace EmbedIO.Net
         public HttpListener(ServerCertificateSource certificateSource, ServerTlsPolicy? tlsPolicy)
             : this(null, certificateSource ?? throw new ArgumentNullException(nameof(certificateSource)), null)
         {
-            tlsPolicy?.EnsureSupported(false, false);
+            tlsPolicy?.EnsureSupported(false);
             tlsPolicy?.Lock();
             TlsPolicy = tlsPolicy;
         }

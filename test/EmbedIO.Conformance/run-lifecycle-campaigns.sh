@@ -10,13 +10,6 @@ src=$1
 out=$2
 seed=$3
 scale=${4:-1}
-provider=${5:-system}
-provider_args=()
-case "$provider" in
-  system) ;;
-  native) provider_args=(--native-http3) ;;
-  *) echo "Unknown HTTP/3 provider: $provider" >&2; exit 2 ;;
-esac
 [[ "$scale" =~ ^[1-9][0-9]*$ ]] || { echo "Scale must be a positive integer." >&2; exit 2; }
 # Reject typos instead of emitting a successful zero-phase report.
 if [[ -n "${ONLY:-}" ]]; then
@@ -36,9 +29,8 @@ status=0
 record() { printf '%s\n' "$*" | tee -a "$out/summary.txt"; }
 
 record "source=${SOURCE_SHA:-unknown} (git archive snapshot)"
-record "http3_provider=$provider"
 record "seed=$seed scale=$scale cpus=$(nproc) kernel=$(uname -r) started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-record "dotnet=$(dotnet --version) msquic=$(dpkg-query --show --showformat='${Version}' libmsquic 2>/dev/null || echo missing)"
+record "dotnet=$(dotnet --version)"
 record "h2spec=$(h2spec --version 2>&1 | head -1) python=$(python3 --version)"
 record "peers=$(python3 -I -c 'import importlib.metadata as m; print(" ".join(f"{p}={m.version(p)}" for p in ("h2","hyperframe","hpack","aioquic","pylsqpack")))')"
 

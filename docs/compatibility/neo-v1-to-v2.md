@@ -146,9 +146,9 @@ HTTP.sys URL reservations and kernel certificate bindings are specific to the
 removed backend; use the replacement engine's HTTPS certificate configuration and
 validate deployment guidance for your application model.
 
-HTTP/3 uses `System.Net.Quic` for transport. This is distinct from the removed
-`System.Net.HttpListener` backend. The native MsQuic application provider is not
-available for public selection; do not depend on it as the default transport.
+Released v2.16.0 runs HTTP/3 on `System.Net.Quic`; unmerged PR #506 replaces it
+with the EmbedIO.Quic engine. Both are distinct from the removed
+`System.Net.HttpListener` backend.
 Keeping the EmbedIO mode name does not retain the old parser's permissive behavior.
 
 Choose the mode appropriate for your deployment:
@@ -157,11 +157,11 @@ Choose the mode appropriate for your deployment:
 | --- | --- | --- |
 | EmbedIO | HTTP/1 and HTTP/2 over TCP. | Exercise existing routes and clients against the new engine. |
 | Microsoft (v1 only) | Removed in v2. | Remove the mode selection and migrate backend-specific deployment configuration. |
-| EmbedIOHttp3 | Opt-in HTTP/3 over UDP, without a TCP listener. | Use the .NET 10 asset, supported native QUIC, HTTPS and a certificate with its private key. |
+| EmbedIOHttp3 | Opt-in HTTP/3 over UDP, without a TCP listener. | Use the .NET 10 asset on a platform the HTTP/3 guide supports, HTTPS and a certificate with its private key. |
 | EmbedIOCombined | HTTP/1 and HTTP/2 over TCP alongside HTTP/3 over UDP on the same HTTPS prefixes. | Permit both transports; startup requires both bindings and has no silent TCP-only fallback. |
 
 Library targets remain .NET Standard 2.0 and .NET 10. HTTP/3 and combined mode
-require the .NET 10 asset and runtime/native QUIC support; the legacy asset cannot
+require the .NET 10 asset and the platform support in the HTTP/3 guide; the legacy asset cannot
 provide them. Library namespaces and package identities remain preserved.
 HTTP/2 over TLS requires the ALPN-capable .NET 10 asset. Cleartext HTTP/2 support
 on .NET Standard does not provide TLS negotiation support.
@@ -169,8 +169,8 @@ on .NET Standard does not provide TLS negotiation support.
 Follow the [HTTP/3 deployment guide](../guides/http3.md) for certificate lifetime,
 key provisioning, hostname validation, native libraries and platform limits.
 HTTP/3 availability does not imply automatic Alt-Svc discovery or an available
-WebTransport server. Native MsQuic transport, unreliable datagrams and WebTransport
-are not yet available as supported public deployment options. Consult the
+WebTransport server. Unreliable datagrams and WebTransport are not yet available
+as supported public deployment options in a released package. Consult the
 [capability status](../project/http-engine.md) before selecting those features.
 
 ## Request framing and client behavior
@@ -415,15 +415,15 @@ stream's documented synchronization.
 The HTTP datagram APIs include `HttpTunnel.Datagrams`, `HttpDatagramChannel`,
 `HttpDatagram` and `HttpDatagramSendStatus`. Existing context interfaces and tunnel
 constructors are unchanged. The surface exists on both current library targets;
-unsupported backends return null. These APIs require a supporting native HTTP/3
-provider, which is not yet available for public selection. Do not assume that
-selecting HTTP/3 enables datagrams.
+unsupported backends return null. Released v2.16.0 returns null; unmerged PR #506
+supports them over HTTP/3 when both peers negotiate HTTP datagrams. Do not assume
+that selecting HTTP/3 enables datagrams.
 
 Applications must explicitly accept and authorize the extension, dispose received
 packets after using their memory, and handle unreliable submission results. No
 automatic capsule fallback or retransmission is introduced. Output completion
 preserves remaining incoming delivery; full closure releases unread packet owners.
-See [the carrier guide](../guides/capsule-tunnels.md#native-http-datagrams) before
+See [the carrier guide](../guides/capsule-tunnels.md#http-datagrams) before
 adapting a protocol handler. This addition does not change WebSocket queue defaults.
 
 ## Finite request limit defaults

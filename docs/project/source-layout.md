@@ -27,7 +27,7 @@ namespaces or assemblies: existing `EmbedIO`, `EmbedIO.Internal` and
 | `src/EmbedIO/Internal/Conversion` | Value and MIME conversion helpers. |
 | `src/EmbedIO/Net/Internal/Http1` | HTTP/1 framing, adapters and upgrade output. |
 | `src/EmbedIO/Net/Internal/Http2` | HTTP/2 frames, streams and flow control. |
-| `src/EmbedIO/Net/Internal/Http3` | HTTP/3 and native QUIC transport. |
+| `src/EmbedIO/Net/Internal/Http3` | HTTP/3 and its binding to the EmbedIO.Quic engine. |
 | `src/EmbedIO/Net/Internal/Transport` | Shared TCP listener, endpoint, connection and TLS lifetime. |
 | `src/EmbedIO/Net/Internal/Multiplexed` | Shared HTTP/2 and HTTP/3 request/response adapters. |
 | `src/EmbedIO/Net/Internal/Headers` | Shared field parsing, framing metadata and cookie serialization. |

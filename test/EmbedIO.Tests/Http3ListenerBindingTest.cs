@@ -5,7 +5,6 @@ using System.Net.Http;
 using System.Net.Quic;
 using System.Net.Security;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -20,29 +19,27 @@ namespace EmbedIO.Tests
     [SupportedOSPlatform("windows")]
     [SupportedOSPlatform("linux")]
     [SupportedOSPlatform("macos")]
-    public class NativeHttp3ListenerBindingTest
+    // The HTTP/3 listener's own application contexts (GetContextAsync) over the
+    // EmbedIO.Quic binding, against the independent BCL QUIC client.
+    public class Http3ListenerBindingTest
     {
-        private static IHttpListener Create(X509Certificate2 certificate, bool native = true)
+        private static IHttpListener Create(X509Certificate2 certificate)
         {
-            var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener");
-            if (type == null) Assert.Ignore("HTTP/3 is unavailable in the selected asset.");
-            return (IHttpListener)(Activator.CreateInstance(type ?? throw new AssertionException("Missing listener type."),
-                BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { certificate, native }, null)
-                ?? throw new AssertionException("Missing native listener constructor."));
-        }
-        [TestCase(false, true)]
-        [TestCase(true, true)]
-        [TestCase(false, false)]
-        [TestCase(true, false)]
-        public async Task NativeBindingDispatchesApplicationContextsAndRestarts(bool ipv6, bool native)
-        {
-            if (!QuicListener.IsSupported)
+            if (!QuicConnection.IsSupported)
             {
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.Fail("QUIC is required.");
-                Assert.Ignore("QUIC is unavailable.");
+                Assert.Ignore("The host does not provide a QUIC client.");
             }
+            if (EngineInternals.Find("EmbedIO.Net.Internal.Http3.Http3Listener") == null)
+                Assert.Ignore("HTTP/3 is unavailable in the selected asset.");
+            return (IHttpListener)EngineInternals.Create("EmbedIO.Net.Internal.Http3.Http3Listener", certificate);
+        }
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task BindingDispatchesApplicationContextsAndRestarts(bool ipv6)
+        {
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
-            using var listener = Create(certificate, native);
+            using var listener = Create(certificate);
             var port = new Uri(Resources.GetServerAddress()).Port;
             var address = new Uri("https://" + (ipv6 ? "[::1]" : "127.0.0.1") + ":" + port + "/");
             listener.AddPrefix(address.AbsoluteUri);
@@ -63,15 +60,15 @@ namespace EmbedIO.Tests
                     Assert.That(context.Request.LocalEndPoint.Address.MapToIPv6().GetAddressBytes(),
                         Is.EqualTo((ipv6 ? IPAddress.IPv6Loopback : IPAddress.Loopback).MapToIPv6().GetAddressBytes()));
                 });
-                await context.SendStringAsync("native-ready", "text/plain", WebServer.Utf8NoBomEncoding);
+                await context.SendStringAsync("ready", "text/plain", WebServer.Utf8NoBomEncoding);
                 context.Close();
-                Assert.That(await response, Is.EqualTo("native-ready"));
+                Assert.That(await response, Is.EqualTo("ready"));
                 listener.Stop();
                 Assert.That(listener.IsListening, Is.False);
             }
         }
         [Test]
-        public async Task RejectedPeerHandshakeDoesNotStopNativeApplicationDispatch()
+        public async Task RejectedPeerHandshakeDoesNotStopApplicationDispatch()
         {
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             using var listener = Create(certificate);
@@ -90,7 +87,7 @@ namespace EmbedIO.Tests
             listener.Stop();
         }
         [Test]
-        public async Task NativeDrainPreservesAnAdmittedResponseUntilCompletion()
+        public async Task DrainPreservesAnAdmittedResponseUntilCompletion()
         {
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             using var listener = Create(certificate);
@@ -112,7 +109,7 @@ namespace EmbedIO.Tests
             Assert.That(listener.IsListening, Is.False);
         }
         [Test]
-        public async Task NativeFailedMultiEndpointStartRollsBackEarlierBindings()
+        public async Task FailedMultiEndpointStartRollsBackEarlierBindings()
         {
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             using var occupied = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp)
@@ -139,7 +136,7 @@ namespace EmbedIO.Tests
             Assert.That(await response, Is.EqualTo("rebound"));
         }
         [Test]
-        public async Task NativeStopCompletesAPendingContextAccept()
+        public async Task StopCompletesAPendingContextAccept()
         {
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             using var listener = Create(certificate);
@@ -152,12 +149,11 @@ namespace EmbedIO.Tests
             Assert.That(failure.ErrorCode, Is.EqualTo(995));
             Assert.That(listener.IsListening, Is.False);
         }
-        [TestCase(true)]
-        [TestCase(false)]
-        public async Task DnsHttpClientDispatchesThroughEitherProvider(bool native)
+        [Test]
+        public async Task DnsHttpClientDispatchesApplicationContexts()
         {
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
-            using var listener = Create(certificate, native);
+            using var listener = Create(certificate);
             var address = new Uri("https://localhost:" + new Uri(Resources.GetServerAddress()).Port + "/");
             listener.AddPrefix(address.AbsoluteUri);
             listener.Start();
@@ -174,7 +170,7 @@ namespace EmbedIO.Tests
         {
             // Keep the literal HTTP authority and exact remote IP, but use a
             // DNS TLS identity. The pinned Unix MsQuic client fails before
-            // certificate callbacks for IP-literal TLS targets on both providers.
+            // certificate callbacks for IP-literal TLS targets.
             await using var connection = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
             {
                 RemoteEndPoint = new IPEndPoint(IPAddress.Parse(address.Host.Trim('[', ']')), address.Port),

@@ -8,8 +8,6 @@ using System.Net.Http;
 using System.Net.Quic;
 using System.Net.Security;
 using System.Net.Sockets;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -238,15 +236,12 @@ namespace EmbedIO.Tests.Issues
             private readonly CancellationTokenSource _stop = new CancellationTokenSource();
             private readonly Task _running;
 
-            internal Host(ServerCertificateSource source, HttpListenerMode mode = HttpListenerMode.EmbedIO, bool native = false, string? url = null)
+            internal Host(ServerCertificateSource source, HttpListenerMode mode = HttpListenerMode.EmbedIO, string? url = null)
             {
                 Url = url ?? HttpsSmoke.GetUrl();
                 Port = new Uri(Url).Port;
                 var options = new WebServerOptions().WithUrlPrefix(Url).WithMode(mode).WithCertificateSource(source);
-                Server = native
-                    ? (WebServer)(Activator.CreateInstance(typeof(WebServer), BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { options, true }, null)
-                        ?? throw new AssertionException("Missing native host constructor."))
-                    : new WebServer(options);
+                Server = new WebServer(options);
                 Server.WithModule(new ActionModule("/slow", HttpVerbs.Get, async context =>
                 {
                     Entered.TrySetResult(true);
@@ -605,7 +600,7 @@ namespace EmbedIO.Tests.Issues
         {
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener") == null)
                 Assert.Ignore("HTTP/3 is unavailable in the selected asset.");
-            if (!(QuicListener.IsSupported && QuicConnection.IsSupported))
+            if (!QuicConnection.IsSupported)
             {
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1")
                     Assert.Fail("QUIC is required.");
@@ -613,62 +608,16 @@ namespace EmbedIO.Tests.Issues
             }
         }
 
-        // Reloading an unchanged certificate, say hourly from the same file, must not make the native binding build
-        // and retain another MsQuic configuration each time; only an actual replacement does.
-        [Test]
-        public async Task NativeHttp3ReusesItsConfigurationForTheSameCertificate()
-        {
-            RequireHttp3();
-            using var first = Create("first");
-            using var second = Create("second");
-            var source = new ServerCertificateSource(first);
-            var bindingType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3ListenerBinding")
-                ?? throw new AssertionException("Missing binding type.");
-            var bind = bindingType.GetMethod("Bind", BindingFlags.Static | BindingFlags.NonPublic)
-                ?? throw new AssertionException("Missing Bind.");
-            var endpoint = new IPEndPoint(IPAddress.Loopback, new Uri(Resources.GetServerAddress()).Port);
-            var binding = (IAsyncDisposable)(bind.Invoke(null, new object?[] { endpoint, source, null, true })
-                ?? throw new AssertionException("Missing binding."));
-            try
-            {
-                var current = binding.GetType().GetMethod("CurrentConfiguration", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?? throw new AssertionException("Missing CurrentConfiguration.");
-                var retired = binding.GetType().GetField("_retiredConfigurations", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?? throw new AssertionException("Missing retired configurations.");
-                int Retired() => ((System.Collections.ICollection)(retired.GetValue(binding) ?? throw new AssertionException("Missing list."))).Count;
-
-                var initial = current.Invoke(binding, null);
-                for (var i = 0; i < 20; i++)
-                {
-                    using var copy = X509CertificateLoader.LoadPkcs12(first.Export(X509ContentType.Pfx), null, X509KeyStorageFlags.Exportable);
-                    source.Publish(copy);
-                    Assert.That(current.Invoke(binding, null), Is.SameAs(initial));
-                }
-
-                Assert.That(Retired(), Is.Zero);
-                source.Publish(second);
-                var replaced = current.Invoke(binding, null);
-                Assert.That(replaced, Is.Not.SameAs(initial));
-                Assert.That(current.Invoke(binding, null), Is.SameAs(replaced));
-                Assert.That(Retired(), Is.EqualTo(1));
-            }
-            finally
-            {
-                await binding.DisposeAsync();
-            }
-        }
-
         private static string LocalhostUrl() => "https://localhost:" + new Uri(Resources.GetServerAddress()).Port.ToString(CultureInfo.InvariantCulture) + "/";
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task Http3HandshakesUseThePublishedCertificate(bool native)
+        [Test]
+        public async Task Http3HandshakesUseThePublishedCertificate()
         {
             RequireHttp3();
             using var first = Create("first");
             using var second = Create("second");
             var source = new ServerCertificateSource(first);
-            await using var host = new Host(source, HttpListenerMode.EmbedIOHttp3, native, LocalhostUrl());
+            await using var host = new Host(source, HttpListenerMode.EmbedIOHttp3, LocalhostUrl());
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             var seen = new ConcurrentQueue<string>();
 
@@ -681,15 +630,14 @@ namespace EmbedIO.Tests.Issues
         }
 
         // Combined hosting shares one source between TCP and QUIC.
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task CombinedHostingRotatesEveryProtocol(bool native)
+        [Test]
+        public async Task CombinedHostingRotatesEveryProtocol()
         {
             RequireHttp3();
             using var first = Create("first");
             using var second = Create("second");
             var source = new ServerCertificateSource(first);
-            await using var host = new Host(source, HttpListenerMode.EmbedIOCombined, native, LocalhostUrl());
+            await using var host = new Host(source, HttpListenerMode.EmbedIOCombined, LocalhostUrl());
             using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
             source.Publish(second);
@@ -699,37 +647,6 @@ namespace EmbedIO.Tests.Issues
                 Assert.That(await GetAsync(seen, host.Url, version, stop.Token), Is.EqualTo("ok:" + version.ToString(2)));
                 Assert.That(seen, Is.EqualTo(new[] { Hash(second) }), version.ToString());
             }
-        }
-
-        // Native HTTP/3 outside Windows hands MsQuic an exported PKCS#12 copy of the certificate. A certificate whose
-        // key cannot be exported passes the source's checks but cannot be loaded; new connections keep the previous one.
-        [Test]
-        public async Task NativeHttp3KeepsThePreviousCertificateWhenANewOneCannotBeLoaded()
-        {
-            RequireHttp3();
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                Assert.Ignore("Native HTTP/3 on Windows loads the certificate context without exporting it.");
-            using var first = Create("first");
-            using var locked = Create("locked", flags: X509KeyStorageFlags.DefaultKeySet);
-            try
-            {
-                _ = locked.Export(X509ContentType.Pfx);
-                Assert.Ignore("This platform exports keys loaded without the Exportable flag.");
-            }
-            catch (CryptographicException)
-            {
-                // The key cannot be exported: the case this test covers.
-            }
-
-            var source = new ServerCertificateSource(first);
-            await using var host = new Host(source, HttpListenerMode.EmbedIOHttp3, true, LocalhostUrl());
-            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var seen = new ConcurrentQueue<string>();
-
-            source.Publish(locked);
-            Assert.That(await GetAsync(seen, host.Url, HttpVersion.Version30, stop.Token), Is.EqualTo("ok:3.0"));
-            Assert.That(await GetAsync(seen, host.Url, HttpVersion.Version30, stop.Token), Is.EqualTo("ok:3.0"));
-            Assert.That(seen, Is.EqualTo(new[] { Hash(first), Hash(first) }));
         }
     }
 }

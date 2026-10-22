@@ -55,7 +55,7 @@ namespace EmbedIO.Net.Internal.Http3
         )
         {
             ArgumentNullException.ThrowIfNull(certificates);
-            policy?.EnsureSupported(true, false);
+            policy?.EnsureSupported(true);
 
             EnsureSupported();
             policy?.Lock();

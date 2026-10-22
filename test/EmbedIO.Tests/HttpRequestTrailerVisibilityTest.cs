@@ -214,7 +214,7 @@ namespace EmbedIO.Tests
         public async Task Http3ApplicationDisposalCannotPublishLateFinButKeepsCompletedSnapshot(bool abandon)
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await RunRequestTrailerDisposal(abandon);
         }
 
@@ -285,7 +285,7 @@ namespace EmbedIO.Tests
         public async Task Http3RequestTrailersWaitForFinAndInvalidFollowingDataCannotPublish(bool malformed)
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await RunRequestTrailerFin(malformed);
         }
 

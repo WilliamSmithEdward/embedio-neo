@@ -27,7 +27,7 @@ internal static class ResponsePipelineFuzz
 
     private static async Task RunAsync(StateMachineTrace trace, int protocol, CancellationToken token, string? fault = null)
     {
-        if (protocol == 3 && !QuicListener.IsSupported)
+        if (protocol == 3 && !QuicConnection.IsSupported)
             throw new PlatformNotSupportedException("Response HTTP/3 requires working QUIC support.");
         var root = Directory.CreateTempSubdirectory("embedio-response-fuzz-").FullName;
         try

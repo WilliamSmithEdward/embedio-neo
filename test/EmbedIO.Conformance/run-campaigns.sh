@@ -10,13 +10,6 @@ src=$1
 out=$2
 seed=$3
 scale=${4:-1}
-provider=${5:-system}
-provider_args=()
-case "$provider" in
-  system) ;;
-  native) provider_args=(--native-http3) ;;
-  *) echo "Unknown HTTP/3 provider: $provider" >&2; exit 2 ;;
-esac
 [[ "$scale" =~ ^[1-9][0-9]*$ ]] || { echo "Scale must be a positive integer." >&2; exit 2; }
 mkdir -p "$out" || exit 2
 out=$(cd "$out" && pwd) || exit 2
@@ -25,9 +18,8 @@ status=0
 record() { printf '%s\n' "$*" | tee -a "$out/summary.txt"; }
 
 record "source=${SOURCE_SHA:-unknown} (git archive snapshot)"
-record "http3_provider=$provider"
 record "seed=$seed scale=$scale cpus=$(nproc) kernel=$(uname -r)"
-record "dotnet=$(dotnet --version) msquic=$(dpkg-query --show --showformat='${Version}' libmsquic 2>/dev/null || echo missing)"
+record "dotnet=$(dotnet --version)"
 record "h2spec=$(h2spec --version 2>&1 | head -1) python=$(python3 --version)"
 
 python3 -I "$src/test/EmbedIO.Conformance/drivers/settings_ack_test.py" > "$out/peer-settings-ack.log" 2>&1 || { record "PEER SETTINGS MODEL FAILED"; exit 2; }

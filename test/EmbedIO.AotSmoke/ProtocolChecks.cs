@@ -24,7 +24,7 @@ namespace EmbedIO.AotSmoke
     {
         internal static async Task RunAsync(SortedDictionary<string, string> checks)
         {
-            Require(QuicListener.IsSupported, "QUIC is not supported on this host, so HTTP/3 cannot be checked.");
+            Require(QuicConnection.IsSupported, "QUIC is not supported on this host, so HTTP/3 cannot be checked.");
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
             var url = $"https://localhost:{LoopbackPorts.Free()}/";
 

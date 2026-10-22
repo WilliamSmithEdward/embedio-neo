@@ -134,9 +134,8 @@ namespace EmbedIO.Quic
                 options,
                 bodyPolicy => new Http3Listener(
                     source,
-                    false,
                     bodyPolicy,
-                    (requested, certificates, policy, native) =>
+                    (requested, certificates, policy) =>
                     {
                         // This host validates the real pipeline with a development credential.
                         // It must reject configurations its TLS fixture cannot honor.
@@ -145,7 +144,6 @@ namespace EmbedIO.Quic
                             || !requested.Equals(endpoint)
                             || !ReferenceEquals(source, certificates)
                             || !ReferenceEquals(policy, tlsPolicy)
-                            || native
                         )
                             throw new NotSupportedException("Unsupported development listener configuration.");
 

@@ -83,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7600
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7428
 ```
 
 For every development change, also run the source-quality gates after the final edit:
@@ -115,7 +115,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 7600 executed/reported test cases to catch accidental discovery loss; update
+least 7428 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full regression and
 coverage suite budget is twelve minutes on all three desktop platforms. Linux coverage
 run 38970758078 stopped near its eight-minute boundary with 6,522 of 6,695 cases
@@ -182,10 +182,8 @@ smokes. Static analysis, the package build (which still packs and checks
 request runs the compatibility jobs on Windows and Linux; pushes to `main` and
 manual dispatches run them on macOS as well, plus the Android lifecycle smoke.
 
-The opt-in QUIC and runtime diagnostics (`quic-cleanup-experiment`,
-`quic-self-contained-experiment`, `quic-openssl-experiment`, `quic-rebind-probe`,
-`runtime-close-probe`, `quic-retirement-gate`) are in `diagnostics.yml`, which
-runs only by hand: `gh workflow run diagnostics.yml --ref <branch> -f <input>=true`.
+The opt-in runtime close probe (`runtime-close-probe`) is in `diagnostics.yml`,
+which runs only by hand: `gh workflow run diagnostics.yml --ref <branch> -f <input>=true`.
 The explicit filters in `test/EmbedIO.Tests/testconfig.json` avoid Coverlet's
 automatic exclusions, which otherwise exclude `EmbedIO.Cli` from this test suite.
 
@@ -371,27 +369,18 @@ The Windows job also runs `test/EmbedIO.LegacyRouteValidationSmoke` outside the 
 
 ### HTTP/3 transport tests
 
-The modern .NET target uses System.Net.Quic. Local hosts without its native
-prerequisites explicitly skip direct QUIC cases while still running the portable
-framing/QPACK tests. Desktop CI installs version/hash-pinned MsQuic 2.6.2 packages
-on Linux and macOS, and uses the runtime-bundled Windows library. It sets
-`EMBEDIO_REQUIRE_QUIC=1` to reject absent capability rather than silently lose
-coverage. After preparing the native library, use that environment variable with
+The modern .NET target serves HTTP/3 with the EmbedIO.Quic engine. The tests use
+the independent .NET client (`HttpClient` and `System.Net.Quic`), which needs
+MsQuic: local hosts without it explicitly skip direct QUIC cases while still
+running the portable framing/QPACK tests. Desktop CI installs version/hash-pinned
+MsQuic 2.6.2 packages for that client on Linux and macOS, and uses the
+runtime-bundled Windows library. Linux and macOS servers also need the engine's
+native TLS library (`libembedio_quic_tls`), which CI builds from source. Set the
+`EmbedIOQuicNativeTlsDirectory` MSBuild property, or an environment variable of
+that name, to its directory before building the tests, and the build copies it
+next to them. CI sets `EMBEDIO_REQUIRE_QUIC=1` to reject absent capability rather
+than silently lose coverage. After preparing both, use that environment variable
+with
 `dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --filter FullyQualifiedName~Http3QuicTest`.
-See [the engine validation record](docs/project/http-engine.md#required-native-quic-coverage-in-desktop-ci)
-for package sources, platform limitations and actual test evidence.
-
-The QUIC lifetime retirement gate is opt-in. Its four owned restart cases are
-skipped unless `EMBEDIO_QUIC_RETIREMENT_GATE=1`; select them with the raw
-runtime rebind cases using
-`--filter "TestCategory=QuicLifetimeRetirementGate|FullyQualifiedName~QuicRuntimeRebindTest"`,
-or dispatch `diagnostics.yml` with the `quic-retirement-gate` input. The gate tolerates no
-retry and applies no quarantine, so a runtime whose MsQuic still keeps a
-disposed listener's port bound fails it by design. See
-[QUIC lifetime and rebind](docs/project/quic-lifetime.md#retirement-gates).
-
-Native QUIC module lifetime is also checked in three fresh processes on every
-desktop CI runner, before coverage. The seven-case subset avoids initializing
-System.Net.Quic and requires normal test-process exit; Linux additionally checks
-stable mappings across 513 API lifecycles. See
-[standalone module lifetime](docs/project/native-quic-module-lifetime.md).
+See [the QUIC development record](docs/project/quic-development-and-testing.md)
+for runtime preparation, platform limitations and actual test evidence.

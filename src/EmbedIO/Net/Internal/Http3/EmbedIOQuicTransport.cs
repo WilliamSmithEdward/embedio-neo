@@ -1,7 +1,6 @@
 ﻿#if NET10_0_OR_GREATER
 using System;
 using System.IO;
-using System.Net.Quic;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
@@ -38,16 +37,16 @@ namespace EmbedIO.Net.Internal.Http3
         internal override bool ReliableReset => _features.ReliableReset;
 
         internal override async ValueTask<Http3TransportStream> OpenOutboundStreamAsync(
-            QuicStreamType type,
+            Http3StreamType type,
             CancellationToken token
         )
         {
-            if (type is not QuicStreamType.Bidirectional and not QuicStreamType.Unidirectional)
+            if (type is not Http3StreamType.Bidirectional and not Http3StreamType.Unidirectional)
                 throw new ArgumentOutOfRangeException(nameof(type));
 
             return new EmbedIOQuicTransportStream(
                 await _application
-                    .OpenOutboundStreamAsync(type == QuicStreamType.Unidirectional, token)
+                    .OpenOutboundStreamAsync(type == Http3StreamType.Unidirectional, token)
                     .ConfigureAwait(false)
             );
         }
@@ -93,8 +92,8 @@ namespace EmbedIO.Net.Internal.Http3
         }
 
         internal override long Id => checked((long)_stream.Id);
-        internal override QuicStreamType Type =>
-            _stream.Unidirectional ? QuicStreamType.Unidirectional : QuicStreamType.Bidirectional;
+        internal override Http3StreamType Type =>
+            _stream.Unidirectional ? Http3StreamType.Unidirectional : Http3StreamType.Bidirectional;
         internal override Task ReadsClosed => _stream.ReadsClosed;
         internal override Task WritesClosed => _stream.WritesClosed;
 
@@ -108,24 +107,24 @@ namespace EmbedIO.Net.Internal.Http3
             _applicationBody = true;
         }
 
-        internal override void Abort(QuicAbortDirection direction, long code)
+        internal override void Abort(Http3AbortDirection direction, long code)
         {
             if (code < 0 || (ulong)code > StreamReassembly.MaximumOffset)
                 throw new ArgumentOutOfRangeException(nameof(code));
 
             if (
-                direction is not QuicAbortDirection.Read
-                    and not QuicAbortDirection.Write
-                    and not QuicAbortDirection.Both
+                direction is not Http3AbortDirection.Read
+                    and not Http3AbortDirection.Write
+                    and not Http3AbortDirection.Both
             )
                 throw new ArgumentOutOfRangeException(nameof(direction));
 
             try
             {
-                if (direction is QuicAbortDirection.Read or QuicAbortDirection.Both && _stream.CanRead)
+                if (direction is Http3AbortDirection.Read or Http3AbortDirection.Both && _stream.CanRead)
                     _stream.AbortRead((ulong)code);
 
-                if (direction is QuicAbortDirection.Write or QuicAbortDirection.Both && _stream.CanWrite)
+                if (direction is Http3AbortDirection.Write or Http3AbortDirection.Both && _stream.CanWrite)
                     _stream.AbortWrite((ulong)code);
             }
 

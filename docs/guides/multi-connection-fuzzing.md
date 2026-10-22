@@ -32,7 +32,7 @@ values 0â€“63; their interpretation belongs to the scenario.
 | `response-http1`, `response-http2`, `response-http3` | File ranges/validators, compression, HEAD, cookies/trailers and response cancellation over real protocol connections |
 | `http1-connections` | Real HTTP/1 connection isolation |
 | `http2-connections` | Real HTTP/2 connection isolation |
-| `http3-connections` | Real HTTP/3 connection isolation; requires working native QUIC support |
+| `http3-connections` | Real HTTP/3 connection isolation; requires a working .NET HTTP/3 client (MsQuic) |
 
 An unfiltered run includes HTTP/3. Missing QUIC support is a validation limitation,
 not evidence that HTTP/3 passed; use an explicit supported scenario locally and
@@ -167,8 +167,8 @@ therefore test accepted-request ownership and cleanup, not cancellation halfway
 through upload reception. HTTP/2 scenarios do not substitute three streams on one
 connection for three physical connections. HTTP/3 scenarios do not perform QUIC
 connection migration, address rebinding or packet-loss simulation.
-Post-drain listener endpoint rebinding is checked for HTTP/1 and HTTP/2 only;
-HTTP/3 native listener retirement remains covered by its separate runtime tests.
+Post-drain listener endpoint rebinding is checked for every protocol, HTTP/3
+included.
 
 Additional [stateful application campaigns](stateful-surface-fuzzing.md) cover
 controller parity, persistence rollback, lifecycle, mutable files, request

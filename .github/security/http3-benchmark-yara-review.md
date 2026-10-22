@@ -44,3 +44,9 @@ dismissal is claimed. On 2026-10-13 William explicitly waived only the
 matching-alert dismissal requirement for this rule and path because GitHub exposes
 no corresponding alert. Written source review, successful scans and every other
 exact-head merge check remain required. PR #182 remains draft and unmerged.
+
+## Benchmark removed
+
+On 2026-10-22 the benchmark and its `scripts/compare_http3_writes.py` driver were
+removed with the System.Net.Quic server path they measured. The acceptance entry
+for this path was removed with them.

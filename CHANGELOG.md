@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- HTTP/3, in `EmbedIOHttp3` mode and the QUIC half of `EmbedIOCombined`, runs on
+  EmbedIO.Quic, a QUIC implementation built into the .NET 10 asset, instead of
+  `System.Net.Quic`. Windows uses Schannel TLS 1.3 (Windows 11 or Server 2022 and
+  later); Linux and macOS use the `EmbedIO-Neo.Quic.Native` runtime dependency,
+  which NuGet selects transitively. Startup checks that TLS path instead of
+  `QuicListener.IsSupported`, and the server no longer needs MsQuic. HTTP datagrams
+  work when both peers negotiate them. The .NET Standard asset still rejects HTTP/3.
+  The earlier `System.Net.Quic` and internal MsQuic server providers, their bind
+  retry and their CI quarantines were removed. See the
+  [HTTP/3 guide](docs/guides/http3.md).
+
 ## [2.16.0] - 2026-10-18
 
 ### Added

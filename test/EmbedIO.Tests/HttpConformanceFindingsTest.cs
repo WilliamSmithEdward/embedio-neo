@@ -201,7 +201,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task CancelledHttp3UploadsDoNotStopTheListener()
         {
-            if (!System.Net.Quic.QuicListener.IsSupported || !System.Net.Quic.QuicConnection.IsSupported)
+            if (!System.Net.Quic.QuicConnection.IsSupported)
                 Assert.Ignore("No native QUIC support on this host.");
             // QUIC's portable TLS backend exports the certificate and private key
             // to PKCS#12. Match the other QUIC fixtures' provisioning on macOS.

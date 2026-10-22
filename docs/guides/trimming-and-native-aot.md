@@ -30,7 +30,8 @@ A Native AOT executable built from the
 
 Its publish runs with warnings as errors, so no trim or AOT warning is reachable from
 these features. CI publishes and runs it on Windows (`windows-2025`, `win-x64`) and Linux
-(`ubuntu-24.04`, `linux-x64`, with the pinned `libmsquic` 2.6.2 package for HTTP/3).
+(`ubuntu-24.04`, `linux-x64`, with the pinned `libmsquic` 2.6.2 package for the smoke's
+.NET HTTP/3 client).
 
 ## HTTP/3 in a Native AOT application
 

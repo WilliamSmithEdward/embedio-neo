@@ -115,7 +115,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task ListenerDrainSendsGoAwayOnEveryConnectionAndRejectsLaterWork()
         {
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
             using var certificate = Certificate();
             var prefix = Prefix();

@@ -1,20 +1,21 @@
 # EmbedIO.Quic implementation
 
-The generic transport core is the `EmbedIO.Quic` assembly under `src/EmbedIO.Quic`.
-The separate `EmbedIO.Quic.Development` executable under `test/EmbedIO.Quic` owns
-the current TLS/console/wire host and HTTP/3 adapters. Both projects are nonpackable
-and excluded from current shipped packages; production does not yet reference
-them. Its C# packet
-and stream handling can use an existing TLS provider and communicate with an
-independent implementation. It adds no public listener mode or application API.
-The production HTTP/3 listener continues to use its existing provider. Public
-WebTransport APIs remain unavailable. The engine includes loss recovery,
-NewReno congestion control and an HTTP/3/WebTransport adapter.
+The transport core lives under `src/EmbedIO.Quic`. Its sources compile into the
+.NET 10 `EmbedIO` assembly, where the ordinary HTTP/3 listener uses them, and into
+a nonpackable `EmbedIO.Quic` assembly for development. The separate
+`EmbedIO.Quic.Development` executable under `test/EmbedIO.Quic` owns the
+TLS/console/wire host and its HTTP/3 adapters. Its C# packet and stream handling
+can use an existing TLS provider and communicate with an independent
+implementation. The engine includes loss recovery, NewReno congestion control and
+an HTTP/3/WebTransport adapter. It adds no public listener mode, and public
+WebTransport APIs remain unavailable.
 
-The intended production end state replaces MsQuic entirely, including the native
-provider and indirect use through `System.Net.Quic`. That transition remains gated
-on complete transport/application integration, interoperability, platform and
-performance validation. The existing production provider is still in place.
+In unmerged [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506)
+the ordinary HTTP/3 binding uses EmbedIO.Quic, and the earlier `System.Net.Quic`
+and native MsQuic providers are removed; see
+[retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+Interoperability, platform and performance acceptance of the replacement remain
+open, and released v2.16.0 still uses `System.Net.Quic`.
 
 ## Scope and provenance
 
@@ -276,9 +277,9 @@ go -C test/EmbedIO.Quic/peer build -mod=readonly -trimpath -o ../../../TestResul
 
 The [development and testing record](quic-development-and-testing.md) contains
 the complete implementation/test map, replay commands, extended local campaigns,
-validation ledger and MsQuic retirement checklist. All existing fuzz engines now
-include direct QUIC core targets; native-context mutations complement managed
-coverage. The production provider remains unchanged.
+validation ledger and the retirement of the earlier providers. All existing fuzz
+engines now include direct QUIC core targets; native-context mutations complement
+managed coverage.
 
 ## Next acceptance boundaries
 
@@ -289,16 +290,14 @@ coverage. The production provider remains unchanged.
    and lifecycle algorithms as production transport acceptance.
 2. Exercise outbound partial reset, withheld credit, concurrent session termination
    and malformed authenticated traffic more extensively against independent peers.
-3. Connect the validated transport to the production HTTP/3 provider abstraction,
-   request dispatcher and application authorization APIs. Keep capability checks
-   bound to the live connection before exposing a public WebTransport API.
+3. Expose the public WebTransport API through the request dispatcher and
+   application authorization, with capability checks bound to the live connection.
 4. Validate Windows, Linux and macOS using exact dependency artifacts, then browsers.
-   Measure warm steady-state and tail latency separately from cold start before
-   choosing any default provider.
+   Measure warm steady-state and tail latency separately from cold start.
 
-The existing [WebTransport upstream readiness record](webtransport-upstream-readiness.md)
-continues to describe the MsQuic route. EmbedIO.Quic implements a separate provider;
-it does not establish that either route is ready to ship.
+The [WebTransport upstream readiness record](webtransport-upstream-readiness.md)
+describes the earlier MsQuic route, which is no longer in the source. Neither
+record establishes that WebTransport is ready to ship.
 
 ## Shared listener validation
 

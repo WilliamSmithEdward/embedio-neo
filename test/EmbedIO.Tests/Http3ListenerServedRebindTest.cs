@@ -9,8 +9,8 @@ namespace EmbedIO.Tests
     public partial class Http3ListenerTest
     {
         // Serve a request, stop, and start a new server on the same endpoint at once.
-        // Accepted connections share the listener's MsQuic binding, which is released
-        // only when MsQuic frees the last of them.
+        // Accepted connections share the listener's UDP socket, which stopping releases
+        // only after the last of them has closed.
         [Test]
         public async Task ServedListenerRebindsItsEndpointImmediately()
         {

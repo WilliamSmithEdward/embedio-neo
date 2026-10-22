@@ -69,7 +69,6 @@ updates:
       - /.github/requirements
       - /test/EmbedIO.Conformance/drivers
       - /test/EmbedIO.Fuzz
-      - /test/EmbedIO.NativeDependencyProbe
       - /test/EmbedIO.QpackInterop
     schedule:
       interval: daily

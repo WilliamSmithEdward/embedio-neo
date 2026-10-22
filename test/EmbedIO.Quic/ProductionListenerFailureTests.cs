@@ -55,7 +55,7 @@ namespace EmbedIO.Quic
             Func<IPEndPoint, Http3ListenerBinding> create
         )
         {
-            var listener = new Http3Listener(source, false, null, (endpoint, _, _, _) => create(endpoint));
+            var listener = new Http3Listener(source, null, (endpoint, _, _) => create(endpoint));
             listener.AddPrefix("https://127.0.0.1:59213/");
             return listener;
         }

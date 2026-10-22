@@ -3,11 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Net.Quic;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
-using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -23,8 +21,7 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly object _sync = new();
         private readonly ServerCertificateSource _certificates;
-        private readonly bool _native;
-        private readonly Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, bool, Http3ListenerBinding> _bind;
+        private readonly Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> _bind;
         private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = [];
         private Session? _session;
@@ -32,28 +29,24 @@ namespace EmbedIO.Net.Internal.Http3
         private bool _stopping;
         private Func<IHttpContextImpl, Task>? _dispatcher;
 
-        internal Http3Listener(X509Certificate2? certificate) : this(certificate, false) { }
+        internal Http3Listener(X509Certificate2? certificate) : this(certificate, null) { }
 
-        internal Http3Listener(X509Certificate2? certificate, bool native) : this(certificate, native, null) { }
-
-        internal Http3Listener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
-            : this(FixedSource(certificate), native, bodyPolicy)
+        internal Http3Listener(X509Certificate2? certificate, RequestPolicyResolver? bodyPolicy)
+            : this(FixedSource(certificate), bodyPolicy)
         { }
 
-        internal Http3Listener(ServerCertificateSource certificates, bool native, RequestPolicyResolver? bodyPolicy)
-            : this(certificates, native, bodyPolicy, Http3ListenerBinding.Bind)
+        internal Http3Listener(ServerCertificateSource certificates, RequestPolicyResolver? bodyPolicy)
+            : this(certificates, bodyPolicy, Http3ListenerBinding.Bind)
         { }
 
         internal Http3Listener(
             ServerCertificateSource certificates,
-            bool native,
             RequestPolicyResolver? bodyPolicy,
-            Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, bool, Http3ListenerBinding> bind
+            Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> bind
         )
         {
             _bind = bind ?? throw new ArgumentNullException(nameof(bind));
             _certificates = certificates ?? throw new ArgumentNullException(nameof(certificates));
-            _native = native;
             _bodyPolicy = bodyPolicy;
         }
 
@@ -137,7 +130,6 @@ namespace EmbedIO.Net.Internal.Http3
                     [.. _prefixes.Select(value => new ListenerPrefix(value))],
                     _certificates,
                     TlsPolicy,
-                    _native,
                     DeferContinue,
                     Telemetry,
                     _bodyPolicy,
@@ -294,10 +286,7 @@ namespace EmbedIO.Net.Internal.Http3
             internal bool IsDraining { get; private set; }
             internal bool IsRunning => !_stop.IsCancellationRequested;
 
-            private readonly Dictionary<Http3ListenerBinding, (
-                ListenerPrefix[] Prefixes,
-                IPEndPoint EndPoint
-            )> _listeners = [];
+            private readonly Dictionary<Http3ListenerBinding, ListenerPrefix[]> _listeners = [];
             private readonly List<Task> _accepts = [];
             private readonly object _gate = new();
             private readonly Dictionary<long, Task> _connections = [];
@@ -318,12 +307,11 @@ namespace EmbedIO.Net.Internal.Http3
                 ListenerPrefix[] prefixes,
                 ServerCertificateSource certificates,
                 ServerTlsPolicy? policy,
-                bool native,
                 bool deferContinue,
                 EmbedIO.Internal.ServerTelemetry? telemetry,
                 RequestPolicyResolver? bodyPolicy,
                 Func<IHttpContextImpl, Task>? dispatcher,
-                Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, bool, Http3ListenerBinding> bind
+                Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> bind
             )
             {
                 var session = new Session
@@ -355,19 +343,11 @@ namespace EmbedIO.Net.Internal.Http3
                     }
 
                     foreach (var binding in endpoints)
-                    {
-                        var listener = QuicEndpointReleases.Shared.Bind(
-                            binding.Key,
-                            () => bind(binding.Key, certificates, policy, native)
-                        );
-                        session._listeners.Add(listener, (binding.Value.ToArray(), binding.Key));
-                    }
+                        session._listeners.Add(bind(binding.Key, certificates, policy), [.. binding.Value]);
 
                     // Publish accept loops only after all bindings succeeded.
                     foreach (var listener in session._listeners)
-                        session._accepts.Add(
-                            Task.Run(() => session.AcceptAsync(listener.Key, listener.Value.Prefixes))
-                        );
+                        session._accepts.Add(Task.Run(() => session.AcceptAsync(listener.Key, listener.Value)));
 
                     return session;
                 }
@@ -409,30 +389,11 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     while (true)
                     {
-                        Http3AcceptedConnection connection;
-
-                        try
-                        {
-                            connection = await listener
-                                .AcceptAsync(_acceptStop.Token)
-                                .ConfigureAwait(false);
-                        }
-
-                        catch (Exception error) when (
-                            !_acceptStop.IsCancellationRequested
-                            && (error is AuthenticationException
-                                || error is QuicException quic
-                                && quic.QuicError is QuicError.ConnectionAborted
-                                or QuicError.ConnectionTimeout
-                                or QuicError.ConnectionIdle
-                                or QuicError.TransportError)
-                        )
-                        {
-                            // The BCL reports failed peer handshakes through Accept.
-                            // They do not invalidate the listening socket or other peers.
-                            continue;
-                        }
-
+                        // The binding hands over connections before their handshake
+                        // completes; a failed handshake ends only that connection.
+                        var connection = await listener
+                            .AcceptAsync(_acceptStop.Token)
+                            .ConfigureAwait(false);
                         var rejected = false;
                         var pending = connection.HandshakePending;
 
@@ -770,11 +731,6 @@ namespace EmbedIO.Net.Internal.Http3
                             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
                             {
                                 Record(error);
-                            }
-
-                            finally
-                            {
-                                QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
                             }
                         }
                     }

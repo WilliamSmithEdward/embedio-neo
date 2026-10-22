@@ -1,5 +1,9 @@
 # Native QUIC datagram validation on macOS
 
+> Historical record. The earlier HTTP/3 providers, and the code, tests and CI jobs
+> this record describes, were removed on 2026-10-22; see
+> [retiring the earlier HTTP/3 providers](../project/quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+
 Local Apple Silicon validation of the internal native QUIC datagram owner
 (`MsQuicNativeDatagrams`), using the independent aioquic peer. The setup
 mirrors CI's step "Install pinned macOS QUIC prerequisite" in

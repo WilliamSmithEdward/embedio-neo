@@ -47,3 +47,12 @@ listener onto the shared EmbedIO.Quic test host, and its reflection moved into t
 shared test helpers. The same rule in the pinned YARA-X 1.21.0 / YARA Forge 20261018
 bundle no longer matches it, so its path was removed from the acceptance. The
 direction-watcher fixture and its acceptance are unchanged.
+
+## Direction-watcher fixture no longer matches
+
+On 2026-10-22 the direction-watcher fixture stopped feeding synthetic
+System.Net.Quic exceptions to the failure classifier, which now recognizes only
+the EmbedIO.Quic engine's stream and connection failures, and its reflection moved
+into the shared test helpers. The pinned YARA-X 1.21.0 / YARA Forge 20261018 bundle
+no longer reports any rule on it, so its acceptance entry was removed. Neither
+fixture in this review keeps an acceptance.

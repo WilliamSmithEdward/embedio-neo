@@ -107,19 +107,6 @@ namespace EmbedIO
             Listener = CreateHttpListener();
         }
 
-        internal WebServer(WebServerOptions options, bool nativeHttp3) : base(options)
-        {
-            DrainStarted = _drainStarted.Token;
-
-            if (
-                nativeHttp3
-                && options.Mode is not HttpListenerMode.EmbedIOHttp3 and not HttpListenerMode.EmbedIOCombined
-            )
-                throw new ArgumentException("Native HTTP/3 requires an HTTP/3 hosting mode.", nameof(options));
-
-            Listener = CreateHttpListener(nativeHttp3);
-        }
-
         internal WebServer(
             WebServerOptions options,
             Func<EmbedIO.Internal.RequestPolicyResolver?, IHttpListener> http3Factory
@@ -487,33 +474,28 @@ namespace EmbedIO
             X509Certificate2? certificate,
             Net.ServerCertificateSource? certificateSource,
             bool combined = false,
-            bool native = false,
             EmbedIO.Internal.RequestPolicyResolver? bodyPolicy = null
         )
         {
 #if NET10_0_OR_GREATER
-            if (
-                (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                && (!native || System.Net.Quic.QuicListener.IsSupported)
-            )
+            if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
             {
-                if (!native) Net.Internal.Http3.EmbedIOQuicTls.EnsureSupported();
+                Net.Internal.Http3.EmbedIOQuicTls.EnsureSupported();
 
                 if (certificateSource != null)
                     return combined
-                        ? new CombinedHttpListener(certificateSource, native, bodyPolicy)
-                        : new Net.Internal.Http3.Http3Listener(certificateSource, native, bodyPolicy);
+                        ? new CombinedHttpListener(certificateSource, bodyPolicy)
+                        : new Net.Internal.Http3.Http3Listener(certificateSource, bodyPolicy);
 
                 return combined
-                    ? new CombinedHttpListener(certificate, native, bodyPolicy)
-                    : new Net.Internal.Http3.Http3Listener(certificate, native, bodyPolicy);
+                    ? new CombinedHttpListener(certificate, bodyPolicy)
+                    : new Net.Internal.Http3.Http3Listener(certificate, bodyPolicy);
             }
 #endif
-            throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset and native QUIC support.");
+            throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset on Windows, Linux or macOS.");
         }
 
         private IHttpListener CreateHttpListener(
-            bool nativeHttp3 = false,
             Func<EmbedIO.Internal.RequestPolicyResolver?, IHttpListener>? http3Factory = null
         )
         {
@@ -538,14 +520,12 @@ namespace EmbedIO
                             CertificateOrNull(),
                             Options.CertificateSource,
                             false,
-                            nativeHttp3,
                             bodyPolicy
                         ),
                         HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(
                             CertificateOrNull(),
                             Options.CertificateSource,
                             true,
-                            nativeHttp3,
                             bodyPolicy
                         ),
                         _ when (int)Options.Mode == 1 =>
@@ -560,8 +540,7 @@ namespace EmbedIO
             // Refuse TLS settings the selected listener cannot honor before creating it.
             var tlsPolicy = Options.TlsPolicy;
             tlsPolicy?.EnsureSupported(
-                Options.Mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined,
-                nativeHttp3
+                Options.Mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined
             );
             var listener = DoCreate();
             $"Running HTTPListener: {listener.Name}".Info(LogSource);

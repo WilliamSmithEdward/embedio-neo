@@ -1,10 +1,9 @@
 ﻿using System;
 using System.IO;
-using System.Net.Quic;
-using System.Reflection;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
@@ -14,21 +13,26 @@ namespace EmbedIO.Tests
     [SupportedOSPlatform("macos")]
     public class Http3DirectionWatcherTest
     {
-        private static MethodInfo Method(string name)
+        private static Type Connection()
         {
-            var type = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection");
+            var type = EngineInternals.Find("EmbedIO.Net.Internal.Http3.Http3QuicConnection");
             if (type == null) Assert.Ignore("The legacy asset has no direct QUIC transport.");
-            return (type ?? throw new AssertionException("Missing QUIC connection."))
-                .GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)
-                ?? throw new AssertionException("Missing request-direction member " + name + ".");
+            return type ?? throw new AssertionException("Missing QUIC connection.");
         }
 
         private static void Watch(Task direction, CancellationTokenSource requestStop)
-            => Method("WatchRequestDirection").Invoke(null, new object[] { direction, requestStop });
+            => EngineInternals.CallStatic(Connection(), "WatchRequestDirection", direction, requestStop);
 
         // What the request owner sees for this direction when the request ends.
         private static Exception? Unexpected(Task direction, CancellationTokenSource requestStop)
-            => (Exception?)Method("UnexpectedDirectionFault").Invoke(null, new object[] { direction, requestStop });
+            => (Exception?)EngineInternals.CallStatic(Connection(), "UnexpectedDirectionFault", direction, requestStop);
+
+        // The engine's failure of one stream direction, reset by the peer or aborted here.
+        private static Exception StreamFailure(bool remote)
+            => (Exception)EngineInternals.Create("EmbedIO.Quic.QuicStreamFailure", 0x10cUL, remote);
+
+        private static Exception ConnectionFailure()
+            => (Exception)EngineInternals.Create("EmbedIO.Quic.QuicConnectionFailure", 0x100UL, true, true);
 
         [TestCase(false)]
         [TestCase(true)]
@@ -49,7 +53,7 @@ namespace EmbedIO.Tests
         {
             using var requestStop = new CancellationTokenSource();
             var direction = new TaskCompletionSource();
-            var reset = new QuicException(QuicError.StreamAborted, 0x10c, "Peer reset.");
+            var reset = StreamFailure(true);
             if (alreadyFaulted) direction.TrySetException(reset);
             Watch(direction.Task, requestStop);
             direction.TrySetException(reset);
@@ -81,7 +85,7 @@ namespace EmbedIO.Tests
             using var registration = requestStop.Token.Register(() => Interlocked.Increment(ref observed));
             Watch(direction.Task, requestStop);
             requestStop.Cancel();
-            direction.TrySetException(new QuicException(QuicError.ConnectionAborted, 0x100, "Connection closed."));
+            direction.TrySetException(ConnectionFailure());
             Assert.That(Volatile.Read(ref observed), Is.EqualTo(1), "Request callbacks run once.");
         }
 
@@ -99,7 +103,8 @@ namespace EmbedIO.Tests
                 requestStop.Token.Register(() => Interlocked.Increment(ref observed));
                 Watch(direction.Task, requestStop);
                 using var start = new Barrier(2);
-                var fault = Task.Run(() => { start.SignalAndWait(); direction.TrySetException(new QuicException(QuicError.StreamAborted, 0x10c, "Peer reset.")); });
+                var reset = StreamFailure(true);
+                var fault = Task.Run(() => { start.SignalAndWait(); direction.TrySetException(reset); });
                 var end = Task.Run(() => { start.SignalAndWait(); requestStop.Cancel(); });
                 await Task.WhenAll(fault, end);
                 Assert.That(SpinWait.SpinUntil(() => Volatile.Read(ref observed) == 1, TimeSpan.FromSeconds(2)), Is.True);
@@ -107,18 +112,22 @@ namespace EmbedIO.Tests
             }
         }
 
-        [TestCase(true, QuicError.OperationAborted, false)]
-        [TestCase(false, QuicError.OperationAborted, true)]
-        [TestCase(true, QuicError.StreamAborted, true)]
-        [TestCase(false, QuicError.StreamAborted, true)]
-        [TestCase(true, QuicError.ConnectionAborted, true)]
-        [TestCase(false, QuicError.ConnectionAborted, true)]
-        public void LocalReadAbortPreservesOutputButPeerAndWriteFaultsCancel(bool reading, QuicError error, bool canceled)
+        [TestCase(true, "local-abort", false)]
+        [TestCase(false, "local-abort", true)]
+        [TestCase(true, "peer-reset", true)]
+        [TestCase(false, "peer-reset", true)]
+        [TestCase(true, "connection", true)]
+        [TestCase(false, "connection", true)]
+        public void LocalReadAbortPreservesOutputButPeerAndWriteFaultsCancel(bool reading, string failure, bool canceled)
         {
             using var requestStop = new CancellationTokenSource();
-            var direction = Task.FromException(new QuicException(error, null, "Direction failed."));
-            Method(reading ? "WatchRequestReadDirection" : "WatchRequestDirection")
-                .Invoke(null, new object[] { direction, requestStop });
+            var direction = Task.FromException(failure switch
+            {
+                "local-abort" => StreamFailure(false),
+                "peer-reset" => StreamFailure(true),
+                _ => ConnectionFailure()
+            });
+            EngineInternals.CallStatic(Connection(), reading ? "WatchRequestReadDirection" : "WatchRequestDirection", direction, requestStop);
             Assert.That(requestStop.IsCancellationRequested, Is.EqualTo(canceled));
             Assert.That(Unexpected(direction, requestStop), Is.Null);
         }

@@ -3,7 +3,6 @@ using System;
 using System.Buffers;
 using System.Globalization;
 using System.IO;
-using System.Net.Quic;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
@@ -456,10 +455,10 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 if (payload.Length <= CoalescedPayload)
                 {
-                    // One transport submission (and completion) per small frame.
-                    // QuicStream copies the bytes into native memory before it submits
-                    // them (runtime 10.0.12 MsQuicBuffers.SetBuffer), so the rented
-                    // array is free once the write has completed or failed.
+                    // One transport submission (and completion) per small frame. The
+                    // engine copies the bytes into its own send buffer before a write
+                    // completes (ConnectionStreams.TryWrite), so the rented array is
+                    // free once the write has completed or failed.
                     coalesced = ArrayPool<byte>.Shared.Rent(size + payload.Length);
                     _frameHeader
                         .AsSpan(0, size)

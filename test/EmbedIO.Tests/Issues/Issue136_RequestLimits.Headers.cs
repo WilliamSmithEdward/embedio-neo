@@ -406,7 +406,7 @@ namespace EmbedIO.Tests.Issues
                 string url;
                 if (protocol == 3)
                 {
-                    var supported = QuicListener.IsSupported && QuicConnection.IsSupported
+                    var supported = QuicConnection.IsSupported
                         && typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener") != null;
                     if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.That(supported, Is.True);
                     if (!supported) Assert.Ignore("The selected asset or host has no HTTP/3 transport.");

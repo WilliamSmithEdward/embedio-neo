@@ -1,5 +1,4 @@
-﻿using System.Net.Quic;
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 using EmbedIO.Net.Internal.Http3;
 
 namespace EmbedIO.Quic
@@ -111,7 +110,7 @@ namespace EmbedIO.Quic
             Await(writing);
             peer.Ack();
             Await(stream.WritesClosed);
-            Check(stream.Type == QuicStreamType.Bidirectional && stream.Id == 0, "stream-identity");
+            Check(stream.Type == Http3StreamType.Bidirectional && stream.Id == 0, "stream-identity");
         }
 
         [SupportedOSPlatform("windows")]
@@ -209,12 +208,12 @@ namespace EmbedIO.Quic
 
             foreach (var direction in new[]
             {
-                QuicAbortDirection.Read, QuicAbortDirection.Write, QuicAbortDirection.Both
+                Http3AbortDirection.Read, Http3AbortDirection.Write, Http3AbortDirection.Both
             })
                 stream.Abort(direction, 0x10c);
 
-            Expect<ArgumentOutOfRangeException>(() => stream.Abort((QuicAbortDirection)99, 0x10c));
-            Expect<ArgumentOutOfRangeException>(() => stream.Abort(QuicAbortDirection.Both, -1));
+            Expect<ArgumentOutOfRangeException>(() => stream.Abort((Http3AbortDirection)99, 0x10c));
+            Expect<ArgumentOutOfRangeException>(() => stream.Abort(Http3AbortDirection.Both, -1));
             peer.Pump();
             Check(peer.Sent.Count == 0, "terminal-abort-does-not-queue");
         }

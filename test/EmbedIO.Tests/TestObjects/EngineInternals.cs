@@ -7,13 +7,17 @@ namespace EmbedIO.Tests.TestObjects
 {
     // Reflection access to the library's internal types. The test project has no
     // InternalsVisibleTo grant; a missing type or member fails the calling test.
+    // A member's own exception reaches the caller unwrapped.
     internal static class EngineInternals
     {
         internal const BindingFlags Members = BindingFlags.Instance
             | BindingFlags.Static
             | BindingFlags.Public
             | BindingFlags.NonPublic;
-        private const BindingFlags Constructors = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        private const BindingFlags Constructors = BindingFlags.Instance
+            | BindingFlags.Public
+            | BindingFlags.NonPublic
+            | BindingFlags.DoNotWrapExceptions;
         private static readonly Assembly Library = typeof(WebServer).Assembly;
 
         // The named internal type, or null when this build of the library lacks it.
@@ -37,7 +41,13 @@ namespace EmbedIO.Tests.TestObjects
             (target
                 .GetType()
                 .GetProperty(name, Members)
-                ?? throw new AssertionException("Missing property: " + name)).GetValue(target);
+                ?? throw new AssertionException("Missing property: " + name)).GetValue(
+                target,
+                BindingFlags.DoNotWrapExceptions,
+                null,
+                null,
+                null
+            );
 
         internal static object? Field(object target, string name) =>
             (target
@@ -70,7 +80,10 @@ namespace EmbedIO.Tests.TestObjects
         private static object? Invoke(Type type, object? target, string name, object?[] arguments) =>
             (type.GetMethod(name, Members) ?? throw new AssertionException("Missing method: " + name)).Invoke(
                 target,
-                arguments
+                BindingFlags.DoNotWrapExceptions,
+                null,
+                arguments,
+                null
             );
     }
 }

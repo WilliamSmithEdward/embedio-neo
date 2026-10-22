@@ -507,16 +507,17 @@ rent pages as data arrives and clear/return them after consumption, read abort,
 reliable-reset suffix discard, retirement or connection shutdown; empty streams do
 not reserve full payload windows. Discard retains offset/final-size validation and
 keeps application-delivered bytes under explicit consumption ownership. It has
-no separate public engine API. The unmerged ordinary WebServer binding now uses
-EmbedIO.Quic; complete MsQuic removal still awaits replacement acceptance. The [development and testing record](docs/project/quic-development-and-testing.md)
+no separate public engine API. The unmerged ordinary WebServer binding uses
+EmbedIO.Quic, and this source no longer contains the System.Net.Quic or MsQuic
+server providers. The [development and testing record](docs/project/quic-development-and-testing.md)
 tracks all fuzz engines, extensive local runs and remaining production acceptance. The Windows
 validation helper checks native lifetime and a bounded first-flight matrix against
 read-only host TLS-group policy. P-256 must succeed; X25519 must succeed when enabled
 and reject without keys when disabled. Missing policy evidence or unexpected outcomes
 fail the gate; validation never changes machine policy. Shared HTTP lifecycle fuzzing distinguishes
 expected stopped-client disconnects from response failures and cleanup deadlines.
-Once the replacement is complete, remove MsQuic-specific quarantines/workarounds
-and review every open Neo issue; close issues only after validating their resolution.
+The MsQuic-specific quarantines, rebind retry and diagnostics are gone with it.
+Review every open Neo issue; close issues only after validating their resolution.
 See [its scope and reproduction steps](docs/project/quic-engine-feasibility.md)
 and [WebTransport readiness](docs/project/webtransport-upstream-readiness.md).
 
@@ -1283,8 +1284,8 @@ The earlier isolated default-selection probe verified ordinary .NET 10 HTTP/3
 WebServer modes through `EmbedIOQuicListenerBinding`, using Schannel on Windows
 and the private pinned OpenSSL TLS runtime on Linux/macOS. That selection and its
 actual TLS capability checks are now integrated into the unmerged source as
-described below. Full replacement acceptance and removal of the remaining
-comparison paths are still required; no released package selects this snapshot.
+described below. Full replacement acceptance is still required; no released
+package selects this snapshot.
 
 Recovery now accumulates pacing credit at the RTT/congestion-window rate, capped
 at the initial ten-packet window and independently constrained by congestion.
@@ -1293,7 +1294,7 @@ HTTP/3 stream abort is harmless after connection closure; pending operations
 retain their original connection error and argument validation remains active.
 The model, actual WebServer regression, independent-peer and fuzz evidence is in
 the development/testing record. WebTransport application/browser integration
-and the MsQuic retirement/issue audit remain outstanding.
+and the open-issue audit remain outstanding.
 
 
 The unmerged .NET 10 core now declares the owned `EmbedIO-Neo.Quic.Native`
@@ -1319,9 +1320,11 @@ fail before binding; the server no longer needs BCL QUIC to be available on this
 path. Normal package consumers prove portable/RID/AOT delivery and missing-runtime
 refusal without an injected binding. The private macOS build now targets 14.0;
 metadata checks do not substitute for downlevel runtime execution. Released v2.16.0
-and the remaining internal comparison path still use the previous provider.
+still uses the previous provider; this source no longer contains it. Tests that
+drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through the
+EmbedIO.Quic binding; the BCL client remains the independent test client.
 Final platform acceptance, WebTransport/browser integration, lifetime/latency
-work and the complete old-provider retirement/issue audit remain outstanding.
+work and the open-issue audit remain outstanding.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified

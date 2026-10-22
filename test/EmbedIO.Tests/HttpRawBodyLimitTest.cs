@@ -799,7 +799,7 @@ namespace EmbedIO.Tests
             {
                 RequireQuic();
 
-                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+                if (!QuicConnection.IsSupported) return;
             }
 
             var resume = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -913,7 +913,7 @@ namespace EmbedIO.Tests
         {
             RequireQuic();
 
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
 
             var entered = 0;
             using var certificate = Certificate();
@@ -1084,7 +1084,7 @@ namespace EmbedIO.Tests
             {
                 RequireQuic();
 
-                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+                if (!QuicConnection.IsSupported) return;
             }
 
             var body = new byte[length];

@@ -8,8 +8,8 @@ namespace EmbedIO.Tests
 {
     public partial class Http3ListenerTest
     {
-        // Restart on the same endpoint without pausing. On macOS, MsQuic 2.6.2 closes a
-        // disposed listener's socket after disposal has returned.
+        // Restart on the same endpoint without pausing: stopping releases the UDP
+        // endpoint before it returns.
         [Test]
         public async Task StoppedListenerRebindsItsEndpointImmediately()
         {

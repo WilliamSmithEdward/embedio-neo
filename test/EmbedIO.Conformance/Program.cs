@@ -36,7 +36,7 @@ string Identity() => JsonSerializer.Serialize(new
     processors = Environment.ProcessorCount,
     assembly = typeof(WebServer).Assembly.Location,
     http3Provider = mode == "serve" && Option("--h3") != null
-        ? args.Contains("--native-http3") ? "native-candidate" : "System.Net.Quic" : "not-hosted",
+        ? "EmbedIO.Quic" : "not-hosted",
     assemblySha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(typeof(WebServer).Assembly.Location))),
     informational = typeof(WebServer).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
         .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion,
@@ -55,7 +55,7 @@ switch (mode)
             using var stop = new CancellationTokenSource();
             var running = new List<Task>();
             foreach (var endpoint in endpoints)
-                running.Add(host.Add(endpoint.Url, endpoint.Mode, endpoint.Url.StartsWith("https", StringComparison.Ordinal), args.Contains("--native-http3")).RunAsync(stop.Token));
+                running.Add(host.Add(endpoint.Url, endpoint.Mode, endpoint.Url.StartsWith("https", StringComparison.Ordinal)).RunAsync(stop.Token));
             if (host.Certificate != null)
                 File.WriteAllText(Option("--cert-out") ?? "conformance-cert.pem", host.Certificate.ExportCertificatePem());
             Console.WriteLine("READY " + ConformanceServer.Describe(endpoints));

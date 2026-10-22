@@ -130,7 +130,7 @@ key support; Unix TLS uses an owned PKCS#12 copy and requires an exportable key.
 Existing established connections retain their original certificate selection.
 
 The following native-configuration behavior concerns the earlier MsQuic provider
-and the internal comparison path retained during replacement validation.
+in released v2.16.0; this source no longer contains it.
 The native MsQuic binding loads a certificate into an MsQuic configuration once,
 so it builds a new configuration when the next connection arrives after a
 different certificate was published. Republishing a certificate with the same

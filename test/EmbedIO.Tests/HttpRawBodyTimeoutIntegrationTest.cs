@@ -26,7 +26,7 @@ namespace EmbedIO.Tests
             if (protocol == 3)
             {
                 RequireQuic();
-                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+                if (!QuicConnection.IsSupported) return;
             }
             var resume = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var formatted = 0;
@@ -200,25 +200,21 @@ namespace EmbedIO.Tests
         // body limit cleanup used to drain it, which could only fail, and logged the request as
         // a failed stream. With a read deadline the canceled read also stays unsettled in the
         // deadline's wrapper, which cleanup must leave alone too.
-        [TestCase(false, false, false)]
-        [TestCase(true, false, false)]
-        [TestCase(false, true, false)]
-        [TestCase(true, true, false)]
-        [TestCase(false, false, true)]
-        [TestCase(true, false, true)]
-        [TestCase(false, true, true)]
-        [TestCase(true, true, true)]
-        public async Task HandlerCanceledHttp3ReadLeavesTheBodyToTheTransport(bool readDeadline, bool native, bool pendingData)
+        [TestCase(false, false)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(true, true)]
+        public async Task HandlerCanceledHttp3ReadLeavesTheBodyToTheTransport(bool readDeadline, bool pendingData)
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
-            await HandlerCanceledHttp3ReadCore(readDeadline, native, pendingData);
+            if (!QuicConnection.IsSupported) return;
+            await HandlerCanceledHttp3ReadCore(readDeadline, pendingData);
         }
 
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task HandlerCanceledHttp3ReadCore(bool readDeadline, bool native, bool pendingData)
+        private static async Task HandlerCanceledHttp3ReadCore(bool readDeadline, bool pendingData)
         {
             using var trace = new RequestOutcomeTrace();
             using var certificate = Certificate();
@@ -246,7 +242,7 @@ namespace EmbedIO.Tests
                     context.Response.StatusCode = 408;
                     await context.SendStringAsync("timeout after " + total, "text/plain", WebServer.Utf8NoBomEncoding);
                 }
-            }, options => { if (readDeadline) options.WithRequestBodyReadTimeout(TimeSpan.FromSeconds(60)); }, native: native);
+            }, options => { if (readDeadline) options.WithRequestBodyReadTimeout(TimeSpan.FromSeconds(60)); });
             await using var peer = await H3Peer.ConnectAsync(host, certificate);
             await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
             await request.WriteAsync(new byte[] { 0, pendingData ? (byte)10 : (byte)3, 1, 2, 3 }, host.Token);

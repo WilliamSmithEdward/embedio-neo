@@ -17,12 +17,12 @@ The audit, results and prioritized findings are in
 | `Http1Fuzz.cs` | Stateful HTTP/1.1 campaign: pipelined valid, invalid and aborted requests with random framing and fragmentation, checked against an independent model, plus resource settlement. |
 | `drivers/h2_campaign.py` | HTTP/2 cases and stateful campaign. The client is hyper-h2; malformed and abusive input is written as raw frames with hyperframe. |
 | `drivers/h3_campaign.py` | HTTP/3 cases and stateful campaign over aioquic, whose QPACK decoder also checks the server's dynamic encoding. |
-| `drivers/quic_datagram_peer.py` | Independent RFC 9221 QUIC datagram peer over aioquic for the internal native MsQuic provider. Driven by `MsQuicNativeDatagramTest` when `EMBEDIO_DATAGRAM_PEER_PYTHON` names a Python with `drivers/requirements.txt` installed; skipped otherwise. |
+| `drivers/quic_datagram_peer.py` | Independent RFC 9221 QUIC datagram and HTTP datagram peer over aioquic. Driven by `Http3ApplicationDatagramPeerTest` (`http-echo` mode) when `EMBEDIO_DATAGRAM_PEER_PYTHON` names a Python with `drivers/requirements.txt` installed; skipped otherwise. |
 | `drivers/lifecycle_campaign.py` | Seeded HTTP/2 (hyper-h2) and HTTP/3 (aioquic) campaigns mixing interim/trailer responses (`/lifecycle`), uploads, capsule tunnels with half-close, client resets and malformed requests on one connection; and graceful-drain checks started through the test-only `/__drain` route. HTTP/2 drain uses raw hyperframe frames and the hpack decoder. |
 | `run-lifecycle-campaigns.sh` | The application lifecycle audit: response sections, capsules, lifecycle fuzz, ten drains per protocol on fresh servers and h2spec. `ONLY="phase ..."` limits a diagnostic rerun. |
 | `standards/capture_standards.py` | Captures RFC Editor metadata (with update and obsolescence chains), errata, the RFC index sweep, IANA registries and datatracker state of tracked drafts, with URLs, times and SHA-256. |
 | `ApplicabilityProbes.cs` | `applicability` mode: in-process minimal reproductions for the [standards applicability audit](../../docs/project/http-standards-applicability.md) (informational responses, trailers, Upgrade/CONNECT, QUERY, HTTP/2 SETTINGS). Uses the `/probe/*` routes. Outcome `gap` records a missing application capability the RFC permits; it does not fail a run. |
-| `../../../.github/test/conformance/Dockerfile` | Pinned runner: the .NET SDK image for the SDK `global.json` pins, by digest, MsQuic 2.6.2 by SHA-256, h2spec v2.6.0 built from its tag commit, Python packages by hash. |
+| `../../../.github/test/conformance/Dockerfile` | Pinned runner: the .NET SDK image for the SDK `global.json` pins, by digest, h2spec v2.6.0 built from its tag commit, Python packages by hash. |
 | `run-campaigns.sh` | Every campaign against one separate server process, with a summary tied to the source commit. |
 | `repro.sh` | One focused driver run with engine logging, for reducing a failure. |
 
@@ -62,8 +62,7 @@ Python is development-only. Rebuild `drivers/requirements.txt` with:
 uv pip compile test/EmbedIO.Conformance/drivers/requirements.in --universal --generate-hashes --python-version 3.12 --exclude-newer <date a week ago> -o test/EmbedIO.Conformance/drivers/requirements.txt
 ```
 
-To move h2spec, change the tag commit in the Dockerfile. To move MsQuic, update the
-package hash in the Dockerfile, as for CI. The SDK image follows `global.json`:
+To move h2spec, change the tag commit in the Dockerfile. The SDK image follows `global.json`:
 `update-dotnet-sdk.yml` proposes its new digest once MCR publishes the tag, often a
 few hours after an SDK release. Until then the container cannot build a checkout
 whose `global.json` names the newer SDK.
@@ -127,16 +126,14 @@ opens a 1 MiB stream window (larger than every generated response) while preserv
 all randomized window changes before completion. A peer-only wire regression
 reproduces the zero window and verifies that explicit reopening permits the final
 payload. The 30-second completion deadline and byte validation remain unchanged.
-## Internal native HTTP/3 candidate
+## HTTP/3 host
 
-On an engine revision containing the internal native host constructor, `serve
---native-http3 --h3 PORT` selects that candidate explicitly. Public WebServer
-constructors and production provider defaults remain unchanged. The host's
-IDENTITY record names the selected HTTP/3 provider and exact core hash; a flag
-without an HTTP/3 endpoint records `not-hosted`.
-
-The fifth optional argument to `run-campaigns.sh` and `run-lifecycle-campaigns.sh`
-is `system` (default) or `native`. It is recorded in the campaign summary and
-passed only as a test-host selector. Preserve failed phases and compare separate
-fresh processes/source archives; direct native-core tests do not establish
-application-provider conformance or a performance improvement.
+The server hosts HTTP/3 with the EmbedIO.Quic engine. On Linux it needs the
+engine's native TLS runtime: build with
+`-p:EmbedIOQuicNativeTlsDirectory=<directory with libembedio_quic_tls.so>`, as CI
+does for the test projects, or HTTP/3 startup fails with
+`PlatformNotSupportedException`. The host's IDENTITY record names the HTTP/3
+provider and exact core hash; without an HTTP/3 endpoint it records `not-hosted`.
+Earlier engine revisions also accepted `--native-http3` and a `system`/`native`
+provider argument to the campaign scripts; both are gone with the earlier
+providers.
