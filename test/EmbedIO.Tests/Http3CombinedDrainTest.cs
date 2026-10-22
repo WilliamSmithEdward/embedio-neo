@@ -247,16 +247,20 @@ namespace EmbedIO.Tests
         // A drain, canceled or not, ends once the transports stop, and a QUIC connection holds
         // that through its closing period (RFC 9000 section 10.2): three probe timeouts from an
         // RTT estimate that a loaded host inflates. Allow 5 seconds, then what remains of that
-        // period and one second more. On a miss, name the shutdown stages still pending and the
-        // state of each QUIC connection, and measure how long the drain really takes (bounded)
-        // before failing.
+        // period, if any, and one second more: a period that ends at the 5-second mark leaves no
+        // connection to read, but the drain still has its last steps to finish. On a miss, name
+        // the shutdown stages still pending and the state of each QUIC connection, and measure
+        // how long the drain really takes (bounded) before failing.
         private static async Task WaitForCombinedDrainAsync(Task drain, WebServer server)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
             var drained = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(5))) == drain;
-            if (!drained && PendingTaskReport.RemainingCloseMilliseconds(server.Listener) is { } closing)
+            if (!drained)
+            {
+                var closing = PendingTaskReport.RemainingCloseMilliseconds(server.Listener) ?? 0;
                 drained = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, closing) + 1000)))
                     == drain;
+            }
 
             if (drained) return;
 
