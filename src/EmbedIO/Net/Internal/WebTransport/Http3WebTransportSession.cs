@@ -113,6 +113,10 @@ namespace EmbedIO.Net.Internal.WebTransport
             Finish();
         }
 
+        // The core closes before it resets the session's streams, so a handler that
+        // acts on one of those resets already sees the session closed.
+        internal bool IsClosed => _core.State == WebTransportSessionState.Closed;
+
         public async ValueTask<WebTransportStream?> AcceptStreamAsync(CancellationToken token)
         {
             while (

@@ -125,12 +125,17 @@ namespace EmbedIO.Net.Internal.WebTransport
         }
 
         // Completes writes, stops reading what the peer has not sent, then releases the stream.
+        // Once the session has ended the stream is reset with WT_SESSION_GONE instead (draft
+        // section 6), even if the core has not reached it yet; otherwise disposal could finish
+        // it or reset it with a generic code before the core's reset arrives.
         public async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
 
             try
             {
+                if (_session.IsClosed) AbortFromSession(WebTransportProtocol.SessionGone);
+
                 if (CanWrite && Interlocked.Exchange(ref _writesCompleted, 1) == 0)
                     try
                     {
@@ -162,17 +167,19 @@ namespace EmbedIO.Net.Internal.WebTransport
             }
         }
 
-        // The core aborts the stream when its session ends.
+        // The core aborts the stream when its session ends. The abort comes before the flag:
+        // DisposeAsync takes the flag to mean that writes are over, and disposing a stream that
+        // is not yet reset would reset it with the transport's generic code first.
         internal void AbortFromSession(long http3ErrorCode)
         {
-            Volatile.Write(ref _writesCompleted, 1);
-
             try
             {
                 _stream.Abort(Http3AbortDirection.Both, http3ErrorCode);
             }
 
             catch (ObjectDisposedException) { }
+
+            Volatile.Write(ref _writesCompleted, 1);
         }
 
         private void Finish()
