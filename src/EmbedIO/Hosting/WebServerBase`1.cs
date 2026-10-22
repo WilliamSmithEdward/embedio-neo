@@ -756,6 +756,16 @@ namespace EmbedIO
                 ex.Log(LogSource, $"[{context.Id}] Multiplexed request stream failed.");
             }
 
+            catch (Exception ex) when (
+                context is Net.Internal.HttpListenerContext && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)
+            )
+            {
+                // Likewise one HTTP/1 connection, such as one its client reset before
+                // the response was written, must not dispose the listener shared by
+                // unrelated connections. Context cleanup above already ended the request.
+                ex.Log(LogSource, $"[{context.Id}] HTTP/1 request failed.");
+            }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(LogSource, $"[{context.Id}] Fatal exception.");
