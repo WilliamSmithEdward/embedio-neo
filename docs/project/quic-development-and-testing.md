@@ -2284,6 +2284,23 @@ variants eight times on `38507d79` (24 cases total). Every run passed with
 are under ignored `TestResults/quic-feasibility/continuation/webtransport-public-01/upload-repeat-head385`.
 This local repetition does not replace the hosted Windows/Ubuntu recheck.
 
+Hosted CI `39719366609` on `38507d79` passed the Linux regression suite,
+including the concurrent uploads. Windows finished 7,590 successful cases,
+14 skips and one failure: a stalled HTTP/3 body read received
+`H3_REQUEST_CANCELLED` instead of the complete 408 response. The exact H2/H3
+cases then passed 40/40 focused local repeats without reproducing that reset.
+macOS finished 7,568 successful cases, 24 skips and 13 loopback QUIC connection
+failures reporting `HostUnreachable` across unrelated tests. Their cause is not
+established. The exact logs and macOS TRX are retained under ignored
+`TestResults/quic-feasibility/continuation/webtransport-public-01/ci-head385`.
+
+The HTTP/3 fixture now records at most four accept-loop error messages of
+4,096 characters during each test and reports them only when that test fails.
+This test-only observer does not capture request payloads or keys and does not
+change listener behavior. Its focused observer case passed, as did the eleven
+selected WebSocket and concurrent-upload cases. New-head hosted evidence is
+still required before concluding either platform failure is resolved.
+
 ## Open-issue resolution baseline
 
 The open-issue inventory on 2026-10-21 contains eight issues. This is a
