@@ -334,9 +334,11 @@ defaults client and health transports to `h1,h1tls,h2c,h2tls`, and rejects HTTP/
 before starting a host. A narrower `--transports` list is allowed. Client filtering
 alone does not change the default `combined` server, which still enables HTTP/3.
 
-The TCP-only profile skips QUIC capability/module probing and native process-heap
+The TCP-only profile skips the MsQuic module check and native process-heap
 walking; it retains ordinary GC/process/socket metrics and forced managed-GC
-snapshots. Profile and listener mode are recorded explicitly. Endurance records
+snapshots. The server never asks System.Net.Quic whether QUIC is supported, because
+that loads MsQuic, which EmbedIO.Quic does not use; only the clients load it, for
+.NET's HttpClient. Profile and listener mode are recorded explicitly. Endurance records
 runtime/GC facts and explicit options without enumerating environment values.
 `endurance-profile-check` validates accepted/rejected configuration without starting
 a host; it also runs as part of `endurance-verdict-check`.

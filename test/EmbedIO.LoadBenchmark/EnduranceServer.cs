@@ -54,11 +54,11 @@ internal static class EnduranceServer
                 listenerProfile = profile.Name,
                 tlsListenerMode = profile.TlsListenerDisplay,
                 nativeDiagnostics = profile.TcpOnly ? "not-probed-tcp-only" : "enabled",
-                quicSupported = profile.TcpOnly ? (bool?)null : System.Net.Quic.QuicListener.IsSupported,
-                assemblies = profile.TcpOnly ? AssemblyIdentity.Describe(typeof(WebServer).Assembly) : AssemblyIdentity.Describe(typeof(WebServer).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
-                // The MsQuic module actually loaded, which differs from the runtime directory's
-                // copy when System.Net.Quic.AppLocalMsQuic selects an application-local build.
-                msquic = profile.TcpOnly ? null : LoadedModule("msquic.dll"),
+                assemblies = AssemblyIdentity.Describe(typeof(WebServer).Assembly),
+                // EmbedIO.Quic serves HTTP/3 without MsQuic, so the server must not load it; only
+                // the clients' HttpClient does. Asking System.Net.Quic whether QUIC is supported
+                // would itself load MsQuic, so this only reports a module already loaded.
+                msquic = profile.TcpOnly ? null : LoadedModule("msquic"),
             }));
 
             while (true)
@@ -108,12 +108,16 @@ internal static class EnduranceServer
         }
     }
 
-    private static object? LoadedModule(string name)
+    // Matches the library's name on each platform: msquic.dll, libmsquic.so.2,
+    // libmsquic.2.dylib and the like.
+    private static object? LoadedModule(string stem)
     {
         using var process = Process.GetCurrentProcess();
         foreach (ProcessModule module in process.Modules)
         {
-            if (!string.Equals(module.ModuleName, name, StringComparison.OrdinalIgnoreCase)) continue;
+            var name = module.ModuleName;
+            if (name.StartsWith("lib", StringComparison.Ordinal)) name = name[3..];
+            if (!name.StartsWith(stem + ".", StringComparison.OrdinalIgnoreCase)) continue;
             var path = module.FileName;
             return new
             {
