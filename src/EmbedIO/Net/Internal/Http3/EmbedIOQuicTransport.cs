@@ -110,11 +110,18 @@ namespace EmbedIO.Net.Internal.Http3
             )
                 throw new ArgumentOutOfRangeException(nameof(direction));
 
-            if (direction is QuicAbortDirection.Read or QuicAbortDirection.Both && _stream.CanRead)
-                _stream.AbortRead((ulong)code);
+            try
+            {
+                if (direction is QuicAbortDirection.Read or QuicAbortDirection.Both && _stream.CanRead)
+                    _stream.AbortRead((ulong)code);
 
-            if (direction is QuicAbortDirection.Write or QuicAbortDirection.Both && _stream.CanWrite)
-                _stream.AbortWrite((ulong)code);
+                if (direction is QuicAbortDirection.Write or QuicAbortDirection.Both && _stream.CanWrite)
+                    _stream.AbortWrite((ulong)code);
+            }
+
+            // Connection closure already terminates both directions and retains
+            // its failure on pending operations. Cleanup has no further work.
+            catch (QuicConnectionFailure) { }
         }
 
         internal override ValueTask WriteAsync(

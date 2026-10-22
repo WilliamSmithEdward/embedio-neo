@@ -545,13 +545,19 @@ namespace EmbedIO.Quic
             byte[] client = [9, 10, 11, 12, 13, 14, 15, 16];
             using var keys = PacketKeys.Initial(original, false);
             var first = NativeFuzz.Initial(keys, original, client, 0, [1]);
+            var tls = new ConnectionCoreTests.ModelTls(false);
             using var connection = new QuicConnection(
                 first,
-                static _ => new ConnectionCoreTests.ModelTls(true),
+                _ => tls,
                 static (port, _) => new StreamEchoApplication(port)
             );
             connection.BeginRouting(Endpoint(18000));
             connection.Receive(first, 0);
+            tls.ReadKeys[1] = new PacketKeys(new byte[32]);
+            tls.WriteKeys[1] = new PacketKeys(new byte[32]);
+            tls.AllowEstablishment = true;
+            connection.BeginRouting(Endpoint(18000));
+            connection.Receive(ConnectionCoreTests.HandshakePacket(connection.ServerId, client), 1);
             connection.BeginRouting(Endpoint(18000));
             connection.Receive(ConnectionCoreTests.ApplicationPacket(connection.ServerId, Wire.Frame(1), 0), 100);
             Check(connection.IssuedConnectionIds.Count > 1, "spare local ID is available for path close case");
@@ -585,21 +591,22 @@ namespace EmbedIO.Quic
             var output = connection.CloseApplication(42, 201);
             var routes = connection.OutputPaths;
             Check(
-                connection.Phase == ConnectionPhase.Closing
-                    && connection.ClosePackets == 1
-                    && output.Count == 1
-                    && routes?.Count
-                    == 1
-                    && routes[0]?.Endpoints.Peer.Port
-                    == 18000
-                    && output[0]
-                        .AsSpan(1, client.Length)
-                        .SequenceEqual(client)
-                    && Plain(output[0], client)[0] == 0x1d,
+                connection.Phase == ConnectionPhase.Closing && connection.ClosePackets == 1 && output.Count == 1,
+                $"close fallback produces one response ({connection.Phase}; sent={connection.ClosePackets}; output={output.Count})"
+            );
+            Check(
+                routes?.Count == 1 && routes[0]?.Endpoints.Peer.Port == 18000,
                 smallCandidate
                     ? "close uses fallback when current amplification is exhausted"
                     : "close uses fallback when current path lacks a peer ID"
             );
+            Check(
+                output[0]
+                    .AsSpan(1, client.Length)
+                    .SequenceEqual(client),
+                "close fallback uses its peer ID"
+            );
+            Check(Plain(output[0], client)[0] == 0x1d, "close fallback carries application closure");
         }
 
         private static void LocalRetirementLimit()

@@ -2,8 +2,11 @@
 
 This record covers the development path, test architecture, reproducible local
 campaigns and remaining acceptance work for the original C# QUIC engine. It is
-maintained with the implementation. The feature is pending in draft PR #506;
-production HTTP/3 still uses its existing MsQuic provider. No package release or
+maintained with the implementation. The feature is pending in draft PR #506.
+An isolated local probe selects EmbedIO.Quic for the ordinary HTTP/3 binding;
+the committed default still uses MsQuic while runtime delivery and capability
+checks are completed. The startup support gate and internal native comparison
+path also remain. No package release or
 public WebTransport API is implied by this record. The sections retain the implementation
 sequence and its evidence; the final acceptance list describes work still outstanding.
 
@@ -21,7 +24,7 @@ copying from those projects.
 
 | Stage | Implementation and validation |
 | --- | --- |
-| Core packet and connection owners | `QuicConnection` and `QuicConnectionDispatcher` own packet/TLS/recovery state and bounded destination-ID routing in the source core. Factories supply TLS and applications; development wrappers add protocol error mapping and observations. Simple echo, multiplexed streams and H3 use the same stream owner. The library socket binding now exercises the actual WebServer pipeline; public provider selection is unchanged. |
+| Core packet and connection owners | `QuicConnection` and `QuicConnectionDispatcher` own packet/TLS/recovery state and bounded destination-ID routing in the source core. Factories supply TLS and applications; development wrappers add protocol error mapping and observations. Simple echo, multiplexed streams and H3 use the same stream owner. The library socket binding exercises the actual WebServer pipeline; an isolated ordinary-binding selection probe is recorded below. Automatic runtime delivery and public default selection remain pending. |
 | Windows certificate selection | Complete ClientHello/SNI framing precedes a once-only certificate selector. A selected certificate is cloned for the native credential; the source remains application-owned. Focused tests exercise publication timing, selector errors and disposal during selection. The independent selection profile uses two non-exportable CNG key types and six aioquic cases. The actual WebServer fixture now uses the library's policy/source factory to verify SNI and live publication; Windows client-certificate integration is described below; complete platform parity remains pending. |
 | Windows TLS credentials | Original managed SSPI binding, provider-neutral TLS state and non-exportable CNG RSA/ECDSA test credentials. Native credential/context/buffer ownership, bounded ClientHello parsing and once-only traffic-secret installation are exercised before production integration. The development cipher profile remains AES-128-GCM/SHA-256. |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
@@ -57,7 +60,7 @@ sources, and the unsigned development host references that library through an
 explicit friend assembly. It no longer compiles copies of HTTP/3/WebTransport
 codecs. This preserves existing package dependency groups and .NET Standard
 compilation while exercising the actual library protocol. Default listener
-selection remains unchanged. Native TLS and final platform packaging still require
+selection remains unchanged outside the isolated local probe. Native TLS and final platform packaging still require
 acceptance. The table names implementation files in those source groups and their
 corresponding host/test files.
 
@@ -1151,8 +1154,8 @@ python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py
 3. Complete transport/application error classification, server reset emission, Retry,
    path handling, post-handshake TLS, resumption and any intentionally supported
    0-RTT policy. Features outside the supported profile must fail explicitly.
-4. Finish production provider selection and public WebTransport API/controller
-   integration; broaden the actual WebServer auth/cancellation/disposal checks across
+4. Finish default provider selection, capability detection, automatic runtime delivery and public
+   WebTransport API/controller integration; broaden the actual WebServer auth/cancellation/disposal checks across
    supported configurations and platforms.
 5. Independent peers on Windows/Linux/macOS, browser compatibility, dependency
    packaging, and startup/warm/tail-latency measurements. Windows embedded hosting
@@ -1775,9 +1778,9 @@ no usable peer ID. Both cases assert one encrypted close response on the prior
 validated route with its original destination ID; bounded mutation inputs vary
 the new-path packet size. The path-validation model now passes all 16 groups.
 
-On the final local source, Windows and Linux each passed six independent NAT
-and simultaneous IP/CID-change profiles across the three supported cipher
-suites, plus the local-ID and reset profiles. Each platform passed 100,000
+On that final local source, Windows passed four independent NAT and simultaneous
+IP/CID-change profiles using its two AES cipher suites; Linux passed six profiles
+including ChaCha20-Poly1305. Both passed the local-ID and reset profiles. Each platform passed 100,000
 managed mutations, 10,000 cases per FsCheck property, and 1,000 recovery and
 lifecycle traces. Windows completed 85,728 libFuzzer and 51,460 AFL++
 executions in separate two-minute campaigns with no saved crash or hang.
@@ -1790,3 +1793,76 @@ The macOS package-consumer source-IP/CID case binds 127.0.0.2. The hosted
 runner configures this as a temporary loopback /32 alias, verifies that a
 socket can bind it, and removes the alias when the validation step ends. This
 keeps the actual IP-change case enabled without changing production networking.
+
+## Ordinary HTTP/3 binding and paced scheduling
+
+An isolated local selection probe makes the ordinary HTTP/3 binding create
+`EmbedIOQuicListenerBinding` through the existing WebServer modes. Its selection
+patch is retained separately until automatic native TLS runtime delivery and
+supported-platform capability detection are wired through the ordinary build
+and CI paths. The committed default and internal native comparison path still
+use the old providers. Selecting the new binding alone would not complete the
+replacement or preserve Unix package consumers.
+
+A local selection probe reported 574 passes and two failures among 576 HTTP/3
+cases. One failure came from best-effort request cleanup aborting a stream after
+its connection had already closed. A direct model regression reproduced this for
+local and remote closure with pending reads and writes. The adapter now treats
+that terminal abort as complete while preserving the original pending-operation
+failure, checking arguments and queuing no more frames. Both variants join the
+existing production-transport mutation target.
+
+The other probe failure was the three-concurrent-1-MiB HTTP echo case reaching
+its client deadline. With the cleanup correction it passed in 12.63 seconds in
+one local run, still close to the 15-second client limit. The inter-packet pacer
+discarded elapsed scheduler credit after every packet, allowing only one data
+packet at each wake. Recovery now retains a leaky pacing budget at the existing
+1.25-times-window/RTT rate, capped at ten maximum-size packets and independently
+limited by the congestion window. ACK-only traffic retains its existing unpaced
+behavior. Congestion/RTT transitions refill using the previous rate; idle time
+cannot grow the burst beyond the initial window and an address change starts
+with a fresh path budget.
+
+Deterministic checks cover the initial window, a pacing-limited burst below the
+congestion limit, partial/full rate refill, credit consumption, PTO exemption,
+idle-burst bounds and a fresh path. Bounded mutation inputs vary packet size and
+RTT across idle and path transitions in the recovery, lifecycle and property
+targets; trace coverage records the pacing case only when it actually runs.
+The larger allowed batch also exposed a fixture that had skipped the model
+Handshake packet. That fixture now authenticates a Handshake packet before
+claiming a validated fallback, without changing the production validation rules.
+
+All six focused combined-stop/upload cases passed with the bounded pacer. The
+same three-concurrent-1-MiB case took 0.79 seconds in that run; these are controlled
+test elapsed times, not a latency benchmark or a cross-platform speedup claim.
+An initial full Windows run reported 7,600 cases with seven failures at explicit
+old-provider identity assertions, 7,572 passes and 21 existing opt-in/platform
+skips. The updated assertion requires the replacement provider before checking
+HTTP behavior; all 21 focused body-limit cases then passed. The final local
+selection probe subsequently passed all 7,600 Windows cases: 7,579 passed, 21
+existing opt-in/platform skips and zero failures in 7m 11s. This is Windows
+WebServer regression evidence, not automatic Unix runtime delivery or a claim
+that the remaining MsQuic startup dependency has been removed.
+
+The Linux snapshot passed the model/dispatcher suites, six independent
+NAT/IP/CID profiles across the three cipher suites, local-ID and reset cases,
+100,000 managed mutations, 10,000 FsCheck cases per property and 1,000 recovery
+and lifecycle traces. Each trace campaign actually exercised the bounded pacing
+case 335 times. These use the verified unchanged native TLS SDK and pinned peer;
+ordinary Unix package delivery and final replacement acceptance remain separate.
+
+On the finalized implementation increment, Windows also passed its four
+independent NAT/IP/CID cases, local-ID, path-control and reset suites. Managed
+mutations, FsCheck properties and recovery/lifecycle traces passed with the same
+100,000/10,000-per-property/1,000-per-scenario counts as Linux. Two-minute guided
+campaigns completed 81,115 libFuzzer and 51,231 AFL++ executions without a saved
+crash or hang. AFL++ stability was 1.18%; dependable coverage feedback remains
+outstanding. Both core targets and the development host had zero unsuppressed
+nonhidden compiler diagnostics, changed-source formatting/analyzers passed,
+model/dispatcher suites passed and the pinned full source scan passed.
+
+Formatting the local probe's body-limit test with pinned PrettyCSharp 1.1.10 required
+repairing its angle-bracket layout at three named-tuple generic constructions to
+the Roslyn whitespace form. That fixture edit is retained with the isolated
+selection patch, rather than the current implementation increment. No
+compiler/analyzer rule or file was excluded.

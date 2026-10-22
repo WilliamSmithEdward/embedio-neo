@@ -437,7 +437,7 @@ cancellation-callback failures are reported after session teardown;
 connection workers and sibling bindings still receive cleanup. A failed drain clears
 the previous session so the listener can restart. Per-instance listener
 construction allows the real WebServer pipeline to validate that binding with
-development credentials; public provider selection remains unchanged.
+development credentials. The current unmerged binding selection is described below.
 The replacement stream/datagram adapters now drive the library's HTTP/3 protocol
 from the development UDP host. Ordinary body-read cancellation preserves the
 existing distinction between local timeout (`H3_NO_ERROR`) and request cancellation;
@@ -1100,7 +1100,8 @@ and peer parameters alone do not admit application traffic: TLS Finished and
 client-certificate policy must succeed first. Native buffers and handles remain
 bounded and owned by the serialized connection. Windows retains Schannel.
 
-Public HTTP/3 provider selection and package dependency groups are unchanged.
+Released HTTP/3 provider selection and package dependency groups are unchanged;
+the development binding transition is described below.
 A separate unpublished native runtime package and package-only consumers are in
 development; oldest supported libc/musl and remaining RID validation are pending. Build instructions and the exact archive pin are in
 [`native/EmbedIO.Quic.Tls`](native/EmbedIO.Quic.Tls/README.md). The portable CI job
@@ -1156,8 +1157,7 @@ A local musl x64 preview passed the initial six JIT/AOT cipher profiles; exact
 later repeats are recorded in the development guide. Single-RID preview switches
 are local development aids, not distribution acceptance. All six RID runs, oldest
 OS/libc, native signing/loading, final-payload scans, browser and endurance/latency
-acceptance still apply. Public provider selection is unchanged and none of these
-native package changes is released.
+acceptance still apply. These native package changes remain unreleased.
 
 
 The development connection now honors authenticated peer `NEW_CONNECTION_ID`
@@ -1197,7 +1197,7 @@ adds no token hash to the usual single-connection packet path. Reset routes and 
 groups retire with connection ownership. Server-issued IDs and reset emission
 are described below; path migration remains development work.
 The new model, dispatcher, independent-peer and fuzz checks are recorded in the
-development/testing guide. Public provider selection remains unchanged.
+development/testing guide; see the current unmerged binding selection below.
 
 
 The unmerged engine issues fixed 16-byte random server IDs and maintains two
@@ -1216,8 +1216,8 @@ share of the output queue. Active IDs use ordinary connection processing.
 Model tests cover 10,000 retirements, loss, bounds, malformed frames and cleanup;
 Windows reference peers passed 32 rotations and two retired-ID reset emissions
 on each AES profile, and Linux passed the same checks on all three cipher profiles.
-This remains unmerged development: public provider selection, runtime dependency
-groups, and supported application configuration are unchanged. Local regression/fuzz results, the low AFL++ feedback-stability limitation and
+This remains unmerged development; runtime delivery and application acceptance
+continue as described below. Local regression/fuzz results, the low AFL++ feedback-stability limitation and
 final changed-source acceptance for this increment are recorded in the testing guide.
 
 
@@ -1251,7 +1251,24 @@ fallback, sibling requests and drain/rebind. Obsolete paths release peer IDs by
 reliable retirement on the validated route; reservations stay separate from reset-
 token eligibility until a packet is sent. A close response can use that validated
 route when the new path lacks send allowance or a usable peer ID. Broader loss,
-reordering, browser and platform/package acceptance remain development work;
-public provider selection is unchanged. The macOS hosted package fixture adds
+reordering, browser and platform/package acceptance remain development work.
+The macOS hosted package fixture adds
 127.0.0.2 to loopback only for the source-IP/CID case and removes that alias
 when validation ends; production networking does not require this fixture setup.
+
+An isolated default-selection probe routes ordinary .NET 10 HTTP/3 WebServer
+modes through `EmbedIOQuicListenerBinding`, using Schannel on Windows and the
+private pinned OpenSSL TLS runtime on Linux/macOS. The committed default and its
+startup support gate still use the previous provider. Automatic native runtime
+delivery, capability checks, full replacement acceptance and removal of the
+remaining paths are required before applying that selection change and merging;
+no released package selects this development snapshot.
+
+Recovery now accumulates pacing credit at the RTT/congestion-window rate, capped
+at the initial ten-packet window and independently constrained by congestion.
+This permits bounded batches after scheduler delay without unlimited idle bursts.
+HTTP/3 stream abort is harmless after connection closure; pending operations
+retain their original connection error and argument validation remains active.
+The model, actual WebServer regression, independent-peer and fuzz evidence is in
+the development/testing record. WebTransport application/browser integration
+and the MsQuic retirement/issue audit remain outstanding.

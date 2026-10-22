@@ -15,6 +15,8 @@ namespace EmbedIO.Quic
                 for (var mode = 0; mode < 3; mode++) BodyCancellation(mode, [7, 8, 9]);
 
                 CompletedRead();
+                TerminalAbort(false);
+                TerminalAbort(true);
                 Datagrams();
             }
         }
@@ -24,7 +26,10 @@ namespace EmbedIO.Quic
             if (data.Length == 0 || (data[0] & 31) != 0) return;
 
             if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            {
                 BodyCancellation(data[0] % 3, data[1..Math.Min(data.Length, 64)].ToArray());
+                TerminalAbort((data[0] & 32) != 0);
+            }
         }
 
         [SupportedOSPlatform("windows")]
@@ -166,6 +171,52 @@ namespace EmbedIO.Quic
                     == 0,
                 "clean-fin"
             );
+        }
+
+        [SupportedOSPlatform("windows")]
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static void TerminalAbort(bool remote)
+        {
+            using var peer = new AsyncStreamTests.Peer();
+            peer.Streams.Receive(0, 0, [], false);
+            using var stream = new EmbedIOQuicTransportStream(
+                Await(
+                    peer.Application
+                        .AcceptInboundStreamAsync()
+                        .AsTask()
+                )
+            );
+            var reading = stream
+                .ReadAsync(new byte[1])
+                .AsTask();
+            var writing = stream
+                .WriteAsync(new byte[1], true, default)
+                .AsTask();
+
+            if (remote) peer.Application.ConnectionClosed(42, true);
+
+            else peer.Application.Dispose();
+
+            var readFailure = Expect<QuicConnectionFailure>(() => Await(reading));
+            var writeFailure = Expect<QuicConnectionFailure>(() => Await(writing));
+            Check(
+                ReferenceEquals(readFailure, writeFailure)
+                    && readFailure.Remote == remote
+                    && readFailure.ErrorCode == (remote ? 42UL : 0UL),
+                "terminal-failure-provenance"
+            );
+
+            foreach (var direction in new[]
+            {
+                QuicAbortDirection.Read, QuicAbortDirection.Write, QuicAbortDirection.Both
+            })
+                stream.Abort(direction, 0x10c);
+
+            Expect<ArgumentOutOfRangeException>(() => stream.Abort((QuicAbortDirection)99, 0x10c));
+            Expect<ArgumentOutOfRangeException>(() => stream.Abort(QuicAbortDirection.Both, -1));
+            peer.Pump();
+            Check(peer.Sent.Count == 0, "terminal-abort-does-not-queue");
         }
 
         private static void Datagrams()

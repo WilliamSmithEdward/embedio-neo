@@ -4,6 +4,9 @@
     {
         internal static void Run()
         {
+            Pacing();
+            Mutate([0, 0]);
+            Mutate([224, 255]);
             var repeats = new List<(Delivery Delivery, bool Probe)>();
             Recovery Create() => new((delivery, probe) => repeats.Add((delivery, probe)));
             var recovery = Create();
@@ -116,6 +119,86 @@
                 recovery.Discard(2);
                 Check(recovery.BytesInFlight == 0, "seeded retirement releases all flight");
             }
+        }
+
+        private static void Pacing()
+        {
+            var recovery = new Recovery(static (_, _) => { });
+
+            for (ulong number = 0; number < 10; number++)
+            {
+                Check(recovery.CanSend(1200, 0, false), "initial burst permits the initial window");
+                recovery.SentPacket(2, number, 1200, 0, new Delivery(2, [1]), false);
+            }
+
+            Check(!recovery.CanSend(1200, 0, false), "initial burst stops at congestion window");
+            recovery.Acknowledge(2, [(0UL, 9UL)], 0, 100);
+            Check(recovery.CongestionWindow == 24000 && recovery.SmoothedRtt == 100, "controlled pacing rate");
+
+            for (ulong number = 10; number < 20; number++)
+            {
+                Check(recovery.CanSend(1200, 200, false), "delayed wake can use earned pacing credit");
+                recovery.SentPacket(2, number, 1200, 200, new Delivery(2, [1]), false);
+            }
+
+            Check(
+                recovery.BytesInFlight < recovery.CongestionWindow && !recovery.CanSend(1200, 200, false),
+                "pacing burst is bounded independently of congestion credit"
+            );
+            Check(!recovery.CanSend(1200, 203.9, false), "partial pacing credit cannot send a full packet");
+            Check(recovery.CanSend(1200, 204.1, false), "pacing credit accrues at the RTT and window rate");
+            recovery.SentPacket(2, 20, 1200, 204.1, new Delivery(2, [1]), false);
+            Check(!recovery.CanSend(1200, 204.1, false), "sending consumes pacing credit");
+            Check(recovery.CanSend(1200, 204.1, true), "PTO exception still bypasses pacing");
+            recovery.Acknowledge(2, [(10UL, 20UL)], 0, 10000);
+
+            for (ulong number = 21; number < 31; number++)
+            {
+                Check(recovery.CanSend(1200, 10000, false), "idle wake retains one bounded burst");
+                recovery.SentPacket(2, number, 1200, 10000, new Delivery(2, [1]), false);
+            }
+
+            Check(!recovery.CanSend(1200, 10000, false), "idle time cannot accumulate an unbounded burst");
+            recovery.ChangePath(10001);
+            Check(recovery.CanSend(1200, 10001, false), "new path starts with its own initial pacing budget");
+        }
+
+        internal static bool Mutate(ReadOnlySpan<byte> input)
+        {
+            if (input.Length < 2 || (input[0] & 31) != 0) return false;
+
+            var size = 600 + input[1] * 600 / 255;
+            var rtt = 32 + input[0];
+            var recovery = new Recovery(static (_, _) => { });
+            ulong next = 0;
+
+            void Burst(double now)
+            {
+                var bytes = 0;
+                var count = 0;
+
+                while (count < 32 && recovery.CanSend(size, now, false))
+                {
+                    recovery.SentPacket(2, next++, size, now, new Delivery(2, [1]), false);
+                    bytes += size;
+                    count++;
+                }
+
+                QuicFuzzChecks.Require(
+                    count > 1 && bytes <= 12000 && !recovery.CanSend(size, now, false),
+                    "pacing-bounded-burst"
+                );
+            }
+
+            Burst(0);
+            recovery.Acknowledge(2, [(0UL, next - 1)], 0, rtt);
+            var begin = next;
+            Burst(2 * rtt);
+            recovery.Acknowledge(2, [(begin, next - 1)], 0, 3 * rtt);
+            Burst(1000 * rtt);
+            recovery.ChangePath(1001 * rtt);
+            Burst(1001 * rtt);
+            return true;
         }
 
         private static void Check(bool valid, string name)

@@ -36,11 +36,13 @@ namespace EmbedIO.Quic
                     break;
 
                 case 3:
+                    RecoveryTests.Mutate(data);
                     RecoveryRetentionTests.Mutate(data);
                     QuicFuzzState.Run(data, false, null);
                     break;
 
                 case 4:
+                    RecoveryTests.Mutate(data);
                     QuicFuzzState.Run(data, true, null);
                     break;
 
@@ -72,6 +74,9 @@ namespace EmbedIO.Quic
         public static void StateMachine(ReadOnlySpan<byte> steps, Action<string>? cover = null)
         {
             steps = steps[..Math.Min(steps.Length, MaximumInput)];
+
+            if (RecoveryTests.Mutate(steps)) cover?.Invoke("recovery.pacing-burst-bounds");
+
             RecoveryRetentionTests.Mutate(steps);
             PeerConnectionIdTests.Mutate(steps);
             LocalConnectionIdTests.Mutate(steps);
@@ -98,6 +103,9 @@ namespace EmbedIO.Quic
         public static void Lifecycle(ReadOnlySpan<byte> steps, Action<string>? cover = null)
         {
             steps = steps[..Math.Min(steps.Length, MaximumInput)];
+
+            if (RecoveryTests.Mutate(steps)) cover?.Invoke("recovery.pacing-burst-bounds");
+
             QuicFuzzState.Run(steps, true, cover);
             PeerConnectionIdTests.Mutate(steps);
             LocalConnectionIdTests.Mutate(steps);

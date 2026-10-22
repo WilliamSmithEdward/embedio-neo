@@ -36,6 +36,7 @@ namespace EmbedIO.Quic
         internal const int MaximumActivePackets = 4096;
         internal const int MaximumRetiredPackets = 4096;
         internal const int MaximumAcknowledgments = 12288;
+        private const int MaximumBurst = 10 * MaximumPacket;
         private readonly int _acknowledgmentLimit;
         private readonly int _retainedAcknowledgments;
         private readonly int _retiredLimit;
@@ -78,7 +79,8 @@ namespace EmbedIO.Quic
         private double _recoveryStart = -1;
         private double _firstSample = double.PositiveInfinity;
         private double _slowStartThreshold = double.PositiveInfinity;
-        private double _nextPacedSend;
+        private double _pacingCredit = MaximumBurst;
+        private double _pacingTime;
         private int _ptoCount;
         private ulong _epoch;
         private double _lastTimeout = -1;
@@ -86,7 +88,7 @@ namespace EmbedIO.Quic
         private readonly List<double> _acknowledgedTimes = [];
 
         internal long BytesInFlight { get; private set; }
-        internal double CongestionWindow { get; private set; } = 10 * MaximumPacket;
+        internal double CongestionWindow { get; private set; } = MaximumBurst;
         internal int LostPackets { get; private set; }
         internal int RetransmittedPackets { get; private set; }
         internal int ProbeTimeouts { get; private set; }
@@ -110,8 +112,26 @@ namespace EmbedIO.Quic
 
         internal bool IsDiscarded(int level) => _discarded[level];
 
-        internal bool CanSend(int size, double now, bool probe) =>
-            probe || (BytesInFlight + size <= CongestionWindow && now >= _nextPacedSend);
+        internal bool CanSend(int size, double now, bool probe)
+        {
+            if (probe) return true;
+
+            RefillPacing(now);
+            return BytesInFlight + size <= CongestionWindow && size <= _pacingCredit;
+        }
+
+        private void RefillPacing(double now)
+        {
+            // RFC 9002 7.7 permits bounded bursts to absorb scheduler delay.
+            // Idle time earns at most the initial window; congestion still gates
+            // every ordinary packet independently of this pacing budget.
+            var elapsed = Math.Max(0, now - _pacingTime);
+            _pacingTime = Math.Max(_pacingTime, now);
+            _pacingCredit = Math.Min(
+                Math.Min(CongestionWindow, MaximumBurst),
+                _pacingCredit + elapsed * 1.25 * CongestionWindow / Math.Max(_smoothedRtt, 1)
+            );
+        }
 
         internal void SentPacket(
             int level,
@@ -138,11 +158,16 @@ namespace EmbedIO.Quic
 
             if (delivery.Eliciting) _lastEliciting[level] = now;
 
-            if (inFlight) _nextPacedSend = now + size * Math.Max(_smoothedRtt, 1) / (1.25 * CongestionWindow);
+            if (inFlight)
+            {
+                RefillPacing(now);
+                _pacingCredit = Math.Max(0, _pacingCredit - size);
+            }
         }
 
         internal void Acknowledge(int level, IReadOnlyList<(ulong Low, ulong High)> ranges, double delay, double now)
         {
+            RefillPacing(now);
             var largest = ranges[0].High;
             var late = _retired.Values
                 .Where(p => p.Level == level && ranges.Any(r => p.Number >= r.Low && p.Number <= r.High))
@@ -241,6 +266,8 @@ namespace EmbedIO.Quic
 
         internal void Tick(double now)
         {
+            RefillPacing(now);
+
             if (DetectLost(now)) return;
 
             var candidates = _sent.Values
@@ -353,13 +380,14 @@ namespace EmbedIO.Quic
             // Old-path ACKs still retire them, but cannot train the new controller.
             _epoch++;
             BytesInFlight = 0;
-            CongestionWindow = 10 * MaximumPacket;
+            CongestionWindow = MaximumBurst;
             _minimumRtt = double.PositiveInfinity;
             _latestRtt = _smoothedRtt = 333;
             _variation = 166.5;
             _firstSample = _slowStartThreshold = double.PositiveInfinity;
             _recoveryStart = -1;
-            _nextPacedSend = now;
+            _pacingCredit = MaximumBurst;
+            _pacingTime = now;
             _ptoCount = 0;
             _lastTimeout = -1;
             _lostHistory.Clear();

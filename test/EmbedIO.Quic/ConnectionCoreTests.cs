@@ -392,6 +392,29 @@ namespace EmbedIO.Quic
             return keys.Protect(header, 1 + destination.Length, number, bytes);
         }
 
+        internal static byte[] HandshakePacket(ReadOnlySpan<byte> destination, ReadOnlySpan<byte> client)
+        {
+            using var header = new MemoryStream();
+            header.Write(
+                [
+                    0xe3,
+                    0,
+                    0,
+                    0,
+                    1,
+                    (byte)destination.Length
+                ]
+            );
+            header.Write(destination);
+            header.WriteByte((byte)client.Length);
+            header.Write(client);
+            Wire.Integer(header, 21);
+            var offset = (int)header.Length;
+            header.Write(new byte[4]);
+            using var keys = new PacketKeys(new byte[32]);
+            return keys.Protect(header.ToArray(), offset, 0, Wire.Frame(1));
+        }
+
         // Deterministic TLS substitute for packet ownership/flow tests. It supplies
         // public test keys only; native and independent-peer suites verify real TLS.
         internal sealed class ModelTls(bool establish, bool failDispose = false) : TlsSession
@@ -404,6 +427,7 @@ namespace EmbedIO.Quic
             ];
 
             internal QuicCipherSuite CipherSuite { get; set; } = QuicCipherSuite.Aes128GcmSha256;
+            internal bool AllowEstablishment { get; set; } = establish;
             internal int DisposeCalls { get; private set; }
 
             internal override void Add(int level, ulong offset, ReadOnlySpan<byte> bytes) =>
@@ -411,7 +435,7 @@ namespace EmbedIO.Quic
 
             internal override void Pump()
             {
-                if (!establish || Established) return;
+                if (!AllowEstablishment || Established) return;
 
                 using var parameters = new MemoryStream();
                 Wire.Parameter(parameters, 15, Client);
