@@ -51,6 +51,7 @@ namespace EmbedIO.Net.Internal.Http3
 
                 if (endpoint.Address.Equals(IPAddress.IPv6Any)) _socket.DualMode = true;
 
+                ReceiveDestinations(_socket);
                 _socket.Bind(endpoint);
                 _local = QuicConnectionEndpoints.Copy(
                     (IPEndPoint)(_socket.LocalEndPoint
@@ -241,7 +242,7 @@ namespace EmbedIO.Net.Internal.Http3
                                 _connections.Receive(
                                     bytes.AsSpan(0, packet.ReceivedBytes),
                                     (IPEndPoint)packet.RemoteEndPoint,
-                                    new IPEndPoint(packet.PacketInformation.Address, _local.Port)
+                                    DestinationOf(packet.PacketInformation, _local)
                                 );
                         }
 
@@ -362,6 +363,34 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
         }
+
+        // .NET turns on destination reporting at the first ReceiveMessageFrom, and macOS
+        // reports nothing for datagrams that arrived before then. Turn it on before
+        // binding instead. macOS never reports IPv4 destinations on a dual-mode socket.
+        private static void ReceiveDestinations(Socket socket)
+        {
+            if (socket.AddressFamily == AddressFamily.InterNetwork)
+            {
+                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
+                return;
+            }
+
+            socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.PacketInformation, true);
+
+            if (!socket.DualMode) return;
+
+            try
+            {
+                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
+            }
+
+            catch (SocketException) { }
+        }
+
+        // A datagram without a reported destination arrived on the bound address,
+        // which is the wildcard for a dual-mode socket on macOS.
+        internal static IPEndPoint DestinationOf(IPPacketInformation information, IPEndPoint bound) =>
+            new(information.Address ?? bound.Address, bound.Port);
 
         // A shared unconnected socket can report a previous destination's ICMP
         // failure on either receive or send. Loss recovery remains per connection.

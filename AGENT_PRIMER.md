@@ -1347,7 +1347,14 @@ public session integration and final hosted acceptance are still pending.
 The unmerged async-stream owner now ignores inbound STREAM/RESET/STOP events
 after connection closure without creating another stream owner; outbound operations
 continue to report the original connection failure. A local close-race regression
-passes, but final hosted Linux/macOS acceptance remains pending.
+passes, and the next hosted Linux suite passed; final hosted acceptance remains pending.
+
+The unmerged EmbedIO.Quic listener now enables UDP destination reporting before it
+binds. On macOS a datagram could arrive without its destination (before the first
+receive, or any IPv4 datagram on a dual-mode wildcard socket), and the listener
+stopped, so clients saw "No route to host". Such a datagram is now attributed to
+the bound address, so a dual-mode wildcard listener reports that address as the
+local endpoint of IPv4 requests on macOS. Hosted macOS acceptance is pending.
 
 
 Source-reference fuzz, conformance and load-benchmark hosts now opt into that

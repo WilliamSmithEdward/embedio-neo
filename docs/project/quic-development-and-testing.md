@@ -2322,6 +2322,46 @@ job log are retained under ignored
 The macOS causes and intermittent 408 reset remain unresolved; neither a local
 focused pass nor the async-stream correction establishes their resolution.
 
+## macOS datagram destinations
+
+Hosted CI `39725851625` on `07670812` passed the Windows and Linux regression
+suites, so the late-STREAM correction above now has a passing Linux run. macOS
+reported 7,607 cases: 7,577 passed, six failed and 24 were not executed. All six
+failed about 1.2 seconds into the test with `HostUnreachable`, and every one
+carried the new accept-loop record: `ArgumentNullException` for `address` from
+the `IPEndPoint` constructor in `EmbedIOQuicListenerBinding.RunAsync`. The
+listener built each datagram's local endpoint from
+`packet.PacketInformation.Address`, which was null. The receive loop failed, the
+accept loop stopped the HTTP/3 listener, `RunAsync` completed normally, and the
+client's packets met a closed port. This one mechanism matches the scattered
+`HostUnreachable` failures of the earlier macOS runs.
+
+The .NET 10.0.13 source explains both ways the address goes missing.
+`Socket.ReceiveMessageFromAsync` enables destination reporting on its first call
+(`SetReceivingPacketInformation`), after the socket is bound; macOS attaches the
+destination when a datagram arrives, so a client datagram that beats the first
+receive has none. `SocketPal.Unix.SetReceivingDualModeIPv4PacketInformation` is
+a no-op on macOS because it cannot report IPv4 destinations on a dual-mode
+socket, so a wildcard prefix would lose every IPv4 destination.
+
+The binding now enables destination reporting for its address family before
+binding, plus IPv4 reporting on a dual-mode socket where the platform accepts it.
+A datagram that still has no destination is attributed to the bound address,
+which is the wildcard for a dual-mode socket; it no longer stops the listener.
+`DatagramsWithoutAReportedDestinationUseTheBoundEndpoint` checks that resolution
+directly, and `WildcardHttp3ListenerServesIpv4Clients` serves two fresh IPv4
+connections through a wildcard (dual-mode) listener and requires it to stay up.
+The wildcard case reaches the macOS dual-mode path on every run, not only when a
+datagram races the first receive.
+
+Locally on Windows, the core and test projects built without warnings, the 20
+affected HTTP/3 cases passed, and the full suite reported 7,608 cases: 7,586
+passed, 22 skipped, none failed. The wildcard case was excluded from that local
+run because binding `[::]` on the desktop can raise a firewall prompt; hosted CI
+runs it on all three platforms. Evidence is under ignored
+`TestResults/quic-feasibility/continuation/macos-destinations-01`. Hosted macOS
+acceptance of this correction and the intermittent 408 reset are still open.
+
 ## Open-issue resolution baseline
 
 The open-issue inventory on 2026-10-21 contains eight issues. This is a
