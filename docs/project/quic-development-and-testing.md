@@ -2605,8 +2605,9 @@ Validation on Windows 11 with Schannel, before hosted CI:
   WebTransport and request-abort cases passed in ten fresh processes. Before the
   request record correction the 300-round case failed at round 128 in each of ten
   runs, and the session-core case could not find the method it tests; after it,
-  both passed in ten runs. The regression floor is the new discovery count, 7,459.
-- The full suite, without the local wildcard-bind case, ran 7,458 cases: 7,454
+  both passed in ten runs. With the HTTP/1 case described under Endurance below,
+  the regression floor is the new discovery count, 7,460.
+- The full suite, without the local wildcard-bind case, ran 7,459 cases: 7,455
   passed and 4 skipped, none failed. Three skips are the usual platform ones; the
   fourth, the aioquic datagram case, skips without its peer and passed on its own
   with the peer configured. Its first run caught the test host still passing the
@@ -2636,10 +2637,43 @@ compiled, for osx-arm64, in the `golang:1.27.2-trixie` image pinned by digest in
 `go.sum` with `go mod verify`. The `WebTransport interop` jobs then run all modes on
 Ubuntu 24.04 and macOS 15 against that run's TLS runtime, re-signing the macOS
 binary ad hoc, and keep the logs without the throwaway test key. Dependabot follows
-the Go image and the peer's modules.
+the Go image and the peer's modules. In CI `39794451873` all modes passed on both
+platforms. The macOS job needed one rerun: after its modes passed, `dotnet nuget
+locals` exited 137 in `setup-dotnet`'s cache cleanup, the failure #401 tracks.
 
-Not covered yet: browsers other than Chromium, a browser on Linux or macOS, and
-the first hosted run of the interop jobs, which is also the first macOS run.
+Not covered yet: browsers other than Chromium, and a browser on Linux or macOS.
+
+## Endurance
+
+The load benchmark's endurance mode ran on Windows against `750176f0`, with server
+CPUs 0-3 and client CPUs 4-7: idle, steady load, three restarts, the fault mix, two
+drains under load, steady load, three restarts, the fault mix, steady load and
+idle. The run took 18 minutes over nine server generations. All ten steps passed
+without a client error; the server answered 1,846,123 validated requests, 264,958 of
+them over HTTP/3, and every drain and restart left nothing in flight. Retention comes
+from snapshots taken after a forced collection with no request in flight; the first
+two are warm-up.
+
+| Quiesced value | First after warm-up | Range | Last |
+| --- | --- | --- | --- |
+| Managed heap | 4,475 KiB | 3,000 to 4,475 KiB | 3,966 KiB |
+| Handles | 589 | 569 to 617 | 583 |
+| Timers | 5 | 5 to 6 | 5 |
+| Private memory outside the GC's committed memory | 22.5 MiB | 20.9 to 23.7 MiB | 23.7 MiB |
+
+Private memory itself ranged from 37.7 to 59.0 MiB, following what the GC kept
+committed after load; without that, the series has no trend. At the 16 bytes per
+HTTP/3 request that #278 measured in `System.Net.Quic`, these requests would have
+added about 4 MB. One 18-minute run on one platform cannot rule out a smaller leak.
+
+The first attempt, on `fb0031d8`, stopped serving in both fault phases. A failure
+while the server finished an HTTP/1 request reached `WebServerBase`'s
+fatal-exception path, which disposes the listener; HTTP/2 and HTTP/3 requests were
+already excluded from that path. HTTP/1 requests now are too.
+`ResetWhileCleanupReadsAnOpenedBodyEndsOnlyItsConnection` failed on the unchanged
+source and passed in ten runs with the correction. The benchmark also still
+expected the 90-second limit from before v2 for a connection's first request; it now
+expects the default `RequestHeadersTimeout` of 30 seconds.
 
 ## Open-issue audit
 
@@ -2649,11 +2683,11 @@ yet: the work that resolves them is not on `main` until this pull request merges
 
 | Issue | Disposition on this source | Before closing |
 | --- | --- | --- |
-| [#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414) | Implemented: the session core is wired to HTTP/3, the public API, limits and guide exist, and opening a stream that fails after credit was reserved now returns the reservation. quic-go modes pass on Windows and Linux; Chromium 152 completed a draft-02 session on Windows. | A passing macOS run of the interop jobs, a browser on Linux or macOS, and the merge. |
-| [#303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303) | EmbedIO.Quic implements current-wire `RESET_STREAM_AT`, so the MsQuic request (microsoft/msquic#6376) no longer gates WebTransport. The peer's reset, outbound-reset and missing-reset modes pass on Windows and Linux; the migration guide and standards matrix now state the support and its limits. | A passing macOS run of the interop jobs and the merge. |
-| [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278) | The server no longer uses `System.Net.Quic`, so its send-buffer retention reaches only the BCL test client. | An endurance check of EmbedIO.Quic: bounded memory and handles after quiescence and repeated restarts. |
+| [#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414) | Implemented: the session core is wired to HTTP/3, the public API, limits and guide exist, and opening a stream that fails after credit was reserved now returns the reservation. quic-go modes pass on Windows, Linux and macOS; Chromium 152 completed a draft-02 session on Windows. | A browser on Linux or macOS, and the merge. |
+| [#303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303) | EmbedIO.Quic implements current-wire `RESET_STREAM_AT`, so the MsQuic request (microsoft/msquic#6376) no longer gates WebTransport. The peer's reset, outbound-reset and missing-reset modes pass on Windows, Linux and macOS; the migration guide and standards matrix now state the support and its limits. | The merge. |
+| [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278) | The server no longer uses `System.Net.Quic`, so its send-buffer retention reaches only the BCL test client. The endurance run under Endurance above kept quiesced heap, handles and memory outside the GC within the ranges they held from the start, over nine server generations and 264,958 HTTP/3 requests. | The merge. The run was 18 minutes, on Windows only. |
 | [#202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202) | The bind retry and the rebind quarantine went with the MsQuic provider, and the restart cases run without them. They passed on Windows, Linux and macOS in CI `39748091670`. | The merge. |
 | [#398](https://github.com/WilliamSmithEdward/embedio-neo/issues/398) | The failing path, `QuicListener` loading its credential, no longer exists on the server; EmbedIO.Quic acquires its Schannel credential itself, and the quarantine is gone. Windows Test passed in both runs on the new binding (`39738902765`, `39748091670`). | The merge; reopen if the engine shows a credential failure. |
 | [#399](https://github.com/WilliamSmithEdward/embedio-neo/issues/399) | The native MsQuic listener and the tests that failed are removed. | The merge. |
-| [#401](https://github.com/WilliamSmithEdward/embedio-neo/issues/401) | Unrelated to the QUIC work: the macOS compatibility audit's `dotnet list` call. | Its own investigation. |
+| [#401](https://github.com/WilliamSmithEdward/embedio-neo/issues/401) | Unrelated to the QUIC work: the macOS compatibility audit's `dotnet list` call. The same exit 137 hit `dotnet nuget locals` in `setup-dotnet`'s cleanup on the macOS interop job in CI `39794451873`. | Its own investigation. |
 | [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181) | The umbrella program; it stays open for the remaining engine work. | Not applicable. |
