@@ -33,8 +33,8 @@ copying from those projects.
 | Recovery and congestion | Bounded retired-packet metadata and acknowledgement barriers permit long-running recovery histories. Physical packet records retain logical delivery ownership through retransmission and late ACKs. Monotonic-time tests exercise packet/time loss, RTT, PTO probes, pacing, NewReno, application-limited ACKs and persistent congestion. |
 | HTTP/3 and WebTransport bridge | Existing H3/QPACK/capsule/session code is linked into the prototype. The bridge handles SETTINGS, authorized CONNECT, exact Origin admission, bidi/uni streams, datagrams, independent sessions and reliable partial resets. quic-go provides a separate wire peer. |
 | Sustained transfers | A fixed sliding receive window retains final-size history and compacts consumed H3 input. MAX_DATA/MAX_STREAM_DATA track consumption, including reset gaps after their reliable prefix. Independent cases transfer 512 KiB, with small peer windows and loss. A separate bounded endurance case transfers 8 MiB over two streams with frequent local key updates. |
-| Application boundary | `StreamApplication` and its owner-bound operations separate raw streams/datagrams from the H3 adapter. Consumption returns receive credit; reliable prefixes and critical-stream rules belong to the application. The subsequent async API connects this boundary to application workers; production integration remains pending. |
-| Async application ownership | `AsyncStreamApplication` and `AsyncQuicStream` provide owned read/write/open/accept/datagram/close operations, explicit cancellation and independent stream halves. A bounded signal wakes the UDP owner; FIN-ACK retirement and asynchronous disposal retain delivery ownership. The console host exercises application workers on a real connection. |
+| Application boundary | `StreamApplication` and its owner-bound operations separate raw streams/datagrams from the H3 adapter. Consumption returns receive credit; reliable prefixes and critical-stream rules belong to the application. The async API connects this boundary to application workers and the ordinary HTTP/3 listener; public WebTransport integration remains pending. |
+| Async application ownership | `AsyncStreamApplication` and `AsyncQuicStream` provide owned read/write/open/accept/datagram/close operations, explicit cancellation and independent stream halves. A bounded signal wakes the UDP owner; FIN-ACK retirement and asynchronous disposal retain delivery ownership. Reliable stream prefixes are copied before writes, installed on the owner turn and retained through reset and flow-control delay. The console host exercises application workers on a real connection. |
 | Stream lifetime | Cumulative stream credit replenishes after complete receive/application and required send-ACK retirement. Closed-ID ranges prevent reuse; at most 64 recent final sizes retain narrow conflict checks. ACK delays keep echo work within resident stream bounds. |
 | Connection lifetime | Active, closing, draining and closed states use injected time. Idle expiry is silent; close replies are bounded; repeated sends or duplicate close traffic do not extend retirement. Windows ICMP reset notifications during retirement are handled explicitly. |
 | Shared listener | Destination-ID demultiplexing, endpoint-bound original-ID aliases, 16 resident owners, bounded admission attempts and fixed handshake deadlines. One cancellable UDP receive loop retires owners and permits clean port rebinding. |
@@ -2198,3 +2198,30 @@ macOS suite reported 7,604 cases with 7,570 successes, 24 skips and ten
 unreachable-route failures, so the CI aggregate remained red. This is still a
 draft PR; the hosted outcome does not establish the cause of those macOS errors
 or resolve the earlier upload error.
+
+## Public WebTransport transport prerequisites
+
+The ordinary HTTP/3 listener's connection factory previously received QUIC's
+negotiated maximum DATAGRAM frame size and reliable-reset capability, but passed
+only the async stream application to the HTTP/3 adapter. That binding and the
+development production-H3 host now retain both values with the application.
+The provider-neutral HTTP/3 transport reports them as zero/false for providers
+that cannot establish them. Session admission must use the negotiated values,
+not infer transport support merely from a DATAGRAM send method.
+
+The async stream owner now accepts a copied reliable prefix of 1–64 bytes
+before writes begin. It installs the prefix on the serialized connection-owner
+turn before any queued write abort. A duplicate reservation, a late reservation
+after a queued or committed write, or an oversized prefix is rejected. Closing
+the connection releases an uninstalled prefix. The owned HTTP/3 stream adapter
+exposes this operation; providers without the capability reject it.
+
+The model regression opens real owned streams, aborts before the first write and
+checks that the exact copied two-byte session header is transmitted before
+`RESET_STREAM_AT` with matching reliable/final sizes. A separate case grants
+one byte of connection credit at a time and verifies that reset waits until the
+whole header is sent. The QUIC self-test passed locally; five ordinary Windows
+HTTP/3 listener cases passed without skips with the feature handoff. This is a
+transport prerequisite only. Public WebTransport sessions, exact Origin/auth
+admission, incoming and outgoing data-stream routing, capsules, drain semantics
+and browser validation remain required.

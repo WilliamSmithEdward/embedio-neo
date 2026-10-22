@@ -416,7 +416,12 @@ exercises it without HTTP/3 control-stream or WebTransport session assumptions;
 its async test-host API adds owned reads/writes, outbound bidi/uni streams,
 consumption-driven buffering, cancellation with explicit read-abort codes, FIN-ACK
 completion and bounded datagram/open/accept queues. Application commands wake the
-UDP owner directly. The Windows TLS factory captures the fallback certificate when
+UDP owner directly. The ordinary HTTP/3 binding now retains the negotiated peer
+datagram-frame and reliable-reset transport parameters through its owned adapter.
+Async streams can reserve a copied, at-most-64-byte reliable prefix before writing;
+the owner installs it before a reset and waits for flow credit if necessary. Public
+WebTransport session admission, routes/controllers, stream demultiplexing and browser
+acceptance remain pending. The Windows TLS factory captures the fallback certificate when
 constructing each handshake, then selects and clones the certificate after a complete
 ClientHello. It preserves bounded ASCII SNI spelling, calls the configured selector
 once and isolates selector failures. Later publication applies to new handshakes;

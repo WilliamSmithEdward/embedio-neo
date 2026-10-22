@@ -14,11 +14,16 @@ namespace EmbedIO.Quic
 
         internal int Completed => Volatile.Read(ref _completed);
 
-        internal Task RunAsync(AsyncStreamApplication application, QuicConnectionOwner owner, CancellationToken token)
+        internal Task RunAsync(
+            AsyncStreamApplication application,
+            QuicConnectionOwner owner,
+            QuicPeerFeatures features,
+            CancellationToken token
+        )
         {
             if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
                 return Http3QuicConnection.RunTransportForListenerAsync(
-                    new EmbedIOQuicTransportConnection(application, owner),
+                    new EmbedIOQuicTransportConnection(application, owner, features),
                     DispatchAsync,
                     token,
                     CancellationToken.None,

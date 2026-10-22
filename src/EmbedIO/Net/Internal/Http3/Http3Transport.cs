@@ -13,6 +13,8 @@ namespace EmbedIO.Net.Internal.Http3
     internal abstract class Http3TransportConnection : IAsyncDisposable
     {
         internal virtual Http3DatagramTransport? Datagrams => null;
+        internal virtual ulong PeerMaximumDatagramFrameSize => 0;
+        internal virtual bool ReliableReset => false;
 
         internal abstract ValueTask<Http3TransportStream> OpenOutboundStreamAsync(
             QuicStreamType type,
@@ -36,6 +38,9 @@ namespace EmbedIO.Net.Internal.Http3
         internal abstract void Abort(QuicAbortDirection direction, long code);
 
         internal abstract void CompleteWrites();
+
+        internal virtual void SetReliablePrefix(ReadOnlySpan<byte> prefix) =>
+            throw new NotSupportedException("The transport cannot retain a reliable stream prefix.");
 
         internal virtual void EnableApplicationBodyCancellation(CancellationToken requestCancellation) { }
 

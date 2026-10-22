@@ -24,7 +24,7 @@ namespace EmbedIO.Quic
             bool multiplexed = false,
             bool asyncStreams = false,
             Func<byte[], string, TlsSession>? tlsFactory = null,
-            Func<StreamOperations, StreamApplication>? applicationFactory = null
+            Func<StreamOperations, QuicPeerFeatures, StreamApplication>? applicationFactory = null
         )
             : base(
                 firstPacket,
@@ -38,7 +38,7 @@ namespace EmbedIO.Quic
                         webTransport ? "h3" : DevelopmentOpenSslTls.ApplicationProtocol
                     ),
                 (operations, features) => applicationFactory != null
-                    ? applicationFactory(operations)
+                    ? applicationFactory(operations, features)
                     : webTransport
                         ? new WebTransportApplication(
                             features.MaximumDatagramFrameSize > 0 && features.ReliableReset,

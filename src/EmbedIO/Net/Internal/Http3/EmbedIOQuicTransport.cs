@@ -16,18 +16,26 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly AsyncStreamApplication _application;
         private readonly QuicConnectionOwner _owner;
+        private readonly QuicPeerFeatures _features;
         private readonly Http3DatagramTransport _datagrams;
 
-        internal EmbedIOQuicTransportConnection(AsyncStreamApplication application, QuicConnectionOwner owner)
+        internal EmbedIOQuicTransportConnection(
+            AsyncStreamApplication application,
+            QuicConnectionOwner owner,
+            QuicPeerFeatures features
+        )
         {
             ArgumentNullException.ThrowIfNull(application);
             ArgumentNullException.ThrowIfNull(owner);
             _application = application;
             _owner = owner;
+            _features = features;
             _datagrams = new EmbedIOQuicDatagramTransport(application);
         }
 
         internal override Http3DatagramTransport Datagrams => _datagrams;
+        internal override ulong PeerMaximumDatagramFrameSize => _features.MaximumDatagramFrameSize;
+        internal override bool ReliableReset => _features.ReliableReset;
 
         internal override async ValueTask<Http3TransportStream> OpenOutboundStreamAsync(
             QuicStreamType type,
@@ -91,6 +99,8 @@ namespace EmbedIO.Net.Internal.Http3
         internal override Task WritesClosed => _stream.WritesClosed;
 
         internal override void CompleteWrites() => _stream.CompleteWrites();
+
+        internal override void SetReliablePrefix(ReadOnlySpan<byte> prefix) => _stream.SetReliablePrefix(prefix);
 
         internal override void EnableApplicationBodyCancellation(CancellationToken requestCancellation)
         {

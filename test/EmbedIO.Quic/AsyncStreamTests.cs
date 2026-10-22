@@ -65,6 +65,7 @@
             FlowBackpressure();
             Cancellation();
             LocalStreams();
+            ReliablePrefix();
             Datagrams();
             Closure();
 
@@ -679,6 +680,87 @@
             Check(peer.Streams.RetiredStreams == 2 && peer.Application.Retained == 0, "outbound-streams-retire");
             peer.Application.ConnectionClosed(123, false);
             Expect<QuicConnectionFailure>(() => Await(accept));
+        }
+
+        private static void ReliablePrefix()
+        {
+            using (var peer = new Peer())
+            {
+                var opening = peer.Application
+                    .OpenOutboundStreamAsync(false)
+                    .AsTask();
+                peer.Pump();
+                using var stream = Await(opening);
+                var prefix = new byte[] { 0x41, 0 };
+                stream.SetReliablePrefix(prefix);
+                prefix[0] = 0xff;
+                Expect<InvalidOperationException>(() => stream.SetReliablePrefix([1]));
+                stream.AbortWrite(0x44);
+                peer.Pump();
+                Check(peer.Sent.Count == 2, "reliable-prefix-and-reset-queued");
+                var header = new WireReader(peer.Sent[0].Bytes);
+                Check(
+                    header.Integer() == 14
+                        && header.Integer() == stream.Id
+                        && header.Integer() == 0
+                        && header.Integer() == 2
+                        && header
+                            .Take(2)
+                            .SequenceEqual(new byte[] { 0x41, 0 })
+                        && header.Remaining == 0,
+                    "reliable-prefix-precedes-reset"
+                );
+                var reset = new WireReader(peer.Sent[1].Bytes);
+                Check(
+                    reset.Integer() == 0x24
+                        && reset.Integer() == stream.Id
+                        && reset.Integer() == 0x44
+                        && reset.Integer() == 2
+                        && reset.Integer() == 2
+                        && reset.Remaining == 0,
+                    "reliable-reset-preserves-session-header"
+                );
+            }
+
+            using (var peer = new Peer())
+            {
+                var opening = peer.Application
+                    .OpenOutboundStreamAsync(false)
+                    .AsTask();
+                peer.Pump();
+                using var stream = Await(opening);
+                Expect<ArgumentOutOfRangeException>(() => stream.SetReliablePrefix([]));
+                Expect<ArgumentOutOfRangeException>(() => stream.SetReliablePrefix(new byte[65]));
+                var writing = stream
+                    .WriteOwnedAsync(new byte[] { 1 }, false, default)
+                    .AsTask();
+                Expect<InvalidOperationException>(() => stream.SetReliablePrefix([0x41, 0]));
+                peer.Pump();
+                Await(writing);
+                Expect<InvalidOperationException>(() => stream.SetReliablePrefix([0x41, 0]));
+            }
+
+            using (var peer = new Peer(data: 0))
+            {
+                var opening = peer.Application
+                    .OpenOutboundStreamAsync(false)
+                    .AsTask();
+                peer.Pump();
+                using var stream = Await(opening);
+                stream.SetReliablePrefix([0x41, 0]);
+                stream.AbortWrite(0x44);
+                peer.Pump();
+                Check(peer.Sent.Count == 0, "reliable-prefix-waits-for-credit");
+                peer.Streams.UpdateData(1);
+                peer.Pump();
+                Check(peer.Sent.Count == 1 && peer.Sent[0].Bytes[0] == 14, "partial-reliable-prefix-before-reset");
+                peer.Streams.UpdateData(2);
+                peer.Pump();
+                Check(
+                    peer.Sent.Count == 3 && peer.Sent[1].Bytes[0] == 14 && peer.Sent[2].Bytes[0] == 0x24,
+                    "reliable-reset-awaits-entire-prefix"
+                );
+            }
         }
 
         private static void Datagrams()

@@ -377,9 +377,10 @@ namespace EmbedIO.Net.Internal.Http3
             private readonly QuicConnectionOwner _owner;
             private readonly IPEndPoint _local;
             private readonly IPEndPoint _remote;
-            private readonly TaskCompletionSource<AsyncStreamApplication> _ready = new(
-                TaskCreationOptions.RunContinuationsAsynchronously
-            );
+            private readonly TaskCompletionSource<(
+                AsyncStreamApplication Application,
+                QuicPeerFeatures Features
+            )> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
             private readonly Task _closed;
             private X509Certificate2? _clientCertificate;
 
@@ -395,14 +396,14 @@ namespace EmbedIO.Net.Internal.Http3
 
             internal AsyncStreamApplication CreateApplication(
                 StreamOperations operations,
-                QuicPeerFeatures _,
+                QuicPeerFeatures features,
                 TlsSession? tls
             )
             {
                 _clientCertificate = tls?.CopyClientCertificate();
                 var application = new AsyncStreamApplication(operations, _owner.Notify);
 
-                if (!_ready.TrySetResult(application))
+                if (!_ready.TrySetResult((application, features)))
                 {
                     application.Dispose();
                     throw new InvalidOperationException("QUIC application was initialized twice.");
@@ -422,12 +423,12 @@ namespace EmbedIO.Net.Internal.Http3
                 CancellationToken drain
             )
             {
-                var application = await _ready.Task
+                var (application, features) = await _ready.Task
                     .WaitAsync(abort)
                     .ConfigureAwait(false);
                 await Http3QuicConnection
                     .RunTransportForListenerAsync(
-                        new EmbedIOQuicTransportConnection(application, _owner),
+                        new EmbedIOQuicTransportConnection(application, _owner, features),
                         exchange => dispatch(
                             exchange,
                             QuicConnectionEndpoints.Copy(_local),
@@ -444,8 +445,8 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 if (_ready.Task.IsCompletedSuccessfully)
                 {
-                    var application = await _ready.Task.ConfigureAwait(false);
-                    await new EmbedIOQuicTransportConnection(application, _owner)
+                    var (application, features) = await _ready.Task.ConfigureAwait(false);
+                    await new EmbedIOQuicTransportConnection(application, _owner, features)
                         .CloseAsync(0x107, token)
                         .ConfigureAwait(false);
                 }

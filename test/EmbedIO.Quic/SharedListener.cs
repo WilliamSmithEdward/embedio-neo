@@ -37,14 +37,16 @@ namespace EmbedIO.Quic
             var connections = new QuicConnectionDispatcher(
                 (packet, now, owner, _) =>
                 {
-                    StreamApplication CreateApplication(StreamOperations operations)
+                    StreamApplication CreateApplication(StreamOperations operations, QuicPeerFeatures features)
                     {
                         var application = new AsyncStreamApplication(operations, owner.Notify);
 
                         if (productionHttp3)
                         {
                             var http3 = new ProductionHttp3Application();
-                            productionApplications.Add((http3, http3.RunAsync(application, owner, stop.Token)));
+                            productionApplications.Add(
+                                (http3, http3.RunAsync(application, owner, features, stop.Token))
+                            );
                         }
 
                         else

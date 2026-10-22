@@ -73,6 +73,9 @@ namespace EmbedIO.Quic
         private Exception? _connectionError;
         private ReadRequest? _read;
         private WriteRequest? _write;
+        private byte[]? _reliablePrefix;
+        private bool _prefixInstalled;
+        private bool _writeStarted;
         private ulong? _abortRead;
         private ulong? _abortWrite;
 
@@ -498,6 +501,23 @@ namespace EmbedIO.Quic
             if (_ended) throw new InvalidOperationException("Stream writes have completed.");
         }
 
+        internal void SetReliablePrefix(ReadOnlySpan<byte> prefix)
+        {
+            if (prefix.Length is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(prefix));
+
+            lock (_gate)
+            {
+                CheckWritable();
+
+                if (_prefixInstalled || _writeStarted)
+                    throw new InvalidOperationException("Reliable prefix must precede stream writes.");
+
+                _reliablePrefix = prefix.ToArray();
+                _prefixInstalled = true;
+                ready();
+            }
+        }
+
         internal void CompleteWrites()
         {
             lock (_gate)
@@ -615,6 +635,12 @@ namespace EmbedIO.Quic
                     _abortRead = null;
                 }
 
+                if (_reliablePrefix is { } prefix)
+                {
+                    operations.ReliablePrefix(Id, prefix);
+                    _reliablePrefix = null;
+                }
+
                 if (_abortWrite.HasValue)
                 {
                     operations.AbortWrite(Id, _abortWrite.Value);
@@ -630,6 +656,7 @@ namespace EmbedIO.Quic
                     if (!operations.TryWrite(Id, request.Memory.Slice(request.Position, count), end && request.Fin))
                         return;
 
+                    _writeStarted = true;
                     request.Progress = true;
                     request.Position += count;
 
@@ -689,6 +716,7 @@ namespace EmbedIO.Quic
             {
                 _connectionError ??= error;
                 _retired = true;
+                _reliablePrefix = null;
                 _consumed = 0;
                 DiscardBuffer();
                 _consumed = 0;
