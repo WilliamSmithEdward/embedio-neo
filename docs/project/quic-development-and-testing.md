@@ -2,8 +2,8 @@
 
 This record covers the development path, test architecture, reproducible local
 campaigns and remaining acceptance work for the original C# QUIC engine. It is
-maintained with the implementation, which [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506) added; no
-released package contains it yet. The ordinary HTTP/3 binding selects EmbedIO.Quic with
+maintained with the implementation, which [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506) added; 2.17.0
+is the first release to contain it. The ordinary HTTP/3 binding selects EmbedIO.Quic with
 its own TLS capability check and transitive runtime delivery, the earlier providers are
 removed, and servers can opt in to public WebTransport sessions. The sections keep the
 implementation sequence and its evidence in order, so an earlier section describes the
@@ -2709,7 +2709,7 @@ on 2 November 2026.
 
 ## Last CI fixes
 
-Three failures on `1d97aa8e` were corrected before the merge:
+Failures on `1d97aa8e`, `2b466559` and `7d861056` were corrected before the merge:
 
 - The Security report failed on a Semgrep parse error, not a finding. Semgrep 1.181.0
   cannot parse C# primary constructors, and `PendingHeader`, added with the HTTP/3
@@ -2729,6 +2729,19 @@ Three failures on `1d97aa8e` were corrected before the merge:
   The canceled case now gets the allowance the uncanceled case already had: what
   remains of the closing period plus one second, with the pending stages reported on
   a miss.
+- On `2b466559` that canceled case failed once more on macOS, at the 5-second bound
+  with no shutdown stage pending and no QUIC connection left; the drain finished 2 ms
+  later. The helper granted its extra second only while a connection was still
+  closing, so a closing period that ended at the bound left none. The second now
+  applies either way (`7d861056`).
+- On `7d861056` the Linux interop's `outbound-reset` mode received H3_REQUEST_CANCELLED
+  instead of WT_SESSION_GONE on a server stream, a product defect. A session's streams
+  are reset one after another; the first reset woke a handler that disposed the next
+  stream before the core reached it, and `AbortFromSession` had marked that stream's
+  writes complete before resetting it, so disposal reset it with the generic code. The
+  reset now comes first, and a stream disposed after its session ended is reset with
+  WT_SESSION_GONE (`ed27dfe8`). A sleep in that window reproduced the failure in 20 of
+  20 local runs.
 
 ## Endurance
 

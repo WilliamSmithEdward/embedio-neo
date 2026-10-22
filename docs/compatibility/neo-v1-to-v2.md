@@ -146,9 +146,8 @@ HTTP.sys URL reservations and kernel certificate bindings are specific to the
 removed backend; use the replacement engine's HTTPS certificate configuration and
 validate deployment guidance for your application model.
 
-Released packages through 2.16.1 run HTTP/3 on `System.Net.Quic`; the current
-source replaces it with the EmbedIO.Quic engine, which no released package contains
-yet. Both are distinct from the removed
+Packages through 2.16.1 run HTTP/3 on `System.Net.Quic`; 2.17.0 replaces it with
+the EmbedIO.Quic engine. Both are distinct from the removed
 `System.Net.HttpListener` backend.
 Keeping the EmbedIO mode name does not retain the old parser's permissive behavior.
 
@@ -170,10 +169,8 @@ on .NET Standard does not provide TLS negotiation support.
 Follow the [HTTP/3 deployment guide](../guides/http3.md) for certificate lifetime,
 key provisioning, hostname validation, native libraries and platform limits.
 HTTP/3 availability does not imply automatic Alt-Svc discovery or an available
-WebTransport server. Unreliable datagrams and WebTransport are not yet available
-as supported public deployment options in a released package.
-[PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506) adds
-opt-in WebTransport sessions, with their datagrams, through `IWebTransportContext`;
+WebTransport server. 2.17.0 adds opt-in WebTransport sessions, with their
+datagrams, through `IWebTransportContext`;
 the [WebTransport guide](../guides/webtransport.md) gives its drafts, limits and
 validation. Consult the
 [capability status](../project/http-engine.md) before selecting those features.
@@ -377,7 +374,7 @@ The new APIs are optional capabilities, not requirements for existing handlers:
   Upgrade carriers. Accepting a carrier does not open a connection to a destination.
 - HttpCapsuleChannel streams reliable capsule framing; it does not by itself
   provide unreliable QUIC datagrams, a proxy, or an integrated WebTransport server.
-- IWebTransportContext, added by PR #506 and not yet released, accepts opt-in WebTransport sessions
+- IWebTransportContext, added in 2.17.0, accepts opt-in WebTransport sessions
   over HTTP/3 on servers configured with WithWebTransport; see the
   [WebTransport guide](../guides/webtransport.md).
 - HttpVerbs.Query enables explicit QUERY routes; existing verbs retain their values.
@@ -423,8 +420,8 @@ stream's documented synchronization.
 The HTTP datagram APIs include `HttpTunnel.Datagrams`, `HttpDatagramChannel`,
 `HttpDatagram` and `HttpDatagramSendStatus`. Existing context interfaces and tunnel
 constructors are unchanged. The surface exists on both current library targets;
-unsupported backends return null. Released packages through 2.16.1 return null; the
-current source supports them over HTTP/3 when both peers negotiate HTTP datagrams. Do not assume
+unsupported backends return null. Packages through 2.16.1 return null; 2.17.0 and
+later support them over HTTP/3 when both peers negotiate HTTP datagrams. Do not assume
 that selecting HTTP/3 enables datagrams.
 
 Applications must explicitly accept and authorize the extension, dispose received

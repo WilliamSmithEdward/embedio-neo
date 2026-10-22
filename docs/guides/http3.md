@@ -2,9 +2,8 @@
 
 `HttpListenerMode.EmbedIOHttp3` serves normal WebServer modules over QUIC,
 including request bodies, routing, responses and sessions. Its transport is
-EmbedIO.Quic, added by [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506), which no released
-package contains yet; released packages through 2.16.1 use the earlier
-`System.Net.Quic` provider. The [development record](../project/quic-development-and-testing.md)
+EmbedIO.Quic, added in 2.17.0 by [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506); packages
+through 2.16.1 use the earlier `System.Net.Quic` provider. The [development record](../project/quic-development-and-testing.md)
 records what has been validated and what remains.
 
 ## Requirements
@@ -22,7 +21,7 @@ identifiers, and they passed once on macOS 14, the oldest macOS the native build
 targets; the oldest glibc and musl versions it targets are untested. See
 [native runtime preparation](../../native/EmbedIO.Quic.Tls/README.md).
 
-For the provider in released packages through 2.16.1, use a host where
+For the provider in packages through 2.16.1, use a host where
 `QuicListener.IsSupported` is true.
 Windows requires TLS 1.3 and Linux/macOS require the system MsQuic prerequisite.
 The following runtime and native-library notes apply to that earlier provider.
@@ -94,8 +93,8 @@ TCP replacement does not establish their completion.
 <a id="runtime-memory-limitation"></a>
 ## Earlier provider runtime memory limitation
 
-This limitation concerns the previous `System.Net.Quic` provider, which is still
-used by released packages through 2.16.1. It does not establish the replacement engine's lifetime
+This limitation concerns the previous `System.Net.Quic` provider, which packages
+through 2.16.1 use. It does not establish the replacement engine's lifetime
 or memory behavior; that has its own acceptance work.
 
 The tested .NET 10.0.12 `System.Net.Quic` retains a native send-buffer allocation
@@ -202,7 +201,7 @@ retains its existing one-run lifecycle. Prefix changes require a stopped listene
 A simultaneous restart while cleanup is running is rejected explicitly.
 
 Stopping releases each UDP endpoint before it returns, so a new listener can bind
-it at once. The provider in released packages through 2.16.1 retried such a bind for up to a second
+it at once. The provider in packages through 2.16.1 retried such a bind for up to a second
 because its native QUIC library could keep the port bound briefly after disposal;
 this source has no retry. The
 [QUIC listener disposal and rebind record](../project/quic-lifetime.md) keeps the

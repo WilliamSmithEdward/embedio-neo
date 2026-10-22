@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.17.0] - 2026-10-22
+
 ### Added
 
 - Opt-in WebTransport over HTTP/3 in `EmbedIOHttp3` and `EmbedIOCombined` mode.

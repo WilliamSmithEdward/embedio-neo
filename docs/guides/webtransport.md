@@ -2,9 +2,8 @@
 
 WebTransport gives a client and a server a session over one HTTP/3 request: any
 number of reliable streams in both directions, plus unreliable datagrams. The
-HTTP/3 listener accepts sessions when the server opts in. This is part of
-[PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506);
-no released package contains it yet.
+HTTP/3 listener accepts sessions when the server opts in. It was added in
+2.17.0 by [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506).
 
 The server speaks two drafts, neither a published RFC:
 
