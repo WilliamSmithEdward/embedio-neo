@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [2.16.1] - 2026-10-22
+
+### Fixed
+
+- One failed HTTP/1 request no longer stops the server. A failure while the server
+  finishes the request is logged and ends only that connection, as it already did on
+  HTTP/2 and HTTP/3; before, it disposed the listener for every client.
+
 ## [2.16.0] - 2026-10-18
 
 ### Added

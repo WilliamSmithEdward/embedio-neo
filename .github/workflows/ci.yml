@@ -170,7 +170,7 @@ jobs:
         shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7600'
+          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7601'
           # Scheduling allowance; case deadlines and discovery stay enforced.
           EMBEDIO_REGRESSION_TIMEOUT: '12m'
         run: |
