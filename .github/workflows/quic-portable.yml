@@ -2,6 +2,11 @@ name: Portable QUIC TLS
 
 on:
   workflow_call:
+    inputs:
+      reuse-native-artifacts:
+        description: Use the source-verified native artifacts built earlier in this workflow run
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
@@ -9,79 +14,13 @@ permissions:
 
 jobs:
   native:
-    name: Native TLS build (${{ matrix.rid }})
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - {os: ubuntu-24.04, rid: linux-x64, compiler: manylinux-x64}
-          - {os: ubuntu-24.04-arm, rid: linux-arm64, compiler: manylinux-arm64}
-          - {os: ubuntu-24.04, rid: linux-musl-x64, compiler: musl-x64}
-          - {os: ubuntu-24.04-arm, rid: linux-musl-arm64, compiler: musl-arm64}
-          - {os: macos-15-intel, rid: osx-x64, compiler: macos}
-          - {os: macos-26, rid: osx-arm64, compiler: macos}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.14.6'
-      - name: Build and audit the pinned private TLS boundary
-        shell: bash
-        env:
-          QUIC_RID: ${{ matrix.rid }}
-          QUIC_COMPILER: ${{ matrix.compiler }}
-        run: |
-          set -euo pipefail
-          python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
-          python3 -m unittest discover -s native/EmbedIO.Quic.Tls/tests -p 'test_*.py'
-          if [ "$RUNNER_OS" = Linux ]; then
-            docker build -f "native/EmbedIO.Quic.Tls/Dockerfile.$QUIC_COMPILER" -t embedio-quic-native-build native/EmbedIO.Quic.Tls
-            mkdir -p TestResults/quic-native-build-logs
-            docker run --rm --cpus 3 --memory 6g \
-              --mount "type=bind,source=$PWD/native/EmbedIO.Quic.Tls,target=/source,readonly" \
-              --mount "type=bind,source=$PWD/TestResults,target=/results" \
-              embedio-quic-native-build bash /source/build-linux.sh "$QUIC_RID"
-          else
-            python3 native/EmbedIO.Quic.Tls/build.py --work "$RUNNER_TEMP/embedio-quic-native" --output TestResults/quic-native --jobs 3 --rid "$QUIC_RID"
-          fi
-      - name: Build the same-version Intel macOS test peer wheel
-        if: matrix.rid == 'osx-x64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 native/EmbedIO.Quic.Tls/build_peer_wheel.py \
-            --native-work "$RUNNER_TEMP/embedio-quic-native" --native-output TestResults/quic-native \
-            --work "$RUNNER_TEMP/embedio-quic-peer" --output TestResults/quic-peer-wheel \
-            --source-commit "$(git rev-parse HEAD)"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: matrix.rid == 'osx-x64'
-        with:
-          name: quic-peer-wheel-osx-x64
-          path: TestResults/quic-peer-wheel/
-          if-no-files-found: error
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: quic-native-${{ matrix.rid }}
-          path: TestResults/quic-native/
-          if-no-files-found: error
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
-        with:
-          name: quic-tls-build-logs-${{ matrix.rid }}
-          path: |
-            TestResults/quic-native-build-logs/
-            ${{ runner.temp }}/embedio-quic-native/*.log
-            ${{ runner.temp }}/embedio-quic-peer/*.log
-          if-no-files-found: warn
+    if: ${{ !inputs.reuse-native-artifacts }}
+    uses: ./.github/workflows/quic-native.yml
 
   package:
     name: Assemble the six-RID runtime package
     needs: [native]
+    if: ${{ always() && !cancelled() && (inputs.reuse-native-artifacts || needs.native.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -94,26 +33,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14.6'
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: ./.github/actions/quic-runtime
         with:
-          pattern: quic-native-*
-          path: TestResults/quic-native-inputs
-      - name: Stage exact-source assets and build the local preview feed
+          output: TestResults/quic-runtime-feed
+      - name: Pack the core and seal the exact-source local feed
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
-          # Select only binary artifacts; build logs have a separate prefix.
-          python3 native/EmbedIO.Quic.Tls/stage.py stage --output TestResults/quic-native-staged --inputs \
-            TestResults/quic-native-inputs/quic-native-linux-x64 \
-            TestResults/quic-native-inputs/quic-native-linux-arm64 \
-            TestResults/quic-native-inputs/quic-native-linux-musl-x64 \
-            TestResults/quic-native-inputs/quic-native-linux-musl-arm64 \
-            TestResults/quic-native-inputs/quic-native-osx-x64 \
-            TestResults/quic-native-inputs/quic-native-osx-arm64
-          dotnet restore native/EmbedIO.Quic.Tls/EmbedIO.Quic.Native.csproj --locked-mode
-          dotnet pack native/EmbedIO.Quic.Tls/EmbedIO.Quic.Native.csproj --no-restore -c Release -o TestResults/quic-runtime-feed \
-            -p:EmbedIOQuicNativeAssetsDirectory="$PWD/TestResults/quic-native-staged"
           dotnet restore src/EmbedIO/EmbedIO.csproj --locked-mode
           dotnet pack src/EmbedIO/EmbedIO.csproj --no-restore -c Release -o TestResults/quic-runtime-feed
           python3 native/EmbedIO.Quic.Tls/package_feed.py --staged TestResults/quic-native-staged --feed TestResults/quic-runtime-feed

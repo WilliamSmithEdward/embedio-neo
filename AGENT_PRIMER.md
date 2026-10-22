@@ -1272,3 +1272,16 @@ retain their original connection error and argument validation remains active.
 The model, actual WebServer regression, independent-peer and fuzz evidence is in
 the development/testing record. WebTransport application/browser integration
 and the MsQuic retirement/issue audit remain outstanding.
+
+
+The unmerged .NET 10 core now declares the owned `EmbedIO-Neo.Quic.Native`
+runtime dependency. It has no managed runtime-wrapper assembly; Windows still
+uses Schannel. .NET Standard dependency groups remain unchanged. Package-only
+applications and the development host reference only the core package, and their
+validation requires the native package to resolve transitively at the same version.
+CI shares one six-RID native build across ordinary Unix tests and package consumers;
+source-build tests copy only their verified platform artifact through a test-only
+opt-in. Package-mode validation rejects manual copying. Complete CI/Publish input
+assembly verifies seven packages and all six native RIDs; configured jobs still
+require final-head execution. Public default selection remains on the previous
+provider pending the capability/platform transition. No release is authorized.

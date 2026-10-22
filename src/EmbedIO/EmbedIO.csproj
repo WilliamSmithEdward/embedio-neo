@@ -51,6 +51,8 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <!-- Asset-only owned package: no managed assembly reference or legacy dependency. -->
+    <ProjectReference Include="../../native/EmbedIO.Quic.Tls/EmbedIO.Quic.Native.csproj" Private="false" />
     <Compile Include="../EmbedIO.Quic/**/*.cs" Exclude="../EmbedIO.Quic/bin/**;../EmbedIO.Quic/obj/**" Link="Quic/%(RecursiveDir)%(Filename)%(Extension)" />
     <InternalsVisibleTo Include="EmbedIO.Quic.Development" Condition="'$(SignAssembly)' != 'true'" />
   </ItemGroup>

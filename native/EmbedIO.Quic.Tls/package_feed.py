@@ -40,7 +40,12 @@ def seal(staged, feed, preview_rid=None):
                 groups = {group.attrib.get("targetFramework"): {item.attrib.get("id") for item in group}
                           for group in dependencies}
                 require(groups == {".NETStandard2.0": {"System.ComponentModel.Annotations", "System.Text.Json", "System.Threading.RateLimiting"},
-                                   "net10.0": {"System.Threading.RateLimiting"}}, "Core dependency groups changed before provider transition")
+                                   "net10.0": {"System.Threading.RateLimiting", "EmbedIO-Neo.Quic.Native"}}, "Core runtime dependency groups differ")
+                for group in dependencies:
+                    require(len(group) == len(groups[group.attrib["targetFramework"]]), "Duplicate core dependency")
+                    for item in group:
+                        if item.attrib.get("id") == "EmbedIO-Neo.Quic.Native":
+                            require(item.attrib.get("version") == version, "Native dependency version differs")
     result = {"sourceCommit": head, "version": version, "previewOnly": preview_rid is not None,
               "packages": {path.name: digest(path.read_bytes()) for path in (core, native)}}
     with (feed / "packages.json").open("x", encoding="utf-8") as stream:

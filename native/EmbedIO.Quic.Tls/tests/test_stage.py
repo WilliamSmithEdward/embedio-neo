@@ -49,6 +49,14 @@ class StageTests(unittest.TestCase):
                              (source / "libembedio_quic_tls.so").read_bytes())
             module.verify(root / "output", ["linux-x64"])
 
+    def test_individual_test_asset_must_match_requested_rid(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = self.asset(root)
+            self.assertEqual(module.verify_asset(source, "linux-x64")["rids"], ["linux-x64"])
+            with self.assertRaises(ValueError):
+                module.verify_asset(source, "osx-arm64")
+
     def test_refuses_missing_duplicate_and_foreign_runtimes_before_output(self):
         for expected, duplicate in ((list(module.RIDS), False), (["linux-x64"], True), (["osx-arm64"], False)):
             with self.subTest(expected=expected), tempfile.TemporaryDirectory() as temporary:
@@ -179,7 +187,8 @@ class StageTests(unittest.TestCase):
         with patch.dict(sys.modules, {"stage": module}):
             feed_spec.loader.exec_module(feed_module)
         head = "0" * 40
-        for changed in (None, "source", "standard", "modern", "version", "foreign", "partial-default"):
+        for changed in (None, "source", "standard", "modern", "version", "foreign", "partial-default",
+                        "native-missing", "native-version", "native-legacy", "duplicate"):
             with self.subTest(changed=changed), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 output, feed = root / "output", root / "feed"
@@ -195,8 +204,16 @@ class StageTests(unittest.TestCase):
                 source_head = "1" * 40 if changed == "source" else head
                 version = "2.15.0" if changed == "version" else "2.16.0"
                 standard = "Foreign" if changed == "standard" else "System.Text.Json"
-                modern = '<dependency id="Foreign" />' if changed == "modern" else ''
+                native_version = '2.15.0' if changed == 'native-version' else version
+                native_dependency = '<dependency id="EmbedIO-Neo.Quic.Native" version="' + native_version + '" />'
+                modern = ('<dependency id="Foreign" />' if changed == 'modern' else
+                          '' if changed == 'native-missing' else native_dependency)
+                if changed == 'duplicate':
+                    modern += native_dependency
                 core = ('<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd"><metadata><id>EmbedIO-Neo</id><version>' + version + '</version><repository commit="' + source_head + '" /><dependencies><group targetFramework=".NETStandard2.0"><dependency id="System.ComponentModel.Annotations" /><dependency id="' + standard + '" /><dependency id="System.Threading.RateLimiting" /></group><group targetFramework="net10.0"><dependency id="System.Threading.RateLimiting" />' + modern + '</group></dependencies></metadata></package>')
+                if changed == 'native-legacy':
+                    core = core.replace('</group><group targetFramework="net10.0">',
+                                        native_dependency + '</group><group targetFramework="net10.0">')
                 with zipfile.ZipFile(feed / "EmbedIO-Neo.2.16.0.nupkg", "w") as bundle:
                     bundle.writestr("EmbedIO-Neo.nuspec", core.encode())
                 if changed == "foreign":

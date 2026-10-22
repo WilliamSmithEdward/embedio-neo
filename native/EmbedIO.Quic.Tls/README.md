@@ -36,9 +36,10 @@ The portable CI job builds this boundary and runs those checks on Linux and macO
 Configured jobs are not validation evidence until their exact-source runs pass.
 
 Public HTTP/3 provider selection remains unchanged. Runtime assets are built into
-a separate, unpublished development package; ordinary solution packaging and core
-dependency groups remain unchanged. Supported-RID execution, oldest OS/libc,
-signing and the final provider transition still require validation.
+a separate, unpublished development package. The unmerged modern core now depends
+on that asset-only package; .NET Standard dependencies remain unchanged. CI and
+Publish input assembly include all six runtime assets, but supported-RID execution,
+oldest OS/libc, signing and the final provider transition still require validation.
 See [the development record](../../docs/project/quic-development-and-testing.md).
 
 ## Issuer chains and ownership checks
@@ -109,7 +110,12 @@ build/audit records, a manifest and license/readme/icon files. It contains no
 managed implementation, build targets or package dependencies. The managed
 transport remains compiled into the modern core asset; Windows uses Schannel.
 The native package is separate so the .NET Standard dependency groups and legacy
-Framework AnyCPU behavior can be preserved during the eventual provider change.
+Framework AnyCPU behavior remain unchanged. The modern core's project reference
+emits a NuGet runtime-package dependency without using a managed native-wrapper
+assembly. Package consumers reference only `EmbedIO-Neo`; their generated locks
+must show the exact native version as transitive, and actual output bytes must
+match the sealed runtime package. RID-specific publishing selects the applicable
+asset; portable output retains the runtime directories needed for runtime selection.
 See [NuGet's native asset selection and Framework guidance](https://learn.microsoft.com/en-us/nuget/create-packages/native-files-in-net-packages).
 
 Install `requirements.txt` in the isolated build/validation Python environment
@@ -127,12 +133,22 @@ or runtime/platform acceptance. The package target verifies that staging invento
 before packing. `stage.py package` compares the actual ZIP payload paths/bytes,
 notices, package identity and license with the staged inputs.
 
-The reusable portable workflow builds the six assets on matching GitHub hardware,
-assembles one package and a local core preview, seals both hashes and the source
-commit, then runs `test/EmbedIO.Quic.PackageConsumer/validate.py` on each RID.
+The reusable `quic-native.yml` workflow builds the six assets on matching GitHub
+hardware. Ordinary CI shares those same-run artifacts between Unix regression
+tests, complete package assembly and `quic-portable.yml`; it does not dispatch a
+second native matrix. The standalone portable workflow still builds its own inputs.
+The shared `quic-runtime` action checks and stages the complete source-matched
+inventory before packing. Publish input assembly uses it too, including dry runs,
+and checks seven packages. No tag or publication is implied by these configured jobs.
+The portable workflow seals the native/core hashes and source commit, then runs
+`test/EmbedIO.Quic.PackageConsumer/validate.py` on each RID.
 Compiler and musl validation images use immutable digests; musl validation uses
 the pinned .NET SDK with Native AOT tools and exact signed Python APK packages.
 The native build and consumer matrices each allow at most two concurrent jobs.
+Ordinary source-build tests opt in to the same native artifact through
+`EmbedIOQuicNativeTlsDirectory`. `stage.py asset --output <artifact-directory>
+--rids <executing-rid>` verifies its source, hashes and RID before CI enables the
+shared test-only copy target. Package-mode builds reject that manual copy hook.
 Configured matrix entries are not evidence of successful runs.
 
 The consumer uses a fresh NuGet cache and source mapping to isolate local previews

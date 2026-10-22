@@ -10,7 +10,6 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="EmbedIO-Neo" VersionOverride="$(EmbedIOQuicPackageVersion)" />
-    <PackageReference Include="EmbedIO-Neo.Quic.Native" VersionOverride="$(EmbedIOQuicPackageVersion)" />
     <Compile Remove="$(MSBuildThisFileDirectory)../../src/Shared/AnalyzerUtilities.cs" />
   </ItemGroup>
 </Project>

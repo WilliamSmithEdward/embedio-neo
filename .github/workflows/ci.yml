@@ -80,12 +80,15 @@ jobs:
 
   test:
     name: Test (${{ matrix.os }})
-    needs: [changes]
+    needs: [changes, quic-native]
     if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2025, macos-15]
+        include:
+          - {os: ubuntu-24.04, native-rid: linux-x64}
+          - {os: windows-2025, native-rid: ''}
+          - {os: macos-15, native-rid: osx-arm64}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -97,6 +100,24 @@ jobs:
           global-json-file: global.json
           cache: true
           cache-dependency-path: '**/packages.lock.json'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: runner.os != 'Windows'
+        with:
+          name: quic-native-${{ matrix.native-rid }}
+          path: TestResults/quic-test-native
+      - name: Verify the source-build test TLS runtime
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          QUIC_RID: ${{ matrix.native-rid }}
+        run: |
+          set -euo pipefail
+          python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
+          python3 native/EmbedIO.Quic.Tls/stage.py asset --output TestResults/quic-test-native --rids "$QUIC_RID"
+          printf 'EmbedIOQuicNativeTlsDirectory=%s/TestResults/quic-test-native\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
       - name: Install pinned Linux QUIC prerequisite
         if: runner.os == 'Linux'
         shell: bash
@@ -136,9 +157,6 @@ jobs:
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build the tests
         run: dotnet build test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-restore -p:RunAnalyzers=true
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.14.6'
       - name: Provision the pinned independent QUIC datagram peer
         shell: bash
         run: python scripts/setup_datagram_peer.py
@@ -475,6 +493,8 @@ jobs:
 
   build:
     name: Build and check the NuGet packages
+    needs: [changes, quic-native]
+    if: ${{ always() && !cancelled() && needs.changes.result == 'success' && (needs.changes.outputs.code == 'false' || needs.quic-native.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -486,12 +506,23 @@ jobs:
           global-json-file: global.json
           cache: true
           cache-dependency-path: '**/packages.lock.json'
+      - uses: ./.github/actions/quic-runtime
+        if: needs.changes.outputs.code == 'true'
+        with:
+          output: dist
       - name: Restore from the lock files
         run: dotnet restore EmbedIO.sln --locked-mode
       - name: Build and pack both library targets and the CLI
         run: dotnet pack EmbedIO.sln -c Release --no-restore -o dist -p:RunAnalyzers=true
       - name: Check package contents and source notices
-        run: python3 scripts/check_packages.py dist
+        shell: bash
+        env:
+          CODE_CHANGED: ${{ needs.changes.outputs.code }}
+        run: |
+          set -euo pipefail
+          runtime=()
+          if [ "$CODE_CHANGED" = true ]; then runtime=(--native-staging TestResults/quic-native-staged); fi
+          python3 scripts/check_packages.py dist "${runtime[@]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nupkg
@@ -532,16 +563,24 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/aot-smoke.yml
 
-  quic-portable:
-    name: Portable QUIC TLS
+  quic-native:
+    name: QUIC runtime inputs
     needs: [changes]
     if: needs.changes.outputs.code == 'true'
+    uses: ./.github/workflows/quic-native.yml
+
+  quic-portable:
+    name: Portable QUIC TLS
+    needs: [changes, quic-native]
+    if: needs.changes.outputs.code == 'true'
     uses: ./.github/workflows/quic-portable.yml
+    with:
+      reuse-native-artifacts: true
 
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, test, compatibility, static-analysis, build, mac-catalyst, android, maui-https, aot-smoke, quic-portable]
+    needs: [changes, test, compatibility, static-analysis, build, mac-catalyst, android, maui-https, aot-smoke, quic-native, quic-portable]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -559,7 +598,7 @@ jobs:
           # skip, a failure or a cancellation fails the gate.
           docs_only = results['changes']['result'] == 'success' and os.environ['CODE_CHANGED'] == 'false'
           pull_request = os.environ['EVENT_NAME'] == 'pull_request'
-          gated = {'test', 'compatibility', 'mac-catalyst', 'android', 'maui-https', 'aot-smoke', 'quic-portable'}
+          gated = {'test', 'compatibility', 'mac-catalyst', 'android', 'maui-https', 'aot-smoke', 'quic-native', 'quic-portable'}
           for name, job in results.items():
               optional = (docs_only and name in gated) or (pull_request and name == 'android')
               expected = 'skipped' if optional else 'success'

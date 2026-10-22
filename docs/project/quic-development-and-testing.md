@@ -1866,3 +1866,52 @@ repairing its angle-bracket layout at three named-tuple generic constructions to
 the Roslyn whitespace form. That fixture edit is retained with the isolated
 selection patch, rather than the current implementation increment. No
 compiler/analyzer rule or file was excluded.
+
+
+## Transitive native runtime delivery
+
+The unmerged .NET 10 core references the owned, asset-only
+`EmbedIO-Neo.Quic.Native` project/package. A normal project reference emits its
+NuGet dependency without using a managed wrapper assembly. The .NET Standard
+asset and its dependency group remain unchanged. Explicit native package
+references were removed from both package-only consumers; their validation now
+requires generated locks to show the exact-version native dependency as
+transitive from the core, before checking the selected native bytes.
+
+`quic-native.yml` owns the existing six-RID build matrix and its two-job parallel
+limit. Ordinary CI shares its same-run artifacts with Unix regression tests,
+package assembly and the portable consumer workflow. Standalone portable runs
+still build their inputs. The shared `quic-runtime` action stages and verifies all
+six artifacts before packing; CI code builds and Publish input assembly now verify
+seven packages. Documentation-only CI retains its existing six managed-package
+content check. No release or dry-run dispatch was performed for this increment.
+
+The source-build test hook is shared by the ordinary NUnit project and the QUIC
+development host. CI first checks the artifact source/hashes and executing RID,
+then enables that explicit copy hook. Package-mode builds continue to reject
+manual native copies. Runtime delivery does not itself switch the public listener
+or remove the previous provider.
+
+Local Windows assembly of all seven packages passed exact native payload,
+inventory and notice checks using unchanged, source-matched six-RID build inputs
+from CI 39692993875. The native tooling suite passed 27 cases with one Windows
+symlink-privilege skip (28 total). Solution restore and 21 available affected
+project restores passed in locked mode; the only lock changes add the owned
+runtime project to modern source-reference graphs. The six mobile/platform lock
+graphs await their matching CI workloads. Offline pinned workflow analysis passed.
+A clean Linux x64 snapshot then passed the complete package-consumer driver:
+all nine portable/RID/AOT cipher/application profiles and the package-backed
+host's wire, cipher-vector, connection-ID, reset, path, SNI/publication,
+certificate-policy and issuer-chain suites (31 steps). All 256 deterministic
+certificate-mutation handshakes completed with 37 pinned-identity acceptances,
+219 expected rejections and 61 healthy sibling requests; cleanup/drain/rebind
+passed. The first local attempt stopped at an overly strict RID-lock assertion:
+RID groups contain differences from the base graph. The verifier now validates
+the combined graph, with negative coverage for direct and wrong-version RID
+entries; assertions on the transitive package and selected bytes remain enforced.
+
+Three local negative gates confirmed missing native packages, missing source-build
+libraries and package-mode manual copying are rejected. Final source acceptance
+uses the prescribed source-quality and guard scripts. These local checks do not
+establish hosted workflow or supported-platform acceptance; final-head platform
+runs remain required.

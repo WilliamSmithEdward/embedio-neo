@@ -110,6 +110,12 @@ def load_asset(directory):
     return {"rid": rid, "binary": binary, "audit": audit_bytes, "receipt": receipt_bytes}
 
 
+def verify_asset(directory, rid):
+    asset = load_asset(directory)
+    require(asset["rid"] == rid, "Native runtime differs from the executing test RID")
+    return {"rids": [rid], "sha256": digest(asset["binary"])}
+
+
 def stage(output, directories, rids):
     require(rids and len(rids) == len(set(rids)) and set(rids) <= set(RIDS), "Invalid expected runtime inventory")
     assets = [load_asset(path) for path in directories]
@@ -211,14 +217,18 @@ def verify_package(package, output, rids, version):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("stage", "verify", "package"))
+    parser.add_argument("mode", choices=("stage", "verify", "package", "asset"))
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--package", type=Path)
     parser.add_argument("--version")
     parser.add_argument("--inputs", type=Path, nargs="*")
     parser.add_argument("--rids", choices=RIDS, nargs="+", default=list(RIDS))
     args = parser.parse_args()
-    if args.mode == "package":
+    if args.mode == "asset":
+        if len(args.rids) != 1:
+            parser.error("Asset verification requires exactly one --rids value")
+        result = verify_asset(args.output, args.rids[0])
+    elif args.mode == "package":
         if args.package is None or args.version is None:
             parser.error("Package validation requires --package and --version")
         result = verify_package(args.package, args.output, args.rids, args.version)

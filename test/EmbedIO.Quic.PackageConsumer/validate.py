@@ -29,6 +29,22 @@ def digest(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def verify_transitive_runtime(lock, version):
+    dependencies = json.loads(lock.read_text(encoding="utf-8"))["dependencies"]
+    base = dependencies.get("net10.0")
+    require(isinstance(base, dict) and bool(base), "Consumer base dependency group is missing")
+    for target, delta in dependencies.items():
+        require(target == "net10.0" or target.startswith("net10.0/"), "Unexpected consumer target")
+        # RID groups record differences, rather than duplicating the base graph.
+        group = {**base, **delta}
+        core = group.get("EmbedIO-Neo", {})
+        native = group.get("EmbedIO-Neo.Quic.Native", {})
+        require(core.get("type") == "Direct" and core.get("resolved") == version and
+                core.get("dependencies", {}).get("EmbedIO-Neo.Quic.Native") == version and
+                native.get("type") == "Transitive" and native.get("resolved") == version,
+                "Native runtime must resolve transitively from the exact core package")
+
+
 def validate(args):
     require((args.rid == "osx-x64") == bool(args.peer_wheel_directory),
             "Intel macOS requires its exact-source pinned test wheel; other RIDs use the published wheel lock")
@@ -117,6 +133,7 @@ def validate(args):
                 properties += ["-p:PublishAot=true"]
             run([args.dotnet, "restore", consumer, "--configfile", str(config), "--use-lock-file", *properties],
                 profile + "-restore", environment)
+            verify_transitive_runtime(Path(lock), version)
             run([args.dotnet, "publish", consumer, "--no-restore", "-c", "Release", "-o", str(target), *properties],
                 profile + "-publish", environment)
             native_path = target / library if profile != "portable" else target / "runtimes" / args.rid / "native" / library
@@ -135,6 +152,7 @@ def validate(args):
                       "-p:NuGetLockFilePath=" + str(args.output / "development-host.lock.json"), "-r", args.rid]
         run([args.dotnet, "restore", host_project, "--configfile", str(config), "--use-lock-file", *properties],
             "development-host-restore", environment)
+        verify_transitive_runtime(args.output / "development-host.lock.json", version)
         run([args.dotnet, "publish", host_project, "--no-restore", "-c", "Release", "--self-contained", "false",
              "-o", str(host), *properties], "development-host-publish", environment)
         require((host / library).read_bytes() == native_bytes, "Development host did not resolve the package native asset")
