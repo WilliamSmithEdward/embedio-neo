@@ -855,6 +855,26 @@ namespace EmbedIO.Tests
             AssertError("Http3ProtocolException", 0x107, () => Call(registry, "NoteRequestStream", 20008L));
         }
         [Test]
+        public void EndedRequestsAreSettledUnlessASessionOwnsThem()
+        {
+            var limits = New("WebTransportRegistryLimits"); Set(limits, "MaximumTrackedRequestRanges", 2);
+            var registry = Registry(Settings(true), Settings(true), new Recorder(), limits: limits);
+            var arguments = new object?[] { 8L, null };
+            Assert.That(Call(registry, "TryCreateSession", arguments)?.ToString(), Is.EqualTo("Accepted"));
+            var session = arguments[1] ?? throw new AssertionException("Missing session.");
+            Call(session, "Establish");
+            Call(registry, "RequestEnded", 8L); // A session settles its own identifier when it ends.
+            Assert.That(Call(registry, "RouteDatagram", 8L, new byte[1], 0, 1), Is.True, "the session is still live");
+            Assert.Throws<InvalidOperationException>(() => Call(registry, "NoteRequestStream", 8L));
+            Call(registry, "RequestEnded", 0L); Call(registry, "RequestEnded", 0L); // A repeat changes nothing.
+            Call(registry, "NoteRequestStream", 16L);
+            Call(registry, "RequestEnded", 4L); Call(registry, "RequestEnded", 12L); // Close the gaps beside 8.
+            Assert.That(Call(registry, "RouteDatagram", 4L, new byte[1], 0, 1), Is.False);
+            Call(session, "Close", 0u, ""); Call(registry, "SessionEnded", session); // Joins both ranges.
+            Call(registry, "RequestEnded", 40L); // A second range fits only because the first is whole.
+            AssertError("Http3ProtocolException", 0x107, () => Call(registry, "RequestEnded", 48L));
+        }
+        [Test]
         public void EndedSessionCannotBeRecreatedAndDoesNotClassifyUnseenLowerRequests()
         {
             var recorder = new Recorder(); var registry = Registry(Settings(true), Settings(true), recorder);

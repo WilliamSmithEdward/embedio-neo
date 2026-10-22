@@ -338,6 +338,68 @@ namespace EmbedIO.Tests
             }
         }
 
+        // The connection records which request streams can no longer name a session, in a
+        // bounded list of ranges. A request that fails before it is classified must not
+        // leave a hole in that record: alternating failures and successes would otherwise
+        // fragment it until the connection is closed as excessive load.
+        [Test]
+        public async Task RequestsThatFailBeforeClassificationKeepTheConnectionUsable()
+        {
+            if (!QuicConnection.IsSupported) { Assert.Ignore("QUIC unavailable."); return; }
+
+            using var certificate = Certificate();
+            var prefix = Prefix();
+            var uri = new Uri(prefix);
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            using var server = WebTransportServer(prefix, certificate, _ => { }, _ => Task.CompletedTask);
+            var running = server.RunAsync(stop.Token);
+            var peers = new List<QuicStream>();
+
+            try
+            {
+                await using var connection = await ConnectRawAsync(uri, certificate, stop.Token);
+                await using var control = await SendClientSettingsAsync(connection, [], stop.Token);
+                _ = await ReadServerSettingsAsync(connection, peers, stop.Token);
+
+                // More rounds than the record holds ranges. Even rounds send an empty request,
+                // which fails while its headers are read; odd rounds reset the stream inside its
+                // first integer, before a request can be told from a session stream.
+                for (var round = 0; round < 300; round++)
+                {
+                    await using (var failed = await connection.OpenOutboundStreamAsync(QuicStreamType.Bidirectional, stop.Token))
+                    {
+                        if (round % 2 == 0)
+                        {
+                            await failed.WriteAsync(ReadOnlyMemory<byte>.Empty, true, stop.Token);
+                            Assert.That(await ObserveRequestAsync(failed, stop.Token), Is.EqualTo(Reset(0x10d)), $"round {round}");
+                        }
+
+                        else
+                        {
+                            // 0x40 begins a two-byte variable-length integer.
+                            await failed.WriteAsync((byte[])[0x40], stop.Token);
+                            failed.Abort(QuicAbortDirection.Write, 0x10c);
+                        }
+                    }
+
+                    try
+                    {
+                        await HealthySibling(connection, uri.Authority, stop.Token);
+                    }
+
+                    catch (QuicException error)
+                    {
+                        Assert.Fail($"round {round}: {error.Message}");
+                    }
+                }
+            }
+
+            finally
+            {
+                await StopAsync(stop, running, peers);
+            }
+        }
+
         // Section 4.6 buffers streams that name a session not seen yet. A connection whose
         // SETTINGS lack WebTransport will never have one, so its streams are refused.
         [Test]

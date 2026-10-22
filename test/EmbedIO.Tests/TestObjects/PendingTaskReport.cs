@@ -129,6 +129,36 @@ namespace EmbedIO.Tests.TestObjects
             }
         }
 
+        // The longest time a QUIC connection in the graph has left in its closing or draining
+        // period (RFC 9000 section 10.2), by its owner's clock; null when none is in either.
+        internal static double? RemainingCloseMilliseconds(object root, int depth = 12)
+        {
+            double? remaining = null;
+            Walk(
+                root,
+                depth,
+                (value, _) =>
+                {
+                    if (value is Task) return false;
+
+                    if (value.GetType().FullName != "EmbedIO.Quic.QuicConnectionOwner") return true;
+
+                    if (
+                        EngineInternals.Field(value, "_clock") is Func<double> clock
+                        && EngineInternals.Field(value, "_connection") is { } connection
+                        && EngineInternals.Property(connection, "Phase")?.ToString() is "Closing" or "Draining"
+                        && EngineInternals.Field(connection, "_lifetime") is { } lifetime
+                        && EngineInternals.Field(lifetime, "_deadline") is double deadline
+                    )
+                        remaining = Math.Max(remaining ?? 0, deadline - clock());
+
+                    return false;
+                },
+                new StringBuilder()
+            );
+            return remaining;
+        }
+
         private static string? Milliseconds(object? value) =>
             value is double milliseconds ? milliseconds.ToString("F1", CultureInfo.InvariantCulture) : null;
 

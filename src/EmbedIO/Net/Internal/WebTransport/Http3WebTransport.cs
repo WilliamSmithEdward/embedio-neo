@@ -54,7 +54,14 @@ namespace EmbedIO.Net.Internal.WebTransport
                 options.MaximumIncomingStreamsPerSession,
                 options.MaximumIncomingStreamsPerSession
             );
-            var limits = new WebTransportRegistryLimits { MaximumSessions = options.MaximumSessionsPerConnection };
+            // Every request stream is settled when its worker ends, so the gaps in the
+            // record are requests still in progress: at most one per worker, and the
+            // record holds one more range than it has gaps.
+            var limits = new WebTransportRegistryLimits
+            {
+                MaximumSessions = options.MaximumSessionsPerConnection,
+                MaximumTrackedRequestRanges = Http3QuicConnection.MaximumStreamWorkers + 1
+            };
             limits.Session.MaximumActiveIncomingStreams = options.MaximumIncomingStreamsPerSession;
             _registry = new WebTransportSessionRegistry(
                 _local,
@@ -178,6 +185,9 @@ namespace EmbedIO.Net.Internal.WebTransport
             );
 
         internal void SessionEnded(WebTransportSessionCore session) => _registry.SessionEnded(session);
+
+        // A request stream's worker ended, whether or not the request was classified.
+        internal void RequestEnded(long streamId) => _registry.RequestEnded(streamId);
 
         // The server is draining: each session is asked to finish.
         internal void Drain()

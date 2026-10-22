@@ -57,6 +57,11 @@ peer enables by declaring its own limits. Draft-02 has no flow control, so its
 connections hold up to `MaximumSessionsPerConnection` sessions with only the
 stream count enforced.
 
+Below these settings, each QUIC connection lets the peer hold 128 bidirectional
+and 16 unidirectional streams open at once, for every session and request on it.
+HTTP/3 itself uses three of the unidirectional streams. A peer that reaches either
+cap waits for earlier streams to finish, however high the session limits are.
+
 ## Accepting a session
 
 A session request is an ordinary request: it passes through every module before
@@ -288,4 +293,6 @@ unidirectional stream, and both sides recorded the close code and reason the pag
 sent. No other browser was tested. The
 [development record](../project/quic-development-and-testing.md) has the details.
 
-WebTransport over HTTP/2 (draft-ietf-webtrans-http2) is not supported.
+Not implemented: application protocol negotiation with `WT-Available-Protocols` and
+`WT-Protocol` (draft-16 section 3.3), keying-material exporters (section 4.8) and
+WebTransport over HTTP/2 (draft-ietf-webtrans-http2).

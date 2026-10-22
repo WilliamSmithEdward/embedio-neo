@@ -2566,6 +2566,14 @@ Found and corrected during integration:
   later streams with `WT_BUFFERED_STREAM_REJECTED`; datagrams are dropped.
 - `IWebTransportContext` said only HTTP/3 contexts implement it. HTTP/2 contexts
   implement it too, with `IsWebTransportRequest` false; the documentation now says so.
+- A request stream that ended before it was classified, such as an empty request or
+  one reset inside its first integer, was never recorded in the registry's bounded
+  record of requests that can no longer name a session. Each one left a gap, and
+  once ordinary requests had split the record into 128 ranges the connection closed
+  with `H3_EXCESSIVE_LOAD`. Every request stream is now recorded when its worker
+  ends, except an active session, which records itself when it ends. Gaps are then
+  only requests still in progress, one per stream worker at most, so the record
+  holds one more range than the 256 workers a connection may run.
 
 `LocalReadAbortEndsAnAbandonedBodyReadWithoutResettingTheResponse` called
 `Assert.CatchAsync` without awaiting it. NUnit 5 returns a task from that call, so
@@ -2575,17 +2583,30 @@ only; the unawaited call explains a failure that depends on when the read's
 continuation runs, but this was not reproduced. The test now awaits the call, and
 no other test leaves an asynchronous NUnit assertion unawaited.
 
+`CombinedDrainAbortsAFullUndispatchedQueue(False)` timed out on macOS in five of the
+last twelve CI runs of this branch. In run `39782520890` the drain finished 5.1
+seconds after it began, past the test's 5-second bound, while one QUIC connection
+was still in its closing period. RFC 9000 section 10.2 keeps a closing connection for
+three probe timeouts, and that runner's RTT estimate (449 ms smoothed, 417 ms
+variation, 26 ms acknowledgement delay) made the period 6.4 seconds. The engine does
+what the RFC asks. The test now reads the remaining closing period from the
+connections and allows it plus one second past the 5-second bound; anything else
+that holds the drain still fails it.
+
 Validation on Windows 11 with Schannel, before hosted CI:
 
-- 29 new in-suite cases: 14 for the settings and the mode check, 13 over the
+- 31 new in-suite cases: 14 for the settings and the mode check, 14 over the
   listener with the .NET QUIC client (advertised SETTINGS, malformed session
   requests on connections without WebTransport, the draft-02 token as an ordinary
   request when that dialect is off, ordinary GET and POST beside WebTransport,
-  request streams that end the same way with and without it, and streams refused on
-  a connection without it) and 2 in the session core. The 123 WebTransport and
-  request-abort cases passed in ten fresh processes. The regression floor is the
-  new discovery count, 7,457.
-- The full suite, without the local wildcard-bind case, ran 7,456 cases: 7,452
+  request streams that end the same way with and without it, streams refused on a
+  connection without it, and 300 rounds of requests that fail before
+  classification between ordinary ones) and 3 in the session core. The 123
+  WebTransport and request-abort cases passed in ten fresh processes. Before the
+  request record correction the 300-round case failed at round 128 in each of ten
+  runs, and the session-core case could not find the method it tests; after it,
+  both passed in ten runs. The regression floor is the new discovery count, 7,459.
+- The full suite, without the local wildcard-bind case, ran 7,458 cases: 7,454
   passed and 4 skipped, none failed. Three skips are the usual platform ones; the
   fourth, the aioquic datagram case, skips without its peer and passed on its own
   with the peer configured. Its first run caught the test host still passing the
@@ -2608,12 +2629,31 @@ Validation on Windows 11 with Schannel, before hosted CI:
 On Linux, an Ubuntu 24.04 container with SDK 10.0.402 (runtime 10.0.13) built the
 development host against the linux-x64 TLS library from CI run `f2b190b0` (native
 sources unchanged since) and passed all 15 modes, with the peer built both by Go
-1.26.8 and by the pinned Go 1.27.2 image. The new `WebTransport interop (linux-x64)`
-CI job runs the same steps on every code change: it builds the peer in the
-`golang:1.27.2-trixie` image pinned by digest in `test/EmbedIO.Quic/peer/Dockerfile`
-(Go 1.27.3 was three days old), checks `go.sum` with `go mod verify`, and keeps the
-logs without the throwaway test key. Dependabot follows that image and the peer's
-Go modules.
+1.26.8 and by the pinned Go 1.27.2 image. CI now runs the same steps on every code
+change. The `WebTransport peer` job builds the peer once, for linux-x64 and, cross-
+compiled, for osx-arm64, in the `golang:1.27.2-trixie` image pinned by digest in
+`test/EmbedIO.Quic/peer/Dockerfile` (Go 1.27.3 was three days old), after checking
+`go.sum` with `go mod verify`. The `WebTransport interop` jobs then run all modes on
+Ubuntu 24.04 and macOS 15 against that run's TLS runtime, re-signing the macOS
+binary ad hoc, and keep the logs without the throwaway test key. Dependabot follows
+the Go image and the peer's modules.
 
 Not covered yet: browsers other than Chromium, a browser on Linux or macOS, and
-the first hosted run of the new job.
+the first hosted run of the interop jobs, which is also the first macOS run.
+
+## Open-issue audit
+
+On 2026-10-22, after the provider removal and the public WebTransport sessions,
+each of the eight open issues was rechecked against this source. None is closed
+yet: the work that resolves them is not on `main` until this pull request merges.
+
+| Issue | Disposition on this source | Before closing |
+| --- | --- | --- |
+| [#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414) | Implemented: the session core is wired to HTTP/3, the public API, limits and guide exist, and opening a stream that fails after credit was reserved now returns the reservation. quic-go modes pass on Windows and Linux; Chromium 152 completed a draft-02 session on Windows. | A passing macOS run of the interop jobs, a browser on Linux or macOS, and the merge. |
+| [#303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303) | EmbedIO.Quic implements current-wire `RESET_STREAM_AT`, so the MsQuic request (microsoft/msquic#6376) no longer gates WebTransport. The peer's reset, outbound-reset and missing-reset modes pass on Windows and Linux; the migration guide and standards matrix now state the support and its limits. | A passing macOS run of the interop jobs and the merge. |
+| [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278) | The server no longer uses `System.Net.Quic`, so its send-buffer retention reaches only the BCL test client. | An endurance check of EmbedIO.Quic: bounded memory and handles after quiescence and repeated restarts. |
+| [#202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202) | The bind retry and the rebind quarantine went with the MsQuic provider, and the restart cases run without them. They passed on Windows, Linux and macOS in CI `39748091670`. | The merge. |
+| [#398](https://github.com/WilliamSmithEdward/embedio-neo/issues/398) | The failing path, `QuicListener` loading its credential, no longer exists on the server; EmbedIO.Quic acquires its Schannel credential itself, and the quarantine is gone. Windows Test passed in both runs on the new binding (`39738902765`, `39748091670`). | The merge; reopen if the engine shows a credential failure. |
+| [#399](https://github.com/WilliamSmithEdward/embedio-neo/issues/399) | The native MsQuic listener and the tests that failed are removed. | The merge. |
+| [#401](https://github.com/WilliamSmithEdward/embedio-neo/issues/401) | Unrelated to the QUIC work: the macOS compatibility audit's `dotnet list` call. | Its own investigation. |
+| [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181) | The umbrella program; it stays open for the remaining engine work. | Not applicable. |

@@ -56,6 +56,10 @@ namespace EmbedIO.Net.Internal.Http3
         // bidirectional stream limit (EmbedIOQuicListenerBinding), so one number
         // bounds concurrent application work per connection on both protocols.
         private const int MaximumApplications = 128;
+
+        // One worker per accepted stream; a peer that exceeds this is flooding
+        // the connection, which is closed as excessive load.
+        internal const int MaximumStreamWorkers = 256;
         private int _applicationCount;
         private CancellationToken _drainToken;
         private static readonly TimeSpan ApplicationDrainTimeout = TimeSpan.FromSeconds(30);
@@ -172,7 +176,7 @@ namespace EmbedIO.Net.Internal.Http3
                     lock (_sync)
                     {
                         draining = _draining && stream.Type == Http3StreamType.Bidirectional;
-                        rejected = draining || _workers.Count >= 256;
+                        rejected = draining || _workers.Count >= MaximumStreamWorkers;
 
                         // Register under the tracking gate before a worker can finish.
                         if (!rejected)
@@ -565,6 +569,11 @@ namespace EmbedIO.Net.Internal.Http3
                     // A WebTransport stream never carried a field section.
                     if (scope?.InputComplete != true && !handedOff) CancelDecode(streamId);
 
+                    // A request that ended before WebTransport classified it can no
+                    // longer name a session. Recording it keeps such requests from
+                    // fragmenting the registry's bounded record of settled requests.
+                    if (!handedOff) SettleRequest(streamId);
+
                     _priorities.Close(streamId);
                 }
 
@@ -936,6 +945,21 @@ namespace EmbedIO.Net.Internal.Http3
 
             // Connection cancellation runs request callbacks; never under the gate.
             if (failure != null) Fail(failure);
+        }
+
+        private void SettleRequest(long streamId)
+        {
+            if (_webTransport == null) return;
+
+            try
+            {
+                _webTransport.RequestEnded(streamId);
+            }
+
+            catch (Http3ProtocolException error)
+            {
+                Fail(error);
+            }
         }
 
         private void SignalFeedback()

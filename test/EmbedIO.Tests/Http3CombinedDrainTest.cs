@@ -232,17 +232,27 @@ namespace EmbedIO.Tests
                 }
                 else
                 {
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
+                    var drained = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(5))) == drain;
+
+                    // A QUIC connection holds the drain through its closing period (RFC 9000
+                    // section 10.2), three probe timeouts from an RTT estimate that a loaded host
+                    // inflates. Allow what remains of that period and one second more.
+                    if (!drained && PendingTaskReport.RemainingCloseMilliseconds(server.Listener) is { } closing)
+                        drained = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, closing) + 1000)))
+                            == drain;
+
                     // On a miss, name the shutdown stages still pending and the state of each
                     // QUIC connection, and measure how long the drain really takes (bounded)
                     // before failing the same way.
-                    var clock = System.Diagnostics.Stopwatch.StartNew();
-                    if (await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(5))) != drain)
+                    if (!drained)
                     {
+                        var missed = clock.Elapsed;
                         var pending = PendingTaskReport.Describe(server.Listener, 8);
                         var quic = PendingTaskReport.DescribeQuicConnections(server.Listener);
                         var finished = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(25))) == drain;
-                        TestContext.Error.WriteLine($"Combined drain pending at 5 s:{pending}\nQUIC connections at 5 s:{quic}\nDrain finished: {finished} after {clock.Elapsed}");
-                        throw new TimeoutException("The combined drain did not finish within 5 seconds.");
+                        TestContext.Error.WriteLine($"Combined drain pending at {missed}:{pending}\nQUIC connections at {missed}:{quic}\nDrain finished: {finished} after {clock.Elapsed}");
+                        throw new TimeoutException("The combined drain outlasted 5 seconds and the QUIC closing period.");
                     }
                     await drain;
                 }

@@ -170,7 +170,11 @@ Follow the [HTTP/3 deployment guide](../guides/http3.md) for certificate lifetim
 key provisioning, hostname validation, native libraries and platform limits.
 HTTP/3 availability does not imply automatic Alt-Svc discovery or an available
 WebTransport server. Unreliable datagrams and WebTransport are not yet available
-as supported public deployment options in a released package. Consult the
+as supported public deployment options in a released package. The unmerged
+[PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506) adds
+opt-in WebTransport sessions, with their datagrams, through `IWebTransportContext`;
+the [WebTransport guide](../guides/webtransport.md) gives its drafts, limits and
+validation. Consult the
 [capability status](../project/http-engine.md) before selecting those features.
 
 ## Request framing and client behavior
@@ -372,6 +376,9 @@ The new APIs are optional capabilities, not requirements for existing handlers:
   Upgrade carriers. Accepting a carrier does not open a connection to a destination.
 - HttpCapsuleChannel streams reliable capsule framing; it does not by itself
   provide unreliable QUIC datagrams, a proxy, or an integrated WebTransport server.
+- In unmerged PR #506, IWebTransportContext accepts opt-in WebTransport sessions
+  over HTTP/3 on servers configured with WithWebTransport; see the
+  [WebTransport guide](../guides/webtransport.md).
 - HttpVerbs.Query enables explicit QUERY routes; existing verbs retain their values.
 
 Use capability checks on custom contexts and adapters. Existing context/response

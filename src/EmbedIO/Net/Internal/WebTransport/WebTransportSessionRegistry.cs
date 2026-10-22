@@ -227,7 +227,13 @@ namespace EmbedIO.Net.Internal.WebTransport
         // Call only after this exact request is classified as non-WebTransport
         // or its CONNECT is rejected. Seeing a higher request says nothing about
         // an unseen lower CONNECT; HTTP/3 streams can arrive out of order.
-        internal void NoteRequestStream(long streamId)
+        internal void NoteRequestStream(long streamId) => Settle(streamId, true);
+
+        // A request stream ended, classified or not. An active session settles its
+        // identifier when it ends; any other request can no longer name one.
+        internal void RequestEnded(long streamId) => Settle(streamId, false);
+
+        private void Settle(long streamId, bool classified)
         {
             if (!WebTransportProtocol.IsSessionId(streamId)) throw new ArgumentOutOfRangeException(nameof(streamId));
 
@@ -236,7 +242,12 @@ namespace EmbedIO.Net.Internal.WebTransport
             lock (_gate)
             {
                 if (_sessions.ContainsKey(streamId))
-                    throw new InvalidOperationException("An active WebTransport session owns this request.");
+                {
+                    if (classified)
+                        throw new InvalidOperationException("An active WebTransport session owns this request.");
+
+                    return;
+                }
 
                 MarkUnavailable(streamId);
 

@@ -7,6 +7,15 @@ integration. Nothing here is reachable from a listener, no setting is advertised
 no public API or dependency is added and both library targets are unchanged in
 shape. It is not a WebTransport implementation and claims no interoperability.
 
+Status in unmerged [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506):
+the HTTP/3 listener now drives this core for servers that opt in, over EmbedIO.Quic's
+datagrams and current-wire reliable reset. The
+[WebTransport guide](../guides/webtransport.md) describes the public API and the
+[development record](quic-development-and-testing.md) its validation. This page keeps
+the increment as it was; of its remaining gaps, the HTTP/2 mapping, keying-material
+exporters and the `WT-Available-Protocols`/`WT-Protocol` fields are still not
+implemented, and Origin checks belong to the application.
+
 ## Specification basis
 
 The applicable text on 2026-10-10 is
