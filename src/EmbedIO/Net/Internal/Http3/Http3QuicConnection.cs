@@ -44,8 +44,7 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly SemaphoreSlim _feedbackReady = new(0, 1);
         private Http3PeerSettings _peer = Http3PeerSettings.Parse([]);
         private readonly Http3DatagramRouter? _datagrams;
-        private readonly WebTransportSettings? _webTransportLocal;
-        private WebTransportSettings? _webTransportPeer;
+        private readonly Http3WebTransport? _webTransport;
         private static readonly byte[] OrdinaryServerSettings = [0, 4, 12, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1];
         private static readonly byte[] DatagramServerSettings = [
             0, 4, 14, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1, 0x33, 1
@@ -65,27 +64,22 @@ namespace EmbedIO.Net.Internal.Http3
         private bool _draining;
         private long _highestRequestId = -4;
 
-        internal WebTransportSettings? PeerWebTransportSettings => Volatile.Read(ref _webTransportPeer);
-
         private Http3QuicConnection(
             Http3TransportConnection connection,
             Func<Http3QuicExchange, Task> dispatch,
             CancellationToken token,
             bool dispatchInline,
-            bool enableWebTransport = false
+            WebTransportOptions? webTransport = null
         )
         {
             _connection = new BorrowedResource<Http3TransportConnection>(connection);
 
             if (connection.Datagrams != null) _datagrams = new Http3DatagramRouter(connection.Datagrams);
 
-            if (enableWebTransport)
-            {
-                if (_datagrams == null || connection.PeerMaximumDatagramFrameSize == 0 || !connection.ReliableReset)
-                    throw new NotSupportedException("WebTransport requires negotiated datagrams and reliable reset.");
-
-                _webTransportLocal = WebTransportSettings.Local(true, 65536, 8, 8);
-            }
+            // Sessions need HTTP datagrams. The peer's SETTINGS and transport parameters
+            // decide later whether this connection negotiated a WebTransport dialect.
+            if (webTransport != null && _datagrams != null)
+                _webTransport = new Http3WebTransport(connection, webTransport);
 
             _dispatch = dispatch;
             _dispatchInline = dispatchInline;
@@ -112,7 +106,7 @@ namespace EmbedIO.Net.Internal.Http3
             CancellationToken abortToken,
             CancellationToken drainToken,
             TimeSpan drainTimeout,
-            bool enableWebTransport = false
+            WebTransportOptions? webTransport = null
         )
         {
             ArgumentNullException.ThrowIfNull(connection);
@@ -122,7 +116,7 @@ namespace EmbedIO.Net.Internal.Http3
                 throw new ArgumentOutOfRangeException(nameof(drainTimeout));
 
             await using (connection.ConfigureAwait(false))
-            using (var session = new Http3QuicConnection(connection, dispatch, abortToken, true, enableWebTransport))
+            using (var session = new Http3QuicConnection(connection, dispatch, abortToken, true, webTransport))
             {
                 session._drainToken = drainToken;
                 session._drainTimeout = drainTimeout;
@@ -145,7 +139,7 @@ namespace EmbedIO.Net.Internal.Http3
                 control = await _connection.Value
                     .OpenOutboundStreamAsync(Http3StreamType.Unidirectional, startup.Token)
                     .ConfigureAwait(false);
-                var settings = EncodeServerSettings(_datagrams != null, _webTransportLocal);
+                var settings = EncodeSettingsFrame(_datagrams != null, _webTransport?.EncodeSettings());
                 await control
                     .WriteAsync(settings, startup.Token)
                     .ConfigureAwait(false);
@@ -241,6 +235,7 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     _datagrams?.Dispose();
                     CancelRequests(_stop);
+                    _webTransport?.Shutdown();
 
                     lock (_decoderSync)
                     {
@@ -305,15 +300,24 @@ namespace EmbedIO.Net.Internal.Http3
 
         internal static byte[] EncodeServerSettings(bool datagrams, WebTransportSettings? webTransport)
         {
-            if (webTransport == null) return datagrams ? DatagramServerSettings : OrdinaryServerSettings;
-
-            if (!datagrams || !webTransport.Enabled)
+            if (webTransport != null && (!datagrams || !webTransport.Enabled))
                 throw new ArgumentException(
                     "WebTransport SETTINGS require an enabled datagram profile.",
                     nameof(webTransport)
                 );
 
-            var extension = webTransport.EncodeLocal();
+            return EncodeSettingsFrame(datagrams, webTransport?.EncodeLocal());
+        }
+
+        // The server control stream's type and SETTINGS frame. WebTransport pairs
+        // follow the datagram profile they depend on.
+        private static byte[] EncodeSettingsFrame(bool datagrams, byte[]? extension)
+        {
+            if (extension == null) return datagrams ? DatagramServerSettings : OrdinaryServerSettings;
+
+            if (!datagrams)
+                throw new ArgumentException("WebTransport SETTINGS require the datagram profile.", nameof(extension));
+
             var basePairs = DatagramServerSettings.AsSpan(3);
             var payloadLength = basePairs.Length + extension.Length;
             var bytes = new byte[2 + QuicInteger.EncodedLength(payloadLength) + payloadLength];
@@ -393,6 +397,9 @@ namespace EmbedIO.Net.Internal.Http3
 
                 foreach (var request in unprocessed) AbortStream(request, 0x10b);
 
+                // Section 4.7: sessions are asked to finish while the drain lets them run.
+                _webTransport?.Drain();
+
                 // Exhausted request stream IDs need no GOAWAY (RFC 9114 section 5.2).
                 if (cutoff <= QuicInteger.Maximum)
                 {
@@ -440,6 +447,7 @@ namespace EmbedIO.Net.Internal.Http3
         private async Task ProcessStreamAsync(Http3TransportStream stream, RequestScope? scope)
         {
             var critical = false;
+            var handedOff = false;
             var streamId = stream.Id;
             // Leave the accept loop at once. Yielding queues this state machine
             // itself, without the closure and wrapper tasks of Task.Run.
@@ -451,7 +459,29 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     if (scope == null) throw new Http3ProtocolException(0x103, "Invalid request stream initiator.");
 
-                    await ProcessRequestAsync(stream, scope).ConfigureAwait(false);
+                    byte[]? prefix = null;
+
+                    if (_webTransport != null)
+                    {
+                        // Section 4.3: a session's bidirectional stream begins with 0x41,
+                        // which no request frame uses. Anything else is replayed as a request.
+                        var (first, bytes) = await ReadIntegerPrefixAsync(stream, _token).ConfigureAwait(false);
+
+                        if (first == WebTransportProtocol.BidirectionalStreamSignal)
+                        {
+                            lock (_sync) _requests.Remove(streamId);
+
+                            handedOff = true;
+                            await _webTransport
+                                .AcceptBidirectionalAsync(stream, _token)
+                                .ConfigureAwait(false);
+                            return;
+                        }
+
+                        prefix = bytes;
+                    }
+
+                    await ProcessRequestAsync(stream, scope, prefix).ConfigureAwait(false);
                 }
 
                 else
@@ -460,6 +490,15 @@ namespace EmbedIO.Net.Internal.Http3
 
                     if (!type.HasValue)
                         return; // A partial/absent type may be abandoned.
+
+                    if (type == WebTransportProtocol.UnidirectionalStreamType && _webTransport != null)
+                    {
+                        handedOff = true;
+                        await _webTransport
+                            .AcceptUnidirectionalAsync(stream, _token)
+                            .ConfigureAwait(false);
+                        return;
+                    }
 
                     if (type == 1) throw new Http3ProtocolException(0x103, "Client initiated a push stream.");
 
@@ -523,16 +562,19 @@ namespace EmbedIO.Net.Internal.Http3
                     // RFC 9204 section 4.4.2: Stream Cancellation is for reset or
                     // abandoned input. A stream read to its FIN has no section left
                     // to decode, and every decoded section was already acknowledged.
-                    if (scope?.InputComplete != true) CancelDecode(streamId);
+                    // A WebTransport stream never carried a field section.
+                    if (scope?.InputComplete != true && !handedOff) CancelDecode(streamId);
 
                     _priorities.Close(streamId);
                 }
 
                 try
                 {
-                    await stream
-                        .DisposeAsync()
-                        .ConfigureAwait(false);
+                    // A WebTransport stream now belongs to its session, or was released.
+                    if (!handedOff)
+                        await stream
+                            .DisposeAsync()
+                            .ConfigureAwait(false);
                 }
 
                 catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
@@ -552,7 +594,7 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
-        private async Task ProcessRequestAsync(Http3TransportStream stream, RequestScope scope)
+        private async Task ProcessRequestAsync(Http3TransportStream stream, RequestScope scope, byte[]? prefix)
         {
             var requestStop = scope.Stop;
             var requestToken = requestStop.Token;
@@ -562,10 +604,14 @@ namespace EmbedIO.Net.Internal.Http3
             var writes = stream.WritesClosed;
             WatchRequestReadDirection(reads, requestStop);
             WatchRequestDirection(writes, requestStop);
+            Http3WebTransportSession? webTransport = null;
 
             try
             {
-                var reader = new Http3RequestStream(stream.Id, stream, 65536, long.MaxValue);
+                var source = prefix is { Length: > 0 }
+                    ? new Http3PrefixedStream(prefix, stream)
+                    : (System.IO.Stream)stream;
+                var reader = new Http3RequestStream(stream.Id, source, 65536, long.MaxValue);
                 var first = await reader
                     .ReadEventAsync(requestToken)
                     .ConfigureAwait(false);
@@ -620,36 +666,63 @@ namespace EmbedIO.Net.Internal.Http3
 
                 if (request.Method != "CONNECT") stream.EnableApplicationBodyCancellation(requestToken);
 
-                // Isolate even callbacks that block before returning their Task.
-                if (Interlocked.Increment(ref _applicationCount) > MaximumApplications)
-                {
-                    Interlocked.Decrement(ref _applicationCount);
-                    throw new Http3StreamException(stream.Id, 0x107, "Too many outstanding application callbacks.");
-                }
+                var outcome = WebTransportRequestOutcome.NotWebTransport;
 
-                var application = DispatchApplicationAsync(exchange, requestToken);
-
-                try
+                if (_webTransport != null)
                 {
-                    await application
-                        .WaitAsync(requestToken)
+                    (outcome, webTransport) = await _webTransport
+                        .AdmitAsync(stream.Id, request.Method, request.Protocol, exchange, requestToken)
                         .ConfigureAwait(false);
+
+                    if (outcome == WebTransportRequestOutcome.RequirementsNotMet)
+                        throw new Http3StreamException(
+                            stream.Id,
+                            WebTransportProtocol.H3MessageError,
+                            "This connection did not negotiate the WebTransport requirements of the request."
+                        );
+
+                    exchange.WebTransport = webTransport;
                 }
 
-                catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
+                // Section 5.2: a session beyond the connection's limit is refused before dispatch.
+                if (outcome == WebTransportRequestOutcome.TooManySessions)
+                    await exchange
+                        .SendHeadersAsync([new HpackField(":status", "429")], true, requestToken)
+                        .ConfigureAwait(false);
+
+                else
                 {
-                    // A detached callback may fail later. Observe that failure
-                    // without retaining or accessing the disposed connection.
-                    _ = application.ContinueWith(
-                        static completed =>
-                        {
-                            _ = completed.Exception;
-                        },
-                        CancellationToken.None,
-                        TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                        TaskScheduler.Default
-                    );
-                    throw;
+                    // Isolate even callbacks that block before returning their Task.
+                    if (Interlocked.Increment(ref _applicationCount) > MaximumApplications)
+                    {
+                        Interlocked.Decrement(ref _applicationCount);
+                        throw new Http3StreamException(stream.Id, 0x107, "Too many outstanding application callbacks.");
+                    }
+
+                    var application = DispatchApplicationAsync(exchange, requestToken);
+
+                    try
+                    {
+                        await application
+                            .WaitAsync(requestToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    catch (OperationCanceledException) when (requestToken.IsCancellationRequested)
+                    {
+                        // A detached callback may fail later. Observe that failure
+                        // without retaining or accessing the disposed connection.
+                        _ = application.ContinueWith(
+                            static completed =>
+                            {
+                                _ = completed.Exception;
+                            },
+                            CancellationToken.None,
+                            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                            TaskScheduler.Default
+                        );
+                        throw;
+                    }
                 }
 
                 if (!exchange.Ended)
@@ -687,6 +760,8 @@ namespace EmbedIO.Net.Internal.Http3
 
             finally
             {
+                // A session the handler never accepted ends with its request.
+                webTransport?.EndPending();
                 CancelRequests(requestStop);
                 var unexpected = UnexpectedDirectionFault(reads, requestStop)
                     ?? UnexpectedDirectionFault(writes, requestStop);
@@ -915,7 +990,7 @@ namespace EmbedIO.Net.Internal.Http3
 
         private async Task ReadControlAsync(Http3TransportStream stream)
         {
-            var control = new Http3ControlStream(stream, false, _webTransportLocal != null);
+            var control = new Http3ControlStream(stream, false, _webTransport != null);
 
             while (true)
             {
@@ -935,7 +1010,7 @@ namespace EmbedIO.Net.Internal.Http3
                         ?? throw new Http3ProtocolException(0x102, "Missing peer settings.");
                     Volatile.Write(ref _peer, settings);
                     _datagrams?.SetPeerEnabled(settings.Datagrams);
-                    Volatile.Write(ref _webTransportPeer, control.WebTransportSettings);
+                    _webTransport?.PeerSettingsReceived(control.WebTransportSettings);
                 }
 
                 // No push IDs have been promised by this server yet.
@@ -1083,30 +1158,52 @@ namespace EmbedIO.Net.Internal.Http3
                 Fail(new Http3ProtocolException(0x104, error.Message));
         }
 
-        private async Task<long?> ReadStreamTypeAsync(Http3TransportStream stream)
+        private Task<long?> ReadStreamTypeAsync(Http3TransportStream stream) => ReadIntegerAsync(stream, _token);
+
+        // Reads one variable-length integer without reading past it. A stream that
+        // ends inside the integer yields no value.
+        internal static async Task<long?> ReadIntegerAsync(System.IO.Stream stream, CancellationToken token) =>
+            (await ReadIntegerPrefixAsync(stream, token).ConfigureAwait(false)).Value;
+
+        // As ReadIntegerAsync, and also returns the bytes it read, for replay.
+        private static async Task<(long? Value, byte[] Bytes)> ReadIntegerPrefixAsync(
+            System.IO.Stream stream,
+            CancellationToken token
+        )
         {
             var bytes = new byte[8];
             var count = await stream
-                .ReadAsync(bytes.AsMemory(0, 1), _token)
+                .ReadAsync(bytes.AsMemory(0, 1), token)
                 .ConfigureAwait(false);
 
-            if (count == 0) return null;
+            if (count == 0) return (null, []);
 
             var length = 1 << (bytes[0] >> 6);
 
             while (count < length)
             {
                 var read = await stream
-                    .ReadAsync(bytes.AsMemory(count, length - count), _token)
+                    .ReadAsync(bytes.AsMemory(count, length - count), token)
                     .ConfigureAwait(false);
 
-                if (read == 0) return null;
+                if (read == 0)
+                    return (
+                        null,
+                        bytes
+                            .AsSpan(0, count)
+                            .ToArray()
+                    );
 
                 count += read;
             }
 
             var offset = 0;
-            return QuicInteger.Read(bytes, ref offset, length);
+            return (
+                QuicInteger.Read(bytes, ref offset, length),
+                bytes
+                    .AsSpan(0, length)
+                    .ToArray()
+            );
         }
 
         private void RequestFailed(Http3TransportStream stream, Exception error)

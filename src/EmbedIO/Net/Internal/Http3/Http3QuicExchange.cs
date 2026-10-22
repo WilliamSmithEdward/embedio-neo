@@ -20,6 +20,7 @@ namespace EmbedIO.Net.Internal.Http3
         IMultiplexedResponseTrailers,
         IMultiplexedTunnelControl,
         IMultiplexedDatagramExchange,
+        IMultiplexedWebTransportExchange,
         IDisposable
     {
         private const int MaximumDataPayload = 256 * 1024;
@@ -62,6 +63,9 @@ namespace EmbedIO.Net.Internal.Http3
 
         internal Http3PriorityState.Entry? PriorityState { get; set; }
         internal Http3DatagramChannel? Datagrams { get; set; }
+
+        // The WebTransport session the connection admitted for this request.
+        public IWebTransportPendingSession? WebTransport { get; internal set; }
 
         public HttpDatagramChannel? CreateDatagramChannel()
         {

@@ -168,6 +168,28 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Enables WebTransport over HTTP/3 with new settings, which <paramref name="configure"/> may change.
+        /// </summary>
+        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
+        /// <param name="configure">Changes the default settings, or <see langword="null"/> to keep them.</param>
+        /// <returns><paramref name="this"/> with its <see cref="WebServerOptions.WebTransport">WebTransport</see> property
+        /// set to the new settings.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
+        public static WebServerOptions WithWebTransport(
+            this WebServerOptions @this,
+            System.Action<WebTransportOptions>? configure = null
+        )
+        {
+            if (@this is null) throw new System.NullReferenceException();
+
+            var options = new WebTransportOptions();
+            configure?.Invoke(options);
+            @this.WebTransport = options;
+            return @this;
+        }
+
+        /// <summary>
         /// Sets the thumbprint of the X.509 certificate to use for SSL connections.
         /// </summary>
         /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>

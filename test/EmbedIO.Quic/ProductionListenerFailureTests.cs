@@ -303,7 +303,8 @@ namespace EmbedIO.Quic
             internal override async Task RunAsync(
                 Func<Http3QuicExchange, IPEndPoint, IPEndPoint, Task> dispatch,
                 CancellationToken abort,
-                CancellationToken drain
+                CancellationToken drain,
+                WebTransportOptions? webTransport = null
             )
             {
                 using var registration = abort.Register(() =>

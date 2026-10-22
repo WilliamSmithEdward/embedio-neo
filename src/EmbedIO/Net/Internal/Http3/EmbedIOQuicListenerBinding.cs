@@ -471,7 +471,8 @@ namespace EmbedIO.Net.Internal.Http3
             internal override async Task RunAsync(
                 Func<Http3QuicExchange, IPEndPoint, IPEndPoint, Task> dispatch,
                 CancellationToken abort,
-                CancellationToken drain
+                CancellationToken drain,
+                WebTransportOptions? webTransport = null
             )
             {
                 var (application, features) = await _ready.Task
@@ -487,7 +488,8 @@ namespace EmbedIO.Net.Internal.Http3
                         ),
                         abort,
                         drain,
-                        TimeSpan.FromMilliseconds(uint.MaxValue - 1)
+                        TimeSpan.FromMilliseconds(uint.MaxValue - 1),
+                        webTransport
                     )
                     .ConfigureAwait(false);
             }

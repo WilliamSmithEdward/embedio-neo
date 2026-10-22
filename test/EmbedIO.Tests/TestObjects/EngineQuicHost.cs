@@ -91,8 +91,9 @@ namespace EmbedIO.Tests.TestObjects
                 .CreateDelegate(typeof(Func<,>).MakeGenericType(exchange, typeof(Task)), target);
         }
 
-        // An HTTP/3 connection layer over an accepted transport. Like the listener, it
-        // dispatches each exchange on its own worker unless dispatchInline is set.
+        // An HTTP/3 connection layer over an accepted transport, without WebTransport.
+        // Like the listener, it dispatches each exchange on its own worker unless
+        // dispatchInline is set.
         internal static IDisposable CreateConnection(
             IAsyncDisposable transport,
             Delegate dispatch,
@@ -105,7 +106,7 @@ namespace EmbedIO.Tests.TestObjects
                 dispatch,
                 token,
                 dispatchInline,
-                false
+                null
             ) as IDisposable
                 ?? throw new AssertionException("The HTTP/3 connection layer is not disposable.");
 

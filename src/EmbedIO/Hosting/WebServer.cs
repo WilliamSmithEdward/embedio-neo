@@ -507,6 +507,14 @@ namespace EmbedIO
                     "MaximumConnections, RequestHeadersTimeout and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode."
                 );
 
+            // WebTransport is served over HTTP/3 only.
+            if (
+                Options.WebTransport != null
+                && http3Factory == null
+                && Options.Mode is not (HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined)
+            )
+                throw new NotSupportedException("WebTransport requires EmbedIOHttp3 or EmbedIOCombined mode.");
+
             // A source replaces the fixed certificate settings, whose getter would otherwise load or register one.
             X509Certificate2? CertificateOrNull() => Options.CertificateSource != null ? null : Options.Certificate;
 
@@ -566,6 +574,7 @@ namespace EmbedIO
                     combined.ConnectionPolicy = connections;
                     combined.TlsPolicy = tlsPolicy;
                     combined.Telemetry = Telemetry;
+                    combined.WebTransport = Options.WebTransport;
                 }
 
                 else if (listener is Net.Internal.Http3.Http3Listener quic)
@@ -573,6 +582,7 @@ namespace EmbedIO
                     quic.DeferContinue = deferContinue;
                     quic.TlsPolicy = tlsPolicy;
                     quic.Telemetry = Telemetry;
+                    quic.WebTransport = Options.WebTransport;
                 }
             }
 #endif

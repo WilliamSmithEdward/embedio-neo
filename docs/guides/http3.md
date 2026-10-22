@@ -279,3 +279,9 @@ evidence, not a claim of complete WebSocket conformance or performance.
 
 References: [RFC 9220](https://www.rfc-editor.org/rfc/rfc9220.html) and
 [.NET 10.0.12 client implementation](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.WebSockets.Client/src/System/Net/WebSockets/WebSocketHandle.Managed.cs).
+
+## WebTransport
+
+In the unmerged replacement, a server configured with `WithWebTransport` also
+accepts WebTransport sessions over this listener. See
+[WebTransport over HTTP/3](webtransport.md).

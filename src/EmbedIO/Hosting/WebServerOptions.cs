@@ -23,6 +23,7 @@ namespace EmbedIO
         private X509Certificate2? _certificate;
         private Net.ServerCertificateSource? _certificateSource;
         private Net.ServerTlsPolicy? _tlsPolicy;
+        private WebTransportOptions? _webTransport;
         private string? _certificateThumbprint;
         private bool _autoLoadCertificate;
         private bool _autoRegisterCertificate;
@@ -110,6 +111,25 @@ namespace EmbedIO
             {
                 EnsureConfigurationNotLocked();
                 _tlsPolicy = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the WebTransport settings. The default, <see langword="null"/>, serves no WebTransport.
+        /// The settings are locked with these options.
+        /// </summary>
+        /// <remarks>WebTransport needs <see cref="HttpListenerMode.EmbedIOHttp3"/> or
+        /// <see cref="HttpListenerMode.EmbedIOCombined"/> on the .NET 10 asset; other modes refuse to start with it.</remarks>
+        /// <exception cref="InvalidOperationException">This property is being set,
+        /// and this instance's configuration is locked.</exception>
+        /// <seealso cref="IWebTransportContext"/>
+        public WebTransportOptions? WebTransport
+        {
+            get => _webTransport;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _webTransport = value;
             }
         }
 
@@ -231,6 +251,7 @@ namespace EmbedIO
             }
 
             _tlsPolicy?.Lock();
+            _webTransport?.Lock();
             base.OnBeforeLockConfiguration();
         }
 

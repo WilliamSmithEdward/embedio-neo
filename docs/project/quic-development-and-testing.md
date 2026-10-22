@@ -1158,8 +1158,9 @@ python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py
    and platforms. Features outside the supported profile must fail explicitly.
 4. Validate the now-integrated ordinary provider selection, actual TLS capability
    checks and transitive native runtime delivery across supported platforms.
-   Finish public WebTransport API/controller integration and broaden the actual
-   WebServer auth/cancellation/disposal checks across those configurations.
+   Run the public WebTransport sessions (see "Public WebTransport sessions" below)
+   against the independent peer in hosted CI, and broaden the actual WebServer
+   auth/cancellation/disposal checks across those configurations.
 5. Independent peers on Windows/Linux/macOS, browser compatibility, dependency
    packaging, and startup/warm/tail-latency measurements. Windows embedded hosting
    leads; meaningful warm regressions are not accepted for cold-start gains.
@@ -2530,3 +2531,89 @@ passed. A recursive scan of every tracked file with the pinned YARA-X 1.21.0 and
 YARA Forge 20261018 rules matched only the remaining accepted entries, so the
 acceptances for the removed benchmark, the removed probe and the two rewritten
 fixtures were removed. Hosted acceptance is pending.
+
+## Public WebTransport sessions
+
+Applications now opt in through `WebServerOptions.WebTransport`
+(`WithWebTransport`) and accept sessions through `IWebTransportContext`, using
+`WebTransportSession` and `WebTransportStream`; the
+[guide](../guides/webtransport.md) describes the API. This is the context-capability
+shape with the draft-02 browser handshake chosen for
+[#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414).
+
+Each HTTP/3 connection of a server that opts in owns an `Http3WebTransport`. It
+appends the draft SETTINGS to the server's control stream, and the client's
+SETTINGS fix the dialect of every session on the connection: draft-16 when the
+client enables it and the connection negotiated datagrams and reliable reset,
+draft-02 when the browser dialect is accepted, the client sends its setting and
+datagrams were negotiated. Session requests are admitted through the existing
+session registry; a request beyond the session limit gets 429 before dispatch and
+one the connection did not negotiate is reset with `H3_MESSAGE_ERROR`. The
+connection reads the first integer of every client bidirectional stream: the
+WebTransport signal hands the stream to its session, and any other value is
+replayed to the request reader through `Http3PrefixedStream`. Unidirectional
+streams of type 0x54 go to their session the same way.
+
+Found and corrected during integration:
+
+- Server-opened session streams carried no stream header. `SetReliablePrefix`
+  marks the first bytes reliable for a later reset but does not send them, so the
+  header is now written after the prefix is installed. The independent peer's
+  echo mode exposed it.
+- A connection whose client never negotiated WebTransport kept buffering streams
+  that named sessions it could never have. When the client's SETTINGS arrive
+  without WebTransport, the registry now releases what it buffered and refuses
+  later streams with `WT_BUFFERED_STREAM_REJECTED`; datagrams are dropped.
+- `IWebTransportContext` said only HTTP/3 contexts implement it. HTTP/2 contexts
+  implement it too, with `IsWebTransportRequest` false; the documentation now says so.
+
+`LocalReadAbortEndsAnAbandonedBodyReadWithoutResettingTheResponse` called
+`Assert.CatchAsync` without awaiting it. NUnit 5 returns a task from that call, so
+the test checked `CanRead` without waiting for the read to end and never checked
+the read's exception. CI `39748091670` failed that `CanRead` assertion on macOS
+only; the unawaited call explains a failure that depends on when the read's
+continuation runs, but this was not reproduced. The test now awaits the call, and
+no other test leaves an asynchronous NUnit assertion unawaited.
+
+Validation on Windows 11 with Schannel, before hosted CI:
+
+- 29 new in-suite cases: 14 for the settings and the mode check, 13 over the
+  listener with the .NET QUIC client (advertised SETTINGS, malformed session
+  requests on connections without WebTransport, the draft-02 token as an ordinary
+  request when that dialect is off, ordinary GET and POST beside WebTransport,
+  request streams that end the same way with and without it, and streams refused on
+  a connection without it) and 2 in the session core. The 123 WebTransport and
+  request-abort cases passed in ten fresh processes. The regression floor is the
+  new discovery count, 7,457.
+- The full suite, without the local wildcard-bind case, ran 7,456 cases: 7,452
+  passed and 4 skipped, none failed. Three skips are the usual platform ones; the
+  fourth, the aioquic datagram case, skips without its peer and passed on its own
+  with the peer configured. Its first run caught the test host still passing the
+  removed `bool` switch to the connection constructor by reflection, which failed
+  17 HTTP/3 adapter cases until the host passed the new options argument.
+- `verify_webtransport_production.py`: all 15 quic-go peer modes passed against
+  the development host's `serve-webtransport` command, an ordinary `WebServer`
+  using the public API.
+- The guide's complete program, extracted verbatim and compiled with warnings as
+  errors, passed the peer's echo, reset, large and origin modes. Its first version
+  opened the reply stream before reading and so answered a reset incoming stream
+  with an empty, cleanly finished reply; the reset mode caught it.
+- Chromium 152 (the Claude desktop app's browser) opened a draft-02 session from a
+  page served on `http://localhost`, pinning a 10-day ECDSA P-256 certificate with
+  `serverCertificateHashes`. The request carried `sec-webtransport-http3-draft02: 1`
+  and the page's origin; a datagram, a bidirectional stream and a unidirectional
+  stream were echoed, and the close code 7 and reason "done" the page sent were
+  recorded on both sides.
+
+On Linux, an Ubuntu 24.04 container with SDK 10.0.402 (runtime 10.0.13) built the
+development host against the linux-x64 TLS library from CI run `f2b190b0` (native
+sources unchanged since) and passed all 15 modes, with the peer built both by Go
+1.26.8 and by the pinned Go 1.27.2 image. The new `WebTransport interop (linux-x64)`
+CI job runs the same steps on every code change: it builds the peer in the
+`golang:1.27.2-trixie` image pinned by digest in `test/EmbedIO.Quic/peer/Dockerfile`
+(Go 1.27.3 was three days old), checks `go.sum` with `go mod verify`, and keeps the
+logs without the throwaway test key. Dependabot follows that image and the peer's
+Go modules.
+
+Not covered yet: browsers other than Chromium, a browser on Linux or macOS, and
+the first hosted run of the new job.

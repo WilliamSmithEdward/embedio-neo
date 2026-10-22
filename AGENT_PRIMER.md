@@ -377,8 +377,12 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 - There is no automatic Alt-Svc advertisement; clients must be told HTTP/3 is
   available. See the [HTTP/3 guide](docs/guides/http3.md).
 
-WebTransport is not supported by the public listener. The internal session core
-and native validation hosts do not make it available to applications. The independent
+In this unmerged branch the HTTP/3 listener serves opt-in WebTransport sessions:
+`WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a
+session through `IWebTransportContext` and use its `WebTransportSession` streams and
+datagrams. It speaks draft-ietf-webtrans-http3-16 and the draft-02 handshake
+Chromium uses; no release contains it. See the
+[WebTransport guide](docs/guides/webtransport.md). The independent
 EmbedIO.Quic generic transport core is under `src/EmbedIO.Quic`. Its separate
 `EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, references the actual
 library HTTP/3 protocol and uses a legacy development OpenSSL loader, the private
@@ -429,14 +433,12 @@ completion and bounded datagram/open/accept queues. Application commands wake th
 UDP owner directly. The ordinary HTTP/3 binding now retains the negotiated peer
 datagram-frame and reliable-reset transport parameters through its owned adapter.
 Async streams can reserve a copied, at-most-64-byte reliable prefix before writing;
-the owner installs it before a reset and waits for flow credit if necessary. The
-HTTP/3 connection now has an internal WebTransport opt-in path that requires
-negotiated datagrams and reliable reset, adds draft SETTINGS fields to the server
-control stream and captures validated client fields. With that mode off, the
-ordinary SETTINGS bytes and unknown-extension treatment are unchanged. This
-path is not yet exposed through a listener option. Public
-WebTransport session admission, routes/controllers, stream demultiplexing and browser
-acceptance remain pending. The Windows TLS factory captures the fallback certificate when
+the owner installs it before a reset and waits for flow credit if necessary. With
+`WebServerOptions.WebTransport` set, the HTTP/3 connection adds draft SETTINGS
+fields to its control stream, validates the client's, and admits draft-16 sessions
+only with negotiated datagrams and reliable reset, draft-02 sessions with
+datagrams. Without it, the SETTINGS bytes and request handling are unchanged.
+The Windows TLS factory captures the fallback certificate when
 constructing each handshake, then selects and clones the certificate after a complete
 ClientHello. It preserves bounded ASCII SNI spelling, calls the configured selector
 once and isolates selector failures. Later publication applies to new handshakes;
@@ -483,8 +485,7 @@ and healthy existing connections through the library's Windows TLS implementatio
 and native RSA/ECDSA mutations. It also runs the client-certificate wire matrix and seeded
 full-handshake certificate/key mutations through `verify_client_certificate.py` and
 `fuzz_client_certificate.py`. These include a continuing healthy connection and retained
-input/fixture replay. Public WebTransport and complete credential/configuration parity
-remain pending before changing the public listener default.
+input/fixture replay. Complete credential and configuration parity remains pending.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
@@ -1293,8 +1294,7 @@ This permits bounded batches after scheduler delay without unlimited idle bursts
 HTTP/3 stream abort is harmless after connection closure; pending operations
 retain their original connection error and argument validation remains active.
 The model, actual WebServer regression, independent-peer and fuzz evidence is in
-the development/testing record. WebTransport application/browser integration
-and the open-issue audit remain outstanding.
+the development/testing record. The open-issue audit remains outstanding.
 
 
 The unmerged .NET 10 core now declares the owned `EmbedIO-Neo.Quic.Native`
@@ -1323,8 +1323,8 @@ metadata checks do not substitute for downlevel runtime execution. Released v2.1
 still uses the previous provider; this source no longer contains it. Tests that
 drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through the
 EmbedIO.Quic binding; the BCL client remains the independent test client.
-Final platform acceptance, WebTransport/browser integration, lifetime/latency
-work and the open-issue audit remain outstanding.
+Final platform acceptance, lifetime/latency work and the open-issue audit remain
+outstanding.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified
@@ -1333,19 +1333,19 @@ locally. This hook is for source-reference fixtures only. Package applications
 continue to use NuGet-selected assets. The AOT fixture's BCL HTTP/3 client still
 requires its separate MsQuic prerequisite; the EmbedIO.Quic server does not.
 
-In the internal draft-16 WebTransport bridge, a client need not advertise
-extended CONNECT support. Client admission requires its WebTransport/datagram
-SETTINGS and the required transport parameters; the server still advertises
-extended CONNECT. Model and independent-peer checks cover omitted and zero-valued
-client advertisements. Public WebTransport acceptance remains integration work.
+Draft-16 WebTransport admission does not require the client to advertise extended
+CONNECT support. It requires the client's WebTransport and datagram SETTINGS and
+the required transport parameters; the server still advertises extended CONNECT.
+Model and independent-peer checks cover omitted and zero-valued client
+advertisements. Locally, the public session API passes all 15 quic-go peer modes,
+and a Chromium 152 browser completed a draft-02 session with datagram, stream and
+close checks.
 
-The ordinary HTTP/3 listener has an internal WebTransport SETTINGS opt-in that
-requires negotiated datagrams and reliable reset. Its default SETTINGS bytes remain
-unchanged; no public listener enables the opt-in yet. The QUIC bridge fuzz target
-round-trips input-derived server SETTINGS through the HTTP/3 and WebTransport
-readers and probes malformed extension pairs. Local self-test and seeded core-fuzz
+The QUIC bridge fuzz target round-trips input-derived server SETTINGS through the
+HTTP/3 and WebTransport readers and probes malformed extension pairs. Local
+self-test and seeded core-fuzz
 evidence is in the [development and testing record](docs/project/quic-development-and-testing.md);
-public session integration and final hosted acceptance are still pending.
+final hosted acceptance is still pending.
 
 The unmerged async-stream owner now ignores inbound STREAM/RESET/STOP events
 after connection closure without creating another stream owner; outbound operations

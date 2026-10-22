@@ -64,7 +64,10 @@ namespace EmbedIO.Tests
             Assert.That(pending.IsCompleted, Is.False, "The read must wait for request data.");
             // What the request worker does when the request ends with input still unread.
             EngineInternals.Call(quic, "AbortRead", 0x100UL);
-            var failure = Assert.CatchAsync<IOException>(async () => await pending.WaitAsync(TimeSpan.FromSeconds(5)));
+            // NUnit 5's CatchAsync completes only when awaited; the read must end before CanRead is checked.
+            var failure = await Assert.CatchAsync<IOException>(
+                async () => await pending.WaitAsync(TimeSpan.FromSeconds(5))
+            );
             var writes = EngineInternals.Property(quic, "WritesClosed") as Task
                 ?? throw new AssertionException("Missing write completion.");
 

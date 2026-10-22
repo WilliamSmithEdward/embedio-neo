@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in WebTransport over HTTP/3 in `EmbedIOHttp3` and `EmbedIOCombined` mode.
+  `WithWebTransport` and `WebTransportOptions` enable it; a handler accepts a
+  session through `IWebTransportContext` and uses its `WebTransportSession` streams
+  and datagrams. The server speaks draft-ietf-webtrans-http3-16 and the draft-02
+  handshake Chromium uses; neither is an RFC. Servers that do not opt in advertise
+  nothing new and serve requests as before. See
+  [WebTransport over HTTP/3](docs/guides/webtransport.md).
+
 ### Changed
 
 - HTTP/3, in `EmbedIOHttp3` mode and the QUIC half of `EmbedIOCombined`, runs on
@@ -14,6 +24,11 @@
   The earlier `System.Net.Quic` and internal MsQuic server providers, their bind
   retry and their CI quarantines were removed. See the
   [HTTP/3 guide](docs/guides/http3.md).
+
+### Fixed
+
+- The README every package carries links to the documentation with absolute URLs,
+  so its links work on nuget.org.
 
 ## [2.16.0] - 2026-10-18
 

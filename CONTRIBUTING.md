@@ -83,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7428
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 8m --minimum-expected-tests 7457
 ```
 
 For every development change, also run the source-quality gates after the final edit:
@@ -115,7 +115,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 7428 executed/reported test cases to catch accidental discovery loss; update
+least 7457 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full regression and
 coverage suite budget is twelve minutes on all three desktop platforms. Linux coverage
 run 38970758078 stopped near its eight-minute boundary with 6,522 of 6,695 cases
@@ -181,6 +181,10 @@ smokes. Static analysis, the package build (which still packs and checks
 `README.md` and the icon) and `CI passed` run on every pull request. A code pull
 request runs the compatibility jobs on Windows and Linux; pushes to `main` and
 manual dispatches run them on macOS as well, plus the Android lifecycle smoke.
+
+Every package carries the root `README.md`, and nuget.org renders it without a
+base URL, so its links must be absolute (`https://github.com/WilliamSmithEdward/embedio-neo/blob/main/...`).
+`scripts/check_packages.py` rejects a relative link there.
 
 The opt-in runtime close probe (`runtime-close-probe`) is in `diagnostics.yml`,
 which runs only by hand: `gh workflow run diagnostics.yml --ref <branch> -f <input>=true`.

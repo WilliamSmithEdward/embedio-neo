@@ -19,10 +19,10 @@ namespace EmbedIO.Net.Internal.WebTransport
         CreditIncreased
     }
 
-    internal delegate void WebTransportStreamHandler(WebTransportSession session, WebTransportStreamHandle stream);
+    internal delegate void WebTransportStreamHandler(WebTransportSessionCore session, WebTransportStreamHandle stream);
 
     internal delegate void WebTransportDatagramHandler(
-        WebTransportSession session,
+        WebTransportSessionCore session,
         byte[] bytes,
         int offset,
         int count
@@ -35,6 +35,10 @@ namespace EmbedIO.Net.Internal.WebTransport
         public int MaximumBufferedStreams { get; set; } = 8;
         public int MaximumBufferedDatagrams { get; set; } = 16;
         public int MaximumBufferedDatagramBytes { get; set; } = 16384;
+
+        // Active peer streams per direction when flow control is not negotiated;
+        // zero leaves them to the transport's stream limits.
+        public int MaximumActiveIncomingStreams { get; set; }
     }
 
     // One WebTransport session: the CONNECT stream's identity, the streams and
@@ -43,7 +47,7 @@ namespace EmbedIO.Net.Internal.WebTransport
     // section 5. The transport owns every QUIC stream; this class only decides
     // which streams belong here, when they must be reset and which capsules to
     // write next. Handlers run outside the session lock.
-    internal sealed class WebTransportSession
+    internal sealed class WebTransportSessionCore
     {
         private readonly object _gate = new();
         private readonly WebTransportSessionLimits _limits;
@@ -75,9 +79,11 @@ namespace EmbedIO.Net.Internal.WebTransport
         private long _blockedStreamsBidirectionalAt = -1;
         private long _blockedStreamsUnidirectionalAt = -1;
         private long _blockedDataAt = -1;
+        private int _activeIncomingBidirectional;
+        private int _activeIncomingUnidirectional;
         private bool _drainSent;
 
-        internal WebTransportSession(
+        internal WebTransportSessionCore(
             long id,
             bool flowControlEnabled,
             WebTransportSettings local,
@@ -109,6 +115,9 @@ namespace EmbedIO.Net.Internal.WebTransport
 
         public long Id { get; }
         public bool FlowControlEnabled { get; }
+
+        // The integrating transport's state for this session.
+        internal object? Owner { get; set; }
         public WebTransportSessionState State { get; private set; }
         public bool DrainRequested { get; private set; }
         public bool ClosedByPeer { get; private set; }
@@ -257,9 +266,29 @@ namespace EmbedIO.Net.Internal.WebTransport
                             }
                         }
 
-                        if (stream.Bidirectional) _incomingStreamsBidirectional++;
+                        // Without negotiated limits the peer cannot know this bound, so a
+                        // stream beyond it is refused on its own; the session goes on.
+                        else if (
+                            _limits.MaximumActiveIncomingStreams > 0
+                            && (stream.Bidirectional ? _activeIncomingBidirectional : _activeIncomingUnidirectional)
+                                >= _limits.MaximumActiveIncomingStreams
+                        )
+                        {
+                            reset = WebTransportProtocol.H3RequestRejected;
+                            break;
+                        }
 
-                        else _incomingStreamsUnidirectional++;
+                        if (stream.Bidirectional)
+                        {
+                            _incomingStreamsBidirectional++;
+                            _activeIncomingBidirectional++;
+                        }
+
+                        else
+                        {
+                            _incomingStreamsUnidirectional++;
+                            _activeIncomingUnidirectional++;
+                        }
 
                         _streams[stream.Id] = stream;
                         break;
@@ -327,6 +356,20 @@ namespace EmbedIO.Net.Internal.WebTransport
                 else _outgoingStreamsUnidirectional++;
 
                 return true;
+            }
+        }
+
+        // The transport could not open a stream TryOpenOutgoingStream counted; return its credit.
+        internal void ReleaseOutgoingStream(bool bidirectional)
+        {
+            lock (_gate)
+            {
+                if (bidirectional)
+                {
+                    if (_outgoingStreamsBidirectional > 0) _outgoingStreamsBidirectional--;
+                }
+
+                else if (_outgoingStreamsUnidirectional > 0) _outgoingStreamsUnidirectional--;
             }
         }
 
@@ -423,6 +466,45 @@ namespace EmbedIO.Net.Internal.WebTransport
             }
         }
 
+        // Reserves as much of requested as the peer's limit allows, so a write larger
+        // than the peer's window can proceed piece by piece. Returns 0 after queuing
+        // one WT_DATA_BLOCKED for the current limit, or -1 once the session is closed.
+        internal long ReserveOutgoingData(long requested)
+        {
+            if (requested <= 0) throw new ArgumentOutOfRangeException(nameof(requested));
+
+            lock (_gate)
+            {
+                if (State == WebTransportSessionState.Closed) return -1;
+
+                var granted = requested;
+
+                if (FlowControlEnabled)
+                {
+                    granted = Math.Min(requested, Math.Max(0, _peerMaxData - _outgoingData));
+
+                    if (granted == 0)
+                    {
+                        if (_blockedDataAt != _peerMaxData)
+                        {
+                            _blockedDataAt = _peerMaxData;
+                            _outgoingCapsules.Enqueue(
+                                WebTransportCapsuleCodec.EncodeLimit(
+                                    WebTransportProtocol.DataBlockedCapsule,
+                                    _peerMaxData
+                                )
+                            );
+                        }
+
+                        return 0;
+                    }
+                }
+
+                _outgoingData += granted;
+                return granted;
+            }
+        }
+
         // A stream ended in either direction. Closed incoming streams still count
         // toward the cumulative limit, so new credit is advertised as they finish.
         internal void StreamFinished(WebTransportStreamHandle stream)
@@ -431,12 +513,17 @@ namespace EmbedIO.Net.Internal.WebTransport
 
             lock (_gate)
             {
-                if (!_streams.Remove(stream.Id) || !FlowControlEnabled || State == WebTransportSessionState.Closed)
-                    return;
+                if (!_streams.Remove(stream.Id)) return;
 
                 var incoming = (stream.Id & 1) == 0;
 
                 if (!incoming) return;
+
+                if (stream.Bidirectional) _activeIncomingBidirectional--;
+
+                else _activeIncomingUnidirectional--;
+
+                if (!FlowControlEnabled || State == WebTransportSessionState.Closed) return;
 
                 if (stream.Bidirectional)
                 {

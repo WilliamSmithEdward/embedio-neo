@@ -172,6 +172,11 @@ namespace EmbedIO.Quic
                     return 0;
                 }
 
+                if (arguments is ["serve-webtransport", var webTransportCertificate, var webTransportKey])
+                    return await ProductionWebTransportHost
+                        .RunAsync(webTransportCertificate, webTransportKey)
+                        .ConfigureAwait(false);
+
                 if (
                     arguments is [
                         "serve-many" or "serve-many-h3" or "serve-many-async" or "serve-many-production-h3",
@@ -220,7 +225,7 @@ namespace EmbedIO.Quic
                     ).ConfigureAwait(false);
 
                 Console.Error.WriteLine(
-                    "Usage: self-test | certificate <output-directory> | serve[-h3] <absolute-openssl-directory> <certificate.pem> <key.pem>"
+                    "Usage: self-test | certificate <output-directory> | serve[-h3] <absolute-openssl-directory> <certificate.pem> <key.pem> | serve-webtransport <certificate.pem> <key.pem>"
                 );
                 return 2;
             }

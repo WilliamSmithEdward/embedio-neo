@@ -13,6 +13,9 @@ namespace EmbedIO.Net.Internal.WebTransport
     {
         public bool Datagrams { get; private set; }
         public bool Enabled { get; private set; }
+
+        // The draft-02 enabling setting current browsers send instead of Enabled.
+        public bool Draft02Enabled { get; private set; }
         public long InitialMaxData { get; private set; }
         public long InitialMaxStreamsUnidirectional { get; private set; }
         public long InitialMaxStreamsBidirectional { get; private set; }
@@ -76,6 +79,10 @@ namespace EmbedIO.Net.Internal.WebTransport
                         settings.Enabled = Http3PeerSettings.Boolean(value);
                         break;
 
+                    case WebTransportProtocol.SettingEnableWebTransportDraft02:
+                        settings.Draft02Enabled = Http3PeerSettings.Boolean(value);
+                        break;
+
                     case WebTransportProtocol.SettingInitialMaxData:
                         settings.InitialMaxData = value;
                         break;
@@ -105,12 +112,16 @@ namespace EmbedIO.Net.Internal.WebTransport
         // The extension's own identifier/value pairs for the connection's SETTINGS
         // frame. The connection already sends SETTINGS_ENABLE_CONNECT_PROTOCOL and
         // owns SETTINGS_H3_DATAGRAM; zero-valued limits are omitted as defaults.
-        internal byte[] EncodeLocal()
+        // With draft02, the draft-02 enabling setting is sent as well.
+        internal byte[] EncodeLocal(bool draft02 = false)
         {
-            var bytes = new byte[64];
+            var bytes = new byte[80];
             var count = 0;
 
             if (Enabled) count += Pair(bytes, count, WebTransportProtocol.SettingEnabled, 1);
+
+            if (Enabled && draft02)
+                count += Pair(bytes, count, WebTransportProtocol.SettingEnableWebTransportDraft02, 1);
 
             if (InitialMaxData != 0)
                 count += Pair(bytes, count, WebTransportProtocol.SettingInitialMaxData, InitialMaxData);

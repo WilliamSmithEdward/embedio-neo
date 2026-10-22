@@ -14,6 +14,13 @@ namespace EmbedIO.Net.Internal.WebTransport
         // Section 3.2 and 9.1: the extended CONNECT :protocol value and upgrade token.
         internal const string ProtocolToken = "webtransport-h3";
 
+        // draft-ietf-webtrans-http3-02, which current browsers send: its :protocol value,
+        // its enabling setting, and the response header naming the draft the server speaks.
+        internal const string Draft02ProtocolToken = "webtransport";
+        internal const long SettingEnableWebTransportDraft02 = 0x2b603742;
+        internal const string Draft02ResponseHeader = "sec-webtransport-http3-draft";
+        internal const string Draft02ResponseValue = "draft02";
+
         // Section 9.2 settings identifiers (all default to 0).
         internal const long SettingEnabled = 0x2c7cf000;
         internal const long SettingInitialMaxData = 0x2b61;
@@ -53,6 +60,7 @@ namespace EmbedIO.Net.Internal.WebTransport
 
         // RFC 9114 section 8.1 codes this mapping relies on.
         internal const long H3ExcessiveLoad = 0x107;
+        internal const long H3RequestRejected = 0x10b;
         internal const long H3IdError = 0x108;
         internal const long H3SettingsError = 0x109;
         internal const long H3MessageError = 0x10e;

@@ -167,7 +167,7 @@ jobs:
         shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7428'
+          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7457'
           # Scheduling allowance; case deadlines and discovery stay enforced.
           EMBEDIO_REGRESSION_TIMEOUT: '12m'
         run: |
@@ -538,10 +538,72 @@ jobs:
     with:
       reuse-native-artifacts: true
 
+  # Public WebTransport sessions against the independent quic-go peer, over the
+  # Linux TLS runtime this run built. The .NET QUIC client cannot open sessions.
+  webtransport-interop:
+    name: WebTransport interop (linux-x64)
+    needs: [changes, quic-native]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: quic-native-linux-x64
+          path: TestResults/quic-test-native
+      - name: Verify the source-build test TLS runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
+          python3 native/EmbedIO.Quic.Tls/stage.py asset --output TestResults/quic-test-native --rids linux-x64
+          printf 'EmbedIOQuicNativeTlsDirectory=%s/TestResults/quic-test-native\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+      - name: Build the development host
+        run: |
+          dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
+          dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore
+      - name: Build the independent quic-go peer
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The peer's one-line Dockerfile pins the Go image; go.sum verifies the modules.
+          docker build --quiet --tag embedio-webtransport-go test/EmbedIO.Quic/peer
+          mkdir -p TestResults/webtransport-peer
+          docker run --rm --user "$(id -u):$(id -g)" --env HOME=/tmp --env GOCACHE=/tmp/go-cache \
+            --env GOPATH=/tmp/go --env GOFLAGS=-mod=readonly --env CGO_ENABLED=0 \
+            --mount "type=bind,source=$PWD/test/EmbedIO.Quic/peer,target=/source,readonly" \
+            --mount "type=bind,source=$PWD/TestResults/webtransport-peer,target=/out" \
+            --workdir /source embedio-webtransport-go sh -c 'go mod verify && go build -trimpath -o /out/webtransport-peer .'
+      - name: Verify WebTransport sessions against the peer
+        run: >-
+          python3 test/EmbedIO.Quic/verify_webtransport_production.py --dotnet "$(command -v dotnet)"
+          --assembly test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll
+          --peer TestResults/webtransport-peer/webtransport-peer --output TestResults/webtransport-production
+      # The throwaway test key stays out of the retained logs.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: webtransport-interop
+          path: |
+            TestResults/webtransport-production/
+            !TestResults/webtransport-production/key.pem
+          if-no-files-found: warn
+
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, test, compatibility, static-analysis, build, package-malware, mac-catalyst, android, maui-https, aot-smoke, quic-native, quic-portable]
+    needs: [changes, test, compatibility, static-analysis, build, package-malware, mac-catalyst, android, maui-https, aot-smoke, quic-native, quic-portable, webtransport-interop]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -559,7 +621,7 @@ jobs:
           # skip, a failure or a cancellation fails the gate.
           docs_only = results['changes']['result'] == 'success' and os.environ['CODE_CHANGED'] == 'false'
           pull_request = os.environ['EVENT_NAME'] == 'pull_request'
-          gated = {'test', 'compatibility', 'mac-catalyst', 'android', 'maui-https', 'aot-smoke', 'quic-native', 'quic-portable', 'package-malware'}
+          gated = {'test', 'compatibility', 'mac-catalyst', 'android', 'maui-https', 'aot-smoke', 'quic-native', 'quic-portable', 'package-malware', 'webtransport-interop'}
           for name, job in results.items():
               optional = (docs_only and name in gated) or (pull_request and name == 'android')
               expected = 'skipped' if optional else 'success'

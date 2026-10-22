@@ -19,21 +19,21 @@ namespace EmbedIO.Quic
             internal int Accounted;
             internal bool Fin;
             internal bool Finished;
-            internal WebTransportSession? Session;
+            internal WebTransportSessionCore? Session;
             internal WebTransportStreamHandle? Handle;
             internal ulong? OutputId;
         }
 
         private readonly Dictionary<ulong, Input> _inputs = [];
         private readonly Dictionary<ulong, (
-            WebTransportSession Session,
+            WebTransportSessionCore Session,
             WebTransportStreamHandle Handle
         )> _outputs = [];
 
         internal int RetainedInputs => _inputs.Count;
         internal int RetainedOutputs => _outputs.Count;
 
-        private readonly Dictionary<long, WebTransportSession> _sessions = [];
+        private readonly Dictionary<long, WebTransportSessionCore> _sessions = [];
         private readonly Dictionary<long, Input> _capsules = [];
         private readonly QpackDecoderTable _qpack = new(0);
         private readonly Action<ulong, byte[], bool> _write;
@@ -350,7 +350,7 @@ namespace EmbedIO.Quic
                 return;
             }
 
-            WebTransportSession? session = null;
+            WebTransportSessionCore? session = null;
             var admission = authorized
                 ? registry.TryCreateSession((long)id, out session)
                 : WebTransportAdmission.NotNegotiated;
@@ -373,7 +373,7 @@ namespace EmbedIO.Quic
             }
         }
 
-        private void Attach(WebTransportSession session, WebTransportStreamHandle handle)
+        private void Attach(WebTransportSessionCore session, WebTransportStreamHandle handle)
         {
             if (!_inputs.TryGetValue((ulong)handle.Id, out var input))
             {
@@ -460,7 +460,7 @@ namespace EmbedIO.Quic
             _registry?.RouteDatagram(session, payload, offset, payload.Length - offset);
         }
 
-        private void Datagram(WebTransportSession session, byte[] bytes, int offset, int count)
+        private void Datagram(WebTransportSessionCore session, byte[] bytes, int offset, int count)
         {
             DatagramsDelivered++;
             using var packet = new MemoryStream();
@@ -469,7 +469,7 @@ namespace EmbedIO.Quic
             _datagram(packet.ToArray());
         }
 
-        private void Capsules(WebTransportSession session, byte[] payload)
+        private void Capsules(WebTransportSessionCore session, byte[] payload)
         {
             if (!_capsules.TryGetValue(session.Id, out var input)) _capsules.Add(session.Id, input = new Input());
 
@@ -522,7 +522,7 @@ namespace EmbedIO.Quic
             }
         }
 
-        private void DrainCapsules(WebTransportSession session)
+        private void DrainCapsules(WebTransportSessionCore session)
         {
             while (session.TryDequeueOutgoingCapsule(out var capsule))
                 _write((ulong)session.Id, Frame(0, capsule), false);

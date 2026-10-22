@@ -58,6 +58,9 @@ namespace EmbedIO.Net.Internal
 
         // Records TCP and QUIC connections. Set before Start.
         internal EmbedIO.Internal.ServerTelemetry? Telemetry { get; set; }
+
+        // WebTransport settings for the QUIC transport, or null to serve none. Set before Start.
+        internal WebTransportOptions? WebTransport { get; set; }
         public string Name => "EmbedIO TCP and QUIC listener";
 
         public bool IsListening
@@ -147,6 +150,7 @@ namespace EmbedIO.Net.Internal
                     DeferContinue,
                     ConnectionPolicy,
                     Telemetry,
+                    WebTransport,
                     _bodyPolicy
                 );
 
@@ -309,6 +313,7 @@ namespace EmbedIO.Net.Internal
                 bool deferContinue,
                 TcpConnectionPolicy connections,
                 EmbedIO.Internal.ServerTelemetry? telemetry,
+                WebTransportOptions? webTransport,
                 RequestPolicyResolver? bodyPolicy
             )
             {
@@ -320,6 +325,7 @@ namespace EmbedIO.Net.Internal
                 quic.TlsPolicy = policy;
                 tcp.Telemetry = telemetry;
                 quic.Telemetry = telemetry;
+                quic.WebTransport = webTransport;
                 quic.DeferContinue = deferContinue;
                 var session = new Session(tcp, quic);
 

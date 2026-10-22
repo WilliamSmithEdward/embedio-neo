@@ -114,6 +114,8 @@
       href: guides/openapi.md
     - name: HTTP/3 listener (Neo v2)
       href: guides/http3.md
+    - name: WebTransport over HTTP/3 (Neo v2)
+      href: guides/webtransport.md
     - name: Command-line server
       href: guides/cli.md
     - name: Static folders

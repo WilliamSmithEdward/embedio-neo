@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/quic-go/qpack"
 	quic "github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/qlog"
 	"io"
 	"net"
 	"os"
@@ -80,6 +81,10 @@ func write(w io.Writer, b []byte) error {
 	}
 	return err
 }
+// requestAuthority is the :authority of session requests; a server on a
+// non-default port expects that port in it.
+var requestAuthority = "localhost"
+
 func connectSession(ctx context.Context, conn *quic.Conn, token, origin string) (*quic.Stream, string, error) {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
@@ -87,7 +92,7 @@ func connectSession(ctx context.Context, conn *quic.Conn, token, origin string) 
 	}
 	var block bytes.Buffer
 	enc := qpack.NewEncoder(&block)
-	for _, h := range []qpack.HeaderField{{Name: ":method", Value: "CONNECT"}, {Name: ":protocol", Value: "webtransport-h3"}, {Name: ":scheme", Value: "https"}, {Name: ":authority", Value: "localhost"}, {Name: ":path", Value: "/echo"}, {Name: "origin", Value: origin}, {Name: "authorization", Value: "Bearer " + token}} {
+	for _, h := range []qpack.HeaderField{{Name: ":method", Value: "CONNECT"}, {Name: ":protocol", Value: "webtransport-h3"}, {Name: ":scheme", Value: "https"}, {Name: ":authority", Value: requestAuthority}, {Name: ":path", Value: "/echo"}, {Name: "origin", Value: origin}, {Name: "authorization", Value: "Bearer " + token}} {
 		if err = enc.WriteField(h); err != nil {
 			return nil, "", err
 		}
@@ -125,7 +130,9 @@ func run() error {
 	port := flag.Int("port", 0, "loopback port")
 	ca := flag.String("ca", "", "test CA")
 	mode := flag.String("mode", "echo", "case")
+	authority := flag.String("authority", "localhost", ":authority of session requests")
 	flag.Parse()
+	requestAuthority = *authority
 	pem, err := os.ReadFile(*ca)
 	if err != nil {
 		return err
@@ -141,6 +148,10 @@ func run() error {
 	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	config := &quic.Config{EnableDatagrams: true, EnableStreamResetPartialDelivery: *mode != "missing-reset", MaxIncomingStreams: 16, MaxIncomingUniStreams: 16}
+	// Diagnostics: qlog traces of the peer's connection, written to QLOGDIR when it is set.
+	if os.Getenv("QLOGDIR") != "" {
+		config.Tracer = qlog.DefaultConnectionTracer
+	}
 	if *mode == "idle" {
 		config.MaxIdleTimeout = 500 * time.Millisecond
 	}
@@ -164,6 +175,8 @@ func run() error {
 	}
 	ready := make(chan error, 1)
 	unis := make(chan *quic.ReceiveStream, 8)
+	// Written before the successful ready send, which publishes it to run.
+	var serverSettings map[uint64]uint64
 	go func() {
 		for {
 			s, e := conn.AcceptUniStream(ctx)
@@ -208,6 +221,7 @@ func run() error {
 						ready <- errors.New("settings not negotiated")
 						return
 					}
+					serverSettings = values
 					ready <- nil
 				} else if t == 0x54 {
 					select {
@@ -307,10 +321,10 @@ func run() error {
 		if *mode == "endurance" {
 			size = 4194304
 		}
-		return sustained(ctx, conn, session, unis, size)
+		return sustained(ctx, conn, session, unis, size, serverSettings[0x2b61])
 	}
 	if *mode == "stream-cycle" {
-		return cycles(ctx, conn, session, unis)
+		return cycles(ctx, conn, session, unis, serverSettings)
 	}
 	if *mode == "outbound-reset" {
 		upload, e := conn.OpenUniStreamSync(ctx)
@@ -474,9 +488,10 @@ func run() error {
 	}
 	return nil
 }
-func sustained(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis <-chan *quic.ReceiveStream, streamSize int) error {
+// initialData is the server's advertised initial session data limit.
+func sustained(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis <-chan *quic.ReceiveStream, streamSize int, initialData uint64) error {
 	const chunkSize = 16384
-	maximum := uint64(65536)
+	maximum := initialData
 	sent := uint64(0)
 	consumed := uint64(0)
 	for _, uni := range []bool{false, true} {
@@ -599,8 +614,9 @@ func sustained(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis 
 	return err
 }
 
-func cycles(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis <-chan *quic.ReceiveStream) error {
-	limits := map[uint64]uint64{0x190B4D3D: 65536, 0x190B4D3F: 8, 0x190B4D40: 8}
+// settings holds the server's advertised initial session limits.
+func cycles(ctx context.Context, conn *quic.Conn, session *quic.Stream, unis <-chan *quic.ReceiveStream, settings map[uint64]uint64) error {
+	limits := map[uint64]uint64{0x190B4D3D: settings[0x2b61], 0x190B4D3F: settings[0x2b65], 0x190B4D40: settings[0x2b64]}
 	var sent, consumed uint64
 	for _, uni := range []bool{false, true} {
 		kind := uint64(0x190B4D3F)

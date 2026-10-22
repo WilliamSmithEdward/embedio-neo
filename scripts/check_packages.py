@@ -1,9 +1,18 @@
 """Check local packages, including the licenses shipped to consumers."""
 
 from pathlib import Path
+import re
 import sys
 import argparse
 from zipfile import ZipFile
+
+
+def relative_links(markdown):
+    """Link targets nuget.org cannot follow: it renders a package README without a base URL."""
+    targets = re.findall(r"\]\(\s*<?([^)\s>]+)", markdown)
+    targets += re.findall(r"^\s*\[[^\]]+\]:\s*<?([^\s>]+)", markdown, re.MULTILINE)
+    targets += re.findall(r"""\b(?:href|src)\s*=\s*["']([^"']+)""", markdown, re.IGNORECASE)
+    return [target for target in targets if not re.match(r"(?:https?:|mailto:|#)", target, re.IGNORECASE)]
 
 
 def main(directory, native_staging=None):
@@ -13,6 +22,9 @@ def main(directory, native_staging=None):
         raise ValueError(f"Expected {expected_count} packages, found {len(packages)}")
     root = Path(__file__).resolve().parents[1]
     expected_readme = (root / "README.md").read_bytes()
+    relative = relative_links(expected_readme.decode("utf-8-sig"))
+    if relative:
+        raise ValueError(f"Every package carries README.md; use absolute links instead of: {relative}")
     expected_license = (root / "LICENSE").read_bytes()
     identities = set()
     for package in packages:

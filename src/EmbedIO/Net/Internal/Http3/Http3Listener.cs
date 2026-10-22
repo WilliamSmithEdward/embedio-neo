@@ -69,6 +69,9 @@ namespace EmbedIO.Net.Internal.Http3
         // Records QUIC connections. Set before Start.
         internal EmbedIO.Internal.ServerTelemetry? Telemetry { get; set; }
 
+        // WebTransport settings, or null to serve none. Set before Start.
+        internal WebTransportOptions? WebTransport { get; set; }
+
         public bool IsListening
         {
             get
@@ -132,6 +135,7 @@ namespace EmbedIO.Net.Internal.Http3
                     TlsPolicy,
                     DeferContinue,
                     Telemetry,
+                    WebTransport,
                     _bodyPolicy,
                     _dispatcher,
                     _bind
@@ -296,6 +300,7 @@ namespace EmbedIO.Net.Internal.Http3
             private bool _deferContinue;
             private RequestPolicyResolver? _bodyPolicy;
             private EmbedIO.Internal.ServerTelemetry? _telemetry;
+            private WebTransportOptions? _webTransport;
             private Func<IHttpContextImpl, Task>? _dispatcher;
 
             private Session() { }
@@ -309,6 +314,7 @@ namespace EmbedIO.Net.Internal.Http3
                 ServerTlsPolicy? policy,
                 bool deferContinue,
                 EmbedIO.Internal.ServerTelemetry? telemetry,
+                WebTransportOptions? webTransport,
                 RequestPolicyResolver? bodyPolicy,
                 Func<IHttpContextImpl, Task>? dispatcher,
                 Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> bind
@@ -318,6 +324,7 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     _deferContinue = deferContinue,
                     _telemetry = telemetry,
+                    _webTransport = webTransport,
                     _bodyPolicy = bodyPolicy,
                     _dispatcher = dispatcher
                 };
@@ -520,7 +527,8 @@ namespace EmbedIO.Net.Internal.Http3
                                 clientCertificate
                             ),
                             _stop.Token,
-                            _drain.Token
+                            _drain.Token,
+                            _webTransport
                         )
                         .ConfigureAwait(false);
                 }
