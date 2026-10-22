@@ -37,7 +37,7 @@ namespace EmbedIO.Quic
         {
             var value = Integer();
 
-            if (value > (ulong)maximum) throw new InvalidDataException("QUIC length exceeds the experiment limit.");
+            if (value > (ulong)maximum) throw new InvalidDataException("QUIC length exceeds the configured limit.");
 
             return (int)value;
         }
@@ -87,7 +87,7 @@ namespace EmbedIO.Quic
         }
     }
 
-    // Fixed bounds are deliberate for this loopback-only feasibility probe.
+    // Fixed bounds limit CRYPTO reassembly independently of packet lifetime.
     // Retaining consumed bytes lets overlapping retransmissions be checked exactly.
     internal sealed class Reassembly(int capacity)
     {

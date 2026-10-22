@@ -169,8 +169,10 @@ namespace EmbedIO.Quic
         {
             RefillPacing(now);
             var largest = ranges[0].High;
+            var descending = ranges.Count > 4 && Descending(ranges);
+            bool Matches(Sent packet) => packet.Level == level && Contains(ranges, packet.Number, descending);
             var late = _retired.Values
-                .Where(p => p.Level == level && ranges.Any(r => p.Number >= r.Low && p.Number <= r.High))
+                .Where(Matches)
                 .ToArray();
 
             foreach (var packet in late)
@@ -184,7 +186,7 @@ namespace EmbedIO.Quic
             }
 
             var acknowledged = _sent.Values
-                .Where(p => p.Level == level && ranges.Any(r => p.Number >= r.Low && p.Number <= r.High))
+                .Where(Matches)
                 .ToArray();
             _largestAcknowledged[level] = Math.Max(_largestAcknowledged[level] ?? 0, largest);
             var sample = acknowledged.FirstOrDefault(p => p.Number == largest && p.Epoch == _epoch);
@@ -256,6 +258,54 @@ namespace EmbedIO.Quic
             }
 
             DetectLost(now);
+        }
+
+        private static bool Descending(IReadOnlyList<(ulong Low, ulong High)> ranges)
+        {
+            var previous = ranges[0].Low;
+
+            for (var index = 1; index < ranges.Count; index++)
+            {
+                var (low, high) = ranges[index];
+
+                if (high >= previous) return false;
+
+                previous = low;
+            }
+
+            return true;
+        }
+
+        private static bool Contains(IReadOnlyList<(ulong Low, ulong High)> ranges, ulong number, bool descending)
+        {
+            if (!descending)
+            {
+                for (var index = 0; index < ranges.Count; index++)
+                {
+                    var (low, high) = ranges[index];
+
+                    if (number >= low && number <= high) return true;
+                }
+
+                return false;
+            }
+
+            var first = 0;
+            var last = ranges.Count - 1;
+
+            while (first <= last)
+            {
+                var middle = first + (last - first) / 2;
+                var (low, high) = ranges[middle];
+
+                if (number > high) last = middle - 1;
+
+                else if (number < low) first = middle + 1;
+
+                else return true;
+            }
+
+            return false;
         }
 
         private double LossDelay => Math.Max(1, 1.125 * Math.Max(_latestRtt, _smoothedRtt));

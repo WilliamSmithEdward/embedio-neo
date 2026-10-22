@@ -395,14 +395,18 @@ policies now have direct controller, chain, callback and revocation checks. All 
 packet cipher profiles retain their hash and header key across key updates, with
 connection-wide authentication-failure limits. Resumption and supported-platform
 TLS/certificate parity remain pending. The standalone
-core and development host remain nonpackable. Existing package dependency groups
-and .NET Standard compilation are unchanged; the public listener still selects
-its existing providers. The fuzz harness exercises the library's engine source. It includes
+core and development host remain nonpackable. .NET Standard compilation remains
+unchanged. In this unmerged branch, ordinary .NET 10 HTTP/3 and combined listeners
+select EmbedIO.Quic and its runtime packages carry the owned Unix TLS library.
+The fuzz harness exercises the library's engine source. It includes
 loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
 current reliable-reset framing, reusable receive windows and explicit connection
 closing/draining. Receive packet history advances with bounded ACK ranges and a
 permanent duplicate-rejection floor. Retired send records and acknowledgement
-history also compact within fixed bounds. Per-key encryption budgets (conservatively capped at the AES-GCM limit for
+history also compact within fixed bounds. Incoming ACK frames accept range counts
+that fit the datagram and sent-packet bounds; ordered ranges use indexed recovery
+lookup. Malformed ranges use FRAME_ENCODING_ERROR, while acknowledgements for
+unsent packets use PROTOCOL_VIOLATION. Per-key encryption budgets (conservatively capped at the AES-GCM limit for
 all profiles) and ACK-confirmed local/peer key generations replace the cumulative send-packet quota.
 Completed stream records retire after receive/application completion and any required
 send acknowledgement; cumulative stream credit replenishes within resident bounds.

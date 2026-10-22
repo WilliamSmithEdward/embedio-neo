@@ -269,6 +269,7 @@ namespace EmbedIO.Quic
             TlsHelloTests.Mutate(data);
             ConnectionCoreTests.Mutate(data);
             PacketNumberWindowTests.Mutate(data);
+            AckRangeTests.Mutate(data);
 
             if (PacketHeader.TryDestination(data, out var destination, out var initial))
             {
@@ -321,7 +322,7 @@ namespace EmbedIO.Quic
             try
             {
                 var ranges = AckRanges.Read(ref reader, 4096, 3, out var delay);
-                Require(ranges.Count is > 0 and <= 129 && double.IsFinite(delay) && delay >= 0, "ack-bounds");
+                Require(ranges.Count is > 0 and <= 32768 && double.IsFinite(delay) && delay >= 0, "ack-bounds");
                 ulong previous = 4096;
 
                 foreach (var (low, high) in ranges)
@@ -331,7 +332,7 @@ namespace EmbedIO.Quic
                 }
             }
 
-            catch (InvalidDataException) { }
+            catch (TransportException error) when (error.ErrorCode is 0x07 or 0x0a) { }
         }
     }
 

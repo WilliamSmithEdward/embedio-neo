@@ -29,7 +29,7 @@ copying from those projects.
 | Windows TLS credentials | Original managed SSPI binding, provider-neutral TLS state and non-exportable CNG RSA/ECDSA test credentials. Native credential/context/buffer ownership, bounded ClientHello parsing and once-only traffic-secret installation are exercised before production integration. The development cipher profile remains AES-128-GCM/SHA-256. |
 | TLS and packet feasibility | Original wire integers, Initial secrets, packet/header protection, packet-number reconstruction, fixed CRYPTO reassembly and public OpenSSL third-party QUIC callbacks. RFC vectors and aioquic establish the first encrypted stream exchange. |
 | Key generations | Current, previous and next read keys share header protection; ACK-confirmed local updates track full generations, enforce encryption/integrity usage limits and retain reordering boundaries. Independent command/packet oracles and native wire error checks complement the repeated-update peer case. |
-| Receive packet history | A sliding floor and at most 128 ACK ranges retain a 4096-number window. Retired packet numbers are never processed again; bounded history can advance without a connection-wide receive packet quota. |
+| Receive packet history | A sliding floor and at most 128 locally generated ACK ranges retain a 4096-number window. Incoming ACK range counts are bounded by the datagram bytes rather than the local generation limit. Retired packet numbers are never processed again; bounded history can advance without a connection-wide receive packet quota. |
 | Recovery and congestion | Bounded retired-packet metadata and acknowledgement barriers permit long-running recovery histories. Physical packet records retain logical delivery ownership through retransmission and late ACKs. Monotonic-time tests exercise packet/time loss, RTT, PTO probes, pacing, NewReno, application-limited ACKs and persistent congestion. |
 | HTTP/3 and WebTransport bridge | Existing H3/QPACK/capsule/session code is linked into the prototype. The bridge handles SETTINGS, authorized CONNECT, exact Origin admission, bidi/uni streams, datagrams, independent sessions and reliable partial resets. quic-go provides a separate wire peer. |
 | Sustained transfers | A fixed sliding receive window retains final-size history and compacts consumed H3 input. MAX_DATA/MAX_STREAM_DATA track consumption, including reset gaps after their reliable prefix. Independent cases transfer 512 KiB, with small peer windows and loss. A separate bounded endurance case transfers 8 MiB over two streams with frequent local key updates. |
@@ -66,7 +66,7 @@ corresponding host/test files.
 
 | Surface | Files | Test approach |
 | --- | --- | --- |
-| Bytes and packet boundaries | `Wire.cs`, `PacketHeader.cs`, `AckRanges.cs`, `PacketNumberWindow.cs` | Independent integer decoding, canonical sizes, header bounds, valid token construction, malformed/descending ACK ranges and independent packet-history set models. |
+| Bytes and packet boundaries | `Wire.cs`, `PacketHeader.cs`, `AckRanges.cs`, `AckRangeTests.cs`, `PacketNumberWindow.cs` | Independent integer decoding, canonical sizes, header bounds, valid token construction, full-packet incoming ACK range counts, malformed/descending ACK ranges, bounded recovery lookup and independent packet-history set models. |
 | Packet protection | `PacketKeys.cs`, `KeyUpdateState.cs`, `KeyUpdateTests.cs` | RFC vectors, encrypt/decrypt identity, tamper rejection, per-key encryption limits, packet-number truncation, repeated key generations, ACK/cooldown policy models and retained header protection. |
 | Receive state | `StreamReassembly.cs`, `Wire.cs` | Absolute-position dictionary oracle against the sliding ring; reversed/duplicated CRYPTO fragments; final-size, window, overlap and once-only delivery checks. |
 | Recovery/congestion | `Recovery.cs`, `RecoveryRetentionTests.cs` | Deterministic algorithm cases, history compaction/late-ACK models, logical/physical accounting, duplicate ACKs, discard, loss/PTO/retransmit traces, resource bounds and independent connection ownership. |
@@ -2162,3 +2162,39 @@ invocation produced two, so the control verifies bounded retained observations
 without depending on CLR rethrow notification counts. The original records remain
 retained. Hosted exact-source validation and the actual upload correction remain
 outstanding.
+
+## Incoming ACK range interoperability
+
+RFC 9000's ACK Range Count is a variable-length field. The local packet-history
+sender limits its own generated ACKs to 128 ranges, but that limit does not govern
+what another endpoint may send. A controlled 265-byte wire frame with 129
+additional, descending ACK ranges failed at the former incoming count limit;
+the same probe's 127 and 128 additional ranges passed. Larger valid examples
+with 255 and 511 additional ranges failed for the same reason.
+
+Incoming ACK parsing now bounds the count by bytes available for at least two
+varints per additional range, and by the datagram size. It rejects impossible
+counts relative to the largest acknowledged number before building the range
+list. The parser maps malformed ranges to QUIC FRAME_ENCODING_ERROR and an ACK
+for an unsent packet to PROTOCOL_VIOLATION. Recovery searches descending ranges
+by index after one ordering check; direct internal callers with unordered lists
+retain the previous membership behavior. The one-range path remains direct.
+
+The new deterministic cases cover counts from zero through 32,700, exact
+descending packet numbers, truncation, underflow, error codes and cursor
+consumption. A 4,096-sent-packet model uses an instrumented 32,701-range list
+to assert a bound on range reads and the resulting delivery ownership, without
+a wall-clock threshold. The existing packet/header fuzz target now also builds
+structured valid ACKs, including counts above 128, from each selected input
+and checks their independently calculated ranges. The initial model self-test
+passed on Windows; final source, platform and performance acceptance remain
+outstanding.
+
+At source `40152437`, before this ACK change, hosted CI passed the Windows and
+Linux regression suites, static analysis, all six native builds, seven-package
+assembly and malware checks, and the real HTTP/3 state-machine fuzz job. Fuzz,
+Security, Malware, AFL and libFuzzer workflows all completed successfully. The
+macOS suite reported 7,604 cases with 7,570 successes, 24 skips and ten
+unreachable-route failures, so the CI aggregate remained red. This is still a
+draft PR; the hosted outcome does not establish the cause of those macOS errors
+or resolve the earlier upload error.

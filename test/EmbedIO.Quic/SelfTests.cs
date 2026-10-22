@@ -105,6 +105,7 @@ namespace EmbedIO.Quic
             AsyncStreamTests.Run();
             StreamApplicationTests.Run();
             PacketNumberWindowTests.Run();
+            AckRangeTests.Run();
             RecoveryRetentionTests.Run();
             RecoveryTests.Run();
             BridgeTests.Run();
