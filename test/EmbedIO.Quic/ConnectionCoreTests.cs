@@ -21,6 +21,7 @@ namespace EmbedIO.Quic
             DisposedOwnerRejectsWork();
             ConfiguredStreamLimit();
             FailedCleanupReleasesSiblings();
+            OutboundQueuePressure();
             AuthenticationLimits();
 
             foreach (var input in new byte[][]
@@ -32,6 +33,62 @@ namespace EmbedIO.Quic
                 [8, 0],
                 [0x1c, 0, 0, 0]
             }) Mutate(input);
+        }
+
+        private static void OutboundQueuePressure() => QueuePressure(1024, 0, true);
+
+        internal static bool MutateQueue(ReadOnlySpan<byte> data)
+        {
+            if (data.Length < 2 || (data[0] & 15) != 0) return false;
+
+            QueuePressure(600 + data[1] * 4, data[0], false);
+            return true;
+        }
+
+        private static void QueuePressure(int count, byte seed, bool finish)
+        {
+            using var keys = PacketKeys.Initial(Original, false);
+            var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
+            using var connection = new QuicConnection(
+                first,
+                static _ => new ModelTls(true),
+                static (operations, _) => new StreamEchoApplication(operations)
+            );
+            connection.Receive(first, 0);
+            Require(connection.Established && connection.Phase == ConnectionPhase.Active, "queue-pressure-fixture");
+
+            var deliveries = new List<Delivery>();
+            var recovery = new Recovery(connection.QueueRepeat) { HandshakeConfirmed = true };
+
+            for (var index = 0; index < count; index++)
+            {
+                var delivery = new Delivery(2, Wire.Frame(1));
+                deliveries.Add(delivery);
+                recovery.SentPacket(2, (ulong)index, 1000, 0, delivery, false);
+            }
+
+            var largest = (ulong)(count - 1);
+            recovery.Acknowledge(2, [(largest, largest)], 0, 1);
+            Require(connection.DeferredDeliveries > 0, "loss-burst-defers-repeats-without-closing");
+            var probe = new Delivery(2, Wire.Frame(1));
+            connection.QueueRepeat(probe, true);
+
+            var lastLate = finish ? largest : (ulong)(count / 2 + seed % 4);
+            recovery.Acknowledge(2, [(0UL, lastLate)], 0, 2);
+
+            for (var turn = 1; turn <= 4; turn++) connection.PumpApplications(turn);
+
+            Require(connection.Phase == ConnectionPhase.Active && probe.Transmissions > 0, "probe-stays-live");
+
+            if (finish)
+                Require(connection.DeferredDeliveries == 0, "deferred-repeats-retire");
+
+            else
+                Require(
+                    connection.DeferredDeliveries <= Recovery.MaximumActivePackets + 512
+                        && deliveries.All(item => item.Acknowledged || item.Queued || item.Transmissions >= 2),
+                    "queue-pressure-retains-unacknowledged-deliveries"
+                );
         }
 
         internal static void Mutate(ReadOnlySpan<byte> data)

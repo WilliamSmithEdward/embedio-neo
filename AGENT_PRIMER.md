@@ -408,6 +408,12 @@ that fit the datagram and sent-packet bounds; ordered ranges use indexed recover
 lookup. Malformed ranges use FRAME_ENCODING_ERROR, while acknowledgements for
 unsent packets use PROTOCOL_VIOLATION. Per-key encryption budgets (conservatively capped at the AES-GCM limit for
 all profiles) and ACK-confirmed local/peer key generations replace the cumulative send-packet quota.
+Recovery loss bursts now defer retransmission deliveries beyond the 512-entry ready
+window within a separate bounded backlog, while ACK-only work and PTO probes retain
+urgent service. Stream output waits for the backlog to drain; owner ticks promote
+deferred deliveries and discard those acknowledged in the meantime. This draft fix
+addresses the reproduced concurrent-upload queue overflow; hosted acceptance on
+the corrected head is still pending.
 Completed stream records retire after receive/application completion and any required
 send acknowledgement; cumulative stream credit replenishes within resident bounds.
 The stream core accepts an owner-bound application adapter with explicit byte
@@ -420,6 +426,9 @@ UDP owner directly. The ordinary HTTP/3 binding now retains the negotiated peer
 datagram-frame and reliable-reset transport parameters through its owned adapter.
 Async streams can reserve a copied, at-most-64-byte reliable prefix before writing;
 the owner installs it before a reset and waits for flow credit if necessary. Public
+HTTP/3 control-stream parsing can opt into the WebTransport SETTINGS fields without
+changing ordinary HTTP/3's treatment of unknown extension values. This parser is
+not yet wired to an advertised public WebTransport option. Public
 WebTransport session admission, routes/controllers, stream demultiplexing and browser
 acceptance remain pending. The Windows TLS factory captures the fallback certificate when
 constructing each handshake, then selects and clones the certificate after a complete

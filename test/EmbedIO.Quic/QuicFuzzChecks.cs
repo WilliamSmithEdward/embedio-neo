@@ -58,6 +58,7 @@ namespace EmbedIO.Quic
 
                 case 6:
                     HeadersAndAcks(data);
+                    ConnectionCoreTests.MutateQueue(data);
                     break;
 
                 case 7:

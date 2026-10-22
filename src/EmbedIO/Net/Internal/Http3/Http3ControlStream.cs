@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Net.Internal.WebTransport;
 
 namespace EmbedIO.Net.Internal.Http3
 {
@@ -34,17 +35,22 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly Http3FrameReader _reader;
         private readonly bool _peerIsServer;
+        private readonly bool _readWebTransportSettings;
         private long _lastGoAway = QuicInteger.Maximum;
         private long _maximumPush = -1;
         private int _reading;
         private bool _failed;
 
         public Http3PeerSettings? Settings { get; private set; }
+        internal WebTransportSettings? WebTransportSettings { get; private set; }
 
-        internal Http3ControlStream(Stream source, bool peerIsServer)
+        internal Http3ControlStream(Stream source, bool peerIsServer) : this(source, peerIsServer, false) { }
+
+        internal Http3ControlStream(Stream source, bool peerIsServer, bool readWebTransportSettings)
         {
             _reader = new Http3FrameReader(source);
             _peerIsServer = peerIsServer;
+            _readWebTransportSettings = readWebTransportSettings;
         }
 
         internal async Task<Http3ControlEvent> ReadAsync(CancellationToken token)
@@ -73,11 +79,14 @@ namespace EmbedIO.Net.Internal.Http3
                     {
                         if (Settings != null) throw new Http3ProtocolException(0x105, "Repeated HTTP/3 SETTINGS.");
 
-                        Settings = Http3PeerSettings.Parse(
-                            await _reader
-                                .ReadBufferedPayloadAsync(16384, token)
-                                .ConfigureAwait(false)
-                        );
+                        var payload = await _reader
+                            .ReadBufferedPayloadAsync(16384, token)
+                            .ConfigureAwait(false);
+                        Settings = Http3PeerSettings.Parse(payload);
+
+                        if (_readWebTransportSettings)
+                            WebTransportSettings = WebTransportSettings.Parse(payload);
+
                         return new Http3ControlEvent(4, 0);
                     }
 

@@ -2225,3 +2225,35 @@ HTTP/3 listener cases passed without skips with the feature handoff. This is a
 transport prerequisite only. Public WebTransport sessions, exact Origin/auth
 admission, incoming and outgoing data-stream routing, capsules, drain semantics
 and browser validation remain required.
+
+The HTTP/3 control-stream parser now has an explicit WebTransport SETTINGS mode.
+In that mode it validates the draft's enable flag, datagram flag and stream-count
+limits from the same bounded payload as ordinary HTTP/3 SETTINGS. When the mode is
+off, unknown extension values keep their existing HTTP/3 treatment; a malformed
+WebTransport boolean is not rejected by an ordinary HTTP/3 listener. A fragmented
+control-stream regression verifies both modes and the negotiated flags. Public
+WebTransport configuration and session use remain pending.
+
+## Concurrent-upload loss-burst queue pressure
+
+On source `9f226d48`, CI `39715967428` failed the three-concurrent-1-MiB
+HTTP/3 upload case on Windows and Ubuntu. Both TRX artifacts include the engine's
+first-chance `InvalidDataException: Outbound queue budget exceeded` in
+`QuicConnection.QueueRepeat`; the clients then report QUIC transport error 10.
+The exact artifacts are saved under ignored
+`TestResults/quic-feasibility/continuation/webtransport-public-01/ci-9f`.
+Seven macOS tests failed with route, timeout or rebind errors in the same run;
+that evidence does not establish their cause.
+
+The owner now keeps a 512-delivery ready window and a separate bounded backlog
+for recovery bursts, capped at the recovery packet bound plus one ready window.
+New stream frames wait while that backlog exists. ACK-only deliveries and PTO
+probes retain an urgent path with its existing 128-entry bound. On each owner
+turn, acknowledged or discarded backlog entries are dropped and live entries
+are promoted as space becomes available. Connection close and disposal release
+both queues. A deterministic model ACKs the highest of 1,024 sent packets to
+trigger the recovery callback past the former cap, then checks backlog retirement
+and probe progress. The core fuzz target mutates the burst size and late-ACK
+boundary. The local QUIC self-test, a 2,000-case seeded core campaign and all
+three real Windows concurrent-upload variants passed. Hosted Windows/Ubuntu
+rechecks on the corrected head remain required.

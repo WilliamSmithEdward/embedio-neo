@@ -39,6 +39,7 @@ namespace EmbedIO.Quic
         internal int RetainedIncoming => _streams?.IncomingCount ?? 0;
         internal int RetainedOutgoing => _streams?.OutgoingCount ?? 0;
         internal int OutboundResets => _streams?.OutboundResets ?? 0;
+        internal int DeferredDeliveries => _deferred.Count;
         internal int ReceiveCreditUpdates => _streams?.ReceiveCreditUpdates ?? 0;
         internal ulong StreamBytesReceived => _streams?.ReceivedData ?? 0;
         internal StreamApplication? Application => _streams?.Protocol;
@@ -67,6 +68,9 @@ namespace EmbedIO.Quic
         ];
         private readonly Queue<Delivery> _pending = new();
         private readonly Queue<Delivery> _urgent = new();
+        private readonly Queue<Delivery> _deferred = new();
+        private const int MaximumReadyDeliveries = 512;
+        private const int MaximumDeferredDeliveries = Recovery.MaximumActivePackets + MaximumReadyDeliveries;
         private readonly Recovery _recovery;
         private readonly ConnectionLifetime _lifetime = new();
         private byte[]? _closePayload;
@@ -461,7 +465,8 @@ namespace EmbedIO.Quic
                                 operations,
                                 new QuicPeerFeatures(_peerDatagram, _peerReset)
                             ),
-                            canQueue: count => _pending.Count + _urgent.Count + (count + 899) / 900 + 1 <= 480,
+                            canQueue: count => _deferred.Count == 0
+                                && _pending.Count + _urgent.Count + (count + 899) / 900 + 1 <= 480,
                             close: code => BeginClose(2, Wire.Frame(0x1d, code, 0)),
                             inboundBidirectionalStreams: _limits.InboundBidirectionalStreams,
                             inboundUnidirectionalStreams: _limits.InboundUnidirectionalStreams
@@ -639,6 +644,7 @@ namespace EmbedIO.Quic
 
             _pending.Clear();
             _urgent.Clear();
+            _deferred.Clear();
             _closeLevel = level;
             _closePayload = payload;
             _lifetime.Close(_now, _recovery.KeyRetention);
@@ -664,7 +670,7 @@ namespace EmbedIO.Quic
             Send(level, frame.ToArray(), false, false);
         }
 
-        private void QueueRepeat(Delivery delivery, bool probe)
+        internal void QueueRepeat(Delivery delivery, bool probe)
         {
             if (Phase != ConnectionPhase.Active || delivery.Acknowledged || _recovery.IsDiscarded(delivery.Level))
                 return;
@@ -673,21 +679,51 @@ namespace EmbedIO.Quic
             {
                 if (probe && !delivery.ProbePending)
                 {
-                    if (_urgent.Count >= 128) throw new InvalidDataException("Urgent queue budget exceeded.");
-
-                    delivery.ProbePending = true;
-                    _urgent.Enqueue(delivery);
+                    if (_urgent.Count < 128)
+                    {
+                        delivery.ProbePending = true;
+                        _urgent.Enqueue(delivery);
+                    }
                 }
 
                 return;
             }
 
-            if (_pending.Count + _urgent.Count >= 512)
-                throw new InvalidDataException("Outbound queue budget exceeded.");
+            if ((probe || !delivery.Eliciting) && _urgent.Count < 128)
+            {
+                delivery.Queued = true;
+                delivery.ProbePending = probe;
+                _urgent.Enqueue(delivery);
+                return;
+            }
+
+            var defer = _deferred.Count != 0 || _pending.Count + _urgent.Count >= MaximumReadyDeliveries;
+
+            if (defer && _deferred.Count >= MaximumDeferredDeliveries)
+                throw new InvalidDataException("Deferred outbound queue budget exceeded.");
 
             delivery.Queued = true;
             delivery.ProbePending = probe;
-            (probe || !delivery.Eliciting ? _urgent : _pending).Enqueue(delivery);
+
+            (defer ? _deferred : _pending).Enqueue(delivery);
+        }
+
+        private void PromoteDeferred()
+        {
+            while (_deferred.Count != 0 && _pending.Count + _urgent.Count < MaximumReadyDeliveries)
+            {
+                var delivery = _deferred.Dequeue();
+
+                if (!delivery.Queued || delivery.Acknowledged || _recovery.IsDiscarded(delivery.Level))
+                {
+                    delivery.Queued = false;
+                    delivery.ProbePending = false;
+                    continue;
+                }
+
+                var urgent = (delivery.ProbePending || !delivery.Eliciting) && _urgent.Count < 128;
+                (urgent ? _urgent : _pending).Enqueue(delivery);
+            }
         }
 
         private List<byte[]> Drain()
@@ -735,6 +771,7 @@ namespace EmbedIO.Quic
 
                 _pending.Clear();
                 _urgent.Clear();
+                _deferred.Clear();
                 _recovery.Abandon();
                 _streams?.Dispose();
 
@@ -785,6 +822,7 @@ namespace EmbedIO.Quic
                 return output;
             }
 
+            PromoteDeferred();
             _streams?.Prune();
 
             if (Phase != ConnectionPhase.Active) return Drain();
@@ -810,6 +848,7 @@ namespace EmbedIO.Quic
                 {
                     queue.Dequeue();
                     delivery.Queued = false;
+                    delivery.ProbePending = false;
                     continue;
                 }
 
@@ -827,6 +866,7 @@ namespace EmbedIO.Quic
                 {
                     queue.Dequeue();
                     delivery.Queued = false;
+                    delivery.ProbePending = false;
                     continue;
                 }
 
@@ -878,6 +918,7 @@ namespace EmbedIO.Quic
                 _outputPaths?.Add(path?.Route);
             }
 
+            PromoteDeferred();
             return output;
         }
 
@@ -1435,6 +1476,7 @@ namespace EmbedIO.Quic
             _executionClock = null;
             _pending.Clear();
             _urgent.Clear();
+            _deferred.Clear();
             _recovery.Abandon();
             _peerIds?.Dispose();
             _localIds.Dispose();

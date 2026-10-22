@@ -14,29 +14,52 @@ namespace EmbedIO.Tests
         {
             try
             {
-                return (InternalType("Http3PeerSettings").GetMethod("Parse", Hidden) ?? throw new AssertionException("Missing settings parser."))
-                    .Invoke(null, new object[] { Convert.FromHexString(hex), maximum }) ?? throw new AssertionException("Missing settings.");
+                return (InternalType("Http3PeerSettings").GetMethod("Parse", Hidden)
+                    ?? throw new AssertionException("Missing settings parser.")).Invoke(
+                    null,
+                    [
+                        Convert.FromHexString(hex),
+                        maximum
+                    ]
+                )
+                    ?? throw new AssertionException("Missing settings.");
             }
-            catch (TargetInvocationException error) { ExceptionDispatchInfo.Capture(error.InnerException ?? error).Throw(); throw; }
+
+            catch (TargetInvocationException error)
+            {
+                ExceptionDispatchInfo
+                    .Capture(error.InnerException ?? error)
+                    .Throw();
+                throw;
+            }
         }
-        private static bool Flag(object value, string name) => (bool)((value.GetType().GetProperty(name)
-            ?? throw new AssertionException("Missing settings flag.")).GetValue(value) ?? throw new AssertionException("Missing flag value."));
+
+        private static bool Flag(object value, string name) =>
+            (bool)((value
+                .GetType()
+                .GetProperty(name)
+                ?? throw new AssertionException("Missing settings flag.")).GetValue(value)
+                ?? throw new AssertionException("Missing flag value."));
 
         [Test]
         public void SettingsDefaultsAndFullWidthLimits()
         {
             var defaults = Settings("");
-            Assert.That(Property(defaults, "MaximumFieldSectionSize"), Is.EqualTo(long.MaxValue));
-            Assert.That(Property(defaults, "MaximumTableCapacity"), Is.Zero);
-            Assert.That(Property(defaults, "BlockedStreams"), Is.Zero);
-            Assert.That(Flag(defaults, "ExtendedConnect"), Is.False);
-            Assert.That(Flag(defaults, "Datagrams"), Is.False);
             var settings = Settings("01ffffffffffffffff0600074000080133012100");
-            Assert.That(Property(settings, "MaximumTableCapacity"), Is.EqualTo(4611686018427387903L));
-            Assert.That(Property(settings, "MaximumFieldSectionSize"), Is.Zero);
-            Assert.That(Property(settings, "BlockedStreams"), Is.Zero);
-            Assert.That(Flag(settings, "ExtendedConnect"), Is.True);
-            Assert.That(Flag(settings, "Datagrams"), Is.True);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(Property(defaults, "MaximumFieldSectionSize"), Is.EqualTo(long.MaxValue));
+                Assert.That(Property(defaults, "MaximumTableCapacity"), Is.Zero);
+                Assert.That(Property(defaults, "BlockedStreams"), Is.Zero);
+                Assert.That(Flag(defaults, "ExtendedConnect"), Is.False);
+                Assert.That(Flag(defaults, "Datagrams"), Is.False);
+                Assert.That(Property(settings, "MaximumTableCapacity"), Is.EqualTo(4611686018427387903L));
+                Assert.That(Property(settings, "MaximumFieldSectionSize"), Is.Zero);
+                Assert.That(Property(settings, "BlockedStreams"), Is.Zero);
+                Assert.That(Flag(settings, "ExtendedConnect"), Is.True);
+                Assert.That(Flag(settings, "Datagrams"), Is.True);
+            }
         }
 
         [TestCase("01000101", 0x109)]
@@ -67,15 +90,72 @@ namespace EmbedIO.Tests
         private sealed class Control
         {
             private readonly object _instance;
-            internal Control(Stream stream, bool server = false) => _instance = Activator.CreateInstance(InternalType("Http3ControlStream"), Hidden,
-                null, new object[] { stream, server }, null) ?? throw new AssertionException("Missing control stream.");
+
+            internal Control(Stream stream, bool server = false, bool webTransport = false) =>
+                _instance = Activator.CreateInstance(
+                    InternalType("Http3ControlStream"),
+                    Hidden,
+                    null,
+                    webTransport ? [stream, server, true] : [stream, server],
+                    null
+                )
+                    ?? throw new AssertionException("Missing control stream.");
+
+            internal object? WebTransportSettings =>
+                _instance
+                    .GetType()
+                    .GetProperty("WebTransportSettings", Hidden)
+                    ?.GetValue(_instance);
+
             internal async Task<object> Next()
             {
-                var task = (Task)((_instance.GetType().GetMethod("ReadAsync", Hidden) ?? throw new AssertionException("Missing control reader."))
-                    .Invoke(_instance, new object[] { CancellationToken.None }) ?? throw new AssertionException("Missing control task."));
+                var task =
+                    (Task)((_instance
+                        .GetType()
+                        .GetMethod("ReadAsync", Hidden)
+                        ?? throw new AssertionException("Missing control reader.")).Invoke(
+                        _instance,
+                        [CancellationToken.None]
+                    )
+                        ?? throw new AssertionException("Missing control task."));
                 await task;
-                return (task.GetType().GetProperty("Result") ?? throw new AssertionException("Missing control result.")).GetValue(task)
+                return (task
+                    .GetType()
+                    .GetProperty("Result")
+                    ?? throw new AssertionException("Missing control result.")).GetValue(task)
                     ?? throw new AssertionException("Missing control event.");
+            }
+        }
+
+        [Test]
+        public async Task WebTransportSettingsAreParsedOnlyWhenOptedIn()
+        {
+            using (var source = new FragmentedStream(Convert.FromHexString("0405ac7cf00002"), 1))
+            {
+                var control = new Control(source);
+                await control.Next();
+                Assert.That(control.WebTransportSettings, Is.Null);
+            }
+
+            using (var source = new FragmentedStream(Convert.FromHexString("0405ac7cf00002"), 1))
+            {
+                var control = new Control(source, webTransport: true);
+                var error = await Assert.CatchAsync<IOException>(async () => await control.Next());
+                Assert.That(Property(error, "ErrorCode"), Is.EqualTo(0x109));
+            }
+
+            using (var source = new FragmentedStream(Convert.FromHexString("0407ac7cf000013301"), 1))
+            {
+                var control = new Control(source, webTransport: true);
+                await control.Next();
+                var settings = control.WebTransportSettings
+                    ?? throw new AssertionException("Missing WebTransport settings.");
+
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(Flag(settings, "Enabled"), Is.True);
+                    Assert.That(Flag(settings, "Datagrams"), Is.True);
+                }
             }
         }
 
@@ -102,7 +182,10 @@ namespace EmbedIO.Tests
         {
             using var source = new FragmentedStream(Convert.FromHexString(wire), 1);
             var control = new Control(source, server);
-            var error = await Assert.CatchAsync<IOException>(async () => { for (var i = 0; i < 4; i++) await control.Next(); });
+            var error = await Assert.CatchAsync<IOException>(async () =>
+            {
+                for (var i = 0; i < 4; i++) await control.Next();
+            });
             Assert.That(Property(error, "ErrorCode"), Is.EqualTo(code));
             await Assert.ThatAsync(async () => await control.Next(), Throws.TypeOf<IOException>());
         }
@@ -132,17 +215,39 @@ namespace EmbedIO.Tests
         [TestCase("800f07000404753d31", 0xf0700, 4, "u=1")]
         [TestCase("800f07000bcffffffffffffffc753d37", 0xf0700, 1152921504606846972L, "u=7")]
         [TestCase("800f07010407753d32", 0xf0701, 7, "u=2")]
-        public async Task PriorityUpdatePreservesFieldAndFollowingControlFrame(string wire, long type, long id, string field)
+        public async Task PriorityUpdatePreservesFieldAndFollowingControlFrame(
+            string wire,
+            long type,
+            long id,
+            string field
+        )
         {
             using var source = new FragmentedStream(Convert.FromHexString("0400" + wire + "070100"), 1);
             var control = new Control(source);
             await control.Next();
             var update = await control.Next();
-            Assert.That(Property(update, "Type"), Is.EqualTo(type));
-            Assert.That(Property(update, "Identifier"), Is.EqualTo(id));
-            Assert.That(update.GetType().GetProperty("PriorityFieldValue")?.GetValue(update), Is.EqualTo(field));
-            Assert.That(update.GetType().GetProperty("Priority")?.GetValue(update), Is.Not.Null);
-            Assert.That(Property(await control.Next(), "Type"), Is.EqualTo(7));
+            var following = await control.Next();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(Property(update, "Type"), Is.EqualTo(type));
+                Assert.That(Property(update, "Identifier"), Is.EqualTo(id));
+                Assert.That(
+                    update
+                        .GetType()
+                        .GetProperty("PriorityFieldValue")
+                        ?.GetValue(update),
+                    Is.EqualTo(field)
+                );
+                Assert.That(
+                    update
+                        .GetType()
+                        .GetProperty("Priority")
+                        ?.GetValue(update),
+                    Is.Not.Null
+                );
+                Assert.That(Property(following, "Type"), Is.EqualTo(7));
+            }
         }
 
         [Test]
@@ -150,11 +255,23 @@ namespace EmbedIO.Tests
         {
             using var source = new FragmentedStream(Convert.FromHexString("04002103aabbcc0d01040d0104070104030102"), 1);
             var control = new Control(source);
-            Assert.That(Property(await control.Next(), "Type"), Is.EqualTo(4));
-            Assert.That(Property(await control.Next(), "Identifier"), Is.EqualTo(4));
-            Assert.That(Property(await control.Next(), "Type"), Is.EqualTo(13));
-            Assert.That(Property(await control.Next(), "Type"), Is.EqualTo(7));
-            Assert.That(Property(await control.Next(), "Identifier"), Is.EqualTo(2));
+            object[] events =
+            [
+                await control.Next(),
+                await control.Next(),
+                await control.Next(),
+                await control.Next(),
+                await control.Next()
+            ];
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(Property(events[0], "Type"), Is.EqualTo(4));
+                Assert.That(Property(events[1], "Identifier"), Is.EqualTo(4));
+                Assert.That(Property(events[2], "Type"), Is.EqualTo(13));
+                Assert.That(Property(events[3], "Type"), Is.EqualTo(7));
+                Assert.That(Property(events[4], "Identifier"), Is.EqualTo(2));
+            }
         }
 
         [Test]
