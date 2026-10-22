@@ -1305,3 +1305,9 @@ same-run Linux asset; standalone AOT runs build and audit the pinned TLS source
 locally. This hook is for source-reference fixtures only. Package applications
 continue to use NuGet-selected assets. The AOT fixture's BCL HTTP/3 client still
 requires its separate MsQuic prerequisite; the EmbedIO.Quic server does not.
+
+In the internal draft-16 WebTransport bridge, a client need not advertise
+extended CONNECT support. Client admission requires its WebTransport/datagram
+SETTINGS and the required transport parameters; the server still advertises
+extended CONNECT. Model and independent-peer checks cover omitted and zero-valued
+client advertisements. Public WebTransport acceptance remains integration work.

@@ -2031,3 +2031,29 @@ pinned source/archive verification and binary ABI/export/dependency audit. That
 locally compiled binary is a host build, not a new distribution asset. The
 original hosted failure is retained; actual final-head CI and complete standalone
 workflow execution remain required.
+
+
+## Client WebTransport SETTINGS requirements
+
+Server-side admission follows the role-specific requirements in
+[draft 16 section 3.1](https://datatracker.ietf.org/doc/draft-ietf-webtrans-http3/#section-3.1).
+A client requires its WebTransport and HTTP datagram SETTINGS plus the required
+QUIC transport parameters. It does not need to advertise extended CONNECT;
+the server continues to advertise that capability. Boolean-value parsing,
+datagram requirements and reliable-reset negotiation remain enforced.
+
+A new model group covers eight SETTINGS vectors, three malformed boolean values
+and 32 combinations of peer
+settings, local enablement and transport prerequisites. It failed on the earlier
+core's extra client requirement, then passed after the role distinction. A
+separate direct-admission probe likewise changed two legal client cases from
+NotNegotiated to Accepted while retaining rejection of missing required settings.
+All 91 existing NUnit WebTransport core cases passed without skips.
+
+The pinned independent quic-go peer now omits the client extended-CONNECT
+advertisement while still requiring the server's advertisement. All 23 existing
+Windows Schannel bridge profiles passed, including bidirectional/unidirectional
+streams, datagrams, reliable reset, authorization/Origin rejection, separate
+sessions, loss, credit, key updates and repeated stream retirement. These use the
+development bridge; they do not establish a public application API or browser
+acceptance. Those remain required production integration work.

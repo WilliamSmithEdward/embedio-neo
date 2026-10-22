@@ -11,6 +11,7 @@ namespace EmbedIO.Quic
         {
             CipherSuiteTests.Run();
             ProductionTransportTests.Run();
+            WebTransportNegotiationTests.Run();
             TlsHelloTests.Run();
             ConnectionCoreTests.Run();
 

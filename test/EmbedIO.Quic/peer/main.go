@@ -223,7 +223,7 @@ func run() error {
 		return err
 	}
 	settings := []byte{}
-	for _, pair := range [][2]uint64{{8, 1}, {0x33, 1}, {0x2c7cf000, 1}, {0x2b61, 65536}, {0x2b64, 8}, {0x2b65, 8}} {
+	for _, pair := range [][2]uint64{{0x33, 1}, {0x2c7cf000, 1}, {0x2b61, 65536}, {0x2b64, 8}, {0x2b65, 8}} {
 		settings = append(settings, integer(pair[0])...)
 		settings = append(settings, integer(pair[1])...)
 	}
