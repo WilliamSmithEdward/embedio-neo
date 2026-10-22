@@ -39,6 +39,10 @@ namespace EmbedIO.Net.Internal.Http3
         private int _accepting = 1;
         private long _datagramPathErrors;
 
+        // macOS reports no destination on a dual-mode socket, and .NET's ReceiveMessageFrom
+        // refuses such a socket there. Its datagrams are attributed to the bound address.
+        private readonly bool _reportsDestinations;
+
         internal EmbedIOQuicListenerBinding(IPEndPoint endpoint, Func<byte[], TlsSession> createTls)
         {
             ArgumentNullException.ThrowIfNull(endpoint);
@@ -51,7 +55,10 @@ namespace EmbedIO.Net.Internal.Http3
 
                 if (endpoint.Address.Equals(IPAddress.IPv6Any)) _socket.DualMode = true;
 
-                ReceiveDestinations(_socket);
+                _reportsDestinations = !_socket.DualMode || !OperatingSystem.IsMacOS();
+
+                if (_reportsDestinations) ReceiveDestinations(_socket);
+
                 _socket.Bind(endpoint);
                 _local = QuicConnectionEndpoints.Copy(
                     (IPEndPoint)(_socket.LocalEndPoint
@@ -280,6 +287,8 @@ namespace EmbedIO.Net.Internal.Http3
 
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
 
+            catch (SocketException error) when (IsStopAbort(error)) { }
+
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
                 failures.Add(error);
@@ -319,9 +328,26 @@ namespace EmbedIO.Net.Internal.Http3
             if (failures.Count != 0) throw new AggregateException("QUIC listener failed.", failures);
 
             Task<SocketReceiveMessageFromResult> Receive() =>
-                _socket
-                    .ReceiveMessageFromAsync(bytes, SocketFlags.None, any, _stop.Token)
-                    .AsTask();
+                _reportsDestinations
+                    ? _socket
+                        .ReceiveMessageFromAsync(bytes, SocketFlags.None, any, _stop.Token)
+                        .AsTask()
+                    : ReceiveWithoutDestinationAsync();
+
+            // The default packet information names no destination, so DestinationOf
+            // attributes the datagram to the bound address.
+            async Task<SocketReceiveMessageFromResult> ReceiveWithoutDestinationAsync()
+            {
+                var received = await _socket
+                    .ReceiveFromAsync(bytes, SocketFlags.None, any, _stop.Token)
+                    .ConfigureAwait(false);
+
+                return new SocketReceiveMessageFromResult
+                {
+                    ReceivedBytes = received.ReceivedBytes,
+                    RemoteEndPoint = received.RemoteEndPoint
+                };
+            }
 
             async ValueTask SendAsync(OutboundDatagram datagram)
             {
@@ -352,6 +378,8 @@ namespace EmbedIO.Net.Internal.Http3
 
                 catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
 
+                catch (SocketException error) when (IsStopAbort(error)) { }
+
                 catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
                 {
                     Interlocked.Increment(ref _datagramPathErrors);
@@ -364,27 +392,21 @@ namespace EmbedIO.Net.Internal.Http3
             }
         }
 
+        // Stopping cancels pending socket operations. One that .NET is still starting
+        // completes at once with OperationAborted instead of as canceled.
+        private bool IsStopAbort(SocketException error) =>
+            error.SocketErrorCode == SocketError.OperationAborted && _stop.IsCancellationRequested;
+
         // .NET turns on destination reporting at the first ReceiveMessageFrom, and macOS
         // reports nothing for datagrams that arrived before then. Turn it on before
-        // binding instead. macOS never reports IPv4 destinations on a dual-mode socket.
+        // binding instead, for IPv4 datagrams on a dual-mode socket as well.
         private static void ReceiveDestinations(Socket socket)
         {
-            if (socket.AddressFamily == AddressFamily.InterNetwork)
-            {
+            if (socket.AddressFamily == AddressFamily.InterNetwork || socket.DualMode)
                 socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
-                return;
-            }
 
-            socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.PacketInformation, true);
-
-            if (!socket.DualMode) return;
-
-            try
-            {
-                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.PacketInformation, true);
-            }
-
-            catch (SocketException) { }
+            if (socket.AddressFamily == AddressFamily.InterNetworkV6)
+                socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.PacketInformation, true);
         }
 
         // A datagram without a reported destination arrived on the bound address,

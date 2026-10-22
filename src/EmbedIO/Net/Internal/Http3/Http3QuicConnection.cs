@@ -1314,6 +1314,8 @@ namespace EmbedIO.Net.Internal.Http3
             public byte[] Encode(HpackField[] fields) => _connection.EncodeResponse(Stream.Id, fields);
 
             public void Failed(Exception error) => _connection.RequestFailed(Stream, error);
+
+            public bool IsLocalReadAbort(Exception error) => Http3TransportFailure.IsLocalReadAbort(error);
         }
 
         private void Fail(Exception error)

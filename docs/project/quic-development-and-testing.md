@@ -2359,8 +2359,55 @@ affected HTTP/3 cases passed, and the full suite reported 7,608 cases: 7,586
 passed, 22 skipped, none failed. The wildcard case was excluded from that local
 run because binding `[::]` on the desktop can raise a firewall prompt; hosted CI
 runs it on all three platforms. Evidence is under ignored
-`TestResults/quic-feasibility/continuation/macos-destinations-01`. Hosted macOS
-acceptance of this correction and the intermittent 408 reset are still open.
+`TestResults/quic-feasibility/continuation/macos-destinations-01`.
+
+Hosted CI `39730144714` on `f2b190b0` removed the scattered macOS
+`HostUnreachable` failures: macOS reported 7,609 cases with two failures. One was
+the new wildcard case. Its accept-loop record showed a second macOS limit:
+`Socket.ReceiveMessageFromAsync` throws `PlatformNotSupportedException` for any
+dual-mode IPv6 socket there (`SocketPal.Unix.CheckDualModePacketInfoSupport` in
+.NET 10.0.13), so an EmbedIO.Quic listener on a wildcard prefix stopped at its
+first receive on macOS. The binding now receives on such a socket with
+`ReceiveFromAsync`, which reports no destination, and attributes every datagram to
+the bound wildcard address. Windows, Linux and specific-address bindings keep
+`ReceiveMessageFromAsync`. The other macOS failure was the quarantined raw-runtime
+rebind case of the earlier provider, which fails the job only alongside another
+failure.
+
+### Request input ended by the server
+
+The same run failed `StalledMultiplexedBodyReadAnswers408(3)` on Linux, as earlier
+runs had on Windows and macOS: the client received `RESET_STREAM` with
+`H3_REQUEST_CANCELLED` instead of the 408 response. When a handler's read deadline
+expires, `ReadTimeoutStream` abandons the pending body read and the handler answers
+408. When the request ends, the request worker stops reading with
+`STOP_SENDING`/`H3_NO_ERROR`, which fails that abandoned read. `Http3RequestBody`
+reported the failure to its owner as a request failure, and the owner reset both
+directions with 0x10c, after the 408 and its FIN had been sent. A client that had
+not yet read the response saw the reset. A read failure that reports only this
+side's own read abort now ends the input without resetting the stream.
+`LocalReadAbortEndsAnAbandonedBodyReadWithoutResettingTheResponse` drives the real
+request reader and body over an in-memory engine stream: on the unchanged source the
+response direction was reset with 268 (0x10c); with the correction it stays open.
+
+### Listener disposal racing the first receive
+
+The same run failed the Windows Schannel stateless-reset check in one of ten
+cases, during host cleanup. That host binds a second listener and disposes it at
+once to check that the port can be rebound. Disposal cancels the first receive
+while .NET may still be starting it; .NET then completes it at once with
+`SocketException(OperationAborted)` rather than as canceled (`Socket.Tasks.cs`
+reports a synchronous error without translating it), and the listener reported a
+shutdown failure. `ListenerBindingDisposedAtOnceStopsCleanly` creates and disposes
+bindings concurrently. It failed in 2 of 10 local runs against the `07670812`
+binding and 1 of 5 against `f2b190b0`. During a stop, an operation completed with
+`OperationAborted` is now treated as canceled; outside a stop it stays fatal, as
+`Http3DisposedDatagramSocketRemainsFatal` requires. After the correction the stress
+passed 30 of 30 local runs.
+
+Locally on Windows, the full suite with these corrections (wildcard case excluded)
+reported 7,610 cases: 7,588 passed, 22 skipped, none failed. Hosted acceptance of
+the three corrections is pending.
 
 ## Open-issue resolution baseline
 

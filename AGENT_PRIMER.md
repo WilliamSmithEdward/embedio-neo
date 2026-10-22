@@ -1350,11 +1350,14 @@ continue to report the original connection failure. A local close-race regressio
 passes, and the next hosted Linux suite passed; final hosted acceptance remains pending.
 
 The unmerged EmbedIO.Quic listener now enables UDP destination reporting before it
-binds. On macOS a datagram could arrive without its destination (before the first
-receive, or any IPv4 datagram on a dual-mode wildcard socket), and the listener
-stopped, so clients saw "No route to host". Such a datagram is now attributed to
-the bound address, so a dual-mode wildcard listener reports that address as the
-local endpoint of IPv4 requests on macOS. Hosted macOS acceptance is pending.
+binds. On macOS a datagram could arrive without its destination before the first
+receive, and the listener stopped, so clients saw "No route to host". A wildcard
+(dual-mode) HTTP/3 prefix also stopped at its first receive on macOS, where .NET
+cannot report destinations on such a socket. Such datagrams are now attributed to
+the bound address: a wildcard listener on macOS reports the wildcard address as the
+local endpoint of its requests. The same changes stop a server read abort at request
+end from resetting a committed HTTP/3 response (the intermittent 408 reset), and let
+a listener disposed at once stop cleanly. Hosted acceptance is pending.
 
 
 Source-reference fuzz, conformance and load-benchmark hosts now opt into that
