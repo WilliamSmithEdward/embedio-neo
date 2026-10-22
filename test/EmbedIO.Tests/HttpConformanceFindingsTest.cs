@@ -150,6 +150,54 @@ namespace EmbedIO.Tests
             finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
         }
 
+        // Request cleanup reads the rest of a body the handler opened. A client that resets its
+        // connection during that read costs only its connection; the listener goes on serving.
+        [Test]
+        public async Task ResetWhileCleanupReadsAnOpenedBodyEndsOnlyItsConnection()
+        {
+            var url = Resources.GetServerAddress();
+            var answered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var monitored = new FatalObservedWebServer(o => o.WithUrlPrefix(url).WithMode(HttpListenerMode.EmbedIO));
+            var server = monitored.WithModule(new ActionModule("/upload", HttpVerbs.Post, async context =>
+                {
+                    context.OnClose(_ => closed.TrySetResult());
+
+                    // Open the body, leave most of it unread and answer.
+                    _ = await context.Request.InputStream.ReadAsync(new byte[16], context.CancellationToken);
+                    await context.SendStringAsync("partial", "text/plain", Encoding.UTF8);
+                    answered.TrySetResult();
+                }))
+                .WithModule(new ActionModule("/plain", HttpVerbs.Get, context => context.SendStringAsync("healthy", "text/plain", Encoding.UTF8)));
+            using var stop = new CancellationTokenSource();
+            var running = server.RunAsync(stop.Token);
+            try
+            {
+                var port = new Uri(url).Port;
+
+                using (var client = new TcpClient())
+                {
+                    await client.ConnectAsync("localhost", port);
+                    var head = $"POST /upload HTTP/1.1\r\nHost: localhost:{port}\r\nContent-Length: 4000\r\n\r\n";
+                    await client.GetStream().WriteAsync(Encoding.ASCII.GetBytes(head + new string('a', 1000)));
+                    await answered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+                    // Cleanup now waits for the 3000 bytes that never come; the reset ends that read.
+                    await Task.Delay(200);
+                    client.Client.LingerState = new LingerOption(true, 0);
+                }
+
+                await closed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                await Task.WhenAny(running, Task.Delay(500));
+                Assert.That(running.IsCompleted, Is.False, "The server stopped.");
+                Assert.That(monitored.FatalCalls, Is.Zero);
+                Assert.That(server.Listener.IsListening, Is.True);
+                using var health = new System.Net.Http.HttpClient();
+                Assert.That(await health.GetStringAsync(url + "plain"), Is.EqualTo("healthy"));
+            }
+            finally { stop.Cancel(); await running.WaitAsync(TimeSpan.FromSeconds(10)); }
+        }
+
         [Test]
         public async Task ApplicationInvalidDataExceptionRetainsServerErrorHandling()
         {

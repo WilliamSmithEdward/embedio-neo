@@ -690,8 +690,9 @@ internal static class Workers
     }
 
     // Holds a connection idle (before any request, or after one keep-alive response)
-    // and records when and how the server ends it. The managed listener documents
-    // 90 s before the first request and 15 s between requests.
+    // and records when and how the server ends it. The managed listener's defaults are
+    // 30 s for the first request head (RequestHeadersTimeout, 90 s before v2) and 15 s
+    // between requests (KeepAliveTimeout).
     private static async Task IdleHoldAsync(WorkloadStats stats, EnduranceRun run, Random random)
     {
         var tls = stats.Workload.Transport == Transport.H1Tls;
@@ -703,7 +704,7 @@ internal static class Workers
         await using var _ = stream;
         stats.Connected();
         var afterRequest = random.Next(2) == 0;
-        var limit = TimeSpan.FromSeconds(afterRequest ? 15 : 90);
+        var limit = TimeSpan.FromSeconds(afterRequest ? 15 : 30);
         if (afterRequest)
         {
             await stream.WriteAsync(Request(run, tls, "/plaintext", 0, close: false), run.Token).ConfigureAwait(false);

@@ -378,7 +378,7 @@ Mixes (`--rate-scale` multiplies paced rates):
 | Mix | Workloads |
 | --- | --- |
 | `steady` | Paced small GETs, 1 MiB responses, 1 MiB uploads and 1 MiB flushed streams on HTTP/1.1, HTTP/1.1+TLS, h2c, h2 and HTTP/3; rate-limited new-connection churn on HTTP/1.1, HTTP/1.1+TLS, h2 and HTTP/3. |
-| `faults` | Client cancellations (HTTP/1.1 connection reset mid-body; HTTP/2 and HTTP/3 stream cancellation before and during the body, each followed by a validated request on the same connection), abrupt disconnects (resets mid-head, mid-upload and mid-TLS-handshake, a partial h2c HEADERS frame, abandoned HTTP/2 and HTTP/3 connections with streams in flight), slow readers (1 MiB at about 160 KiB/s) and slow writers (256 KiB at about 160 KiB/s), byte-at-a-time request heads, and idle connections held until the server's 90 s initial or 15 s keep-alive timeout. |
+| `faults` | Client cancellations (HTTP/1.1 connection reset mid-body; HTTP/2 and HTTP/3 stream cancellation before and during the body, each followed by a validated request on the same connection), abrupt disconnects (resets mid-head, mid-upload and mid-TLS-handshake, a partial h2c HEADERS frame, abandoned HTTP/2 and HTTP/3 connections with streams in flight), slow readers (1 MiB at about 160 KiB/s) and slow writers (256 KiB at about 160 KiB/s), byte-at-a-time request heads, and idle connections held until the server's 30 s initial or 15 s keep-alive timeout. |
 | `ws` | WebSocket connect/echo/close churn and long-lived echo connections over HTTP/1.1, HTTP/1.1+TLS, h2c and h2 (RFC 8441), with validated text (including multibyte UTF-8) and binary messages up to 64 KiB. |
 | `mixed` | All of the above concurrently. |
 | `saturate` | Unpaced small GETs on every protocol, for short stress segments. |
