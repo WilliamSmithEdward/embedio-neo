@@ -1332,6 +1332,14 @@ SETTINGS and the required transport parameters; the server still advertises
 extended CONNECT. Model and independent-peer checks cover omitted and zero-valued
 client advertisements. Public WebTransport acceptance remains integration work.
 
+The ordinary HTTP/3 listener has an internal WebTransport SETTINGS opt-in that
+requires negotiated datagrams and reliable reset. Its default SETTINGS bytes remain
+unchanged; no public listener enables the opt-in yet. The QUIC bridge fuzz target
+round-trips input-derived server SETTINGS through the HTTP/3 and WebTransport
+readers and probes malformed extension pairs. Local self-test and seeded core-fuzz
+evidence is in the [development and testing record](docs/project/quic-development-and-testing.md);
+public session integration and final hosted acceptance are still pending.
+
 
 Source-reference fuzz, conformance and load-benchmark hosts now opt into that
 same test-only native copy target. Unix real-HTTP/3 fuzz and manual latency jobs

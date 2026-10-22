@@ -81,6 +81,7 @@ namespace EmbedIO.Quic
 
         internal static void Check(ReadOnlySpan<byte> data)
         {
+            CheckServerSettings(data);
             using var healthy = new Peer(1);
             using var mutated = new Peer(2);
             var expected = healthy.Snapshot();
@@ -156,6 +157,43 @@ namespace EmbedIO.Quic
                         .SequenceEqual(Frame(0x31, datagram)),
                 "bridge-healthy-datagram"
             );
+        }
+
+        private static void CheckServerSettings(ReadOnlySpan<byte> data)
+        {
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+            var maxData = data.Length > 1 ? ((long)data[0] << 8) | data[1] : data.Length == 1 ? data[0] : 0;
+            var maxUni = data.Length > 2 ? data[2] & 15 : 0;
+            var maxBidi = data.Length > 3 ? data[3] & 15 : 0;
+            var local = WebTransportSettings.Local(true, maxData, maxUni, maxBidi);
+            var wire = Http3QuicConnection.EncodeServerSettings(true, local);
+            QuicFuzzChecks.Require(wire[0] == 0 && wire[1] == 4, "server-settings-stream-and-frame");
+            var offset = 2;
+            var length = QuicInteger.Read(wire, ref offset, wire.Length);
+            QuicFuzzChecks.Require(length == wire.Length - offset, "server-settings-length");
+            var payload = wire
+                .AsSpan(offset)
+                .ToArray();
+            var http = Http3PeerSettings.Parse(payload);
+            var webTransport = WebTransportSettings.Parse(payload);
+            QuicFuzzChecks.Require(http.ExtendedConnect && http.Datagrams, "server-settings-http-requirements");
+            QuicFuzzChecks.Require(
+                webTransport.SettingsRequirementsMet
+                    && webTransport.InitialMaxData == maxData
+                    && webTransport.InitialMaxStreamsUnidirectional == maxUni
+                    && webTransport.InitialMaxStreamsBidirectional == maxBidi,
+                "server-settings-webtransport-limits"
+            );
+
+            if (data.Length == 0 || (data[0] & 7) != 0) return;
+
+            try
+            {
+                _ = WebTransportSettings.Parse(data.ToArray());
+            }
+
+            catch (Http3ProtocolException) { }
         }
 
         private static byte[] Frame(ulong type, byte[] bytes) =>

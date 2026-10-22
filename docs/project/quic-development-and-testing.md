@@ -2244,6 +2244,15 @@ new server bytes and checks the advertised limits; a missing datagram profile is
 rejected. Both focused cases passed locally. No production listener enables this
 mode yet, so this is not public WebTransport availability or browser acceptance.
 
+The QUIC bridge fuzz target now also constructs opt-in server SETTINGS from
+input-derived flow and stream limits, checks the encoded frame length, parses it
+through the ordinary HTTP/3 and WebTransport readers, and verifies the round-trip
+limits and required flags. Selected inputs are additionally fed directly to the
+WebTransport SETTINGS reader to exercise malformed and duplicate pairs. The local
+QUIC self-test passed with 10,076 assertions, and a 10,000-case seeded core
+campaign passed across eight targets. These local results do not establish public
+WebTransport interoperability or replace final hosted fuzz acceptance.
+
 ## Concurrent-upload loss-burst queue pressure
 
 On source `9f226d48`, CI `39715967428` failed the three-concurrent-1-MiB
