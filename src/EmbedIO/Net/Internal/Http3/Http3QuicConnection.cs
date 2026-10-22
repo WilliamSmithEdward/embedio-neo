@@ -64,11 +64,9 @@ namespace EmbedIO.Net.Internal.Http3
         // Position in Http3HeaderHeartbeat's list, or -1 when not registered.
         internal int HeartbeatSlot = -1;
 
-        private readonly struct PendingHeader(Http3TransportStream stream, long deadline)
-        {
-            internal Http3TransportStream Stream { get; } = stream;
-            internal long Deadline { get; } = deadline;
-        }
+        // A positional record rather than a primary constructor, which Semgrep 1.181.0
+        // cannot parse; a parse error fails the security report.
+        private readonly record struct PendingHeader(Http3TransportStream Stream, long Deadline);
 
         // Matches the HTTP/2 concurrent-stream limit and QUIC's inbound
         // bidirectional stream limit (EmbedIOQuicListenerBinding), so one number
