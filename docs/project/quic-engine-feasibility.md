@@ -14,7 +14,8 @@ Since [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506)
 the ordinary HTTP/3 binding uses EmbedIO.Quic, and the earlier `System.Net.Quic`
 and native MsQuic providers are removed; see
 [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
-Released packages through 2.16.1 still use `System.Net.Quic`. The
+2.17.0 is the first release with it; packages through 2.16.1 use
+`System.Net.Quic`. The
 [development record](quic-development-and-testing.md) lists the interoperability,
 platform and endurance validation and what remains.
 

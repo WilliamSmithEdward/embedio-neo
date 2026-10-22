@@ -119,9 +119,9 @@ without it rejects TLS handoff before sending the success head. TLS 1.2 closure 
 
 ## HTTP datagrams
 
-HTTP/3 runs on EmbedIO.Quic, and an accepted tunnel exposes
+Since 2.17.0, HTTP/3 runs on EmbedIO.Quic, and an accepted tunnel exposes
 `HttpTunnel.Datagrams` (RFC 9297) when both peers negotiate HTTP datagrams. The
-provider in released packages through 2.16.1 returns null.
+provider in packages through 2.16.1 returns null.
 
 On a supporting backend, `HttpDatagramChannel.ReceiveAsync` returns an owned
 `HttpDatagram`, or null when incoming delivery ends. An empty payload is a valid

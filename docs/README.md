@@ -55,8 +55,8 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Metrics and tracing](guides/telemetry.md): opt-in HTTP server metrics and spans with W3C trace context, route templates and server identity.
 - [Trimming and Native AOT](guides/trimming-and-native-aot.md): AOT-safe JSON with source-generated metadata, Web API controllers through generated bindings and their build-time diagnostics, annotated reflection APIs and what a Native AOT host supports.
 - [OpenAPI documents](guides/openapi.md): new in Neo v2, OpenAPI 3.1 documents written from generated controller bindings, with operation attributes, security requirements from authentication modules, declared routes for other modules, routes the document cannot describe and its limits.
-- [HTTP/3 listener](guides/http3.md): new in Neo v2, QUIC mode, certificates, usage and current limits.
-- [WebTransport over HTTP/3](guides/webtransport.md): not yet in a released package; opt-in sessions with streams and datagrams, draft-16 and the browsers' draft-02, authorization, bounds and validation.
+- [HTTP/3 listener](guides/http3.md): new in Neo v2, on EmbedIO.Quic since 2.17.0, QUIC mode, certificates, usage and current limits.
+- [WebTransport over HTTP/3](guides/webtransport.md): 2.17.0+; opt-in sessions with streams and datagrams, draft-16 and the browsers' draft-02, authorization, bounds and validation.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Rotating the server certificate](guides/certificate-rotation.md): new in Neo v2, `ServerCertificateSource`, replacing certificates while TCP and QUIC listeners run.
 - [TLS policy](guides/tls-policy.md): new in Neo v2, client certificates, protocol versions and SNI certificate selection, with per-listener support.
@@ -274,7 +274,7 @@ points for existing links.
 
 - [QUIC development and testing record](project/quic-development-and-testing.md): implementation stages, fuzz targets, extensive local campaigns, validation ledger and the retirement of the earlier providers.
 - [Portable QUIC TLS build](../native/EmbedIO.Quic.Tls/README.md): pinned TLS-only native source builds, ownership boundary and current platform/packaging limits.
-- [EmbedIO.Quic implementation](project/quic-engine-feasibility.md): EmbedIO.Quic recovery, congestion, receive-window/lifecycle and H3/WebTransport implementation with OpenSSL TLS and independent peers; the ordinary HTTP/3 binding since PR #506, not yet released.
+- [EmbedIO.Quic implementation](project/quic-engine-feasibility.md): EmbedIO.Quic recovery, congestion, receive-window/lifecycle and H3/WebTransport implementation with OpenSSL TLS and independent peers; the ordinary HTTP/3 binding since 2.17.0.
 - [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): historical; decision to await a current-wire MsQuic provider, test-only evidence and resumption gates.
 
 - [Coverage-guided URL fuzzing](guides/coverage-guided-fuzzing.md): instrumented parser campaigns, seed replay and crash artifacts.

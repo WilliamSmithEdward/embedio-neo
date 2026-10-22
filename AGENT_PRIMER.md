@@ -252,7 +252,7 @@ limits, failure matrix, concurrency fuzzing and cross-target support.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current source version | 2.16.1, the v2 engine. 2.16.1 keeps the server running when one HTTP/1 request fails. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current source version | 2.17.0, the v2 engine. 2.17.0 runs HTTP/3 on EmbedIO.Quic instead of `System.Net.Quic`; opt-in WebTransport requires 2.17.0+. 2.16.1 keeps the server running when one HTTP/1 request fails. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -368,7 +368,7 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 | Mode | Serves | Requirements |
 | --- | --- | --- |
 | `EmbedIO` (default) | HTTP/1.1 and HTTP/2 over TCP | HTTP/2 needs TLS with ALPN (`net10.0` asset) or cleartext prior knowledge |
-| `EmbedIOHttp3` | HTTP/3 over QUIC/UDP only | `net10.0`, HTTPS prefixes, a certificate with its private key, TLS 1.3; EmbedIO.Quic uses owned native TLS assets on Unix and Schannel on Windows; released 2.16.x packages use `System.Net.Quic` |
+| `EmbedIOHttp3` | HTTP/3 over QUIC/UDP only | `net10.0`, HTTPS prefixes, a certificate with its private key, TLS 1.3; EmbedIO.Quic uses owned native TLS assets on Unix and Schannel on Windows; packages through 2.16.1 use `System.Net.Quic` |
 | `EmbedIOCombined` | Both of the above on the same HTTPS prefixes | Everything HTTP/3 needs; both bindings must succeed |
 
 - HTTP/2 needs no opt-in in the default mode.
@@ -381,13 +381,13 @@ The HTTP/3 listener serves opt-in WebTransport sessions:
 `WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a
 session through `IWebTransportContext` and use its `WebTransportSession` streams and
 datagrams. It speaks draft-ietf-webtrans-http3-16 and the draft-02 handshake
-Chromium uses; no release contains it. See the
+Chromium uses, and requires 2.17.0 or later. See the
 [WebTransport guide](docs/guides/webtransport.md). The independent
 EmbedIO.Quic generic transport core is under `src/EmbedIO.Quic`. Its separate
 `EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, references the actual
 library HTTP/3 protocol and uses a legacy development OpenSSL loader, the private
 OpenSSL 3.5.9 boundary on Unix, or the Windows SDK recordless Schannel
-interface for TLS. In this unreleased branch, the .NET 10 library asset compiles the
+interface for TLS. The .NET 10 library asset compiles the
 same internal engine sources; the standalone `EmbedIO.Quic` project remains an
 independent build boundary. The host no longer compiles copies of the HTTP/3 codecs. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
 credentials and negotiates AES-128-GCM/SHA-256 or AES-256-GCM/SHA-384. The packet core
@@ -1180,9 +1180,10 @@ bearer policy, bounded uploads/rejections, request-abort cancellation and cleanu
 the package-based full harness retains the broader protocol and certificate suites.
 A local musl x64 preview passed the initial six JIT/AOT cipher profiles; exact
 later repeats are recorded in the development guide. Single-RID preview switches
-are local development aids, not distribution acceptance. All six RID runs, oldest
-OS/libc, native signing/loading, final-payload scans, browser and endurance/latency
-acceptance still apply. These native package changes remain unreleased.
+are local development aids, not distribution acceptance. CI runs all six RIDs, and
+the final-payload scans, browser sessions and 30-minute endurance runs passed; the
+oldest glibc and musl, native signing and hardened-runtime loading, and latency
+acceptance remain open. These native package changes shipped in 2.17.0.
 
 
 The development connection now honors authenticated peer `NEW_CONNECTION_ID`
@@ -1283,8 +1284,8 @@ when validation ends; production networking does not require this fixture setup.
 The earlier isolated default-selection probe verified ordinary .NET 10 HTTP/3
 WebServer modes through `EmbedIOQuicListenerBinding`, using Schannel on Windows
 and the private pinned OpenSSL TLS runtime on Linux/macOS. That selection and its
-actual TLS capability checks are integrated as described below; no released
-package selects them yet.
+actual TLS capability checks are integrated as described below, and 2.17.0 is
+the first release that selects them.
 
 Recovery now accumulates pacing credit at the RTT/congestion-window rate, capped
 at the initial ten-packet window and independently constrained by congestion.
@@ -1317,8 +1318,8 @@ Linux/macOS must load the expected private ABI/version. Missing Unix libraries
 fail before binding; the server no longer needs BCL QUIC to be available on this
 path. Normal package consumers prove portable/RID/AOT delivery and missing-runtime
 refusal without an injected binding. The private macOS build targets 14.0, and the
-package consumers passed on macOS 14. Released packages through 2.16.1
-still use the previous provider; this source no longer contains it. Tests that
+package consumers passed on macOS 14. Packages through 2.16.1 use the previous
+provider; 2.17.0 and later no longer contain it. Tests that
 drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through the
 EmbedIO.Quic binding; the BCL client remains the independent test client.
 The [development record](docs/project/quic-development-and-testing.md) lists the
