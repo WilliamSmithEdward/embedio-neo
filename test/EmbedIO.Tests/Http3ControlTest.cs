@@ -159,6 +159,65 @@ namespace EmbedIO.Tests
             }
         }
 
+        [Test]
+        public async Task ServerSettingsAdvertiseWebTransportOnlyWithDatagrams()
+        {
+            var connection = InternalType("Http3QuicConnection");
+            var encode = connection.GetMethod("EncodeServerSettings", Hidden)
+                ?? throw new AssertionException("Missing server SETTINGS encoder.");
+            var local = (typeof(WebServer).Assembly.GetType(
+                "EmbedIO.Net.Internal.WebTransport.WebTransportSettings",
+                true
+            )
+                ?? throw new AssertionException("Missing WebTransport SETTINGS type.")).GetMethod("Local", Hidden)
+                ?? throw new AssertionException("Missing WebTransport SETTINGS factory.");
+            var profile = local.Invoke(null, [true, 65536L, 8L, 8L])
+                ?? throw new AssertionException("Missing WebTransport profile.");
+            var ordinary =
+                (byte[])(encode.Invoke(null, [false, null])
+                    ?? throw new AssertionException("Missing ordinary SETTINGS."));
+            var datagrams =
+                (byte[])(encode.Invoke(null, [true, null])
+                    ?? throw new AssertionException("Missing datagram SETTINGS."));
+            var webTransport =
+                (byte[])(encode.Invoke(null, [true, profile])
+                    ?? throw new AssertionException("Missing WebTransport SETTINGS."));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ordinary, Is.EqualTo(Convert.FromHexString("00040c015000068001000007100801")));
+                Assert.That(datagrams, Is.EqualTo(Convert.FromHexString("00040e0150000680010000071008013301")));
+                Assert.That(webTransport[0], Is.Zero);
+                Assert.That(webTransport[1], Is.EqualTo(4));
+                Assert.That(webTransport[2], Is.EqualTo(webTransport.Length - 3));
+            }
+
+            using (var source = new FragmentedStream(
+                webTransport
+                    .AsSpan(1)
+                    .ToArray(),
+                1
+            ))
+            {
+                var control = new Control(source, webTransport: true);
+                await control.Next();
+                var settings = control.WebTransportSettings
+                    ?? throw new AssertionException("Missing parsed WebTransport SETTINGS.");
+
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(Flag(settings, "Enabled"), Is.True);
+                    Assert.That(Flag(settings, "Datagrams"), Is.True);
+                    Assert.That(Property(settings, "InitialMaxData"), Is.EqualTo(65536L));
+                    Assert.That(Property(settings, "InitialMaxStreamsUnidirectional"), Is.EqualTo(8L));
+                    Assert.That(Property(settings, "InitialMaxStreamsBidirectional"), Is.EqualTo(8L));
+                }
+            }
+
+            var error = Assert.Throws<TargetInvocationException>(() => encode.Invoke(null, [false, profile]));
+            Assert.That(error?.InnerException, Is.TypeOf<ArgumentException>());
+        }
+
         [TestCase("0000", false, 0x10a)]
         [TestCase("2100", false, 0x10a)]
         [TestCase("04000400", false, 0x105)]

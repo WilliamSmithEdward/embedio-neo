@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using EmbedIO.Internal;
 using EmbedIO.Diagnostics;
 using EmbedIO.Net.Internal.Http2;
+using EmbedIO.Net.Internal.WebTransport;
 
 namespace EmbedIO.Net.Internal.Http3
 {
@@ -44,6 +45,12 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly SemaphoreSlim _feedbackReady = new(0, 1);
         private Http3PeerSettings _peer = Http3PeerSettings.Parse([]);
         private readonly Http3DatagramRouter? _datagrams;
+        private readonly WebTransportSettings? _webTransportLocal;
+        private WebTransportSettings? _webTransportPeer;
+        private static readonly byte[] OrdinaryServerSettings = [0, 4, 12, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1];
+        private static readonly byte[] DatagramServerSettings = [
+            0, 4, 14, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1, 0x33, 1
+        ];
         private Exception? _failure;
         private int _critical;
 
@@ -58,6 +65,8 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly CancellationTokenSource _applicationDrain = new();
         private bool _draining;
         private long _highestRequestId = -4;
+
+        internal WebTransportSettings? PeerWebTransportSettings => Volatile.Read(ref _webTransportPeer);
 
         private Http3QuicConnection(
             QuicConnection connection,
@@ -78,12 +87,21 @@ namespace EmbedIO.Net.Internal.Http3
             Http3TransportConnection connection,
             Func<Http3QuicExchange, Task> dispatch,
             CancellationToken token,
-            bool dispatchInline
+            bool dispatchInline,
+            bool enableWebTransport = false
         )
         {
             _connection = new BorrowedResource<Http3TransportConnection>(connection);
 
             if (connection.Datagrams != null) _datagrams = new Http3DatagramRouter(connection.Datagrams);
+
+            if (enableWebTransport)
+            {
+                if (_datagrams == null || connection.PeerMaximumDatagramFrameSize == 0 || !connection.ReliableReset)
+                    throw new NotSupportedException("WebTransport requires negotiated datagrams and reliable reset.");
+
+                _webTransportLocal = WebTransportSettings.Local(true, 65536, 8, 8);
+            }
 
             _dispatch = dispatch;
             _dispatchInline = dispatchInline;
@@ -103,7 +121,8 @@ namespace EmbedIO.Net.Internal.Http3
             Func<Http3QuicExchange, Task> dispatch,
             CancellationToken abortToken,
             CancellationToken drainToken,
-            TimeSpan drainTimeout
+            TimeSpan drainTimeout,
+            bool enableWebTransport = false
         )
         {
             ArgumentNullException.ThrowIfNull(connection);
@@ -113,7 +132,7 @@ namespace EmbedIO.Net.Internal.Http3
                 throw new ArgumentOutOfRangeException(nameof(drainTimeout));
 
             await using (connection.ConfigureAwait(false))
-            using (var session = new Http3QuicConnection(connection, dispatch, abortToken, true))
+            using (var session = new Http3QuicConnection(connection, dispatch, abortToken, true, enableWebTransport))
             {
                 session._drainToken = drainToken;
                 session._drainTimeout = drainTimeout;
@@ -265,11 +284,7 @@ namespace EmbedIO.Net.Internal.Http3
                 control = await _connection.Value
                     .OpenOutboundStreamAsync(QuicStreamType.Unidirectional, startup.Token)
                     .ConfigureAwait(false);
-                // Control type, SETTINGS: capacity 4096, field limit 65536, blocked streams 16, extended CONNECT
-                // enabled.
-                byte[] settings = _datagrams == null
-                    ? [0, 4, 12, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1]
-                    : [0, 4, 14, 1, 0x50, 0, 6, 0x80, 1, 0, 0, 7, 16, 8, 1, 0x33, 1];
+                var settings = EncodeServerSettings(_datagrams != null, _webTransportLocal);
                 await control
                     .WriteAsync(settings, startup.Token)
                     .ConfigureAwait(false);
@@ -425,6 +440,28 @@ namespace EmbedIO.Net.Internal.Http3
                 System.Runtime.ExceptionServices.ExceptionDispatchInfo
                     .Capture(_failure)
                     .Throw();
+        }
+
+        internal static byte[] EncodeServerSettings(bool datagrams, WebTransportSettings? webTransport)
+        {
+            if (webTransport == null) return datagrams ? DatagramServerSettings : OrdinaryServerSettings;
+
+            if (!datagrams || !webTransport.Enabled)
+                throw new ArgumentException(
+                    "WebTransport SETTINGS require an enabled datagram profile.",
+                    nameof(webTransport)
+                );
+
+            var extension = webTransport.EncodeLocal();
+            var basePairs = DatagramServerSettings.AsSpan(3);
+            var payloadLength = basePairs.Length + extension.Length;
+            var bytes = new byte[2 + QuicInteger.EncodedLength(payloadLength) + payloadLength];
+            bytes[0] = 0; // Server control stream type.
+            bytes[1] = 4; // SETTINGS frame type.
+            var offset = 2 + QuicInteger.Write(bytes, 2, payloadLength);
+            basePairs.CopyTo(bytes.AsSpan(offset));
+            extension.CopyTo(bytes.AsSpan(offset + basePairs.Length));
+            return bytes;
         }
 
         private async Task ReadDatagramsAsync()
@@ -1017,7 +1054,7 @@ namespace EmbedIO.Net.Internal.Http3
 
         private async Task ReadControlAsync(Http3TransportStream stream)
         {
-            var control = new Http3ControlStream(stream, false);
+            var control = new Http3ControlStream(stream, false, _webTransportLocal != null);
 
             while (true)
             {
@@ -1037,6 +1074,7 @@ namespace EmbedIO.Net.Internal.Http3
                         ?? throw new Http3ProtocolException(0x102, "Missing peer settings.");
                     Volatile.Write(ref _peer, settings);
                     _datagrams?.SetPeerEnabled(settings.Datagrams);
+                    Volatile.Write(ref _webTransportPeer, control.WebTransportSettings);
                 }
 
                 // No push IDs have been promised by this server yet.

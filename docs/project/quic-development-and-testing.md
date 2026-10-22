@@ -2234,6 +2234,16 @@ WebTransport boolean is not rejected by an ordinary HTTP/3 listener. A fragmente
 control-stream regression verifies both modes and the negotiated flags. Public
 WebTransport configuration and session use remain pending.
 
+The HTTP/3 connection's new internal opt-in mode checks the negotiated QUIC
+datagram and reliable-reset features before startup, appends the draft's enable
+and initial-flow SETTINGS pairs to its normal datagram-capable server SETTINGS,
+and retains the client's validated WebTransport settings from the control stream.
+The ordinary non-opt-in wire bytes are verified unchanged for both datagram and
+non-datagram connections. A fragmented control-stream regression parses the
+new server bytes and checks the advertised limits; a missing datagram profile is
+rejected. Both focused cases passed locally. No production listener enables this
+mode yet, so this is not public WebTransport availability or browser acceptance.
+
 ## Concurrent-upload loss-burst queue pressure
 
 On source `9f226d48`, CI `39715967428` failed the three-concurrent-1-MiB
@@ -2257,3 +2267,27 @@ and probe progress. The core fuzz target mutates the burst size and late-ACK
 boundary. The local QUIC self-test, a 2,000-case seeded core campaign and all
 three real Windows concurrent-upload variants passed. Hosted Windows/Ubuntu
 rechecks on the corrected head remain required.
+
+An additional exact-head Windows check repeated all three real concurrent-upload
+variants eight times on `38507d79` (24 cases total). Every run passed with
+`EMBEDIO_REQUIRE_QUIC=1` and no skipped case; its TRX files and per-run output
+are under ignored `TestResults/quic-feasibility/continuation/webtransport-public-01/upload-repeat-head385`.
+This local repetition does not replace the hosted Windows/Ubuntu recheck.
+
+## Open-issue resolution baseline
+
+The open-issue inventory on 2026-10-21 contains eight issues. This is a
+pre-removal baseline, not a resolution claim. Recheck the issue descriptions,
+current source and final acceptance evidence after the old QUIC provider is
+removed; close only issues whose specific concern is then verified resolved.
+
+| Issue | Current disposition to verify |
+| --- | --- |
+| [#414](https://github.com/WilliamSmithEdward/embedio-neo/issues/414) | Public WebTransport session API, browser streams/datagrams and drain behavior are still unfinished. |
+| [#401](https://github.com/WilliamSmithEdward/embedio-neo/issues/401) | Intermittent macOS package-audit exit 137 is independent of the QUIC provider and needs its own evidence. |
+| [#399](https://github.com/WilliamSmithEdward/embedio-neo/issues/399) | Native MsQuic listener acceptance failure: check that the old campaign is retired and its replacement has equivalent coverage. |
+| [#398](https://github.com/WilliamSmithEdward/embedio-neo/issues/398) | Windows MsQuic/Schannel credential failure and its exact CI quarantine: remove and verify the quarantine only after replacement coverage. |
+| [#303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303) | Current-wire reliable reset: verify independent peer and browser exchange through the owned engine. |
+| [#278](https://github.com/WilliamSmithEdward/embedio-neo/issues/278) | Provider memory retention/endurance: compare the replacement under sustained load and preserve any distinct actionable finding. |
+| [#202](https://github.com/WilliamSmithEdward/embedio-neo/issues/202) | Prior QUIC lifetime workarounds: remove each obsolete workaround and confirm equivalent resource cleanup. |
+| [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181) | Broader modern HTTP-engine program; evaluate all remaining acceptance items separately from the provider replacement. |

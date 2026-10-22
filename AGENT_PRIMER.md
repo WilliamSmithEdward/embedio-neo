@@ -425,10 +425,12 @@ completion and bounded datagram/open/accept queues. Application commands wake th
 UDP owner directly. The ordinary HTTP/3 binding now retains the negotiated peer
 datagram-frame and reliable-reset transport parameters through its owned adapter.
 Async streams can reserve a copied, at-most-64-byte reliable prefix before writing;
-the owner installs it before a reset and waits for flow credit if necessary. Public
-HTTP/3 control-stream parsing can opt into the WebTransport SETTINGS fields without
-changing ordinary HTTP/3's treatment of unknown extension values. This parser is
-not yet wired to an advertised public WebTransport option. Public
+the owner installs it before a reset and waits for flow credit if necessary. The
+HTTP/3 connection now has an internal WebTransport opt-in path that requires
+negotiated datagrams and reliable reset, adds draft SETTINGS fields to the server
+control stream and captures validated client fields. With that mode off, the
+ordinary SETTINGS bytes and unknown-extension treatment are unchanged. This
+path is not yet exposed through a listener option. Public
 WebTransport session admission, routes/controllers, stream demultiplexing and browser
 acceptance remain pending. The Windows TLS factory captures the fallback certificate when
 constructing each handshake, then selects and clones the certificate after a complete
