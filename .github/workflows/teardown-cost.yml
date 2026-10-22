@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.402
-      - name: Install pinned QUIC prerequisite
+      - name: Install pinned QUIC client prerequisite
         shell: bash
         run: |
           set -euo pipefail
@@ -33,11 +33,15 @@ jobs:
           printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e "$package" | sha256sum --check
           sudo apt-get update
           sudo apt-get install --yes "$package"
+      - uses: ./.github/actions/quic-source-runtime
+        id: quic-runtime
       - name: Verify campaign accounting
         run: python -m unittest discover -s scripts -p test_teardown_cost_campaign.py
       - name: Restore separate benchmark
         run: dotnet restore test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj --locked-mode
       - name: Build separate benchmark
+        env:
+          EmbedIOQuicNativeTlsDirectory: ${{ steps.quic-runtime.outputs.native-tls-directory }}
         run: dotnet build test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release --no-restore -p:ContinuousIntegrationBuild=true
       - name: Verify census and pacing controls
         run: dotnet test/EmbedIO.LoadBenchmark/bin/Release/net10.0/EmbedIO.LoadBenchmark.dll teardown-accounting-check
@@ -48,6 +52,8 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: teardown-cost-attempt-${{ github.run_attempt }}
-          path: TestResults/teardown-cost
+          path: |
+            TestResults/teardown-cost
+            TestResults/quic-source-native
           if-no-files-found: error
           retention-days: 30

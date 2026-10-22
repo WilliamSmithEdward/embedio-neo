@@ -1,0 +1,26 @@
+name: Prepare source-built QUIC TLS
+description: Build and audit private TLS for Unix source-reference validation hosts.
+outputs:
+  native-tls-directory:
+    description: Verified native TLS output directory, empty on Windows
+    value: ${{ steps.runtime.outputs.directory }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      if: runner.os != 'Windows'
+      with:
+        python-version: '3.14.6'
+    - name: Build the pinned host TLS boundary
+      id: runtime
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v cc
+        command -v make
+        perl -MTime::Piece -e 1
+        python3 native/EmbedIO.Quic.Tls/build.py --work TestResults/quic-source-native-build --output TestResults/quic-source-native --jobs 2
+        test -f TestResults/quic-source-native/build-receipt.json
+        test -f TestResults/quic-source-native/binary-audit.json
+        printf 'directory=%s/TestResults/quic-source-native\n' "$GITHUB_WORKSPACE" >> "$GITHUB_OUTPUT"

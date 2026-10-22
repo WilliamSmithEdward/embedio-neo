@@ -13,4 +13,5 @@
     <ProjectReference Include="../../src/EmbedIO.Jwt/EmbedIO.Jwt.csproj" />
     <None Update="corpus.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <Import Project="../Shared/QuicNativeAssets.targets" />
 </Project>

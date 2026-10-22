@@ -1311,3 +1311,14 @@ extended CONNECT support. Client admission requires its WebTransport/datagram
 SETTINGS and the required transport parameters; the server still advertises
 extended CONNECT. Model and independent-peer checks cover omitted and zero-valued
 client advertisements. Public WebTransport acceptance remains integration work.
+
+
+Source-reference fuzz, conformance and load-benchmark hosts now opt into that
+same test-only native copy target. Unix real-HTTP/3 fuzz and manual latency jobs
+build/audit the pinned host TLS source before building their managed host; Windows
+continues to use Schannel. The shared preparation action also serves standalone
+AOT validation, while ordinary CI AOT reuses its same-run verified native asset.
+Artifacts retain the local native build receipt and binary audit. This does not
+change NuGet asset selection, campaign assertions or deadlines. Actual Unix fuzz
+replay and bounded state-machine evidence is recorded in the development/testing
+record; final platform failures and sustained latency acceptance remain open.

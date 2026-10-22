@@ -2057,3 +2057,35 @@ streams, datagrams, reliable reset, authorization/Origin rejection, separate
 sessions, loss, credit, key updates and repeated stream retirement. These use the
 development bridge; they do not establish a public application API or browser
 acceptance. Those remain required production integration work.
+
+
+## Source-reference validation host TLS
+
+The Unix real-HTTP/3 state-machine job at source checkpoints `8400dbc8` and
+`01db12dd` failed before replay when its source-reference host could not load
+`libembedio_quic_tls.so`. The fuzz, conformance and load-benchmark projects now
+import the same explicit test-only native-copy target as the development and
+NUnit hosts. Their Unix fuzz/manual latency workflows prepare the pinned host
+TLS source with a shared build/audit action before building the managed host.
+Standalone AOT uses that same action; ordinary CI AOT continues to reuse its
+verified same-run native artifact. The action creates one local host build in
+an existing job, with no additional native matrix or relaxed campaign deadlines.
+The independent BCL client retains its separate pinned MsQuic prerequisite.
+
+A clean local Linux snapshot executed the action's exact Bash body, verified
+its pinned archive/source and ABI/export/dependency audit, and compared the
+copied fuzz-host library byte for byte. All four saved cached/streamed HTTP/3
+response traces replayed successfully. Seed 1729 then passed 32 real HTTP/3
+connection-state cases and 32 response-state cases with the existing oracles.
+The conformance and load-benchmark projects also restored in locked mode,
+built without warnings/errors and received the exact verified library. Those
+builds are not latency campaign or complete standalone-workflow acceptance.
+
+The original hosted failures remain retained. At `01db12dd`, Windows and Linux
+Native AOT jobs passed, together with all six native builds, package assembly
+and the supplemental seven-package malware scan. Desktop suite and final-head
+workflow acceptance remain separate requirements. The prior Linux concurrent
+three-by-1-MiB upload transport failure and macOS route/socket failures remain
+under investigation. A local Linux probe completed 100 fresh public servers
+and 300 exact 1-MiB echo uploads without reproducing that transport error;
+that result does not establish a cause or correction for the hosted failure.

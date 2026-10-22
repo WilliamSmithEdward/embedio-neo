@@ -18,4 +18,5 @@
     <Compile Include="../Shared/LoopbackPorts.cs" Link="Shared/LoopbackPorts.cs" />
     <Compile Include="../Shared/CompressibleJson.cs" Link="Shared/CompressibleJson.cs" />
   </ItemGroup>
+  <Import Project="../Shared/QuicNativeAssets.targets" />
 </Project>

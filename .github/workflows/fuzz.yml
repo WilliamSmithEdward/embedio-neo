@@ -196,7 +196,7 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-      - name: Install pinned Linux QUIC prerequisite
+      - name: Install pinned Linux QUIC client prerequisite
         shell: bash
         run: |
           set -euo pipefail
@@ -207,8 +207,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes "$package"
           dpkg-query --show libmsquic | tee TestResults/fuzz/quic-native.log
+      - uses: ./.github/actions/quic-source-runtime
+        id: quic-runtime
       - name: Build the locked state-machine harness
         shell: bash
+        env:
+          EmbedIOQuicNativeTlsDirectory: ${{ steps.quic-runtime.outputs.native-tls-directory }}
         run: |
           set -euo pipefail
           printf '%s\n' "$GITHUB_SHA" > TestResults/fuzz/source.txt
@@ -235,5 +239,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: state-machine-fuzz-http3-linux
-          path: TestResults/fuzz
+          path: |
+            TestResults/fuzz
+            TestResults/quic-source-native
           if-no-files-found: ignore
