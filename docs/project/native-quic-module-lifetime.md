@@ -1,5 +1,9 @@
 # Standalone native QUIC module lifetime
 
+> Historical record. The earlier HTTP/3 providers, and the code, tests and CI jobs
+> this record describes, were removed on 2026-10-22; see
+> [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+
 Issue [#307](https://github.com/WilliamSmithEdward/embedio-neo/issues/307)
 tracks Linux process teardown after native-only QUIC use. This correction is
 scoped to the internal native provider on the v2 integration branch.

@@ -1,0 +1,323 @@
+# EmbedIO.Quic implementation
+
+The transport core lives under `src/EmbedIO.Quic`. Its sources compile into the
+.NET 10 `EmbedIO` assembly, where the ordinary HTTP/3 listener uses them, and into
+a nonpackable `EmbedIO.Quic` assembly for development. The separate
+`EmbedIO.Quic.Development` executable under `test/EmbedIO.Quic` owns the
+TLS/console/wire host and its HTTP/3 adapters. Its C# packet and stream handling
+can use an existing TLS provider and communicate with an independent
+implementation. The engine includes loss recovery, NewReno congestion control and
+an HTTP/3/WebTransport adapter. It adds no public listener mode, and public
+WebTransport APIs remain unavailable.
+
+Since [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506)
+the ordinary HTTP/3 binding uses EmbedIO.Quic, and the earlier `System.Net.Quic`
+and native MsQuic providers are removed; see
+[retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+Released packages through 2.16.1 still use `System.Net.Quic`. The
+[development record](quic-development-and-testing.md) lists the interoperability,
+platform and endurance validation and what remains.
+
+## Scope and provenance
+
+The implementation was written from RFC 9000, RFC 9001 and the documented OpenSSL
+third-party QUIC TLS API. It does not call MsQuic or `System.Net.Quic`, nor copy their
+transport implementation. Earlier project investigation included reading MsQuic
+source, so this work is described as an independent standards-based implementation,
+not as a formally separated clean-room development process. William permits
+consulting MsQuic and other open-source QUIC implementations where their licenses
+permit it, but requires original implementation code with no verbatim copying.
+
+References:
+
+- [RFC 9000](https://www.rfc-editor.org/rfc/rfc9000.html), packet numbers, framing,
+  stream final size, connection identifiers and address-validation accounting.
+- [RFC 9001](https://www.rfc-editor.org/rfc/rfc9001.html), initial secrets,
+  packet/header protection, TLS CRYPTO transport and alert mapping.
+- [OpenSSL 3.5 QUIC TLS callbacks](https://docs.openssl.org/3.5/man3/SSL_set_quic_tls_cbs/).
+  The runtime is deliberately pinned to OpenSSL 3.5.7 for this development host.
+- [RFC 9002](https://www.rfc-editor.org/rfc/rfc9002.html), ACK ranges, RTT sampling,
+  packet/time loss thresholds, PTO, NewReno, persistent congestion and pacing.
+- [WebTransport HTTP/3 draft 16](https://datatracker.ietf.org/doc/html/draft-ietf-webtrans-http3-16)
+  and [reliable stream reset draft 11](https://datatracker.ietf.org/doc/html/draft-ietf-quic-reliable-stream-reset-11).
+  The adapter uses current parameter `0x1d` and frame `0x24`.
+
+OpenSSL performs the TLS 1.3 handshake, certificate/key handling and secret
+calculation in the cross-platform development profile. A Windows recordless
+Schannel adapter additionally exercises non-exportable CNG RSA/ECDSA credentials;
+see the [Windows TLS development profile](quic-development-and-testing.md#windows-recordless-tls-development-profile)
+for its scope, commands and remaining certificate/platform work. The original C# code owns UDP, QUIC packetization, packet protection,
+CRYPTO reassembly and the stream exchange. AES-GCM, AES and HKDF use the .NET
+cryptography implementations. Only TLS_AES_128_GCM_SHA256 is enabled. The TLS adapter
+uses OpenSSL's public C API and owns its callback buffers and native handles.
+No OpenSSL source or binary is redistributed. OpenSSL is Apache-2.0 licensed;
+consumers of a future distributed provider would need a separate dependency and
+packaging decision. The independent test client reuses the existing, hash-pinned
+`test/EmbedIO.Conformance/drivers/requirements.txt` dependencies.
+
+## Feasibility profile
+
+The executable always binds IPv4 loopback on an ephemeral port. Each process
+uses a ten-second process deadline by default. The single-connection modes are:
+
+- `serve` keeps the original `embedio-quic-probe` ALPN, one bidirectional stream
+  and 8192-byte exact echo.
+- `serve-streams` uses the probe ALPN with the generic application boundary,
+  16 incoming streams per direction, bounded reusable receive windows and raw
+  multiplexed bidi/uni echo. It has a 30-second host deadline. It sends no HTTP/3
+  control streams or implicit WebTransport prefixes. The larger 2 MiB loss case
+  has a 20-second peer deadline; existing probe case deadlines are unchanged.
+- `serve-async` exercises the async connection/stream API with the same bounded
+  raw profile and a 30-second deadline. Incoming uni streams receive alternating
+  server uni/bidi responses; the peer finishes the unused bidi half explicitly.
+  The host admits at most 32 application workers. Owner commands use a bounded
+  wakeup signal alongside UDP receive and recovery timers.
+- `serve-async-close` requests application connection closure with code `0x1234`
+  after an acknowledged response, then completes the normal closing timer.
+- `serve-h3` negotiates `h3`, sends HTTP/3 SETTINGS, decodes bounded QPACK headers
+  with dynamic capacity zero, and accepts `CONNECT :protocol=webtransport-h3` at
+  `https://localhost/echo`. It links the existing repository codecs and session
+  core into this test executable; production files are not copied or modified.
+- `serve-h3-updates` uses the same H3 profile with frequent local key updates and
+  a separate bounded endurance deadline, described below.
+
+The H3 profile requires the current reset parameter, QUIC/HTTP datagrams,
+WebTransport settings, the exact loopback Origin and a fresh per-process bearer
+value. The harness receives that value through the startup pipe, passes it to its
+child through the environment and removes it from retained logs. This is a test
+admission callback, not integration with the shipped bearer/JWT middleware.
+At most two sessions are admitted when session flow control is negotiated; the
+existing session core allows one when it is not. Bidirectional and unidirectional
+stream echo, datagram association, close capsules, session faults and partial
+reset delivery use the same session ownership logic as the internal core.
+
+Recovery runs on an injected monotonic clock. ACK ranges retire physical packets
+once; retransmissions get new packet numbers while retaining logical delivery
+identity. Late ACKs cancel redundant retransmissions without subtracting in-flight
+bytes twice. Packet and time thresholds schedule retransmission; PTO probes retain
+anti-amplification checks. NewReno reduces its window once per recovery epoch,
+observes the two-packet minimum, detects persistent congestion and paces sends.
+Application-limited ACKs do not increase the congestion window. QUIC datagrams
+consume congestion credit but are not retransmitted.
+
+Bounds remain deliberate: 64 KiB CRYPTO reassembly per encryption level,
+4096 active recovery records, bounded ACK/loss history
+and 512 queued packets. H3 permits 16 resident incoming streams of each direction, 64 KiB
+per stream receive window and an initial 256 KiB connection window. Both windows
+advance as the application consumes or discards input; buffered gaps retain their
+credit. Final reset sizes consume and release connection credit once, including
+gaps, after any required reliable prefix arrives. The engine waits for the reliable prefix before reporting a
+partial reset and preserves the header when a local reset waits for send credit.
+Stream reassembly reuses a fixed ring, and the H3 parser compacts consumed input.
+Retired duplicate bytes are ignored; overlap still buffered in the ring must agree,
+and final-size history is retained. The active-record/session/resident-stream budgets and
+process deadline still bound each validation process; this is not indefinite service.
+Receive packet history now uses at most 128 ACK ranges within a sliding
+4096-number window. A monotonic acceptance floor prevents processing retired
+duplicates again. Large jumps and sparse ranges retire old history without ending
+the connection. This removes the cumulative receive-packet limit; outbound packet
+numbers can advance to the QUIC 62-bit limit; active recovery records remain
+bounded independently of cumulative traffic. Four-byte packet numbers carry the
+low bits and reconstruct across 32-bit boundaries.
+Pre-validation sends obey the three-times-received byte allowance.
+
+Lost-packet metadata retains the most recent 4096 retirement entries, while
+current in-flight records remain independently owned. Very late ACKs for evicted
+records can be ignored; a current retransmission still requires its own ACK.
+Acknowledged-send timestamps compact from 12,288 to 8192 entries at a known
+acknowledged-packet barrier. Loss history before that barrier retires with them,
+so compaction does not join persistent-loss intervals across a forgotten ACK.
+These are bounded histories, rather than cumulative connection quotas.
+
+Key updates derive fresh packet secrets while preserving header protection. Read
+and write generations are tracked separately through phase-bit wraparound; a local
+update can advance the writer once before the peer responds. Current-generation
+ACK confirmation and a three-PTO wait gate subsequent local updates. The default
+local interval is 1,048,576 encryptions; per-key AES-GCM protection stops at the
+RFC 9001 limit of 2^23, reserving capacity for AEAD_LIMIT_REACHED closure if an
+update cannot proceed. Packet encryption occurs after pacing/amplification checks.
+Previous receive keys are retained for reordering during three PTO durations.
+Next receive keys are prepared after TLS setup and authenticated transitions;
+unauthenticated phase changes do not trigger derivation. Header protection is
+removed once before selecting the current, previous or next payload key. The
+larger peer cases require a recorded key update and complete exact-byte transfer.
+The per-connection failed-authentication counter stops packet processing at the
+AES-GCM integrity limit of 2^52 failures, with AEAD_LIMIT_REACHED closure. Native
+regressions use smaller test-only budgets to verify both limit paths on the wire.
+
+Stream limits now bound resident work, rather than lifetime stream IDs. Closed
+ranges merge around live or implicitly opened streams; MAX_STREAMS credit advances
+only once per retired incoming stream. Bidirectional streams wait for response
+FIN/reset acknowledgement; the echo adapter also retains receive capacity while
+an associated outgoing uni response is pending. At most 32 local uni records can
+reside, including critical streams and work waiting for peer credit. The async
+API additionally supports 32 resident locally initiated bidi streams. It bounds
+pending opens and accepts to 32, unread application data to 64 KiB per stream,
+and incoming/outgoing datagram queues to 32. Reads and writes permit one pending
+operation per direction. Unaccepted empty FINs keep stream credit until admission;
+FIN delivery and async disposal await the required ACK. Flow-blocked output and
+later credit updates respect the packet-queue budget. Reliable-reset discarded
+tails release their credit separately from any still-unread prefix. A 64-entry
+recent final-size cache checks delayed conflicts without retaining receive buffers;
+older closed IDs are ignored and never charged or opened again. Connection close,
+draining and idle expiry release application buffers, pending work and physical
+recovery flight without discarding the RTT estimate used for retirement timers.
+
+Connections now distinguish active, closing, draining and closed states. Local
+protocol/TLS errors send bounded CONNECTION_CLOSE responses; peer close enters
+silent draining for three PTO durations. Negotiated idle expiry is silent, and
+repeated local sends cannot keep an unresponsive peer alive. Authenticated traffic
+can trigger a rate-limited close retry; closing/draining deadlines are not extended.
+The Windows harness tolerates ICMP connection-reset notifications while finishing
+those states. The hard process deadline remains independent.
+
+The shared `serve-many` / `serve-many-h3` host routes by destination connection ID,
+checks the existing peer endpoint, admits at most 16 resident owners and 16 new
+attempts per one-second window, and retires incomplete handshakes after three
+seconds. Those host limits are independent of each established connection's idle
+state. Cancellation owns the pending receive/timer operations and every connection;
+retired IDs and endpoint aliases are removed. Migration remains unsupported.
+
+The current transport profile has no Retry, migration, resumption, 0-RTT,
+complete post-handshake TLS processing,
+complete transport-error classification, stateless reset
+or production provider interface. It supports a bounded H3 echo profile,
+not a general request dispatcher, public application facade or browser release.
+Do not change the bind address or embed this executable into an application.
+
+## Reproduce on Windows x64
+
+Use the SDK pinned by `global.json`, Python 3.11+ and an existing OpenSSL 3.5.7 x64
+installation with both `libssl-3-x64.dll` and `libcrypto-3-x64.dll`. Set the absolute
+library directory explicitly; the executable checks the version and the receipt
+records the actual library SHA-256 values. No system library is replaced.
+
+From the repository root, in PowerShell:
+
+```powershell
+$opensslDirectory = 'C:\path\to\OpenSSL-3.5.7\bin'
+python -m venv TestResults/embedio-quic-python
+$python = 'TestResults/embedio-quic-python/Scripts/python.exe'
+& $python -m pip install --require-hashes --only-binary=:all: -r test/EmbedIO.Conformance/drivers/requirements.txt
+dotnet restore test/EmbedIO.Quic/EmbedIO.Quic.csproj --locked-mode
+dotnet build test/EmbedIO.Quic/EmbedIO.Quic.csproj -c Release --no-restore
+$assembly = 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll'
+dotnet $assembly self-test
+& $python test/EmbedIO.Quic/verify.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --output TestResults/embedio-quic-wire
+```
+
+Use a fresh output directory for each run to retain earlier evidence. The harness
+records process output, exact source/assembly/library hashes and a machine-readable
+`receipt.json`. A rejection requires its expected QUIC error and a normal process
+exit; a timeout or crash is not accepted as proof of rejection. The peer must match
+the repository's aioquic pin. The temporary certificate is valid for one day.
+
+## Observed local result
+
+Windows x64 with SDK 10.0.402 and OpenSSL 3.5.7 completed the following local
+checks. Run receipts retain exact assembly/source/native-library identities.
+
+- Twenty-four aioquic 1.6.0 cases cover the original ten interoperability cases plus
+  Initial/handshake/response loss, ACK loss and reordering. The designated reliable
+  loss cases require actual retransmitted packets as well as an exact response.
+  Four raw multiplexed cases add 256 sequential bidi streams, 128 uni streams,
+  four groups of 16 concurrent streams with distinct payloads and a 2 MiB sliding-window transfer with
+  three dropped response packets. The peer runs its ordinary delayed-ACK timer
+  and completes a public ping before exact ACK-gated retirement is checked.
+  Five async-host cases add 128 bidi inputs, 128 uni inputs with both server output
+  directions, 16 concurrent distinct requests, a 2 MiB loss transfer and verified
+  application-close code delivery. Application reads/writes own their memory only
+  until completion, and a canceled upload preserves the response half in managed
+  ownership regressions.
+- Twenty-three quic-go 0.63.0 cases cover H3 settings and CONNECT, bidi/uni stream echo,
+  datagrams, two sessions and quota rejection, authorization/Origin rejection,
+  missing current-reset negotiation, incoming and outgoing partial resets,
+  a malformed capsule followed by a healthy sibling, larger transfers, withheld
+  transport credit, peer key updates and handshake/response loss. Three cases
+  transfer 512 KiB per session beyond the initial stream and connection windows,
+  including small peer windows and packet loss. Three cases verify transport/application
+  closing and silent idle expiry; every wire case requires completed shutdown.
+  Two endurance cases transfer 8 MiB over bidi/uni streams, require more than
+  4096 sent packets and multiple local and peer key transitions; the loss case
+  also requires actual retransmission. Two additional cases run 128 bidi and 128 uni
+  data streams on one session, with exact bytes, session/transport credit, later
+  datagrams, complete retirement and a loss/retransmission variant.
+- The original 10,076 primitive assertions remain. Additional deterministic
+  recovery and bridge regressions cover packet spaces, RTT/ACK delay, PTO backoff,
+  late/duplicate ACKs, persistent congestion, blocked credit, sparse reliable
+  prefixes, final-size conflicts, session admission, receive-window reuse and
+  closing/draining timers. A seeded recovery campaign
+  checks 10,000 state transitions plus complete retirement of each run.
+
+CI builds the standalone project and runs the managed checks without loading
+OpenSSL or adding another job. The three independent wire harnesses remain explicit
+local checks. No Linux/macOS wire validation, browser interoperability, latency
+comparison or production acceptance is claimed.
+
+### Current-wire peer
+
+Use Go 1.27.3 for the independent peer. Its source dependencies are pinned in
+`test/EmbedIO.Quic/peer/go.mod` and authenticated by `go.sum`. The Windows
+amd64 toolchain archive is
+[`go1.27.3.windows-amd64.zip`](https://go.dev/dl/go1.27.3.windows-amd64.zip), SHA-256
+`f26081f438319757f8a1b46d7d0b2c5ec7583d4038e485e0aa725cfde7885fff`.
+The local validation used that exact archive. Go is BSD-3-Clause licensed;
+quic-go and qpack are MIT licensed. They are development-only and are not added to
+any NuGet dependency group or package payload.
+
+```powershell
+$env:GOTOOLCHAIN = 'local'
+go version # Expect go1.27.3.
+go -C test/EmbedIO.Quic/peer mod download
+go -C test/EmbedIO.Quic/peer mod verify
+go -C test/EmbedIO.Quic/peer build -mod=readonly -trimpath -o ../../../TestResults/webtransport-peer.exe .
+& $python test/EmbedIO.Quic/verify_webtransport.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --peer TestResults/webtransport-peer.exe --output TestResults/embedio-quic-webtransport
+```
+
+## Development and fuzzing
+
+The [development and testing record](quic-development-and-testing.md) contains
+the complete implementation/test map, replay commands, extended local campaigns,
+validation ledger and the retirement of the earlier providers. All existing fuzz
+engines now include direct QUIC core targets; native-context mutations complement
+managed coverage.
+
+## Next acceptance boundaries
+
+1. Extend the bounded shared-listener/stream machinery to production lifetimes,
+   complete error classification/stateless reset,
+   and longer transfer/loss/endurance coverage.
+   Broaden loss/congestion and close-retry campaigns before treating the recovery
+   and lifecycle algorithms as production transport acceptance.
+2. Exercise outbound partial reset, withheld credit, concurrent session termination
+   and malformed authenticated traffic more extensively against independent peers.
+3. Expose the public WebTransport API through the request dispatcher and
+   application authorization, with capability checks bound to the live connection.
+4. Validate Windows, Linux and macOS using exact dependency artifacts, then browsers.
+   Measure warm steady-state and tail latency separately from cold start.
+
+The [WebTransport upstream readiness record](webtransport-upstream-readiness.md)
+describes the earlier MsQuic route, which is no longer in the source. Neither
+record establishes that WebTransport is ready to ship.
+
+## Shared listener validation
+
+After building the pinned peer above, run the additional ownership cases:
+
+```powershell
+& $python test/EmbedIO.Quic/verify_connections.py --dotnet (Get-Command dotnet).Source --assembly $assembly --openssl $opensslDirectory --peer TestResults/webtransport-peer.exe --output TestResults/embedio-quic-connections
+```
+
+The four cases cover eight simultaneous aioquic clients with loss/malformed input,
+twelve clients in waves after rebinding the same UDP port, four simultaneous
+quic-go WebTransport clients, and cancellation while an established connection is
+still active. Every case checks that the shared host retains zero owners at exit.
+The native mutation entry point also exercises admission, endpoint/CID isolation,
+capacity, handshake deadlines and once-only disposal without sockets.
+
+The `serve-h3-updates` development command uses a 128-packet local update interval
+and a bounded 30-second process lifetime for the 8 MiB endurance case. Its peer
+has a separate 20-second operation deadline. Ordinary hosts and existing peer cases
+retain their ten-second and eight-second bounds. This case verifies exact bidi/uni
+echo bytes, packet count beyond 4096, repeated updates, post-transfer datagrams,
+complete session shutdown and zero remaining physical flight.

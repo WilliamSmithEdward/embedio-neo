@@ -2,9 +2,9 @@ name: AFL++ parser campaign
 on:
   push:
     branches: [main]
-    paths: ['src/EmbedIO/**', 'src/Shared/**', 'test/EmbedIO.SharpFuzz/**', 'test/EmbedIO.Fuzz/MultipartFuzzChecks.cs', 'scripts/run-afl*', '.github/workflows/afl.yml', '.editorconfig', 'Directory.*.props', 'global.json']
+    paths: ['src/EmbedIO/**', 'src/EmbedIO.Quic/**', 'src/Shared/**', 'test/EmbedIO.SharpFuzz/**', 'test/EmbedIO.Quic/**', 'test/Shared/QuicNativeAssets.targets', 'native/EmbedIO.Quic.Tls/*.csproj', 'native/EmbedIO.Quic.Tls/packages.lock.json', 'test/EmbedIO.Fuzz/MultipartFuzzChecks.cs', 'scripts/run-afl*', '.github/workflows/afl.yml', '.editorconfig', 'Directory.*.props', 'global.json']
   pull_request:
-    paths: ['src/EmbedIO/**', 'src/Shared/**', 'test/EmbedIO.SharpFuzz/**', 'test/EmbedIO.Fuzz/MultipartFuzzChecks.cs', 'scripts/run-afl*', '.github/workflows/afl.yml', '.editorconfig', 'Directory.*.props', 'global.json']
+    paths: ['src/EmbedIO/**', 'src/EmbedIO.Quic/**', 'src/Shared/**', 'test/EmbedIO.SharpFuzz/**', 'test/EmbedIO.Quic/**', 'test/Shared/QuicNativeAssets.targets', 'native/EmbedIO.Quic.Tls/*.csproj', 'native/EmbedIO.Quic.Tls/packages.lock.json', 'test/EmbedIO.Fuzz/MultipartFuzzChecks.cs', 'scripts/run-afl*', '.github/workflows/afl.yml', '.editorconfig', 'Directory.*.props', 'global.json']
   schedule:
     - cron: '17 6 * * 3'
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   afl:
-    name: AFL++ managed parser coverage
+    name: AFL++ managed parser and QUIC coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:

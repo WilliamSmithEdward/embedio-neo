@@ -35,11 +35,12 @@ namespace EmbedIO.Net.Internal.WebTransport
     {
         private readonly object _gate = new();
         private readonly WebTransportSettings _local;
-        private readonly WebTransportSettings _peer;
+        private WebTransportSettings? _peer;
+        private int _sessionsWithoutFlowControl = 1;
         private readonly WebTransportRegistryLimits _limits;
         private readonly WebTransportStreamHandler _streamHandler;
         private readonly WebTransportDatagramHandler _datagramHandler;
-        private readonly Dictionary<long, WebTransportSession> _sessions = [];
+        private readonly Dictionary<long, WebTransportSessionCore> _sessions = [];
         private readonly Dictionary<long, Queue<WebTransportStreamHandle>> _bufferedStreams = [];
         private readonly Dictionary<long, Queue<byte[]>> _bufferedDatagrams = [];
         private int _bufferedStreamCount;
@@ -124,22 +125,80 @@ namespace EmbedIO.Net.Internal.WebTransport
             WebTransportRegistryLimits limits,
             WebTransportStreamHandler streamHandler,
             WebTransportDatagramHandler datagramHandler
+        ) : this(local, limits, streamHandler, datagramHandler) => Negotiate(peer, transportParametersMet, 1);
+
+        // A registry whose peer SETTINGS are not known yet. Streams naming unseen
+        // sessions are buffered and requests classified; sessions wait for Negotiate.
+        internal WebTransportSessionRegistry(
+            WebTransportSettings local,
+            WebTransportRegistryLimits limits,
+            WebTransportStreamHandler streamHandler,
+            WebTransportDatagramHandler datagramHandler
         )
         {
             _local = local ?? throw new ArgumentNullException(nameof(local));
-            _peer = peer ?? throw new ArgumentNullException(nameof(peer));
             _limits = limits ?? throw new ArgumentNullException(nameof(limits));
 
             if (limits.MaximumTrackedRequestRanges <= 0) throw new ArgumentOutOfRangeException(nameof(limits));
 
             _streamHandler = streamHandler ?? throw new ArgumentNullException(nameof(streamHandler));
             _datagramHandler = datagramHandler ?? throw new ArgumentNullException(nameof(datagramHandler));
-            Negotiated = local.Enabled && peer.SettingsRequirementsMet && transportParametersMet;
-            FlowControlEnabled = WebTransportSettings.FlowControlEnabled(local, peer);
         }
 
-        public bool Negotiated { get; }
-        public bool FlowControlEnabled { get; }
+        public bool Negotiated { get; private set; }
+        public bool FlowControlEnabled { get; private set; }
+
+        // Records the peer's SETTINGS once. Without negotiated flow control a connection
+        // holds sessionsWithoutFlowControl sessions: one for draft-16 (section 5.1).
+        // A connection that did not negotiate WebTransport never holds a session, so
+        // what arrived before its SETTINGS is released and later arrivals are refused.
+        internal void Negotiate(WebTransportSettings peer, bool transportParametersMet, int sessionsWithoutFlowControl)
+        {
+            if (peer == null) throw new ArgumentNullException(nameof(peer));
+
+            if (sessionsWithoutFlowControl < 1)
+                throw new ArgumentOutOfRangeException(nameof(sessionsWithoutFlowControl));
+
+            List<WebTransportStreamHandle>? refused = null;
+
+            lock (_gate)
+            {
+                if (_peer != null) throw new InvalidOperationException("The peer SETTINGS were already recorded.");
+
+                _peer = peer;
+                _sessionsWithoutFlowControl = sessionsWithoutFlowControl;
+                Negotiated = _local.Enabled && peer.SettingsRequirementsMet && transportParametersMet;
+                FlowControlEnabled = WebTransportSettings.FlowControlEnabled(_local, peer);
+
+                if (!Negotiated)
+                {
+                    refused = [];
+
+                    foreach (var queue in _bufferedStreams.Values) refused.AddRange(queue);
+
+                    _bufferedStreams.Clear();
+                    _bufferedStreamCount = 0;
+                    _bufferedDatagrams.Clear();
+                    _bufferedDatagramCount = 0;
+                    _bufferedDatagramBytes = 0;
+                }
+            }
+
+            if (refused != null)
+                foreach (var stream in refused) stream.Abort(WebTransportProtocol.BufferedStreamRejected);
+        }
+
+        // The peer's SETTINGS arrived without WebTransport: no session will ever exist.
+        private bool Refused => _peer != null && !Negotiated;
+
+        // The sessions the registry holds now, for connection-wide notices such as drain.
+        internal WebTransportSessionCore[] Sessions
+        {
+            get
+            {
+                lock (_gate) return [.. _sessions.Values];
+            }
+        }
 
         public int ActiveSessionCount
         {
@@ -168,7 +227,13 @@ namespace EmbedIO.Net.Internal.WebTransport
         // Call only after this exact request is classified as non-WebTransport
         // or its CONNECT is rejected. Seeing a higher request says nothing about
         // an unseen lower CONNECT; HTTP/3 streams can arrive out of order.
-        internal void NoteRequestStream(long streamId)
+        internal void NoteRequestStream(long streamId) => Settle(streamId, true);
+
+        // A request stream ended, classified or not. An active session settles its
+        // identifier when it ends; any other request can no longer name one.
+        internal void RequestEnded(long streamId) => Settle(streamId, false);
+
+        private void Settle(long streamId, bool classified)
         {
             if (!WebTransportProtocol.IsSessionId(streamId)) throw new ArgumentOutOfRangeException(nameof(streamId));
 
@@ -177,7 +242,12 @@ namespace EmbedIO.Net.Internal.WebTransport
             lock (_gate)
             {
                 if (_sessions.ContainsKey(streamId))
-                    throw new InvalidOperationException("An active WebTransport session owns this request.");
+                {
+                    if (classified)
+                        throw new InvalidOperationException("An active WebTransport session owns this request.");
+
+                    return;
+                }
 
                 MarkUnavailable(streamId);
 
@@ -200,7 +270,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         }
 
         // An extended CONNECT with :protocol=webtransport-h3 arrived on connectStreamId.
-        internal WebTransportAdmission TryCreateSession(long connectStreamId, out WebTransportSession? session)
+        internal WebTransportAdmission TryCreateSession(long connectStreamId, out WebTransportSessionCore? session)
         {
             if (!WebTransportProtocol.IsSessionId(connectStreamId))
                 throw new ArgumentOutOfRangeException(nameof(connectStreamId));
@@ -219,15 +289,15 @@ namespace EmbedIO.Net.Internal.WebTransport
                 if (_sessions.ContainsKey(connectStreamId))
                     throw new InvalidOperationException("A session already uses this CONNECT stream.");
 
-                var bound = FlowControlEnabled ? _limits.MaximumSessions : 1;
+                var bound = FlowControlEnabled ? _limits.MaximumSessions : _sessionsWithoutFlowControl;
 
                 if (_sessions.Count >= bound) return WebTransportAdmission.TooManySessions;
 
-                session = new WebTransportSession(
+                session = new WebTransportSessionCore(
                     connectStreamId,
                     FlowControlEnabled,
                     _local,
-                    _peer,
+                    _peer ?? throw new InvalidOperationException("Missing negotiated peer SETTINGS."),
                     _limits.Session,
                     _streamHandler,
                     _datagramHandler
@@ -260,7 +330,7 @@ namespace EmbedIO.Net.Internal.WebTransport
 
         // The session ended in any way; forget it. Later streams naming it are
         // reset with WT_SESSION_GONE because this exact identifier is recorded.
-        internal void SessionEnded(WebTransportSession session)
+        internal void SessionEnded(WebTransportSessionCore session)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
 
@@ -288,7 +358,7 @@ namespace EmbedIO.Net.Internal.WebTransport
                     "WebTransport session identifier is not a client-initiated bidirectional stream."
                 );
 
-            WebTransportSession? session = null;
+            WebTransportSessionCore? session = null;
             long? reset = null;
 
             lock (_gate)
@@ -297,7 +367,7 @@ namespace EmbedIO.Net.Internal.WebTransport
 
                 else if (_shutdown || IsUnavailable(sessionId)) reset = WebTransportProtocol.SessionGone;
 
-                else if (_bufferedStreamCount >= _limits.MaximumBufferedStreams)
+                else if (Refused || _bufferedStreamCount >= _limits.MaximumBufferedStreams)
                     reset = WebTransportProtocol.BufferedStreamRejected;
 
                 else
@@ -332,7 +402,7 @@ namespace EmbedIO.Net.Internal.WebTransport
                     "HTTP datagram names a stream that is not a client-initiated bidirectional stream."
                 );
 
-            WebTransportSession? session = null;
+            WebTransportSessionCore? session = null;
 
             lock (_gate)
             {
@@ -341,7 +411,8 @@ namespace EmbedIO.Net.Internal.WebTransport
                 else if (_shutdown || IsUnavailable(sessionId)) return false;
 
                 else if (
-                    _bufferedDatagramCount >= _limits.MaximumBufferedDatagrams
+                    Refused
+                    || _bufferedDatagramCount >= _limits.MaximumBufferedDatagrams
                     || count > _limits.MaximumBufferedDatagramBytes - _bufferedDatagramBytes
                 ) return false;
 
@@ -366,7 +437,7 @@ namespace EmbedIO.Net.Internal.WebTransport
         // streams and drop buffered datagrams.
         internal void Shutdown()
         {
-            List<WebTransportSession> sessions;
+            List<WebTransportSessionCore> sessions;
             List<WebTransportStreamHandle> streams = [];
 
             lock (_gate)

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>EmbedIO.Quic.Development</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" Condition="'$(EmbedIOQuicPackageVersion)' == ''" />
+    <PackageReference Include="EmbedIO-Neo" VersionOverride="$(EmbedIOQuicPackageVersion)" Condition="'$(EmbedIOQuicPackageVersion)' != ''" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../src/Shared/AnalyzerUtilities.cs" />
+  </ItemGroup>
+  <Import Project="../Shared/QuicNativeAssets.targets" />
+</Project>

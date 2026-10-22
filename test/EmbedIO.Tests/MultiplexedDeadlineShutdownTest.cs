@@ -16,6 +16,7 @@ using EmbedIO.Actions;
 using EmbedIO.Routing;
 using EmbedIO.Testing;
 using EmbedIO.Utilities;
+using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
@@ -42,7 +43,7 @@ namespace EmbedIO.Tests
         [TestCase(false, true)]
         public async Task Http3ServerShutdownReachesRequest(bool deadline, bool afterHandler)
         {
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
             if (CoreType("EmbedIO.Net.Internal.Http3.Http3QuicConnection", false) == null)
             { Assert.Ignore("The legacy asset has no direct QUIC transport."); return; }
@@ -179,31 +180,14 @@ namespace EmbedIO.Tests
             request.CertificateExtensions.Add(names.Build());
             using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
             using var certificate = X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pkcs12), null, X509KeyStorageFlags.Exportable);
-            await using var listener = await QuicListener.ListenAsync(new QuicListenerOptions
-            {
-                ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
-                ApplicationProtocols = new() { SslApplicationProtocol.Http3 },
-                ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
-                {
-                    DefaultCloseErrorCode = 0x100,
-                    DefaultStreamErrorCode = 0x10c,
-                    MaxInboundBidirectionalStreams = 8,
-                    MaxInboundUnidirectionalStreams = 8,
-                    ServerAuthenticationOptions = new SslServerAuthenticationOptions
-                    {
-                        ApplicationProtocols = new() { SslApplicationProtocol.Http3 },
-                        ServerCertificate = certificate,
-                    },
-                }),
-            }, stop.Token);
-            var local = listener.LocalEndPoint;
+            await using var host = EngineQuicHost.Start(certificate);
+            var local = host.LocalEndPoint;
             var server = Task.Run(async () =>
             {
-                var connection = await listener.AcceptConnectionAsync(stop.Token);
-                var remote = connection.RemoteEndPoint;
+                var accepted = await host.AcceptAsync(stop.Token);
+                var remote = accepted.Remote;
                 var dispatch = Adapt("EmbedIO.Net.Internal.Http3.Http3QuicExchange", exchange => application(Context(exchange, local, remote, true)));
-                await (Task)(Method("EmbedIO.Net.Internal.Http3.Http3QuicConnection", "RunAsync", BindingFlags.Static)
-                    .Invoke(null, new object[] { connection, dispatch, stop.Token }) ?? throw new AssertionException("Missing connection."));
+                await EngineQuicHost.RunAsync(accepted.Transport, dispatch, stop.Token);
             });
             // As over HTTP/2, the client stays open until the server has stopped.
             using var handler = new SocketsHttpHandler

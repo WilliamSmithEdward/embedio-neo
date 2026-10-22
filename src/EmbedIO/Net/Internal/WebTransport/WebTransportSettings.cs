@@ -11,9 +11,11 @@ namespace EmbedIO.Net.Internal.WebTransport
     // reset_stream_at) are not visible to this layer and are reported separately.
     internal sealed class WebTransportSettings
     {
-        public bool ExtendedConnect { get; private set; }
         public bool Datagrams { get; private set; }
         public bool Enabled { get; private set; }
+
+        // The draft-02 enabling setting current browsers send instead of Enabled.
+        public bool Draft02Enabled { get; private set; }
         public long InitialMaxData { get; private set; }
         public long InitialMaxStreamsUnidirectional { get; private set; }
         public long InitialMaxStreamsBidirectional { get; private set; }
@@ -22,9 +24,9 @@ namespace EmbedIO.Net.Internal.WebTransport
         public bool DeclaresFlowControl =>
             InitialMaxData != 0 || InitialMaxStreamsUnidirectional != 0 || InitialMaxStreamsBidirectional != 0;
 
-        // Section 3.1: every SETTINGS requirement a server peer must have met before
-        // :protocol=webtransport-h3 requests are processed as sessions.
-        public bool SettingsRequirementsMet => ExtendedConnect && Datagrams && Enabled;
+        // Section 3.1: a client's required SETTINGS before its sessions are processed.
+        // Extended CONNECT support is advertised by the server, not required from clients.
+        public bool SettingsRequirementsMet => Datagrams && Enabled;
 
         internal static WebTransportSettings Local(
             bool enabled,
@@ -50,7 +52,6 @@ namespace EmbedIO.Net.Internal.WebTransport
 
             return new WebTransportSettings
             {
-                ExtendedConnect = true,
                 Datagrams = true,
                 Enabled = enabled,
                 InitialMaxData = initialMaxData,
@@ -67,7 +68,7 @@ namespace EmbedIO.Net.Internal.WebTransport
                 switch (id)
                 {
                     case WebTransportProtocol.SettingEnableConnectProtocol:
-                        settings.ExtendedConnect = Http3PeerSettings.Boolean(value);
+                        _ = Http3PeerSettings.Boolean(value);
                         break;
 
                     case WebTransportProtocol.SettingH3Datagram:
@@ -76,6 +77,10 @@ namespace EmbedIO.Net.Internal.WebTransport
 
                     case WebTransportProtocol.SettingEnabled:
                         settings.Enabled = Http3PeerSettings.Boolean(value);
+                        break;
+
+                    case WebTransportProtocol.SettingEnableWebTransportDraft02:
+                        settings.Draft02Enabled = Http3PeerSettings.Boolean(value);
                         break;
 
                     case WebTransportProtocol.SettingInitialMaxData:
@@ -107,12 +112,16 @@ namespace EmbedIO.Net.Internal.WebTransport
         // The extension's own identifier/value pairs for the connection's SETTINGS
         // frame. The connection already sends SETTINGS_ENABLE_CONNECT_PROTOCOL and
         // owns SETTINGS_H3_DATAGRAM; zero-valued limits are omitted as defaults.
-        internal byte[] EncodeLocal()
+        // With draft02, the draft-02 enabling setting is sent as well.
+        internal byte[] EncodeLocal(bool draft02 = false)
         {
-            var bytes = new byte[64];
+            var bytes = new byte[80];
             var count = 0;
 
             if (Enabled) count += Pair(bytes, count, WebTransportProtocol.SettingEnabled, 1);
+
+            if (Enabled && draft02)
+                count += Pair(bytes, count, WebTransportProtocol.SettingEnableWebTransportDraft02, 1);
 
             if (InitialMaxData != 0)
                 count += Pair(bytes, count, WebTransportProtocol.SettingInitialMaxData, InitialMaxData);

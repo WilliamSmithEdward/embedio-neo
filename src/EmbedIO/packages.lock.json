@@ -121,6 +121,9 @@
         "requested": "[10.0.13, )",
         "resolved": "10.0.13",
         "contentHash": "3+orva+l3D+EdXYQOJm9zKWgwSxf4/EieVZ0D+uQRjMOUaJMoNIkc/Wu7abCAK5VnAeStZoLcibFYQrmYdsJ0g=="
+      },
+      "EmbedIO-Neo.Quic.Native": {
+        "type": "Project"
       }
     }
   }

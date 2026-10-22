@@ -3,8 +3,14 @@
 ###############################################################################
 * text=auto
 scripts/run-afl-container.sh text eol=lf
+# Native build scripts are mounted directly into Linux containers.
+native/EmbedIO.Quic.Tls/*.sh text eol=lf
+native/EmbedIO.Quic.Tls/Dockerfile.* text eol=lf
+native/EmbedIO.Quic.Tls/OpenSSL-LICENSE.txt text eol=lf
 # Multipart seeds are exact wire bytes, including deliberate CRLF and malformed LF.
 test/EmbedIO.SharpFuzz/corpus/multipart-* binary
+# QUIC seeds contain exact packet and command bytes, including control characters.
+test/EmbedIO.SharpFuzz/corpus/quic-* binary
 
 ###############################################################################
 # Set default behavior for command prompt diff.

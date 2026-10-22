@@ -11,6 +11,12 @@ the October 2026 standards baseline. Strict rejection of malformed and ambiguous
 framing is explicitly approved; valid application interfaces remain compatible.
 This document is a development plan, not a claim of complete protocol support.
 
+The earlier HTTP/3 providers (`System.Net.Quic` and the internal native MsQuic
+binding), with the CI quarantines, probes and scripts that several sections below
+describe, were removed on 2026-10-22; see
+[retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+Those sections remain as history.
+
 ## Development completion criteria
 
 On 2026-10-08 the owner explicitly requested completion of all development as an
@@ -940,6 +946,9 @@ new source's full cross-platform gates must still complete.
 
 ### Required native QUIC coverage in desktop CI
 
+Since 2026-10-22 the server uses EmbedIO.Quic, and the pinned MsQuic installs below
+serve only the independent .NET test client.
+
 Artifact inspection of CI 37786567665 (e00cb8a) showed nine QUIC passes on Windows
 and nine explicit capability skips on each of Linux and macOS. The overall run
 passed, but did not prove Unix QUIC interoperability. CI now installs MsQuic 2.6.2
@@ -1830,16 +1839,17 @@ not the selected 256 KiB implementation. Initial fixture failures and a build
 attempt blocked by the running test apphost remain in local evidence; they are
 not reported as production failures or clean-build passes.
 
-Run `python scripts/compare_http3_writes.py` to reproduce the comparison. It builds
-identical current core snapshots with only the baseline exchange taken from
-commit d40d839, hashes sources/binaries and records SDK information. The default
-output is `TestResults/http3-write-comparison`; `--output` must stay under
-TestResults. Native QUIC support is required. Each of three alternating process
-pairs runs three samples per size/concurrency with tiered compilation disabled.
-TLS setup and warmup are excluded, exact body checking is included. Client and
-server share one process; CPU and managed allocations cover both, while native
-allocation is not counted. Per-sample p50/p95/p99 values and raw results are saved;
-these short loopback samples are not production tail-latency guarantees.
+`python scripts/compare_http3_writes.py` reproduced the comparison until it was
+removed with the earlier providers on 2026-10-22. It built identical current core
+snapshots with only the baseline exchange taken from commit d40d839, hashed
+sources/binaries and recorded SDK information, writing to
+`TestResults/http3-write-comparison` by default. It required native QUIC support.
+Each of three alternating process pairs ran three samples per size/concurrency
+with tiered compilation disabled. TLS setup and warmup were excluded, exact body
+checking was included. Client and server shared one process; CPU and managed
+allocations covered both, while native allocation was not counted. Per-sample
+p50/p95/p99 values and raw results were saved; these short loopback samples are
+not production tail-latency guarantees.
 
 The 16 KiB trial reduced sequential throughput by 27% for 1 MiB and 34% for 8 MiB
 responses, with increased CPU, and was rejected. A 64 KiB trial recovered much
@@ -4886,7 +4896,7 @@ TestResults/http-engine/quic-loader-evidence-artifact and quic-loader-ordering.j
 
 Ordinary CI on that same head still fails its macOS rebind test with
 AddressAlreadyInUse under the stock dependency. No normal prerequisite, production
-package or loader policy was changed to obtain this experimental result. Supported
+package or loader policy was changed to obtain this comparison result. Supported
 native deployment, maintenance/provenance policy and final exact-head checks
 remain release blockers.
 
@@ -6428,6 +6438,8 @@ without warnings/errors; guards and four resource budgets pass. Final combined
 macOS/CI/native experiments and admission performance acceptance remain pending.
 
 ### Windows QUIC credential quarantine
+
+This quarantine was removed with the earlier providers on 2026-10-22.
 
 William approved a second narrow quarantine on 2026-10-14 for the Windows QUIC
 credential failure tracked in

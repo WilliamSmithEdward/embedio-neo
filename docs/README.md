@@ -56,6 +56,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Trimming and Native AOT](guides/trimming-and-native-aot.md): AOT-safe JSON with source-generated metadata, Web API controllers through generated bindings and their build-time diagnostics, annotated reflection APIs and what a Native AOT host supports.
 - [OpenAPI documents](guides/openapi.md): new in Neo v2, OpenAPI 3.1 documents written from generated controller bindings, with operation attributes, security requirements from authentication modules, declared routes for other modules, routes the document cannot describe and its limits.
 - [HTTP/3 listener](guides/http3.md): new in Neo v2, QUIC mode, certificates, usage and current limits.
+- [WebTransport over HTTP/3](guides/webtransport.md): not yet in a released package; opt-in sessions with streams and datagrams, draft-16 and the browsers' draft-02, authorization, bounds and validation.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Rotating the server certificate](guides/certificate-rotation.md): new in Neo v2, `ServerCertificateSource`, replacing certificates while TCP and QUIC listeners run.
 - [TLS policy](guides/tls-policy.md): new in Neo v2, client certificates, protocol versions and SNI certificate selection, with per-listener support.
@@ -181,12 +182,12 @@ for a complete app you can run, then choose files or controllers as needed.
 ## Architecture
 
 - [Modern HTTP engine program](project/http-engine.md): protocol roadmap, compatibility changes and performance acceptance.
-- [QUIC lifetime and rebind](project/quic-lifetime.md): native disposal evidence, bounded retry, quarantine limits and retirement gates.
+- [QUIC lifetime and rebind](project/quic-lifetime.md): historical; native disposal evidence, bounded retry, quarantine limits and retirement gates of the earlier providers.
 - [Upstream QUIC lifetime report](project/quic-upstream-report-draft.md): the MsQuic report posted as microsoft/msquic#6374, separating deferred datapath close from connection-held bindings, plus the unposted dotnet/runtime note.
-- [Native QUIC abort disposal](project/native-quic-abort-disposal.md): preserve explicit read/write abort codes through cleanup, with real-peer regressions.
+- [Native QUIC abort disposal](project/native-quic-abort-disposal.md): historical; preserve explicit read/write abort codes through cleanup in the earlier native provider.
 - [Linux test-host terminations](project/linux-test-host-terminations.md): native listener stop race diagnosis, unattributed glibc abort evidence and next diagnostics.
-- [Native HTTP/3 provider ownership audit](project/http3-native-provider-audit.md): MsQuic acceptance, callback and ownership findings, reproductions and proposed fixes.
-- [Native QUIC lifetime campaigns](project/http3-native-lifetime-campaigns.md): Apple Silicon lifetime and resource campaigns for the native MsQuic provider, confirmed native disposal defects and proposed fixes.
+- [Native HTTP/3 provider ownership audit](project/http3-native-provider-audit.md): historical; MsQuic acceptance, callback and ownership findings, reproductions and proposed fixes.
+- [Native QUIC lifetime campaigns](project/http3-native-lifetime-campaigns.md): historical; Apple Silicon lifetime and resource campaigns for the native MsQuic provider, confirmed native disposal defects and proposed fixes.
 - [Cold-path JIT latency](project/cold-path-jit-latency.md): deferred experiment with Windows first-response measurements and mixed warm/specialized-endpoint tradeoffs.
 - [First-endpoint latency](project/first-endpoint-latency.md): fresh-process HTTP measurements, literal-route cold-path improvements and remaining profiling targets.
 - [Managed TCP write latency](project/http-tcp-latency.md): controlled socket-delay comparison with unchanged keep-alive and HTTP/2 reset regressions.
@@ -229,7 +230,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [MAUI HTTPS validation](platforms/maui-https-validation.md): native client, WebView and external-client fixtures.
 - [MAUI Android](platforms/maui-android.md): background work, listener ownership, and restart diagnostics.
 - [MAUI Mac Catalyst](platforms/maui-mac-catalyst.md): listener startup and sandbox entitlements.
-- [Native QUIC datagrams on macOS](platforms/quic-datagrams-macos-validation.md): local Apple Silicon evidence for the internal datagram owner, scoped to the exact tested commits.
+- [Native QUIC datagrams on macOS](platforms/quic-datagrams-macos-validation.md): historical; local Apple Silicon evidence for the earlier native datagram owner, scoped to the exact tested commits.
 
 - [Informational responses and response trailers](guides/response-field-sections.md): optional managed response sections and ownership rules.
 
@@ -269,9 +270,12 @@ points for existing links.
 
 - [Precompressed static files](guides/precompressed-files.md): opt-in .br and .gz variants, selection, validators, ranges, the 406 correction and measured compression levels.
 
-- [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance.
+- [Standalone native QUIC module lifetime](project/native-quic-module-lifetime.md): historical; Linux unload crash reproduction, retained mapping, collectible contexts and fresh-process acceptance for the earlier native provider.
 
-- [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): decision to await a current-wire provider, test-only evidence and resumption gates.
+- [QUIC development and testing record](project/quic-development-and-testing.md): implementation stages, fuzz targets, extensive local campaigns, validation ledger and the retirement of the earlier providers.
+- [Portable QUIC TLS build](../native/EmbedIO.Quic.Tls/README.md): pinned TLS-only native source builds, ownership boundary and current platform/packaging limits.
+- [EmbedIO.Quic implementation](project/quic-engine-feasibility.md): EmbedIO.Quic recovery, congestion, receive-window/lifecycle and H3/WebTransport implementation with OpenSSL TLS and independent peers; the ordinary HTTP/3 binding since PR #506, not yet released.
+- [WebTransport upstream readiness](project/webtransport-upstream-readiness.md): historical; decision to await a current-wire MsQuic provider, test-only evidence and resumption gates.
 
 - [Coverage-guided URL fuzzing](guides/coverage-guided-fuzzing.md): instrumented parser campaigns, seed replay and crash artifacts.
 - [Production source maintenance audit](project/source-maintenance-audit.md): complete 434-file implementation review, reproduced defects and compatibility-preserving cleanup.

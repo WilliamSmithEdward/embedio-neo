@@ -5,6 +5,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../EmbedIO.Quic/EmbedIO.Quic.csproj" />
     <Compile Include="../EmbedIO.Fuzz/MultipartFuzzChecks.cs" Link="MultipartFuzzChecks.cs" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
     <PackageReference Include="SharpFuzz" />

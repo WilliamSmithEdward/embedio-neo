@@ -20,6 +20,7 @@ namespace EmbedIO.Net.Internal
     internal sealed class MultiplexedContext :
         IHttpContextImpl,
         IHttpTunnelContext,
+        IWebTransportContext,
         IDisposable,
         EmbedIO.Internal.ITelemetryContext,
         ILazyItems,
@@ -34,6 +35,7 @@ namespace EmbedIO.Net.Internal
         // Created by the first OnClose registration, under _sync.
         private Stack<Action<IHttpContext>>? _callbacks;
         private HttpTunnel? _acceptedTunnel;
+        private IWebTransportPendingSession? _acceptedWebTransport;
         private IReadOnlyList<string>? _tunnelProtocols;
         private readonly TaskCompletionSource<bool> _completion = new(
             TaskCreationOptions.RunContinuationsAsynchronously
@@ -232,6 +234,13 @@ namespace EmbedIO.Net.Internal
             {
                 PropagateCancellation();
 
+                // A session still open when its handler returns is closed with code 0
+                // before its tunnel finishes the stream.
+                if (_acceptedWebTransport != null)
+                    await _acceptedWebTransport
+                        .CloseForContextAsync(token)
+                        .ConfigureAwait(false);
+
                 if (_acceptedTunnel != null)
                     await _acceptedTunnel
                         .DisposeOwnedStreamAsync(token)
@@ -379,18 +388,60 @@ namespace EmbedIO.Net.Internal
             if (string.Equals(protocol, "websocket", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Use AcceptWebSocketAsync for WebSocket negotiation.");
 
+            if (IsWebTransportRequest)
+                throw new InvalidOperationException("Use AcceptWebTransportAsync for WebTransport sessions.");
+
             if (useCapsules && protocol == null)
                 throw new InvalidOperationException("Capsules require a negotiated extension protocol.");
 
             if (Interlocked.Exchange(ref _webSocketAccepted, 1) != 0)
                 throw new InvalidOperationException("A protocol handoff was already accepted.");
 
+            return await AcceptTunnelCoreAsync(protocol, useCapsules, null, cancellationToken).ConfigureAwait(false);
+        }
+
+        public bool IsWebTransportRequest => _exchange is IMultiplexedWebTransportExchange { WebTransport: not null };
+
+        public async Task<WebTransportSession> AcceptWebTransportAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var pending = (_exchange as IMultiplexedWebTransportExchange)?.WebTransport
+                ?? throw new InvalidOperationException("The request is not a negotiated WebTransport session request.");
+
+            if (Interlocked.Exchange(ref _webSocketAccepted, 1) != 0)
+                throw new InvalidOperationException("A protocol handoff was already accepted.");
+
+            var tunnel = await AcceptTunnelCoreAsync(
+                _exchange.Request.Protocol,
+                false,
+                pending,
+                cancellationToken
+            ).ConfigureAwait(false);
+            var datagrams = tunnel.Datagrams
+                ?? throw new InvalidOperationException("WebTransport requires negotiated HTTP datagrams.");
+            return pending.Accept(tunnel, datagrams);
+        }
+
+        // Commits the 2xx response of an accepted tunnel and hands its stream over.
+        // A WebTransport session is recorded with its tunnel, so closing the context
+        // closes the session before the tunnel ends the stream.
+        private async Task<HttpTunnel> AcceptTunnelCoreAsync(
+            string? protocol,
+            bool useCapsules,
+            IWebTransportPendingSession? webTransport,
+            CancellationToken cancellationToken
+        )
+        {
             lock (_sync) if (_closed) throw new ObjectDisposedException(nameof(MultiplexedContext));
 
             var control = _exchange as IMultiplexedTunnelControl
                 ?? throw new NotSupportedException("Tunnel control is unavailable.");
             RequestAbortRegistry.Complete(_exchange);
             Response.StatusCode = 200;
+
+            if (webTransport?.Draft02 == true)
+                Response.Headers[Net.Internal.WebTransport.WebTransportProtocol.Draft02ResponseHeader] =
+                    Net.Internal.WebTransport.WebTransportProtocol.Draft02ResponseValue;
 
             try
             {
@@ -427,6 +478,7 @@ namespace EmbedIO.Net.Internal
                 }
 
                 _acceptedTunnel = tunnel;
+                _acceptedWebTransport = webTransport;
             }
 
             return tunnel;

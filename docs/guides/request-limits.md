@@ -26,7 +26,7 @@ Kestrel's `KestrelServerLimits` in ASP.NET Core 10.0.13. Before v2 they were all
 | `MaximumRequestBodyBytes` | 30,000,000 bytes | `MaxRequestBodySize`, 30,000,000 bytes |
 | `MaximumRequestHeaderBytes` | 32 KiB | `MaxRequestHeadersTotalSize`, 32 KiB |
 | `MaximumRequestHeaderCount` | 100 | `MaxRequestHeaderCount`, 100 |
-| `RequestHeadersTimeout` (TCP connections) | 30 seconds | `RequestHeadersTimeout`, 30 seconds |
+| `RequestHeadersTimeout` (TCP connections and HTTP/3 streams) | 30 seconds | `RequestHeadersTimeout`, 30 seconds |
 | `MinimumRequestBodyDataRate` | 240 bytes per second after a 5-second grace period | `MinRequestBodyDataRate`, the same |
 | `RequestBodyReadTimeout` | null (no deadline) | none: Kestrel has no per-read deadline either |
 | `WebSocketModule.MaxMessageSize` | 4 MiB | none: ASP.NET Core's `WebSocketOptions` has no message size limit |
@@ -65,14 +65,15 @@ They live on `WebServerOptionsBase`, next to the existing
 dispatch path. That path serves the managed HTTP/1.1 listener, HTTP/2 and HTTP/3
 alike; each HTTP/2 or HTTP/3 stream counts as one request.
 
-Three more options bound TCP connections rather than requests. They live on
+Three more options bound connections rather than requests. They live on
 `WebServerOptions` and are enforced by the managed TCP listener, so they cover
-HTTP/1.1 and HTTP/2 but not HTTP/3; see [connection limits](#connection-limits).
+HTTP/1.1 and HTTP/2; `RequestHeadersTimeout` also bounds each HTTP/3 stream's
+header. See [connection limits](#connection-limits).
 
 | Option | Default | When exceeded |
 | --- | --- | --- |
 | `MaximumConnections` | null (unlimited) | new connection closed |
-| `RequestHeadersTimeout` | null (30 seconds) | connection closed |
+| `RequestHeadersTimeout` | null (30 seconds) | connection closed; HTTP/3 stream reset |
 | `KeepAliveTimeout` | null (15 s on HTTP/1.1, none on HTTP/2) | connection closed, GOAWAY on HTTP/2 |
 
 ## Example
@@ -284,7 +285,8 @@ Only requests that carry a body are timed.
 ## Connection limits
 
 These options on `WebServerOptions` apply to the managed TCP listener in the `EmbedIO`
-and `EmbedIOCombined` modes. Setting any of them on an `EmbedIOHttp3` server throws
+and `EmbedIOCombined` modes. `RequestHeadersTimeout` also applies to HTTP/3 streams.
+Setting `MaximumConnections` or `KeepAliveTimeout` on an `EmbedIOHttp3` server throws
 `NotSupportedException`, because QUIC connections are not governed by them.
 
 - **`MaximumConnections`** bounds the TCP connections the server keeps open across all
@@ -296,7 +298,13 @@ and `EmbedIOCombined` modes. Setting any of them on an `EmbedIOHttp3` server thr
   first complete request head, including the TLS handshake and, on HTTP/2, the
   connection preface. A connection that misses it is closed without a response. Null
   applies the default of 30 seconds, Kestrel's `RequestHeadersTimeout`; before v2 the
-  default was 90 seconds.
+  default was 90 seconds. On HTTP/3 it applies, as in Kestrel, to every stream the
+  client opens, from the time the server accepts it: a request stream must deliver its
+  complete headers and any other stream its stream header, including a WebTransport
+  stream's session. A request stream that misses it is reset with `H3_REQUEST_REJECTED`,
+  so the client can retry the request; a unidirectional stream gets
+  `H3_STREAM_CREATION_ERROR`. One timer for the process checks the deadlines once a
+  second.
 - **`KeepAliveTimeout`** bounds idle time between requests. On HTTP/1.1 it runs from
   the end of a response until the next request head is complete, replacing the fixed
   15 seconds, and the `Keep-Alive` response header advertises it in whole seconds,
@@ -424,7 +432,7 @@ and is skipped on hosts without QUIC support.
 | Connections beyond `MaximumConnections` | closed unanswered; slot returns when one closes | n/a | n/a |
 | Second server on a port with connection limits | fails to start, first keeps serving | n/a | n/a |
 | Client disconnects mid-upload | handler sees the failure; request and connection slots return | n/a | n/a |
-| Incomplete first request head | closed at `RequestHeadersTimeout` | n/a | n/a |
+| Incomplete first request head | closed at `RequestHeadersTimeout` | n/a | stream reset at `RequestHeadersTimeout` |
 | Idle connection after a response | closed at `KeepAliveTimeout`, header rounded up | GOAWAY then close | n/a |
 | Stream open longer than the idle deadline | n/a | completes normally | n/a |
 | No connection options | `Keep-Alive: timeout=15`, unchanged | n/a | n/a |

@@ -21,6 +21,7 @@
        carry RequiresUnreferencedCode/RequiresDynamicCode so applications see them. -->
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And Exists('NugetSigning.pfx')">
@@ -47,6 +48,13 @@
     <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
     <!-- RateLimitingModule's algorithms. Not part of the base .NET runtime, so both targets reference it. -->
     <PackageReference Include="System.Threading.RateLimiting" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <!-- Asset-only owned package: no managed assembly reference or legacy dependency. -->
+    <ProjectReference Include="../../native/EmbedIO.Quic.Tls/EmbedIO.Quic.Native.csproj" Private="false" />
+    <Compile Include="../EmbedIO.Quic/**/*.cs" Exclude="../EmbedIO.Quic/bin/**;../EmbedIO.Quic/obj/**" Link="Quic/%(RecursiveDir)%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="EmbedIO.Quic.Development" Condition="'$(SignAssembly)' != 'true'" />
   </ItemGroup>
 
   <ItemGroup>

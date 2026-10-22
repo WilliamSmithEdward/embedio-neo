@@ -19,7 +19,6 @@ namespace EmbedIO.Net.Internal
     {
         private readonly object _sync = new();
         private readonly ServerCertificateSource _certificates;
-        private readonly bool _native;
         private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = [];
         private Func<IHttpContextImpl, Task>? _dispatcher;
@@ -29,19 +28,14 @@ namespace EmbedIO.Net.Internal
         private bool _drained;
         private bool _ignoreWriteExceptions = true;
 
-        internal CombinedHttpListener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
-            : this(FixedSource(certificate), native, bodyPolicy)
+        internal CombinedHttpListener(X509Certificate2? certificate, RequestPolicyResolver? bodyPolicy)
+            : this(FixedSource(certificate), bodyPolicy)
         { }
 
         // One source serves both transports, so a published certificate reaches TCP and QUIC handshakes alike.
-        internal CombinedHttpListener(
-            ServerCertificateSource certificates,
-            bool native,
-            RequestPolicyResolver? bodyPolicy
-        )
+        internal CombinedHttpListener(ServerCertificateSource certificates, RequestPolicyResolver? bodyPolicy)
         {
             _certificates = certificates ?? throw new ArgumentNullException(nameof(certificates));
-            _native = native;
             _bodyPolicy = bodyPolicy;
         }
 
@@ -64,6 +58,9 @@ namespace EmbedIO.Net.Internal
 
         // Records TCP and QUIC connections. Set before Start.
         internal EmbedIO.Internal.ServerTelemetry? Telemetry { get; set; }
+
+        // WebTransport settings for the QUIC transport, or null to serve none. Set before Start.
+        internal WebTransportOptions? WebTransport { get; set; }
         public string Name => "EmbedIO TCP and QUIC listener";
 
         public bool IsListening
@@ -150,10 +147,10 @@ namespace EmbedIO.Net.Internal
                     TlsPolicy,
                     _prefixes,
                     _ignoreWriteExceptions,
-                    _native,
                     DeferContinue,
                     ConnectionPolicy,
                     Telemetry,
+                    WebTransport,
                     _bodyPolicy
                 );
 
@@ -313,21 +310,24 @@ namespace EmbedIO.Net.Internal
                 ServerTlsPolicy? policy,
                 List<string> prefixes,
                 bool ignoreWriteExceptions,
-                bool native,
                 bool deferContinue,
                 TcpConnectionPolicy connections,
                 EmbedIO.Internal.ServerTelemetry? telemetry,
+                WebTransportOptions? webTransport,
                 RequestPolicyResolver? bodyPolicy
             )
             {
                 var tcp = new HttpListener(certificates, bodyPolicy);
-                var quic = new Http3.Http3Listener(certificates, native, bodyPolicy);
+                var quic = new Http3.Http3Listener(certificates, bodyPolicy);
                 tcp.DeferContinue = deferContinue;
                 tcp.ConnectionPolicy = connections;
                 tcp.TlsPolicy = policy;
                 quic.TlsPolicy = policy;
                 tcp.Telemetry = telemetry;
                 quic.Telemetry = telemetry;
+                quic.WebTransport = webTransport;
+                // The TCP policy carries the configured or default RequestHeadersTimeout.
+                quic.RequestHeadersTimeout = TimeSpan.FromMilliseconds(connections.HeaderTimeoutMilliseconds);
                 quic.DeferContinue = deferContinue;
                 var session = new Session(tcp, quic);
 

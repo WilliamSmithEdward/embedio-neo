@@ -1,6 +1,7 @@
 # Source layout
 
-The source folders group code by responsibility. Folder names do not define new
+The source folders group code by responsibility. Within the existing library,
+folder names do not define new
 namespaces or assemblies: existing `EmbedIO`, `EmbedIO.Internal` and
 `EmbedIO.Net.Internal` type identities remain unchanged.
 
@@ -15,6 +16,7 @@ namespaces or assemblies: existing `EmbedIO`, `EmbedIO.Internal` and
 | `src/EmbedIO/Modules` | Module contracts, composition and registration extension methods. |
 | `src/EmbedIO/Authentication` | Credential validation modules and bearer callbacks. |
 | `src/EmbedIO/Authorization` | Controller access requirements and named policy evaluation. |
+| `src/EmbedIO.Quic` | Independent .NET 10 packet, cryptography, TLS state/framing, recovery, stream and async ownership core. Nonpackable during production integration; the TLS/HTTP validation host stays under `test/EmbedIO.Quic`. |
 | `src/EmbedIO.Jwt` | Optional explicit-key JWT validation; IdentityModel dependencies stay in this package. |
 | `src/EmbedIO/Tunnels` | Public tunnel, capsule and datagram contracts. |
 | `src/EmbedIO/Internal/RequestBodies` | Request stream wrappers, decoding, accounting and policy enforcement. |
@@ -25,7 +27,7 @@ namespaces or assemblies: existing `EmbedIO`, `EmbedIO.Internal` and
 | `src/EmbedIO/Internal/Conversion` | Value and MIME conversion helpers. |
 | `src/EmbedIO/Net/Internal/Http1` | HTTP/1 framing, adapters and upgrade output. |
 | `src/EmbedIO/Net/Internal/Http2` | HTTP/2 frames, streams and flow control. |
-| `src/EmbedIO/Net/Internal/Http3` | HTTP/3 and native QUIC transport. |
+| `src/EmbedIO/Net/Internal/Http3` | HTTP/3 and its binding to the EmbedIO.Quic engine. |
 | `src/EmbedIO/Net/Internal/Transport` | Shared TCP listener, endpoint, connection and TLS lifetime. |
 | `src/EmbedIO/Net/Internal/Multiplexed` | Shared HTTP/2 and HTTP/3 request/response adapters. |
 | `src/EmbedIO/Net/Internal/Headers` | Shared field parsing, framing metadata and cookie serialization. |
@@ -48,7 +50,7 @@ filters, comparison scripts and current documentation links. Historical evidence
 manifests retain the paths belonging to their recorded commit. Git rename
 history connects those paths to the current layout.
 
-This reorganization moves or renames 186 files without changing any of the 434
+The original source-layout reorganization moved or renamed 186 files without changing any of its 434
 production C# files' contents. Namespaces, public signatures, runtime behavior,
 target frameworks and dependency groups are preserved. Debugger and Source Link
 paths naturally follow the new physical locations.

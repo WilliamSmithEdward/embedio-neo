@@ -29,7 +29,7 @@ namespace EmbedIO.Tests
         [TestCase(true)]
         public async Task InitialLocalhostQuicBindPreservesOccupiedFamilyException(bool ipv6Occupied)
         {
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
                 throw new AssertionException("QUIC availability changed after fixture prerequisite validation.");
             Assert.That(Socket.OSSupportsIPv6, Is.True);
             Assert.That(EmbedIO.Net.EndPointManager.UseIpv6, Is.True,

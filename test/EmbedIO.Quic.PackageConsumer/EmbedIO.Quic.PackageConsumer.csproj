@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>EmbedIO.Quic.Development</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EmbedIOQuicPackageVersion Condition="'$(EmbedIOQuicPackageVersion)' == ''">$(Version)</EmbedIOQuicPackageVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="EmbedIO-Neo" VersionOverride="$(EmbedIOQuicPackageVersion)" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../src/Shared/AnalyzerUtilities.cs" />
+  </ItemGroup>
+</Project>

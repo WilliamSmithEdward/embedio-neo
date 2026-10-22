@@ -3270,6 +3270,25 @@
       ],
       "neoStandardOnly": [],
       "reason": "Owner-approved additive capsule/tunnel API: .NET 10 exposes IAsyncDisposable and DisposeAsync; both assets retain Task-returning CloseAsync and IDisposable. This does not permit other target differences. See docs/compatibility/migration.md#generic-tunnel-and-capsule-carriers-neo-v2."
+    },
+    {
+      "type": "EmbedIO.WebTransportSession",
+      "neoOnly": [
+        "Method: System.Threading.Tasks.ValueTask DisposeAsync() | ",
+        "interface: System.IAsyncDisposable"
+      ],
+      "neoStandardOnly": [],
+      "reason": "Owner-approved additive WebTransport API (#414): .NET 10 exposes IAsyncDisposable and DisposeAsync; both assets retain IDisposable and Task-returning CloseAsync. Sessions run only on the .NET 10 HTTP/3 listener. This does not permit other target differences. See docs/guides/webtransport.md."
+    },
+    {
+      "type": "EmbedIO.WebTransportStream",
+      "neoOnly": [
+        "Method: System.Threading.Tasks.ValueTask DisposeAsync() | ",
+        "Method: System.Threading.Tasks.ValueTask WriteAsync(System.ReadOnlyMemory`1[System.Byte], System.Threading.CancellationToken) | buffer:optional=False:default=<none>;cancellationToken:optional=True:default=",
+        "Method: System.Threading.Tasks.ValueTask`1[System.Int32] ReadAsync(System.Memory`1[System.Byte], System.Threading.CancellationToken) | buffer:optional=False:default=<none>;cancellationToken:optional=True:default="
+      ],
+      "neoStandardOnly": [],
+      "reason": "Owner-approved additive WebTransport API (#414): on .NET 10 the stream overrides Stream's DisposeAsync and Memory-based ReadAsync and WriteAsync, which the .NET Standard 2.0 Stream does not declare; both assets retain the array-based Task methods. This does not permit other target differences. See docs/guides/webtransport.md."
     }
   ]
 }

@@ -28,7 +28,7 @@ internal static class ConnectionIsolationFuzz
 
     private static async Task RunAsync(StateMachineTrace trace, int protocol, CancellationToken token)
     {
-        if (protocol == 3 && !QuicListener.IsSupported) throw new PlatformNotSupportedException("The explicit HTTP/3 campaign requires QUIC support.");
+        if (protocol == 3 && !QuicConnection.IsSupported) throw new PlatformNotSupportedException("The explicit HTTP/3 campaign requires QUIC support.");
         using var certificate = protocol == 3 ? Certificate() : null;
         var url = Prefix(protocol == 3);
         var requests = new ConcurrentDictionary<string, Request>();
@@ -122,11 +122,13 @@ internal static class ConnectionIsolationFuzz
             CheckFaults();
             if (completed.Any(request => request.CloseCount != 1)) throw new StateMachineFailure("network.close-once", "Request cleanup was not exactly once.");
             trace.Cover("network.drain-complete");
-            // QUIC rebind has a separately tracked native retirement defect; this
-            // campaign verifies managed isolation, not a platform retry workaround.
-            if (protocol != 3)
+            // The drained endpoint is free at once: a new listener binds it.
+            using (var replacement = new WebServer(options =>
             {
-                using var replacement = new WebServer(HttpListenerMode.EmbedIO, url);
+                options.WithUrlPrefix(url).WithMode(protocol == 3 ? HttpListenerMode.EmbedIOHttp3 : HttpListenerMode.EmbedIO);
+                if (certificate != null) options.WithCertificate(certificate);
+            }))
+            {
                 replacement.Listener.Start();
                 if (!replacement.Listener.IsListening) throw new StateMachineFailure("network.rebind", url);
                 trace.Cover("network.endpoint-rebound");

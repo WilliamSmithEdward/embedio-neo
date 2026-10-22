@@ -84,7 +84,7 @@ namespace EmbedIO.Tests
         private static object Session(long id, bool flowControl, object? local = null, object? peer = null, Recorder? recorder = null, object? limits = null)
         {
             recorder ??= new Recorder();
-            return New("WebTransportSession", id, flowControl, local ?? Settings(true, 1000, 2, 3), peer ?? Settings(true, 500, 1, 2), limits ?? New("WebTransportSessionLimits"),
+            return New("WebTransportSessionCore", id, flowControl, local ?? Settings(true, 1000, 2, 3), peer ?? Settings(true, 500, 1, 2), limits ?? New("WebTransportSessionLimits"),
                 recorder.StreamHandler, recorder.DatagramHandler);
         }
 
@@ -283,11 +283,23 @@ namespace EmbedIO.Tests
         [Test]
         public void LocalSettingsEncodeOnlyNonDefaultValues()
         {
-            Assert.That(Call(Settings(false), "EncodeLocal"), Is.EqualTo(Array.Empty<byte>()));
-            Assert.That(Call(Settings(true), "EncodeLocal"), Is.EqualTo(Hex("ac7cf00001")));
-            var encoded = (byte[])Get(Settings(true, 65536, 0, 3), "EncodeLocal");
+            Assert.That(Call(Settings(false), "EncodeLocal", false), Is.EqualTo(Array.Empty<byte>()));
+            Assert.That(Call(Settings(true), "EncodeLocal", false), Is.EqualTo(Hex("ac7cf00001")));
+            var encoded = (byte[])Get(Settings(true, 65536, 0, 3), "EncodeLocal", false);
             var parsed = Must("WebTransportSettings", "Parse", encoded, 1024);
             Assert.That((Prop<bool>(parsed, "Enabled"), Prop<long>(parsed, "InitialMaxData"), Prop<long>(parsed, "InitialMaxStreamsBidirectional")), Is.EqualTo((true, 65536L, 3L)));
+            Assert.That(Prop<bool>(parsed, "Draft02Enabled"), Is.False);
+        }
+
+        [Test]
+        public void TheBrowserDraftSettingFollowsAnEnabledServer()
+        {
+            // draft-ietf-webtrans-http3-02 enables sessions with SETTINGS_ENABLE_WEBTRANSPORT (0x2b603742).
+            Assert.That(Call(Settings(true), "EncodeLocal", true), Is.EqualTo(Hex("ac7cf00001ab60374201")));
+            Assert.That(Call(Settings(false), "EncodeLocal", true), Is.EqualTo(Array.Empty<byte>()));
+            var parsed = Must("WebTransportSettings", "Parse", Hex("3301ab60374201"), 1024);
+            Assert.That((Prop<bool>(parsed, "Draft02Enabled"), Prop<bool>(parsed, "Enabled")), Is.EqualTo((true, false)));
+            AssertError("Http3ProtocolException", H3SettingsError, () => Static("WebTransportSettings", "Parse", Hex("ab60374202"), 1024));
         }
 
         // --- Capsule payload codecs (sections 4.7, 5.6, 6) ---
@@ -843,6 +855,26 @@ namespace EmbedIO.Tests
             AssertError("Http3ProtocolException", 0x107, () => Call(registry, "NoteRequestStream", 20008L));
         }
         [Test]
+        public void EndedRequestsAreSettledUnlessASessionOwnsThem()
+        {
+            var limits = New("WebTransportRegistryLimits"); Set(limits, "MaximumTrackedRequestRanges", 2);
+            var registry = Registry(Settings(true), Settings(true), new Recorder(), limits: limits);
+            var arguments = new object?[] { 8L, null };
+            Assert.That(Call(registry, "TryCreateSession", arguments)?.ToString(), Is.EqualTo("Accepted"));
+            var session = arguments[1] ?? throw new AssertionException("Missing session.");
+            Call(session, "Establish");
+            Call(registry, "RequestEnded", 8L); // A session settles its own identifier when it ends.
+            Assert.That(Call(registry, "RouteDatagram", 8L, new byte[1], 0, 1), Is.True, "the session is still live");
+            Assert.Throws<InvalidOperationException>(() => Call(registry, "NoteRequestStream", 8L));
+            Call(registry, "RequestEnded", 0L); Call(registry, "RequestEnded", 0L); // A repeat changes nothing.
+            Call(registry, "NoteRequestStream", 16L);
+            Call(registry, "RequestEnded", 4L); Call(registry, "RequestEnded", 12L); // Close the gaps beside 8.
+            Assert.That(Call(registry, "RouteDatagram", 4L, new byte[1], 0, 1), Is.False);
+            Call(session, "Close", 0u, ""); Call(registry, "SessionEnded", session); // Joins both ranges.
+            Call(registry, "RequestEnded", 40L); // A second range fits only because the first is whole.
+            AssertError("Http3ProtocolException", 0x107, () => Call(registry, "RequestEnded", 48L));
+        }
+        [Test]
         public void EndedSessionCannotBeRecreatedAndDoesNotClassifyUnseenLowerRequests()
         {
             var recorder = new Recorder(); var registry = Registry(Settings(true), Settings(true), recorder);
@@ -873,6 +905,27 @@ namespace EmbedIO.Tests
             Assert.That(Call(registry, "RouteDatagram", 8L, new byte[1], 0, 1), Is.True);
             Assert.That(Call(registry, "RouteDatagram", 8L, new byte[0], 0, 0), Is.False, "count bound");
             Assert.That((Prop<int>(registry, "BufferedStreamCount"), Prop<int>(registry, "BufferedDatagramCount")), Is.EqualTo((2, 2)));
+        }
+
+        [Test]
+        public void AConnectionWithoutWebTransportReleasesEarlyArrivalsAndRefusesLaterOnes()
+        {
+            var aborts = new List<(long Id, long Code)>();
+            var recorder = new Recorder();
+            // Streams and datagrams can arrive before the peer's SETTINGS, so they are buffered.
+            var registry = New("WebTransportSessionRegistry", Settings(true), New("WebTransportRegistryLimits"), recorder.StreamHandler, recorder.DatagramHandler);
+            Assert.That(Call(registry, "RouteIncomingStream", 8L, Handle(2, false, aborts)), Is.True);
+            Assert.That(Call(registry, "RouteDatagram", 8L, new byte[] { 1 }, 0, 1), Is.True);
+            // SETTINGS that enable WebTransport, without the transport parameters it needs.
+            Call(registry, "Negotiate", Settings(true), false, 1);
+            Assert.That(aborts, Is.EqualTo(new[] { (2L, BufferedRejected) }));
+            Assert.That((Prop<int>(registry, "BufferedStreamCount"), Prop<int>(registry, "BufferedDatagramCount")), Is.EqualTo((0, 0)));
+            Assert.That(Call(registry, "RouteIncomingStream", 12L, Handle(6, true, aborts)), Is.False);
+            Assert.That(aborts.Last(), Is.EqualTo((6L, BufferedRejected)));
+            Assert.That(Call(registry, "RouteDatagram", 12L, new byte[1], 0, 1), Is.False);
+            Assert.That(Call(registry, "TryCreateSession", new object?[] { 8L, null })?.ToString(), Is.EqualTo("NotNegotiated"));
+            Assert.That(recorder.Streams, Is.Empty);
+            Assert.That(recorder.Datagrams, Is.Empty);
         }
 
         [Test]
@@ -925,7 +978,7 @@ namespace EmbedIO.Tests
             {
                 var aborts = new System.Collections.Concurrent.ConcurrentBag<(long Id, long Code)>();
                 var recorder = new Recorder();
-                var session = New("WebTransportSession", 0L, false, Settings(true), Settings(true), New("WebTransportSessionLimits"),
+                var session = New("WebTransportSessionCore", 0L, false, Settings(true), Settings(true), New("WebTransportSessionLimits"),
                     recorder.StreamHandler,
                     recorder.DatagramHandler);
                 Call(session, "Establish");

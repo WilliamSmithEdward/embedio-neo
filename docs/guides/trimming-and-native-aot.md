@@ -30,10 +30,26 @@ A Native AOT executable built from the
 
 Its publish runs with warnings as errors, so no trim or AOT warning is reachable from
 these features. CI publishes and runs it on Windows (`windows-2025`, `win-x64`) and Linux
-(`ubuntu-24.04`, `linux-x64`, with the pinned `libmsquic` 2.6.2 package for HTTP/3).
+(`ubuntu-24.04`, `linux-x64`, with the pinned `libmsquic` 2.6.2 package for the smoke's
+.NET HTTP/3 client).
 
 ## HTTP/3 in a Native AOT application
 
+Server HTTP/3 uses EmbedIO.Quic, which no released package contains yet. The
+modern core carries the owned native TLS runtime dependency, so portable,
+RID-specific and Native AOT publishing select it through NuGet without a manual
+native copy; CI publishes and runs all three on each of the six runtime
+identifiers. Windows uses Schannel and needs no server `msquic.dll` copy.
+Linux/macOS need their selected private TLS asset. Missing assets are rejected
+at public server construction.
+
+Publishing Native AOT for macOS needs a current Xcode. On a macOS 14 runner the
+default Xcode 15.4 cannot link .NET 10's Swift-based cryptography bindings
+(`Undefined symbols ... __swift_FORCE_LOAD_$_swift_math`); with Xcode 16.2
+selected, the AOT consumer built and ran on macOS 14.
+
+The following manual-copy workaround applies to the earlier provider in released
+packages through 2.16.1 and to any separate BCL HTTP/3 client in an application. Earlier server
 HTTP/3 uses MsQuic. On Linux it is the system's `libmsquic`, installed as for any .NET
 HTTP/3 application. On Windows, .NET ships `msquic.dll` in its runtime, but a Native AOT
 publish leaves it out, so `QuicListener.IsSupported` is false and an HTTP/3 or combined
@@ -228,8 +244,10 @@ platform in the `aot-smoke-*` artifacts.
 
 ## Not yet validated
 
-Native AOT is exercised on Windows and Linux x64 only; macOS, ARM64 and mobile Native
-AOT have not been run. The smoke host checks one representative of each feature, not
+The feature smoke host runs as Native AOT on Windows and Linux x64 only. The
+smaller HTTP/3 package consumer also publishes and runs as Native AOT on Linux x64
+and ARM64 (glibc and musl) and on macOS x64 and ARM64; mobile Native AOT has not
+been run. The smoke host checks one representative of each feature, not
 every option: for example, WebSockets over HTTP/2, the CLI and
 `EmbedIO.JsonServer` have not been exercised as Native AOT.
 

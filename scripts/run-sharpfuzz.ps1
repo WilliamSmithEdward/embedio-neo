@@ -41,6 +41,10 @@ if ($LASTEXITCODE) { throw 'Publish failed.' }
 dotnet tool install SharpFuzz.CommandLine --version 2.3.0 --tool-path $tools 2>&1 | Tee-Object (Join-Path $output 'tool.log')
 if ($LASTEXITCODE) { throw 'Instrumenter installation failed.' }
 
+$quicHost = Join-Path $publish 'EmbedIO.Quic.Development.dll'
+$quicHostOrdinary = Join-Path $repo 'test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll'
+$quicHostHash = (Get-FileHash $quicHost).Hash
+$quicHostOrdinaryHash = (Get-FileHash $quicHostOrdinary).Hash
 $assembly = Join-Path $publish 'EmbedIO.dll'
 $ordinaryAssembly = Join-Path $repo 'src/EmbedIO/bin/Release/net10.0/EmbedIO.dll'
 $ordinaryHash = (Get-FileHash $ordinaryAssembly).Hash
@@ -51,9 +55,12 @@ try {
     # The instrumenter targets net8; the repository pins and installs net10.
     $env:DOTNET_ROLL_FORWARD = 'Major'
     $env:SHARPFUZZ_PRINT_INSTRUMENTED_TYPES = '1'
-    & (Join-Path $tools 'sharpfuzz') $assembly EmbedIO.Utilities.UrlPath EmbedIO.Utilities.UrlEncodedDataParser EmbedIO.MultipartReader |
+    & (Join-Path $tools 'sharpfuzz') $assembly EmbedIO.Utilities.UrlPath EmbedIO.Utilities.UrlEncodedDataParser EmbedIO.MultipartReader EmbedIO.Quic EmbedIO.Net.Internal.Http2.Hpack EmbedIO.Net.Internal.Http2.PrefixInteger EmbedIO.Net.Internal.Http3 EmbedIO.Net.Internal.WebTransport EmbedIO.Net.Internal.HttpCapsuleTransport |
         Tee-Object (Join-Path $output 'instrumentation.log')
-    if ($LASTEXITCODE) { throw 'Instrumentation failed.' }
+    if ($LASTEXITCODE) { throw 'Library parser and QUIC instrumentation failed.' }
+    & (Join-Path $tools 'sharpfuzz') $quicHost EmbedIO.Quic.StreamEchoApplication EmbedIO.Quic.WebTransportApplication EmbedIO.Quic.QuicConnectionSet EmbedIO.Quic.ProductionTransportTests |
+        Tee-Object (Join-Path $output 'quic-host-instrumentation.log')
+    if ($LASTEXITCODE) { throw 'QUIC host instrumentation failed.' }
 } finally {
     $env:DOTNET_ROLL_FORWARD = $priorRollForward
     $env:SHARPFUZZ_PRINT_INSTRUMENTED_TYPES = $priorPrintTypes
@@ -66,6 +73,15 @@ if ($instrumentation -notmatch 'EmbedIO\.MultipartReader/<ReadBodyCoreAsync>' -o
 if ((Get-FileHash $assembly).Hash -eq $originalHash) { throw 'Instrumentation did not change the copied assembly.' }
 if ((Get-FileHash $ordinaryAssembly).Hash -ne $ordinaryHash) { throw 'Instrumentation modified the ordinary build output.' }
 
+$quicInstrumentation = (Get-Content (Join-Path $output 'instrumentation.log') -Raw) + (Get-Content (Join-Path $output 'quic-host-instrumentation.log') -Raw)
+foreach ($type in @('PacketHeader', 'AckRanges', 'PacketNumberWindow', 'PacketKeys', 'TlsClientHello', 'KeyUpdateState', 'StreamReassembly', 'StreamCountWindow', 'Recovery', 'ConnectionLifetime', 'QuicConnection', 'QuicConnectionSet', 'QuicConnectionDispatcher', 'QuicExecutionPool', 'QuicConnectionOwner', 'ConnectionStreams', 'StreamEchoApplication', 'AsyncQuicStream', 'AsyncStreamApplication', 'WebTransportApplication')) {
+    if ($quicInstrumentation -notmatch ('EmbedIO\.Quic\.' + $type)) { throw "QUIC type was not instrumented: $type" }
+}
+foreach ($type in @('EmbedIO.Net.Internal.Http3.EmbedIOQuicTransportStream', 'EmbedIO.Net.Internal.Http3.EmbedIOQuicDatagramTransport', 'EmbedIO.Net.Internal.Http3.Http3TransportFailure', 'EmbedIO.Net.Internal.Http3.QpackDecoder', 'EmbedIO.Net.Internal.WebTransport')) {
+    if (-not $quicInstrumentation.Contains($type)) { throw "Transport type was not instrumented: $type" }
+}
+if ((Get-FileHash $quicHost).Hash -eq $quicHostHash) { throw 'QUIC host was not instrumented.' }
+if ((Get-FileHash $quicHostOrdinary).Hash -ne $quicHostOrdinaryHash) { throw 'QUIC host instrumentation modified the ordinary assembly.' }
 $harness = Join-Path $publish 'EmbedIO.SharpFuzz.dll'
 $seeds = Get-ChildItem (Join-Path $repo 'test/EmbedIO.SharpFuzz/corpus') -File | Sort-Object Name
 foreach ($file in $seeds) {

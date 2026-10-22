@@ -12,6 +12,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
@@ -32,7 +33,7 @@ namespace EmbedIO.Tests
         public async Task ApplicationAdapterPreservesHttp3Semantics(string scenario)
         {
             ArgumentNullException.ThrowIfNull(scenario);
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
             { Assert.Ignore("The legacy asset has no direct QUIC transport."); return; }
@@ -75,33 +76,21 @@ namespace EmbedIO.Tests
             var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("localhost"); san.AddIpAddress(IPAddress.Loopback); req.CertificateExtensions.Add(san.Build());
             using var generated = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
             using var cert = X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pkcs12), null, X509KeyStorageFlags.Exportable);
-            await using var listener = await QuicListener.ListenAsync(new QuicListenerOptions
-            {
-                ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
-                ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
-                ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
-                {
-                    DefaultCloseErrorCode = 0x100,
-                    DefaultStreamErrorCode = 0x10c,
-                    MaxInboundBidirectionalStreams = 32,
-                    MaxInboundUnidirectionalStreams = 8,
-                    ServerAuthenticationOptions = new SslServerAuthenticationOptions { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = cert }
-                })
-            }, deadline.Token);
+            await using var host = EngineQuicHost.Start(cert);
             var callbacks = new List<int>();
             var payload = Encoding.UTF8.GetBytes("Hello, 世界");
             var body = scenario is "fixed-body" or "streaming-body";
             var status = int.TryParse(scenario, out var parsed) ? parsed : 200;
             var application = new AdaptedApplication
             {
-                Local = listener.LocalEndPoint,
+                Local = host.LocalEndPoint,
                 Remote = new IPEndPoint(IPAddress.Loopback, 0),
                 Application = async context =>
                 {
                     Assert.That(context.Request.ProtocolVersion, Is.EqualTo(HttpVersion.Version30));
                     Assert.That(context.Response.ProtocolVersion, Is.EqualTo(HttpVersion.Version30));
                     Assert.That(context.Request.IsSecureConnection && context.Request.IsLocal, Is.True);
-                    Assert.That(context.Request.LocalEndPoint, Is.EqualTo(listener.LocalEndPoint));
+                    Assert.That(context.Request.LocalEndPoint, Is.EqualTo(host.LocalEndPoint));
                     Assert.That(context.Request.RemoteEndPoint.Port, Is.GreaterThan(0));
                     Assert.That(context.Request.RawTarget, Is.EqualTo("/echo?x=a+b&x=c"));
                     Assert.That(context.Request.QueryString.GetValues("x"), Is.EqualTo(new[] { "a b", "c" }));
@@ -137,20 +126,19 @@ namespace EmbedIO.Tests
             };
             var assembly = typeof(WebServer).Assembly;
             var exchangeType = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange", true) ?? throw new AssertionException("Missing exchange.");
-            var connectionType = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection", true) ?? throw new AssertionException("Missing connection.");
             var handler = (typeof(AdaptedApplication).GetMethod("Handle", Flags) ?? throw new AssertionException("Missing handler."))
                 .MakeGenericMethod(exchangeType).CreateDelegate(typeof(Func<,>).MakeGenericType(exchangeType, typeof(Task)), application);
             var server = Task.Run(async () =>
             {
-                var accepted = await listener.AcceptConnectionAsync(deadline.Token);
-                application.Remote = accepted.RemoteEndPoint;
-                await (Task)(connectionType.GetMethod("RunAsync", Flags)?.Invoke(null, new object[] { accepted, handler, deadline.Token }) ?? throw new AssertionException("Missing runner."));
+                var accepted = await host.AcceptAsync(deadline.Token);
+                application.Remote = accepted.Remote;
+                await EngineQuicHost.RunAsync(accepted.Transport, handler, deadline.Token);
             });
             using var transport = new SocketsHttpHandler { SslOptions = new SslClientAuthenticationOptions { RemoteCertificateValidationCallback = (_, peer, _, _) => peer?.GetCertHashString() == cert.GetCertHashString() } };
             using var client = new HttpClient(transport);
             using var contentStream = new NonSeekableBody(body ? payload : Array.Empty<byte>());
             using var message = new HttpRequestMessage(scenario == "head" ? HttpMethod.Head : HttpMethod.Post,
-                new Uri($"https://127.0.0.1:{listener.LocalEndPoint.Port}/echo?x=a+b&x=c"))
+                new Uri($"https://127.0.0.1:{host.LocalEndPoint.Port}/echo?x=a+b&x=c"))
             {
                 Version = HttpVersion.Version30,
                 VersionPolicy = HttpVersionPolicy.RequestVersionExact,

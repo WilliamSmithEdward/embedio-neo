@@ -8,7 +8,6 @@ using System.Net.Http;
 using System.Net.Quic;
 using System.Net.Security;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Security.Authentication;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -470,7 +469,7 @@ namespace EmbedIO.Tests.Issues
         {
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener") == null)
                 Assert.Ignore("HTTP/3 is unavailable in the selected asset.");
-            if (!(QuicListener.IsSupported && QuicConnection.IsSupported))
+            if (!QuicConnection.IsSupported)
             {
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1")
                     Assert.Fail("QUIC is required.");
@@ -544,24 +543,6 @@ namespace EmbedIO.Tests.Issues
             {
                 using var host = new WebServer(options => options.WithUrlPrefix(LocalhostUrl()).WithMode(HttpListenerMode.EmbedIOHttp3).WithCertificate(server).WithTlsPolicy(policy));
             });
-        }
-
-        // The native binding cannot honor client certificates or SNI selection; it refuses them instead of ignoring them.
-        [TestCase(true, false)]
-        [TestCase(false, true)]
-        public void NativeHttp3RefusesSettingsItCannotHonor(bool clientCertificates, bool selector)
-        {
-            RequireHttp3();
-            using var server = Create("server");
-            var policy = new ServerTlsPolicy();
-            if (clientCertificates)
-                policy.ClientCertificateMode = ClientCertificateMode.Require;
-            if (selector)
-                policy.ServerCertificateSelector = _ => null;
-            var options = new WebServerOptions().WithUrlPrefix(LocalhostUrl()).WithMode(HttpListenerMode.EmbedIOHttp3).WithCertificate(server).WithTlsPolicy(policy);
-            var error = Assert.Throws<TargetInvocationException>(() =>
-                Activator.CreateInstance(typeof(WebServer), BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { options, true }, null));
-            Assert.That(error?.InnerException, Is.InstanceOf<NotSupportedException>());
         }
 
         // Rotation and policy together: a published certificate keeps the client-certificate requirement.

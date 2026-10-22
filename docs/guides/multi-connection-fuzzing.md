@@ -32,7 +32,7 @@ values 0â€“63; their interpretation belongs to the scenario.
 | `response-http1`, `response-http2`, `response-http3` | File ranges/validators, compression, HEAD, cookies/trailers and response cancellation over real protocol connections |
 | `http1-connections` | Real HTTP/1 connection isolation |
 | `http2-connections` | Real HTTP/2 connection isolation |
-| `http3-connections` | Real HTTP/3 connection isolation; requires working native QUIC support |
+| `http3-connections` | Real HTTP/3 connection isolation; requires a working .NET HTTP/3 client (MsQuic) |
 
 An unfiltered run includes HTTP/3. Missing QUIC support is a validation limitation,
 not evidence that HTTP/3 passed; use an explicit supported scenario locally and
@@ -167,8 +167,8 @@ therefore test accepted-request ownership and cleanup, not cancellation halfway
 through upload reception. HTTP/2 scenarios do not substitute three streams on one
 connection for three physical connections. HTTP/3 scenarios do not perform QUIC
 connection migration, address rebinding or packet-loss simulation.
-Post-drain listener endpoint rebinding is checked for HTTP/1 and HTTP/2 only;
-HTTP/3 native listener retirement remains covered by its separate runtime tests.
+Post-drain listener endpoint rebinding is checked for every protocol, HTTP/3
+included.
 
 Additional [stateful application campaigns](stateful-surface-fuzzing.md) cover
 controller parity, persistence rollback, lifecycle, mutable files, request
@@ -227,3 +227,13 @@ with independent response and error-field checks. It covers flat query/form DTOs
 strict decoding and bounds, header/cookie duplicates, custom route IDs and recovery.
 Run `--request-binding-selftest` to verify both corruption oracles. See
 [typed request binding](typed-request-binding.md#verification-and-fuzzing).
+
+## EmbedIO.Quic
+
+The QUIC development core participates in the existing fuzz campaigns. See the
+[development and testing record](../project/quic-development-and-testing.md) for
+all eight targets, scheduled socket dispatch/output ownership and asynchronous application wake-ups, multi-connection
+traces, managed coverage evidence, native TLS
+mutation scope and extensive local commands. The ordinary HTTP/3 binding selects
+EmbedIO.Quic; the earlier server providers are removed, and the BCL QUIC client
+remains only as a test client. Fuzz configuration alone does not establish acceptance.

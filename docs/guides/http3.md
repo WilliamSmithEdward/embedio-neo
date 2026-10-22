@@ -1,19 +1,31 @@
 # HTTP/3 listener (Neo v2)
 
-The modern engine branch adds `HttpListenerMode.EmbedIOHttp3`. This opt-in mode
-serves the normal WebServer modules over QUIC, including request bodies, routing,
-responses and sessions. It is under development in PR #182 and is not a released
-NuGet feature. The [engine program](../project/http-engine.md) records validation
-and the remaining conformance, extension and performance work.
+`HttpListenerMode.EmbedIOHttp3` serves normal WebServer modules over QUIC,
+including request bodies, routing, responses and sessions. Its transport is
+EmbedIO.Quic, added by [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506), which no released
+package contains yet; released packages through 2.16.1 use the earlier
+`System.Net.Quic` provider. The [development record](../project/quic-development-and-testing.md)
+records what has been validated and what remains.
 
 ## Requirements
 
-Use the .NET 10 library asset on a host where `QuicListener.IsSupported` is true.
-Windows requires usable TLS 1.3 support; Linux requires the native MsQuic library.
-CI also exercises macOS with its pinned native prerequisite; this is not a claim
-that every macOS deployment/runtime combination is supported. The .NET Standard
-asset rejects this mode with `PlatformNotSupportedException`.
+Use the .NET 10 library asset in a 64-bit desktop
+process. Windows uses [Schannel TLS 1.3](https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-)
+(Windows 11 / Server 2022 and later).
+Linux/macOS use the owned `EmbedIO-Neo.Quic.Native` runtime dependency, selected
+transitively by NuGet; publish for the deployment RID when producing a targeted
+application. Server startup checks that TLS path directly, without relying on
+BCL QUIC availability. Missing Unix assets fail with `PlatformNotSupportedException`;
+an incompatible private ABI/version also fails before listening. The .NET Standard
+asset continues to reject HTTP/3. CI runs the package consumers on all six runtime
+identifiers, and they passed once on macOS 14, the oldest macOS the native build
+targets; the oldest glibc and musl versions it targets are untested. See
+[native runtime preparation](../../native/EmbedIO.Quic.Tls/README.md).
 
+For the provider in released packages through 2.16.1, use a host where
+`QuicListener.IsSupported` is true.
+Windows requires TLS 1.3 and Linux/macOS require the system MsQuic prerequisite.
+The following runtime and native-library notes apply to that earlier provider.
 On Windows, .NET bundles MsQuic, so use runtime 10.0.13 or later. It is the .NET
 security release for [CVE-2026-105016](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-105016),
 a remote code execution vulnerability in Microsoft QUIC that MSRC rates Critical
@@ -22,8 +34,8 @@ for .NET installed on Windows. Runtime 10.0.13 bundles `msquic.dll` 2.5.11;
 host, which a runtime update does not change.
 
 Configure HTTPS prefixes and a server certificate containing its private key.
-Keep the certificate alive until the server is disposed. The OpenSSL QUIC backend
-used in validation requires an exportable key; choose provisioning appropriate to
+Keep the certificate alive until the server is disposed. The Unix TLS path
+requires an exportable key; choose provisioning appropriate to
 your host and protect the certificate/password. Use a DNS name matching the
 certificate and configure normal client trust. IP-literal URLs worked in the
 Windows fixture but failed TLS setup with the tested Linux .NET 10.0.12/MsQuic
@@ -54,7 +66,8 @@ replace `WithMode(HttpListenerMode.EmbedIOHttp3)` with
 
 Both transports are required: startup fails if either binding fails, and rolls
 back the bindings owned by that attempt. There is no silent TCP-only fallback.
-The .NET Standard asset and hosts without native QUIC reject this mode. Only
+The .NET Standard asset and hosts without the selected transport's TLS support
+reject this mode. Only
 HTTPS prefixes are accepted. Allow the intended TCP and UDP endpoints in the
 host's network policy. The certificate and client trust requirements above apply.
 
@@ -73,11 +86,17 @@ cancellation stops queue admission and aborts the remaining responses, including
 requests waiting in the bounded queue. Shared TCP endpoints keep accepting for
 sibling listeners while refusing new requests for the draining listener. V2 uses
 the original TCP HTTP engine; both inherited listener backends are removed.
-Public HTTP/3 selection still uses System.Net.Quic for its QUIC transport.
-Native-provider integration, Alt-Svc discovery and final resource/performance
-acceptance remain unfinished; TCP replacement does not establish their completion.
+The ordinary HTTP/3 binding selects EmbedIO.Quic, and this source no
+longer contains the earlier providers. Alt-Svc discovery and resource and
+performance acceptance beyond the recorded endurance runs remain separate work;
+TCP replacement does not establish their completion.
 
-## Runtime memory limitation
+<a id="runtime-memory-limitation"></a>
+## Earlier provider runtime memory limitation
+
+This limitation concerns the previous `System.Net.Quic` provider, which is still
+used by released packages through 2.16.1. It does not establish the replacement engine's lifetime
+or memory behavior; that has its own acceptance work.
 
 The tested .NET 10.0.12 `System.Net.Quic` retains a native send-buffer allocation
 for each disposed stream that sent data. Long-running HTTP/3 traffic therefore
@@ -173,21 +192,21 @@ earlier bindings. Failed peer TLS handshakes do not stop healthy acceptance.
 The listener bounds pending application contexts at 256, active connections at
 256, and each connection's inbound request-stream credit at 128. These limits
 are internal defaults in this increment, not tuned performance recommendations.
+Each stream the client opens must complete its header within
+`RequestHeadersTimeout`, 30 seconds by default; see
+[connection limits](request-limits.md#connection-limits).
 
 `Stop` and disposal cancel active requests, release pending accepts and close
 bindings. A directly used `IHttpListener` can restart after Stop; WebServer itself
 retains its existing one-run lifecycle. Prefix changes require a stopped listener.
 A simultaneous restart while cleanup is running is rejected explicitly.
 
-Restarting on an endpoint this process released moments ago is bridged by a
-bounded retry: the native QUIC library can keep the UDP port bound briefly after
-disposal returns (a deferred socket close on macOS, and recently accepted
-connections on every platform), so a bind that fails with `AddressAlreadyInUse`
-for an endpoint released within the last second is retried every millisecond
-until that second ends. Other errors, endpoints this process did not release and
-conflicts that persist beyond the window fail as before. This is a Neo v2
-workaround for a native dependency limit, tracked for retirement in
-[QUIC listener disposal, rebind and workaround retirement](../project/quic-lifetime.md).
+Stopping releases each UDP endpoint before it returns, so a new listener can bind
+it at once. The provider in released packages through 2.16.1 retried such a bind for up to a second
+because its native QUIC library could keep the port bound briefly after disposal;
+this source has no retry. The
+[QUIC listener disposal and rebind record](../project/quic-lifetime.md) keeps the
+history.
 Application response `KeepAlive=false` initiates the connection driver's bounded
 GOAWAY drain with its existing 30-second application-triggered deadline. A
 listener drain has a separate host-specified abort deadline.
@@ -266,3 +285,9 @@ evidence, not a claim of complete WebSocket conformance or performance.
 
 References: [RFC 9220](https://www.rfc-editor.org/rfc/rfc9220.html) and
 [.NET 10.0.12 client implementation](https://github.com/dotnet/runtime/blob/v10.0.12/src/libraries/System.Net.WebSockets.Client/src/System/Net/WebSockets/WebSocketHandle.Managed.cs).
+
+## WebTransport
+
+A server configured with `WithWebTransport` also
+accepts WebTransport sessions over this listener. See
+[WebTransport over HTTP/3](webtransport.md).

@@ -45,4 +45,5 @@
           DestinationFolder="$(OutDir)CliPlugins" />
   </Target>
   <ItemGroup><Compile Include="../Shared/BenchmarkEndpoints.cs" Link="PlatformTests/BenchmarkEndpoints.cs" /></ItemGroup>
+  <Import Project="../Shared/QuicNativeAssets.targets" />
 </Project>

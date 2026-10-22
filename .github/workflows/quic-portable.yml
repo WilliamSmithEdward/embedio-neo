@@ -1,0 +1,128 @@
+name: Portable QUIC TLS
+
+on:
+  workflow_call:
+    inputs:
+      reuse-native-artifacts:
+        description: Use the source-verified native artifacts built earlier in this workflow run
+        type: boolean
+        default: false
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    if: ${{ !inputs.reuse-native-artifacts }}
+    uses: ./.github/workflows/quic-native.yml
+
+  package:
+    name: Assemble the six-RID runtime package
+    needs: [native]
+    if: ${{ always() && !cancelled() && (inputs.reuse-native-artifacts || needs.native.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - uses: ./.github/actions/quic-runtime
+        with:
+          output: TestResults/quic-runtime-feed
+      - name: Pack the core and seal the exact-source local feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/EmbedIO/EmbedIO.csproj --locked-mode
+          dotnet pack src/EmbedIO/EmbedIO.csproj --no-restore -c Release -o TestResults/quic-runtime-feed
+          python3 native/EmbedIO.Quic.Tls/package_feed.py --staged TestResults/quic-native-staged --feed TestResults/quic-runtime-feed
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quic-runtime-feed
+          path: TestResults/quic-runtime-feed/
+          if-no-files-found: error
+
+  portable:
+    name: Portable TLS (${{ matrix.rid }})
+    needs: [package]
+    # A skipped native job (reused artifacts) would otherwise skip this job too,
+    # because a skip propagates down the needs chain.
+    if: ${{ always() && !cancelled() && needs.package.result == 'success' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - {os: ubuntu-24.04, rid: linux-x64, musl: false}
+          - {os: ubuntu-24.04-arm, rid: linux-arm64, musl: false}
+          - {os: ubuntu-24.04, rid: linux-musl-x64, musl: true}
+          - {os: ubuntu-24.04-arm, rid: linux-musl-arm64, musl: true}
+          - {os: macos-15-intel, rid: osx-x64, musl: false}
+          - {os: macos-26, rid: osx-arm64, musl: false}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: ${{ !matrix.musl }}
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ !matrix.musl }}
+        with:
+          python-version: '3.14.6'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: quic-runtime-feed
+          path: TestResults/quic-runtime-feed
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: matrix.rid == 'osx-x64'
+        with:
+          name: quic-peer-wheel-osx-x64
+          path: TestResults/quic-peer-wheel
+      - name: Validate actual package consumers and full protocol suites
+        shell: bash
+        env:
+          QUIC_RID: ${{ matrix.rid }}
+          QUIC_MUSL: ${{ matrix.musl }}
+        run: |
+          set -euo pipefail
+          if [ "$QUIC_MUSL" = true ]; then
+            docker build -f native/EmbedIO.Quic.Tls/Dockerfile.musl-validation -t embedio-quic-package-test native/EmbedIO.Quic.Tls
+            docker run --rm --cpus 3 --memory 6g --user "$(id -u):$(id -g)" \
+              --env HOME=/tmp/embedio-quic-consumer --env DOTNET_CLI_HOME=/tmp/embedio-quic-consumer \
+              --mount "type=bind,source=$PWD,target=/repo" -w /repo \
+              embedio-quic-package-test python3 test/EmbedIO.Quic.PackageConsumer/validate.py \
+              --rid "$QUIC_RID" --feed TestResults/quic-runtime-feed --output TestResults/quic-package-validation
+          else
+            python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
+            if [[ "$QUIC_RID" == osx-* ]]; then
+              # macOS requires an explicit loopback alias for the independent
+              # source-IP/CID rebinding case. Own and remove only our alias.
+              if ! python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.2", 0)); s.close()'; then
+                sudo -n /sbin/ifconfig lo0 inet 127.0.0.2 netmask 255.255.255.255 alias
+                trap 'sudo -n /sbin/ifconfig lo0 inet 127.0.0.2 -alias' EXIT
+              fi
+              python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(("127.0.0.2", 0)); s.close()'
+            fi
+            consumer_options=(--rid "$QUIC_RID" --feed TestResults/quic-runtime-feed --output TestResults/quic-package-validation)
+            if [ "$QUIC_RID" = osx-x64 ]; then
+              consumer_options+=(--peer-wheel-directory "$PWD/TestResults/quic-peer-wheel")
+            fi
+            python3 test/EmbedIO.Quic.PackageConsumer/validate.py "${consumer_options[@]}"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: portable-quic-tls-${{ matrix.rid }}
+          path: TestResults/quic-package-validation/
+          if-no-files-found: error

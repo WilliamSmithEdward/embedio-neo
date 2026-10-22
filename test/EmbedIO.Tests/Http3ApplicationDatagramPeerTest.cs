@@ -12,10 +12,12 @@ using NUnit.Framework;
 
 namespace EmbedIO.Tests
 {
-    public sealed partial class MsQuicNativeDatagramTest
+    // HTTP datagrams (RFC 9297) between an application context and the independent
+    // aioquic peer, through the HTTP/3 listener and the EmbedIO.Quic engine.
+    public sealed class Http3ApplicationDatagramPeerTest
     {
         [Test]
-        public async Task NativeHttp3ApplicationContextEchoesNegotiatedDatagrams()
+        public async Task Http3ApplicationContextEchoesNegotiatedDatagrams()
         {
             var python = Environment.GetEnvironmentVariable("EMBEDIO_DATAGRAM_PEER_PYTHON");
             if (string.IsNullOrWhiteSpace(python))
@@ -23,8 +25,10 @@ namespace EmbedIO.Tests
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_DATAGRAM_PEER") == "1") Assert.Fail("The independent peer is required.");
                 Assert.Ignore("No independent aioquic peer was configured.");
             }
+            if (EngineInternals.Find("EmbedIO.Net.Internal.Http3.Http3Listener") == null)
+            { Assert.Ignore("This build of the library has no HTTP/3 listener."); return; }
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
-            using var listener = (IHttpListener)ConstructApplicationType("Http3Listener", certificate, true);
+            using var listener = (IHttpListener)EngineInternals.Create("EmbedIO.Net.Internal.Http3.Http3Listener", certificate);
             var port = new Uri(Resources.GetServerAddress()).Port;
             listener.AddPrefix("https://localhost:" + port + "/");
             listener.Start();
@@ -91,6 +95,16 @@ namespace EmbedIO.Tests
                 listener.Stop();
                 File.Delete(certificatePath);
             }
+        }
+
+        private static string DriverPath()
+        {
+            for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory != null; directory = directory.Parent)
+            {
+                var candidate = Path.Combine(directory.FullName, "test", "EmbedIO.Conformance", "drivers", "quic_datagram_peer.py");
+                if (File.Exists(candidate)) return candidate;
+            }
+            throw new AssertionException("Missing test/EmbedIO.Conformance/drivers/quic_datagram_peer.py.");
         }
     }
 }

@@ -139,7 +139,7 @@ namespace EmbedIO.Tests
             if (version == 3)
             {
                 RequireQuic();
-                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+                if (!QuicConnection.IsSupported) return;
             }
             using var certificate = Certificate();
             await using var host = await Host.StartAsync(mode, version == 3 ? certificate : null, async context =>
@@ -609,7 +609,7 @@ namespace EmbedIO.Tests
         public async Task Http3AbortAfterTheInterimSectionStaysOnItsStream()
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await Http3AbortAfterInterimCore();
         }
 
@@ -650,7 +650,7 @@ namespace EmbedIO.Tests
         public async Task Http3DrainCompletesACommittedResponseWithTrailers()
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await Http3DrainCore();
         }
 
@@ -709,7 +709,7 @@ namespace EmbedIO.Tests
         public async Task Http3TunnelHandlerFailureStaysOnItsStream()
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await Http3TunnelCore(true);
         }
 
@@ -723,7 +723,7 @@ namespace EmbedIO.Tests
         public async Task Http3TunnelApplicationReadCancellationLeavesOutputUsable()
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await Http3TunnelCore(false);
         }
 
@@ -761,7 +761,7 @@ namespace EmbedIO.Tests
         public async Task Http3ApplicationBodyReadTimeoutCanStillAnswer()
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await Http3BodyTimeoutCore();
         }
 
@@ -803,7 +803,7 @@ namespace EmbedIO.Tests
         {
             ArgumentNullException.ThrowIfNull(pendingInput);
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await Http3BodyTimeoutCore(pendingInput);
         }
         [TestCase(0)]
@@ -998,7 +998,7 @@ namespace EmbedIO.Tests
 
         private static void RequireQuic()
         {
-            var supported = QuicListener.IsSupported && QuicConnection.IsSupported
+            var supported = QuicConnection.IsSupported
                 && typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener") != null;
             if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.That(supported, Is.True);
             if (!supported) Assert.Ignore("The selected asset or host has no HTTP/3 transport.");
@@ -1040,7 +1040,7 @@ namespace EmbedIO.Tests
             internal CancellationToken Token => _stop.Token;
 
             internal static async Task<Host> StartAsync(HttpListenerMode mode, X509Certificate2? certificate, RequestHandlerCallback handler,
-                Action<WebServerOptions>? configure = null, Action<WebServer>? configureServer = null, bool native = false)
+                Action<WebServerOptions>? configure = null, Action<WebServer>? configureServer = null)
             {
                 var quic = mode == HttpListenerMode.EmbedIOHttp3;
                 var port = FreePort(quic);
@@ -1053,10 +1053,7 @@ namespace EmbedIO.Tests
                     var options = new WebServerOptions().WithUrlPrefix(prefix).WithMode(mode);
                     if (certificate != null) options.WithCertificate(certificate);
                     configure?.Invoke(options);
-                    server = native
-                        ? (WebServer)(Activator.CreateInstance(typeof(WebServer), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
-                            null, new object[] { options, true }, null) ?? throw new AssertionException("Missing native host constructor."))
-                        : new WebServer(options);
+                    server = new WebServer(options);
                     server.WithAction("/", HttpVerbs.Any, handler);
                     configureServer?.Invoke(server);
                     running = server.RunAsync(stop.Token);

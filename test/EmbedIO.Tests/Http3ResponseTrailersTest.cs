@@ -10,6 +10,7 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using EmbedIO.PlatformTests;
+using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
@@ -20,7 +21,7 @@ namespace EmbedIO.Tests
         [TestCase(true)]
         public async Task ReservedHttp3TrailersFollowCoalescedContentLengthBody(bool coalesced)
         {
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
             { Assert.Ignore("The netstandard asset does not provide direct QUIC transport."); return; }
@@ -30,7 +31,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task AdapterHttp3TrailersCompleteAfterACoalescedBody()
         {
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
             if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
             { Assert.Ignore("The netstandard asset does not provide direct QUIC transport."); return; }
@@ -44,25 +45,10 @@ namespace EmbedIO.Tests
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var certificate = HttpsSmoke.CreateCertificate(X509KeyStorageFlags.Exportable);
-            await using var listener = await QuicListener.ListenAsync(new QuicListenerOptions
-            {
-                ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
-                ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
-                ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
-                {
-                    DefaultCloseErrorCode = 0x100,
-                    DefaultStreamErrorCode = 0x10c,
-                    MaxInboundBidirectionalStreams = 32,
-                    MaxInboundUnidirectionalStreams = 8,
-                    ServerAuthenticationOptions = new SslServerAuthenticationOptions
-                    { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = certificate }
-                })
-            }, deadline.Token);
+            await using var host = EngineQuicHost.Start(certificate);
             var assembly = typeof(WebServer).Assembly;
             var exchangeType = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange", true)
                 ?? throw new AssertionException("Missing exchange.");
-            var connectionType = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection", true)
-                ?? throw new AssertionException("Missing connection.");
             var fieldType = assembly.GetType("EmbedIO.Net.Internal.Http2.HpackField", true)
                 ?? throw new AssertionException("Missing field type.");
             Array Fields(params string[] pairs)
@@ -124,9 +110,8 @@ namespace EmbedIO.Tests
                 Expression.Invoke(Expression.Constant(application), Expression.Convert(parameter, typeof(object))), parameter).Compile();
             var server = Task.Run(async () =>
             {
-                var accepted = await listener.AcceptConnectionAsync(deadline.Token);
-                await (Task)((connectionType.GetMethod("RunAsync", Flags) ?? throw new AssertionException("Missing runner."))
-                    .Invoke(null, new object[] { accepted, handler, deadline.Token }) ?? throw new AssertionException("Missing server task."));
+                var accepted = await host.AcceptTransportAsync(deadline.Token);
+                await EngineQuicHost.RunAsync(accepted, handler, deadline.Token);
             });
             using var transport = new SocketsHttpHandler
             {
@@ -139,7 +124,7 @@ namespace EmbedIO.Tests
             {
                 for (var i = 0; i < 3; i++)
                 {
-                    using var request = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{listener.LocalEndPoint.Port}/trailers")
+                    using var request = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{host.LocalEndPoint.Port}/trailers")
                     { Version = HttpVersion.Version30, VersionPolicy = HttpVersionPolicy.RequestVersionExact };
                     request.Headers.Host = "localhost";
                     using var response = await client.SendAsync(request, deadline.Token);

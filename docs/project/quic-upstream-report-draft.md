@@ -1,5 +1,9 @@
 # Draft upstream report: QUIC listener endpoint release after disposal
 
+> Historical record. The earlier HTTP/3 providers, and the code, tests and CI jobs
+> this record describes, were removed on 2026-10-22; see
+> [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+
 **Status: the MsQuic report was posted on 2026-10-11 as
 [microsoft/msquic#6374](https://github.com/microsoft/msquic/issues/6374) after
 William's explicit approval; the dotnet/runtime note below remains unposted until

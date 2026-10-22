@@ -23,6 +23,7 @@ namespace EmbedIO
         private X509Certificate2? _certificate;
         private Net.ServerCertificateSource? _certificateSource;
         private Net.ServerTlsPolicy? _tlsPolicy;
+        private WebTransportOptions? _webTransport;
         private string? _certificateThumbprint;
         private bool _autoLoadCertificate;
         private bool _autoRegisterCertificate;
@@ -110,6 +111,25 @@ namespace EmbedIO
             {
                 EnsureConfigurationNotLocked();
                 _tlsPolicy = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the WebTransport settings. The default, <see langword="null"/>, serves no WebTransport.
+        /// The settings are locked with these options.
+        /// </summary>
+        /// <remarks>WebTransport needs <see cref="HttpListenerMode.EmbedIOHttp3"/> or
+        /// <see cref="HttpListenerMode.EmbedIOCombined"/> on the .NET 10 asset; other modes refuse to start with it.</remarks>
+        /// <exception cref="InvalidOperationException">This property is being set,
+        /// and this instance's configuration is locked.</exception>
+        /// <seealso cref="IWebTransportContext"/>
+        public WebTransportOptions? WebTransport
+        {
+            get => _webTransport;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _webTransport = value;
             }
         }
 
@@ -231,6 +251,7 @@ namespace EmbedIO
             }
 
             _tlsPolicy?.Lock();
+            _webTransport?.Lock();
             base.OnBeforeLockConfiguration();
         }
 
@@ -268,13 +289,18 @@ namespace EmbedIO
 
         /// <summary>
         /// Gets or sets how long a new TCP connection may take to deliver its first complete
-        /// request head, including the TLS handshake. The default is null, which applies
-        /// 30 seconds.
+        /// request head, including the TLS handshake, and how long each HTTP/3 stream may take to
+        /// deliver its header. The default is null, which applies 30 seconds.
         /// </summary>
         /// <remarks>
-        /// When the deadline passes the connection is closed without a response. On HTTP/2 the
-        /// deadline covers the connection preface. Subsequent requests on the same connection are
-        /// governed by <see cref="KeepAliveTimeout"/>.
+        /// <para>When the deadline passes on TCP the connection is closed without a response. On
+        /// HTTP/2 the deadline covers the connection preface. Subsequent requests on the same
+        /// connection are governed by <see cref="KeepAliveTimeout"/>.</para>
+        /// <para>On HTTP/3 the deadline applies to every stream the client opens, from the time the
+        /// server accepts it: a request stream must deliver its complete headers, and any other
+        /// stream its stream header. A request stream that misses it is reset with
+        /// H3_REQUEST_REJECTED, so the client can retry the request, and a unidirectional stream
+        /// with H3_STREAM_CREATION_ERROR. Deadlines are checked once a second.</para>
         /// </remarks>
         /// <exception cref="ArgumentOutOfRangeException">The value is not positive or exceeds the
         /// largest supported timer interval.</exception>
@@ -316,6 +342,9 @@ namespace EmbedIO
 
         internal bool HasConnectionLimits =>
             _maximumConnections.HasValue || _requestHeadersTimeout.HasValue || _keepAliveTimeout.HasValue;
+
+        // The limits only TCP listeners can apply; RequestHeadersTimeout also bounds HTTP/3 streams.
+        internal bool HasTcpOnlyConnectionLimits => _maximumConnections.HasValue || _keepAliveTimeout.HasValue;
 
         // The listener-level policy; the shared default when no limit is configured.
         internal Net.Internal.TcpConnectionPolicy CreateConnectionPolicy() =>

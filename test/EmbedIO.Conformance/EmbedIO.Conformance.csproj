@@ -9,4 +9,5 @@
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" /></ItemGroup>
   <ItemGroup><Compile Include="../Shared/HttpsSmoke.cs" Link="Shared/HttpsSmoke.cs" /></ItemGroup>
+  <Import Project="../Shared/QuicNativeAssets.targets" />
 </Project>

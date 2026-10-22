@@ -797,9 +797,10 @@ silently selecting a replacement. See the
 deployment migration, including removed runtime adapters and HTTP.sys configuration.
 
 HTTP/3 remains opt-in through `EmbedIOHttp3`, or `EmbedIOCombined` for TCP and QUIC
-hosting together, with the documented .NET 10, certificate and native QUIC
-prerequisites. Public HTTP/3 selection uses System.Net.Quic, which is distinct
-from the removed System.Net.HttpListener backend. Implementation retirement does
+hosting together, with the documented .NET 10, certificate and platform
+prerequisites. Released packages through 2.16.1 run HTTP/3 on System.Net.Quic,
+and the current source on the EmbedIO.Quic engine; both are distinct from the removed
+System.Net.HttpListener backend. Implementation retirement does
 not establish final program, extension or platform acceptance. See the [default listener transition acceptance criteria](../project/http-engine.md#default-listener-transition)
 and [HTTP/3 guide](../guides/http3.md) for the remaining validation scope.
 
@@ -1244,7 +1245,7 @@ stream and the request lifetime is still active. Previously the engine turned
 that local input cancellation into an abort of both transport directions.
 
 The canceled input remains unusable: a read may already have consumed part of
-a frame, and System.Net.Quic ends that read direction on cancellation. CanRead
+a frame, and the transport ends that read direction on cancellation. CanRead
 returns false and another read throws IOException. Catch the canceled read,
 write the intended response (for example, 408 for a timed-out upload), and
 complete output. A token canceled before a read begins does not abandon input.

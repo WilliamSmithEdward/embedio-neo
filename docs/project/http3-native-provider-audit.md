@@ -1,5 +1,9 @@
 # Native HTTP/3 provider ownership audit
 
+> Historical record. The earlier HTTP/3 providers, and the code, tests and CI jobs
+> this record describes, were removed on 2026-10-22; see
+> [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+
 This audit covers the internal MsQuic provider foundation on
 `codex/http3-native-datagrams` (draft PR 231, program issue 181) at
 `0591b27d7da9f649477985b176eac4b53724e6a3`. That branch's base is

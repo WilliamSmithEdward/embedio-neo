@@ -22,7 +22,7 @@ half-close before reading. Pass the token to streaming, upload and application
 work; retain deadlines because disconnect detection is best effort. Generated
 bindings support AOT and omit the token from OpenAPI. The in-process testing
 context observes its caller token. See [request-abort cancellation](docs/guides/request-abort.md)
-for completion ownership, HTTP/2–3 resets, TLS/proxy limits and examples.
+for completion ownership, HTTP/2 and HTTP/3 resets, TLS/proxy limits and examples.
 Canceled request-abort tokens keep their cancellation source until the token can
 be collected, so retained-token registrations and signaled wait handles remain
 usable. Parent registrations still detach at completion.
@@ -368,7 +368,7 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 | Mode | Serves | Requirements |
 | --- | --- | --- |
 | `EmbedIO` (default) | HTTP/1.1 and HTTP/2 over TCP | HTTP/2 needs TLS with ALPN (`net10.0` asset) or cleartext prior knowledge |
-| `EmbedIOHttp3` | HTTP/3 over QUIC/UDP only | `net10.0`, HTTPS prefixes, a certificate with its private key, native QUIC (MsQuic), TLS 1.3 |
+| `EmbedIOHttp3` | HTTP/3 over QUIC/UDP only | `net10.0`, HTTPS prefixes, a certificate with its private key, TLS 1.3; EmbedIO.Quic uses owned native TLS assets on Unix and Schannel on Windows; released 2.16.x packages use `System.Net.Quic` |
 | `EmbedIOCombined` | Both of the above on the same HTTPS prefixes | Everything HTTP/3 needs; both bindings must succeed |
 
 - HTTP/2 needs no opt-in in the default mode.
@@ -376,6 +376,151 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 - Unsupported HTTP/3 platforms throw `PlatformNotSupportedException` at startup.
 - There is no automatic Alt-Svc advertisement; clients must be told HTTP/3 is
   available. See the [HTTP/3 guide](docs/guides/http3.md).
+
+The HTTP/3 listener serves opt-in WebTransport sessions:
+`WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a
+session through `IWebTransportContext` and use its `WebTransportSession` streams and
+datagrams. It speaks draft-ietf-webtrans-http3-16 and the draft-02 handshake
+Chromium uses; no release contains it. See the
+[WebTransport guide](docs/guides/webtransport.md). The independent
+EmbedIO.Quic generic transport core is under `src/EmbedIO.Quic`. Its separate
+`EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, references the actual
+library HTTP/3 protocol and uses a legacy development OpenSSL loader, the private
+OpenSSL 3.5.9 boundary on Unix, or the Windows SDK recordless Schannel
+interface for TLS. In this unreleased branch, the .NET 10 library asset compiles the
+same internal engine sources; the standalone `EmbedIO.Quic` project remains an
+independent build boundary. The host no longer compiles copies of the HTTP/3 codecs. The Windows development profile uses owned non-exportable CNG RSA/ECDSA
+credentials and negotiates AES-128-GCM/SHA-256 or AES-256-GCM/SHA-384. The packet core
+also implements ChaCha20-Poly1305/SHA-256, exercised through the OpenSSL peer profile;
+Windows Schannel does not advertise that profile. Its Schannel implementation compiles in the
+.NET 10 library under `Net/Internal/Http3/Tls`, with certificate-source and TLS-policy
+integration exercised by the actual WebServer fixture. Windows client-certificate
+policies now have direct controller, chain, callback and revocation checks. Packet
+payloads use .NET AES-GCM or ChaCha20-Poly1305, and key derivation uses .NET HKDF;
+there is no custom TLS or AEAD implementation. The QUIC-specific ChaCha header
+mask is an original single-block implementation with vector and independent-peer
+coverage. All three
+packet cipher profiles retain their hash and header key across key updates, with
+connection-wide authentication-failure limits. Resumption and supported-platform
+TLS/certificate parity remain pending. The standalone
+core and development host remain nonpackable. .NET Standard compilation remains
+unchanged. Ordinary .NET 10 HTTP/3 and combined listeners
+select EmbedIO.Quic and its runtime packages carry the owned Unix TLS library.
+The fuzz harness exercises the library's engine source. It includes
+loss recovery, NewReno congestion control and an H3/WebTransport echo adapter with
+current reliable-reset framing, reusable receive windows and explicit connection
+closing/draining. Receive packet history advances with bounded ACK ranges and a
+permanent duplicate-rejection floor. Retired send records and acknowledgement
+history also compact within fixed bounds. Incoming ACK frames accept range counts
+that fit the datagram and sent-packet bounds; ordered ranges use indexed recovery
+lookup. Malformed ranges use FRAME_ENCODING_ERROR, while acknowledgements for
+unsent packets use PROTOCOL_VIOLATION. Per-key encryption budgets (conservatively capped at the AES-GCM limit for
+all profiles) and ACK-confirmed local/peer key generations replace the cumulative send-packet quota.
+Recovery loss bursts now defer retransmission deliveries beyond the 512-entry ready
+window within a separate bounded backlog, while ACK-only work and PTO probes retain
+urgent service. Stream output waits for the backlog to drain; owner ticks promote
+deferred deliveries and discard those acknowledged in the meantime. This draft fix
+addresses the reproduced concurrent-upload queue overflow; hosted acceptance on
+the corrected head is still pending.
+Completed stream records retire after receive/application completion and any required
+send acknowledgement; cumulative stream credit replenishes within resident bounds.
+The stream core accepts an owner-bound application adapter with explicit byte
+consumption and reliable-prefix ownership. The raw multiplexed echo profile
+exercises it without HTTP/3 control-stream or WebTransport session assumptions;
+its async test-host API adds owned reads/writes, outbound bidi/uni streams,
+consumption-driven buffering, cancellation with explicit read-abort codes, FIN-ACK
+completion and bounded datagram/open/accept queues. Application commands wake the
+UDP owner directly. The ordinary HTTP/3 binding now retains the negotiated peer
+datagram-frame and reliable-reset transport parameters through its owned adapter.
+Async streams can reserve a copied, at-most-64-byte reliable prefix before writing;
+the owner installs it before a reset and waits for flow credit if necessary. With
+`WebServerOptions.WebTransport` set, the HTTP/3 connection adds draft SETTINGS
+fields to its control stream, validates the client's, and admits draft-16 sessions
+only with negotiated datagrams and reliable reset, draft-02 sessions with
+datagrams. Without it, the SETTINGS bytes and request handling are unchanged.
+The Windows TLS factory captures the fallback certificate when
+constructing each handshake, then selects and clones the certificate after a complete
+ClientHello. It preserves bounded ASCII SNI spelling, calls the configured selector
+once and isolates selector failures. Later publication applies to new handshakes;
+existing connections keep their original credential. Ordinary library TLS omits
+development diagnostic strings. Its Windows path honors `ClientCertificateMode.None`,
+`Allow` and `Require`, builds the client-authentication chain using presented intermediates,
+and applies the existing validator and revocation option before TLS completion. Supplied
+roots are not trusted automatically. Accepted requests use the existing
+`Request.GetClientCertificate()` API; certificate copies retain their existing lifetime
+independently of native TLS cleanup. Full platform/configuration parity remains pending.
+A bounded execution pool now serializes each connection's factory, packet,
+timer, application and cleanup work. Its mailbox counts both queued and executing
+input toward packet/byte limits; shutdown waits for active native calls. Direct
+lifecycle, packet-mutation and native first-flight checks exercise this scheduling
+boundary. The shared UDP development host now uses the scheduled dispatcher:
+handshake deadlines include queue time, routing is established before sending,
+and output limits include queued and in-flight sends. Shutdown waits for native
+work and sends, releases sibling owners and reports cleanup failures. The library now
+also has an internal socket binding whose acceptance lifetime is separate from UDP
+ownership, preserving active traffic during HTTP/3 drain. Ordinary binding or
+cancellation-callback failures are reported after session teardown;
+connection workers and sibling bindings still receive cleanup. A failed drain clears
+the previous session so the listener can restart. Per-instance listener
+construction allows the real WebServer pipeline to validate that binding with
+development credentials. The current binding selection is described below.
+The replacement stream/datagram adapters now drive the library's HTTP/3 protocol
+from the development UDP host. Ordinary body-read cancellation preserves the
+existing distinction between local timeout (`H3_NO_ERROR`) and request cancellation;
+CONNECT streams retain their transport cancellation behavior. The new independent
+`test/EmbedIO.Quic/verify_http3.py` checks actual HTTP/3 uploads, complete timeout
+responses and healthy sibling requests. Its request-lifetime regressions run with
+`python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py`
+in the pinned peer environment. The helper reports an authenticated peer close to
+HTTP waiters when draining begins, while leaving the reference engine's drain timer
+and connection cleanup intact. `test/EmbedIO.Quic/verify_listener.py` additionally
+exercises actual WebServer controllers, bearer authentication and policy authorization,
+request-abort cancellation, endpoint metadata isolation, active-response drain and UDP
+rebind through the new binding. OpenSSL and Windows non-exportable RSA/ECDSA profiles
+passed this development-host validation. It rejects TLS configurations outside its
+fixture profile. `test/EmbedIO.Quic/verify_tls_listener.py` additionally verifies
+SNI selection, authenticated certificate publication, strict trust/hostname rejection,
+and healthy existing connections through the library's Windows TLS implementation.
+`scripts/run-quic-development.py --schannel` includes Windows listener/policy checks
+and native RSA/ECDSA mutations. It also runs the client-certificate wire matrix and seeded
+full-handshake certificate/key mutations through `verify_client_certificate.py` and
+`fuzz_client_certificate.py`. These include a continuing healthy connection and retained
+input/fixture replay. Complete credential and configuration parity remains pending.
+A provider-neutral TLS boundary caches handshake state and
+releases packet keys with its connection. Bounded ClientHello framing and transport
+parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
+configuration and full TLS/certificate parity remain pending.
+The source core owns packet processing and destination-ID routing through
+`QuicConnection` and `QuicConnectionDispatcher`, with injected TLS/application factories
+and validated internal stream-count/idle configuration. Scheduled factories receive
+the connection owner and copies of the local/remote endpoint metadata; the async stream
+application uses its coalescing wake callback
+for application commands, so outgoing work need not wait for a peer packet or periodic timer.
+The shared development host also runs owned async stream handlers on that path.
+All development protocols use the same stream owner. The synchronous registry is retained only in the
+development test host as a deterministic reference. Registry shutdown releases all sibling owners before
+reporting ordinary cleanup failures. Direct managed fuzzing exercises both owners
+without loading native TLS; independent peers validate the native path. The bounded
+development socket listener supplies admission limits, handshake deadlines and
+cancellation across multiple connections. Async accept/owner bounds follow the validated
+transport stream capacities, including the production 128/16 profile. Receive windows
+rent pages as data arrives and clear/return them after consumption, read abort,
+reliable-reset suffix discard, retirement or connection shutdown; empty streams do
+not reserve full payload windows. Discard retains offset/final-size validation and
+keeps application-delivered bytes under explicit consumption ownership. It has
+no separate public engine API. The ordinary WebServer binding uses
+EmbedIO.Quic, and this source no longer contains the System.Net.Quic or MsQuic
+server providers. The [development and testing record](docs/project/quic-development-and-testing.md)
+tracks all fuzz engines, extensive local runs and remaining production acceptance. The Windows
+validation helper checks native lifetime and a bounded first-flight matrix against
+read-only host TLS-group policy. P-256 must succeed; X25519 must succeed when enabled
+and reject without keys when disabled. Missing policy evidence or unexpected outcomes
+fail the gate; validation never changes machine policy. Shared HTTP lifecycle fuzzing distinguishes
+expected stopped-client disconnects from response failures and cleanup deadlines.
+The MsQuic-specific quarantines, rebind retry and diagnostics are gone with it.
+Review every open Neo issue; close issues only after validating their resolution.
+See [its scope and reproduction steps](docs/project/quic-engine-feasibility.md)
+and [WebTransport readiness](docs/project/webtransport-upstream-readiness.md).
 
 ## 5. HTTPS and TLS
 
@@ -886,7 +1031,7 @@ when changing the library; follow [CONTRIBUTING.md](CONTRIBUTING.md).
 The [cold-path experiment](docs/project/cold-path-jit-latency.md) retains
 measurements of HTTP/1 header/logging extraction. That optimization was deferred
 after mixed warm results and is absent from the library source; the numbers
-describe experimental binaries, not current production behavior. The requested
+describe diagnostic binaries, not current production behavior. The requested
 listener display name is `EmbedIO-Neo HTTP Listener`. The measurement runner,
 wire regressions and evidence remain available for future investigations.
 
@@ -929,7 +1074,7 @@ commands and the difference between helper-output checks and wire validation.
 - Configuring options or modules after the server started.
 - Calling `RunAsync` twice, or reusing a stopped server.
 - An `https` prefix with no certificate.
-- Expecting HTTP/3 on `netstandard2.0` or without native QUIC.
+- Expecting HTTP/3 on `netstandard2.0` or without the selected transport's TLS support.
 - Relying on defaults for an internet-facing server instead of setting limits.
 - Calling `WithRequestHeaderLimits(bytes)` without a count.
 - Sending a WebSocket close code a server cannot use, such as 1006.
@@ -969,3 +1114,277 @@ passing run. See [property testing](docs/guides/property-testing.md) and
 SSE wire EOF can arrive before the server handler finishes disposing its subscription.
 Lifetime tests must await handler completion before asserting released subscriber slots;
 a successful server shutdown alone does not join every request continuation.
+
+### Portable EmbedIO.Quic TLS development
+
+The internal Linux/macOS TLS adapter uses an original private polling ABI over
+pinned OpenSSL 3.5.9 built with `no-quic`; the managed engine owns the transport.
+The common TLS factory preserves per-handshake certificate-source snapshots, SNI,
+client-certificate modes and managed chain/revocation/callback policy. Packet keys
+and peer parameters alone do not admit application traffic: TLS Finished and
+client-certificate policy must succeed first. Native buffers and handles remain
+bounded and owned by the serialized connection. Windows retains Schannel.
+
+Released HTTP/3 provider selection and package dependency groups are unchanged;
+the development binding transition is described below.
+A separate unpublished native runtime package and package-only consumers are in
+development; oldest supported libc/musl and remaining RID validation are pending. Build instructions and the exact archive pin are in
+[`native/EmbedIO.Quic.Tls`](native/EmbedIO.Quic.Tls/README.md). The portable CI job
+runs independent wire, SNI, publication, mutual TLS and bounded mutation checks on
+Linux and macOS; a configured job does not establish a successful run. Local Linux
+validation passed 24 wire cases, six SNI cases, live publication, 24 certificate
+policy cases and 5,000 native-auth mutations, plus six common-factory JIT/NativeAOT
+wire cases and 3,072 wrapper-sanitizer ownership lifecycles. Those initial proofs
+used the recorded development build; final restricted native-build validation is
+recorded separately in the development guide. None of this work is released.
+
+The portable boundary's private ABI is now 2. Server credential preparation keeps
+runtime-discovered intermediates in order, preserves partial issuers and omits the
+trust anchor; issuer installation transfers only public DER. Native ABI 1 is
+rejected during preflight. Local Linux tests compare five chain profiles with a
+BCL TCP control and check exact peer-visible issuer order and cleanup. The store
+fixture requires an explicitly disposable Linux profile and stores public CA
+certificates without adding a trusted root. Generated chain certificates include
+subject/authority key identifiers, and the TCP control explicitly enables strict
+X.509 validation on every peer Python version. The independent revocation fixture
+serves signed CRLs and OCSP responses, including nonce handling and bounded HTTP
+GET/POST. It preserves the existing policy assertions. Hosted macOS 26 ARM64
+revalidation passed all 24 certificate-policy cases, including online good/revoked
+checks, plus wire/SNI/publication, all three ciphers and 256 native-auth mutations
+in CI run 39638190853. This does not establish other macOS RIDs or native packaging.
+
+The owned connection refreshes its monotonic time after initial TLS processing,
+including application certificate policy, before starting a closing interval.
+Established packet processing does not take this extra clock reading. A delayed
+revocation responder exercises rejection after validation exceeds a loopback PTO;
+policy expectations, handshake limits and response deadlines remain enforced.
+
+Portable builds now emit a binary audit with RID/architecture, dependency,
+export and platform-version metadata. Requested glibc assets reject requirements
+above 2.27; Linux x64 CI builds in a digest-pinned manylinux compiler environment
+and the tested artifact requires only GLIBC_2.17. macOS builds explicitly target
+15.0 and verify their load commands. Binary metadata does not establish all RID,
+musl, signing, package-consumer or runtime acceptance. The native artifacts and
+receipts are retained as package inputs. The unpublished `EmbedIO-Neo.Quic.Native`
+project stages exactly six Linux/macOS x64/ARM64 RIDs by default and checks the
+packed native bytes, license, manifest and source identity. It stays outside the
+ordinary solution; the six existing packages and core dependency groups remain
+unchanged until provider transition. This avoids placing native runtime assets in
+the legacy .NET Standard package graph.
+
+The portable workflow now builds on matching hardware, assembles one runtime
+package and validates portable/RID/Native AOT consumers with isolated local feeds
+and fresh caches. Generated controllers and source-generated JSON avoid reflection
+requirements in the focused AOT consumer. Its wire checks cover all three ciphers,
+bearer policy, bounded uploads/rejections, request-abort cancellation and cleanup;
+the package-based full harness retains the broader protocol and certificate suites.
+A local musl x64 preview passed the initial six JIT/AOT cipher profiles; exact
+later repeats are recorded in the development guide. Single-RID preview switches
+are local development aids, not distribution acceptance. All six RID runs, oldest
+OS/libc, native signing/loading, final-payload scans, browser and endurance/latency
+acceptance still apply. These native package changes remain unreleased.
+
+
+The development connection now honors authenticated peer `NEW_CONNECTION_ID`
+retirement watermarks and retransmits `RETIRE_CONNECTION_ID` through the shared
+recovery owner. It retains at most two active peer IDs and four unacknowledged
+retirements, releases acknowledged records and uses the replacement ID before
+sending a close. These bounds remain constant over long-lived rotation. This
+handles peer destination IDs. Server-issued IDs and reset emission are described
+below; migration and Retry remain separate acceptance work.
+
+CI run 39653100127 built all six native assets and assembled the combined package.
+Its complete package-consumer suites passed on Linux x64, Linux ARM64 and macOS
+ARM64. Both musl consumers stopped at Git checkout ownership validation; the
+owner-matched Docker correction subsequently passed the full local musl x64
+consumer against the same six-RID feed. Intel macOS stopped before wire testing
+because the pinned cryptography 50.0.2 peer dependency has no published x64 wheel.
+The workflow now prepares a separate, unpublished source-built test wheel of
+that same version against the reviewed static OpenSSL SDK, with pinned build
+tools, Cargo lock, wheel/source/native-receipt checks and retained licenses.
+Subsequent run 39671061660 at `61fcc167` passed all six native builds, the
+combined package and all six complete consumers, including Intel macOS and both
+musl architectures. Its Android emulator download failed before app startup;
+the unchanged failed-job retry passed on attempt two. This wheel remains test
+infrastructure, not a production dependency or an assertion of upstream Intel
+macOS support. See the development record for evidence and the remaining
+production, browser, endurance and latency work.
+
+
+The engine recognizes received stateless resets using tokens for
+peer IDs it has actually used; unused and retired IDs do not qualify. Valid
+packet authentication takes precedence. A recognized reset enters silent draining
+and cancels active application work, including request-abort tokens. The dispatcher
+uses endpoint-bound keyed token identities when a randomized header does not
+identify its connection. Shared-endpoint candidates first preserve authentication
+by the issued-ID owner; only failure permits forwarding to the token owner. This
+adds no token hash to the usual single-connection packet path. Reset routes and endpoint
+groups retire with connection ownership. Server-issued IDs and reset emission
+are described below; path migration remains development work.
+The new model, dispatcher, independent-peer and fuzz checks are recorded in the
+development/testing guide; see the current binding selection below.
+
+
+The engine issues fixed 16-byte random server IDs and maintains two
+active IDs per connection. The initial reset token travels in authenticated
+server transport parameters; a spare ID and replacements use reliable
+NEW_CONNECTION_ID deliveries. RETIRE_CONNECTION_ID rejects unissued sequences
+and retirement of the carrying packet's destination. Immutable routing metadata
+adds and removes every active alias before related output is sent. A private
+listener secret derives reset tokens; connection cleanup does not discard that
+secret, and listener disposal clears it after workers stop. Secrets are not
+persisted across listener restarts.
+
+Unknown valid short-header packets can receive a smaller stateless reset. These
+responses have a global 64-attempt-per-second allowance and a small bounded
+share of the output queue. Active IDs use ordinary connection processing.
+Model tests cover 10,000 retirements, loss, bounds, malformed frames and cleanup;
+Windows reference peers passed 32 rotations and two retired-ID reset emissions
+on each AES profile, and Linux passed the same checks on all three cipher profiles.
+Runtime delivery and application acceptance are described below. Local regression/fuzz results, the low AFL++ feedback-stability limitation and
+final changed-source acceptance for this increment are recorded in the testing guide.
+
+
+The development-only standards capture tool uses the hash-locked
+`.github/requirements/standards-capture.txt` parser dependency. It permits only
+primary-source HTTPS origins and redirects, limits individual responses/indexes
+to 64 MiB and the RFC update graph to 512 documents, and rejects XML DTD/entity
+markup. Offline controls run in CI's existing source-quality environment. See
+[HTTP conformance](docs/project/http-conformance.md) for isolated capture commands;
+new captures do not overwrite or redate the documented frozen inventory.
+
+
+Same-path `PATH_CHALLENGE` responses in the engine echo the exact eight
+bytes once and pad the UDP datagram to 1200 bytes, except where the existing
+unvalidated-address amplification budget requires less. Recovery does not repeat
+the response frame. Truncated challenge/response data yields frame-encoding error
+7; an unmatched complete response retains protocol-violation error 10, permitted
+by RFC 9000 section 19.18. The model, fuzz and independent-peer hooks are in the
+[development/testing record](docs/project/quic-development-and-testing.md).
+The engine also has bounded address-aware routing and server-initiated
+path validation. New peer addresses require authenticated 1-RTT traffic after
+handshake confirmation; only the newest non-probing packet steers ordinary output.
+Per-path amplification accounting, unique challenge attempts, a separate full-size
+proof after small address probes, a validated fallback and a bounded failed-path
+cooldown cover source-port rebinding. Responses target the path on which the
+challenge arrived; a response received on another path can validate the originally
+probed route. Application request endpoints retain the connection's initial
+identity, matching the existing HTTP/3 binding. `verify_path_validation.py` checks
+same-IP rebinding and simultaneous source-port/IP/CID changes, blackholed-candidate
+fallback, sibling requests and drain/rebind. Obsolete paths release peer IDs by
+reliable retirement on the validated route; reservations stay separate from reset-
+token eligibility until a packet is sent. A close response can use that validated
+route when the new path lacks send allowance or a usable peer ID. Broader loss,
+reordering, browser and platform/package acceptance remain development work.
+The macOS hosted package fixture adds
+127.0.0.2 to loopback only for the source-IP/CID case and removes that alias
+when validation ends; production networking does not require this fixture setup.
+
+The earlier isolated default-selection probe verified ordinary .NET 10 HTTP/3
+WebServer modes through `EmbedIOQuicListenerBinding`, using Schannel on Windows
+and the private pinned OpenSSL TLS runtime on Linux/macOS. That selection and its
+actual TLS capability checks are integrated as described below; no released
+package selects them yet.
+
+Recovery now accumulates pacing credit at the RTT/congestion-window rate, capped
+at the initial ten-packet window and independently constrained by congestion.
+This permits bounded batches after scheduler delay without unlimited idle bursts.
+HTTP/3 stream abort is harmless after connection closure; pending operations
+retain their original connection error and argument validation remains active.
+The model, actual WebServer regression, independent-peer and fuzz evidence is in
+the development/testing record. The open-issue audit remains outstanding.
+
+
+The .NET 10 core declares the owned `EmbedIO-Neo.Quic.Native`
+runtime dependency. It has no managed runtime-wrapper assembly; Windows still
+uses Schannel. .NET Standard dependency groups remain unchanged. Package-only
+applications and the development host reference only the core package, and their
+validation requires the native package to resolve transitively at the same version.
+CI shares one six-RID native build across ordinary Unix tests and package consumers;
+source-build tests copy only their verified platform artifact through a test-only
+opt-in. Package-mode validation rejects manual copying. Complete CI/Publish input
+assembly verifies seven packages and all six native RIDs; configured jobs still
+require final-head execution. CI also passes that exact seven-package artifact to
+the reusable ClamAV/YARA-X scan, including native bytes. The standalone six-package
+source/managed scan remains required. Publish likewise requires the seventh
+runtime package in its scan input. No release is authorized.
+
+
+Ordinary `EmbedIOHttp3` / `EmbedIOCombined` construction selects
+EmbedIO.Quic through the public WebServer API. Startup checks a 64-bit desktop
+TLS path directly: Schannel requires Windows 11 / Server 2022 and later, while
+Linux/macOS must load the expected private ABI/version. Missing Unix libraries
+fail before binding; the server no longer needs BCL QUIC to be available on this
+path. Normal package consumers prove portable/RID/AOT delivery and missing-runtime
+refusal without an injected binding. The private macOS build targets 14.0, and the
+package consumers passed on macOS 14. Released packages through 2.16.1
+still use the previous provider; this source no longer contains it. Tests that
+drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through the
+EmbedIO.Quic binding; the BCL client remains the independent test client.
+The [development record](docs/project/quic-development-and-testing.md) lists the
+platform, browser and endurance results, the open-issue audit and the work that
+remains, such as latency measurement and the oldest glibc and musl versions.
+
+The source-built Native AOT smoke imports the same explicit test-only Unix TLS
+copy hook as the NUnit and development hosts. Ordinary CI supplies its verified
+same-run Linux asset; standalone AOT runs build and audit the pinned TLS source
+locally. This hook is for source-reference fixtures only. Package applications
+continue to use NuGet-selected assets. The AOT fixture's BCL HTTP/3 client still
+requires its separate MsQuic prerequisite; the EmbedIO.Quic server does not.
+
+Draft-16 WebTransport admission does not require the client to advertise extended
+CONNECT support. It requires the client's WebTransport and datagram SETTINGS and
+the required transport parameters; the server still advertises extended CONNECT.
+Model and independent-peer checks cover omitted and zero-valued client
+advertisements. Locally, the public session API passes all 15 quic-go peer modes,
+and a Chromium 152 browser completed a draft-02 session with datagram, stream and
+close checks.
+
+The QUIC bridge fuzz target round-trips input-derived server SETTINGS through the
+HTTP/3 and WebTransport readers and probes malformed extension pairs. Local
+self-test and seeded core-fuzz
+evidence is in the [development and testing record](docs/project/quic-development-and-testing.md).
+
+The async-stream owner ignores inbound STREAM/RESET/STOP events
+after connection closure without creating another stream owner; outbound operations
+continue to report the original connection failure. A local close-race regression
+passes, as do the hosted suites.
+
+The EmbedIO.Quic listener enables UDP destination reporting before it
+binds. On macOS a datagram could arrive without its destination before the first
+receive, and the listener stopped, so clients saw "No route to host". A wildcard
+(dual-mode) HTTP/3 prefix also stopped at its first receive on macOS, where .NET
+cannot report destinations on such a socket. Such datagrams are now attributed to
+the bound address: a wildcard listener on macOS reports the wildcard address as the
+local endpoint of its requests. The same changes stop a server read abort at request
+end from resetting a committed HTTP/3 response (the intermittent 408 reset), and let
+a listener disposed at once stop cleanly. Hosted acceptance is pending.
+
+
+Source-reference fuzz, conformance and load-benchmark hosts now opt into that
+same test-only native copy target. Unix real-HTTP/3 fuzz and manual latency jobs
+build/audit the pinned host TLS source before building their managed host; Windows
+continues to use Schannel. The shared preparation action also serves standalone
+AOT validation, while ordinary CI AOT reuses its same-run verified native asset.
+Artifacts retain the local native build receipt and binary audit. This does not
+change NuGet asset selection, campaign assertions or deadlines. Actual Unix fuzz
+replay and bounded state-machine evidence is recorded in the development/testing
+record; final platform failures and sustained latency acceptance remain open.
+
+
+The EmbedIO.Quic listener isolates UDP reset/refused/unreachable-path
+errors to their datagram operation. The shared listener keeps accepting healthy
+connections and existing recovery handles lost output. Its internal shutdown
+summary counts these path errors. Other socket failures, cancellation and resource
+ownership retain their existing terminal behavior. A real Linux ICMP fixture and
+an independent disposed-socket control cover the distinction; complete desktop
+CI acceptance, including the separate upload transport failure, remains pending.
+
+
+Concurrent HTTP/3 upload regressions now retain a bounded test-only observation
+of exceptions caught inside the QUIC owner. Collection is enabled only for those
+upload cases; failed-case output keeps at most 16 records of 4,096 characters.
+The fixture detaches its process-level observer after completion and reports
+observation failures explicitly, without adding production logging, payload/key capture or runtime dependencies. A zero-record
+failure remains possible and is useful evidence. The repeated hosted upload
+protocol error still needs a confirmed cause and correction.

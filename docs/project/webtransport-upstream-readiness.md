@@ -1,9 +1,16 @@
 # WebTransport: upstream provider readiness
 
+> Historical record. This decision concerned the earlier MsQuic provider, which was
+> removed on 2026-10-22; see
+> [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+> Issue #303's closure now depends on EmbedIO.Quic.
+
 [Issue #303](https://github.com/WilliamSmithEdward/embedio-neo/issues/303)
 tracks current-wire reliable reset and complete WebTransport integration.
-William's decision is to keep the native candidate **test-only** and await
-upstream support. No modified native library, experimental application facade,
+The native candidate remains **test-only** while awaiting upstream support.
+An independently implemented C# [EmbedIO.Quic implementation](quic-engine-feasibility.md) now
+explores another transport route, with recovery and a bounded H3/WebTransport
+adapter. It does not activate a production provider. No modified native library, application facade,
 or new provider is shipped by this decision. Existing HTTP/3 providers and
 defaults are unchanged; current WebTransport support is not advertised.
 

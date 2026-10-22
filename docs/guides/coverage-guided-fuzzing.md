@@ -1,18 +1,21 @@
-# Coverage-guided URL parser fuzzing
+# Coverage-guided URL, multipart and QUIC fuzzing
 
 `test/EmbedIO.SharpFuzz` is a nonpackable .NET 10 executable. SharpFuzz 2.3.0
-instruments a **copy** of `EmbedIO.dll`; the native libFuzzer driver uses its
+instruments **copies** of `EmbedIO.dll`, `EmbedIO.Quic.dll` and
+`EmbedIO.Quic.Development.dll`; the native libFuzzer driver uses their
 managed branch counters to retain interesting inputs and guide mutations.
 This complements the deterministic mutation and property harness in `EmbedIO.Fuzz`.
-It does not exercise sockets, HTTP framing, TLS, QUIC or WebSocket sessions.
+It exercises URL/multipart parsing and EmbedIO.Quic packet, stream, recovery,
+lifetime and H3 bridge code without sockets or native TLS. Dedicated native TLS
+and wire campaigns are described in the QUIC development record.
 
-The targets are the public `UrlEncodedDataParser.Parse` and `UrlPath.Normalize`
+The URL targets are the public `UrlEncodedDataParser.Parse` and `UrlPath.Normalize`
 APIs. Query checks compare keys and ordered values with mutable and immutable
 results, with both flag-grouping policies. Path checks compare against a separate
 character-by-character slash-collapse oracle and check idempotence. Arbitrary
 bytes decode as UTF-8 with replacement; malformed percent escapes remain inputs.
-Paths receive an initial slash to meet the documented precondition. No exceptions
-are swallowed: unexpected exceptions and failed invariants become crash inputs.
+Paths receive an initial slash to meet the documented precondition. Documented malformed-input exceptions are handled only at their target boundary;
+unexpected exceptions and failed invariants become crash inputs.
 
 ## Run and replay
 
@@ -22,19 +25,20 @@ With the SDK pinned in `global.json` and PowerShell 7, on Windows x64 or Ubuntu 
 ./scripts/run-sharpfuzz.ps1 -Seconds 60 -Seed 1729
 ```
 
-Observe the repository's shared build-slot rules when running locally. This pure
-parser campaign does not bind network endpoints. The runner downloads the official
+Observe the repository's shared build-slot rules when running locally. This managed
+parser/transport campaign does not bind network endpoints. The runner downloads the official
 `v2025.05.02.0904` driver and verifies its platform-specific SHA-256, restores the
 locked harness dependencies and installs the pinned SharpFuzz.CommandLine 2.3.0
 tool. The instrumenter targets .NET 8 and is run with temporary major-version
 roll-forward on the repository's .NET 10 runtime.
 
 Each invocation uses a new `TestResults/sharpfuzz/<id>` directory. Only the
-published copy of the two target types is instrumented. The runner checks that
+published copies of the selected parser and QUIC implementation types are instrumented. The runner checks that
 the copy changed and the ordinary build assembly did not. Neither the harness
-nor its instrumentation belongs in production packages or the ordinary solution.
+nor its instrumentation belongs in production packages. The ordinary fuzz harness
+references the nonpackable QUIC development host.
 
-The five checked-in seeds are replayed before mutation. Inputs are capped at
+All checked-in URL, multipart and QUIC seeds are replayed before mutation. Inputs are capped at
 4096 bytes, each execution has a ten-second timeout and campaigns use one driver
 process. The workflow runs sixty seconds on affected PRs/main and ten minutes
 weekly. Its twenty-minute job limit bounds setup or driver stalls. Nonzero driver
@@ -96,7 +100,7 @@ Container-created result files are made readable for host artifact collection
 even when the campaign fails.
 
 Before mutation, `afl-showmap` must report nonempty, distinct coverage maps for
-two seed inputs. The dotnet executable has no native AFL signature, so the
+each of the URL, multipart and QUIC seed pairs. The dotnet executable has no native AFL signature, so the
 official SharpFuzz bridge requires `AFL_SKIP_BIN_CHECK`; this does not disable
 managed instrumentation or the forkserver. Non-instrumented mode is not used.
 
@@ -132,3 +136,13 @@ The final clean sixty-second container run completed 21,393 executions, retained
   corpus growth, crash artifacts, timeout and mutation controls.
 - [AFL++ 5.03c source](https://github.com/AFLplusplus/AFLplusplus/tree/dbaf11913c1b2702dee5b4d3dcfffd52f1defe50)
   supplies the AFL engine and coverage-map validator used by the container.
+
+## EmbedIO.Quic
+
+The QUIC development core participates in the existing fuzz campaigns. See the
+[development and testing record](../project/quic-development-and-testing.md) for
+all eight targets, scheduled socket dispatch/output ownership and asynchronous application wake-ups, multi-connection
+traces, managed coverage evidence, native TLS
+mutation scope and extensive local commands. The ordinary HTTP/3 binding selects
+EmbedIO.Quic; the earlier server providers are removed, and the BCL QUIC client
+remains only as a test client. Fuzz configuration alone does not establish acceptance.

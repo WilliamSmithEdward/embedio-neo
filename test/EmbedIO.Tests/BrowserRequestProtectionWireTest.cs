@@ -25,7 +25,7 @@ namespace EmbedIO.Tests
         [TestCase(3)]
         public async Task RealProtocolsPreserveSessionTokensAndRejectCrossClientReuse(int protocol)
         {
-            if (protocol == 3 && (!QuicListener.IsSupported || !QuicConnection.IsSupported))
+            if (protocol == 3 && (!QuicConnection.IsSupported))
             {
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.Fail("QUIC is required by this job.");
                 Assert.Ignore("The host does not provide QUIC."); return;

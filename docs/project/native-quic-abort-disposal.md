@@ -1,5 +1,9 @@
 # Native QUIC explicit abort disposal
 
+> Historical record. The earlier HTTP/3 providers, and the code, tests and CI jobs
+> this record describes, were removed on 2026-10-22; see
+> [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+
 The native candidate must preserve an application's explicit stream reset code
 when the stream is subsequently disposed. The original binding queued the
 requested abort, then disposal queued another send/read abort with `0x10c`

@@ -18,8 +18,8 @@ A small, modular web server for .NET. EmbedIO-Neo lets you add JSON APIs, static
 files and WebSockets to desktop apps, local tools and services.
 
 Upgrading? Coming from the original EmbedIO 3.x, start with the
-[upgrade checklist](docs/compatibility/upgrading-from-embedio-3.md). Already on
-EmbedIO-Neo v1, read the [v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md).
+[upgrade checklist](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/compatibility/upgrading-from-embedio-3.md). Already on
+EmbedIO-Neo v1, read the [v1-to-v2 migration guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/compatibility/neo-v1-to-v2.md).
 
 ## Overview
 
@@ -53,8 +53,8 @@ compatibility evidence; it does not provide HTTP/3 or establish support for ever
 older runtime. Mobile and sandboxed applications need their platform-specific
 network permissions and deployment setup.
 
-See the [HTTP/3 guide](docs/guides/http3.md), [HTTPS guide](docs/guides/https.md)
-and [platform documentation](docs/README.md#platforms) for configuration.
+See the [HTTP/3 guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/http3.md), [HTTPS guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/https.md)
+and [platform documentation](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/README.md#platforms) for configuration.
 
 ## Installation
 
@@ -98,28 +98,28 @@ catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
 ```
 
 `OnGet` matches a base path, including requests beneath it. Use
-[controllers](docs/guides/getting-started/controllers.md) for exact routes and
+[controllers](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/getting-started/controllers.md) for exact routes and
 parameters. To serve files, add `WithStaticFolder("/", directory, true)` after
-your API modules; [mount order](docs/guides/multiple-static-folders.md) determines
+your API modules; [mount order](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/multiple-static-folders.md) determines
 which module handles a request.
 
 ## Guides and tools
 
 | Task | Documentation |
 | --- | --- |
-| Read request bodies and define routes | [Requests and controllers](docs/guides/getting-started/requests.md) |
-| Serve HTML and files | [Static files](docs/guides/getting-started/files.md) |
-| Configure HTTPS | [Certificates and client trust](docs/guides/https.md) |
-| Protect APIs and uploads | [Bearer authentication, policies and optional JWT](docs/guides/bearer-authentication.md) |
-| Use WebSockets | [Startup and readiness](docs/user-reports/websocket-startup-messages.md) |
-| Stream progress to a browser | [Server-sent events](docs/user-reports/progress-events.md) |
-| Send interim responses or trailers | [Response field sections](docs/guides/response-field-sections.md) |
-| Accept a capsule tunnel | [Tunnel ownership and authorization](docs/guides/capsule-tunnels.md) |
-| Run a command-line server | [CLI and plugins](docs/guides/cli.md) |
-| Serve a JSON file as REST collections | [JsonServer integration](CONTRIBUTING.md#extras-integration) |
-| Build an app with an AI coding agent | [Agent primer](AGENT_PRIMER.md) |
+| Read request bodies and define routes | [Requests and controllers](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/getting-started/requests.md) |
+| Serve HTML and files | [Static files](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/getting-started/files.md) |
+| Configure HTTPS | [Certificates and client trust](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/https.md) |
+| Protect APIs and uploads | [Bearer authentication, policies and optional JWT](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/bearer-authentication.md) |
+| Use WebSockets | [Startup and readiness](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/user-reports/websocket-startup-messages.md) |
+| Stream progress to a browser | [Server-sent events](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/user-reports/progress-events.md) |
+| Send interim responses or trailers | [Response field sections](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/response-field-sections.md) |
+| Accept a capsule tunnel | [Tunnel ownership and authorization](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/capsule-tunnels.md) |
+| Run a command-line server | [CLI and plugins](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/guides/cli.md) |
+| Serve a JSON file as REST collections | [JsonServer integration](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/CONTRIBUTING.md#extras-integration) |
+| Build an app with an AI coding agent | [Agent primer](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/AGENT_PRIMER.md) |
 
-Browse the [documentation index](docs/README.md) for additional usage,
+Browse the [documentation index](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/README.md) for additional usage,
 platform and compatibility guides.
 
 ## Upgrading
@@ -130,12 +130,12 @@ EmbedIO-Neo carries the archived [unosquare/embedio](https://github.com/unosquar
 forward. Namespaces, assembly names and the fluent `WebServer` pipeline are
 unchanged, so most applications move by swapping packages, replacing SWAN and
 rebuilding. Work through the
-[upgrade checklist](docs/compatibility/upgrading-from-embedio-3.md): it lists
+[upgrade checklist](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/compatibility/upgrading-from-embedio-3.md): it lists
 each change in order, with links into the detailed guides.
 
 ### From EmbedIO-Neo v1 to v2
 
-Read the [Neo v1-to-v2 migration guide](docs/compatibility/neo-v1-to-v2.md).
+Read the [Neo v1-to-v2 migration guide](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/compatibility/neo-v1-to-v2.md).
 It covers listener removal, approved API changes, stricter request and response
 framing, response statuses, connection reuse and deployment changes. Rebuild
 dependent assemblies and test your application's routes and clients before
@@ -145,10 +145,10 @@ upgrading.
 
 Report issues and submit pull requests at
 [WilliamSmithEdward/embedio-neo](https://github.com/WilliamSmithEdward/embedio-neo).
-See [CONTRIBUTING.md](CONTRIBUTING.md) for pinned tooling and validation commands.
+See [CONTRIBUTING.md](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/CONTRIBUTING.md) for pinned tooling and validation commands.
 
 Maintained by William Smith. EmbedIO-Neo is an independent continuation of
 [EmbedIO](https://github.com/unosquare/embedio), licensed under [MIT](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/LICENSE).
 Original copyrights and third-party notices are preserved. The
-[engine development record](docs/project/http-engine.md) contains conformance,
+[engine development record](https://github.com/WilliamSmithEdward/embedio-neo/blob/main/docs/project/http-engine.md) contains conformance,
 performance evidence and remaining acceptance work.

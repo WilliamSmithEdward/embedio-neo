@@ -114,7 +114,6 @@ namespace EmbedIO.Tests
         private static void WriteDrainStartupSnapshot(string phase, WebServer server, string prefix,
             Task entered, Task? running, Task? response)
         {
-            const BindingFlags hiddenInstance = BindingFlags.Instance | BindingFlags.NonPublic;
             const BindingFlags hiddenStatic = BindingFlags.Static | BindingFlags.NonPublic;
             var type = server.Listener.GetType();
             var session = type.GetNestedType("Session", BindingFlags.NonPublic)
@@ -124,27 +123,7 @@ namespace EmbedIO.Tests
             var addresses = resolve.Invoke(null, new object[] { new Uri(prefix).Host }) as IEnumerable<IPAddress>
                 ?? throw new AssertionException("Unexpected actual resolved-address shape.");
             var endpoints = addresses.Select(address => new IPEndPoint(address, new Uri(prefix).Port)).ToArray();
-            var releaseType = typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.QuicEndpointReleases")
-                ?? throw new AssertionException("Missing shared QUIC release policy.");
-            var shared = releaseType.GetProperty("Shared", hiddenStatic)?.GetValue(null)
-                ?? throw new AssertionException("Missing shared QUIC release instance.");
-            var retryValue = releaseType.GetProperty("Retries", hiddenInstance)?.GetValue(shared);
-            if (retryValue is not long retries) throw new AssertionException("Missing actual retry counter.");
-            var gate = releaseType.GetField("_sync", hiddenInstance)?.GetValue(shared)
-                ?? throw new AssertionException("Missing release-history lock.");
-            var released = releaseType.GetField("_released", hiddenInstance)?.GetValue(shared) as Dictionary<IPEndPoint, long>
-                ?? throw new AssertionException("Missing release-history shape.");
-            var windowValue = releaseType.GetField("_window", hiddenInstance)?.GetValue(shared);
-            if (windowValue is not long window) throw new AssertionException("Missing actual release window.");
-            string[] history;
-            lock (gate)
-            {
-                var now = Stopwatch.GetTimestamp();
-                history = endpoints.Select(endpoint => released.TryGetValue(endpoint, out var timestamp)
-                    ? endpoint + ":ageTicks=" + (now - timestamp) + ":recent=" + (now - timestamp <= window)
-                    : endpoint + ":unrecorded").ToArray();
-            }
-            TestContext.Out.WriteLine($"Drain startup phase={phase}; prefix={prefix}; UseIpv6={EmbedIO.Net.EndPointManager.UseIpv6}; OSIPv6={Socket.OSSupportsIPv6}; resolved={string.Join(",", endpoints.Select(endpoint => endpoint.ToString()))}; entered={entered.Status}; running={running?.Status}; client={response?.Status}; state={server.State}; retryCounter={retries}; releaseHistory={string.Join(",", history)}");
+            TestContext.Out.WriteLine($"Drain startup phase={phase}; prefix={prefix}; UseIpv6={EmbedIO.Net.EndPointManager.UseIpv6}; OSIPv6={Socket.OSSupportsIPv6}; resolved={string.Join(",", endpoints.Select(endpoint => endpoint.ToString()))}; entered={entered.Status}; running={running?.Status}; client={response?.Status}; state={server.State}");
         }
     }
 }

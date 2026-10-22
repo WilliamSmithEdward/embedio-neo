@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in WebTransport over HTTP/3 in `EmbedIOHttp3` and `EmbedIOCombined` mode.
+  `WithWebTransport` and `WebTransportOptions` enable it; a handler accepts a
+  session through `IWebTransportContext` and uses its `WebTransportSession` streams
+  and datagrams. The server speaks draft-ietf-webtrans-http3-16 and the draft-02
+  handshake Chromium uses; neither is an RFC. Servers that do not opt in advertise
+  nothing new and serve requests as before. See
+  [WebTransport over HTTP/3](docs/guides/webtransport.md).
+
+### Changed
+
+- HTTP/3, in `EmbedIOHttp3` mode and the QUIC half of `EmbedIOCombined`, runs on
+  EmbedIO.Quic, a QUIC implementation built into the .NET 10 asset, instead of
+  `System.Net.Quic`. Windows uses Schannel TLS 1.3 (Windows 11 or Server 2022 and
+  later); Linux and macOS use the `EmbedIO-Neo.Quic.Native` runtime dependency,
+  which NuGet selects transitively. Startup checks that TLS path instead of
+  `QuicListener.IsSupported`, and the server no longer needs MsQuic. HTTP datagrams
+  work when both peers negotiate them. The .NET Standard asset still rejects HTTP/3.
+  The earlier `System.Net.Quic` and internal MsQuic server providers, their bind
+  retry and their CI quarantines were removed. See the
+  [HTTP/3 guide](docs/guides/http3.md).
+- `RequestHeadersTimeout` also bounds HTTP/3, as Kestrel's does: each stream the
+  client opens must complete its header within it, 30 seconds by default. A request
+  stream that misses it is reset with `H3_REQUEST_REJECTED`, other streams with
+  `H3_STREAM_CREATION_ERROR`; before, an HTTP/3 stream could wait for its header for
+  as long as its connection stayed open. An `EmbedIOHttp3` server now accepts the
+  option. See [request limits](docs/guides/request-limits.md#connection-limits).
+
+### Fixed
+
+- The README every package carries links to the documentation with absolute URLs,
+  so its links work on nuget.org.
+
 ## [2.16.1] - 2026-10-22
 
 ### Fixed

@@ -52,6 +52,24 @@ namespace EmbedIO.Net.Internal
         Task AbortTunnelAsync(Exception cause, bool malformed);
     }
 
+    // A WebTransport session the connection admitted for this request before
+    // dispatch. It waits for the handler to accept it over the request's tunnel.
+    internal interface IWebTransportPendingSession
+    {
+        // The draft-02 dialect browsers send, which names its draft in the response.
+        bool Draft02 { get; }
+
+        WebTransportSession Accept(HttpTunnel tunnel, HttpDatagramChannel datagrams);
+
+        // Closes an accepted session with code 0 before the context ends its stream.
+        Task CloseForContextAsync(CancellationToken token);
+    }
+
+    internal interface IMultiplexedWebTransportExchange
+    {
+        IWebTransportPendingSession? WebTransport { get; }
+    }
+
     // Optional: a transport that can send final response headers together with
     // the first body bytes. Explicit flushes still send headers on their own.
     internal interface IMultiplexedHeaderCoalescing

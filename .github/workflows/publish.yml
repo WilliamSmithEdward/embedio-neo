@@ -13,24 +13,19 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build the NuGet package
+  version:
+    name: Validate the release version
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
-      DOTNET_NOLOGO: "1"
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-
       # First, so a mistyped tag fails in seconds. A tag that says one thing
       # and a package that says another puts a release on nuget.org under a
       # number nobody chose, and a number on nuget.org can never be used
@@ -52,6 +47,34 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+  quic-native:
+    name: QUIC runtime inputs
+    needs: [version]
+    uses: ./.github/workflows/quic-native.yml
+
+  build:
+    name: Build the NuGet package
+    needs: [version, quic-native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    outputs:
+      version: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - uses: ./.github/actions/quic-runtime
+        with:
+          output: dist
+
       - name: Restore from the lock file
         run: dotnet restore EmbedIO.sln --locked-mode
 
@@ -62,7 +85,7 @@ jobs:
         run: dotnet pack EmbedIO.sln --no-build -c Release -o dist
 
       - name: Check packages and source notices
-        run: python3 scripts/check_packages.py dist
+        run: python3 scripts/check_packages.py dist --native-staging TestResults/quic-native-staged
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -87,6 +110,7 @@ jobs:
     uses: ./.github/workflows/malware-scan.yml
     with:
       package-artifact: nupkg
+      include-native: true
     permissions:
       contents: read
 

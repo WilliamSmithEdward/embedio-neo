@@ -166,6 +166,8 @@ TestResult.xml
 *.targets
 # The package build file that ties EmbedIO's reflection switch to System.Text.Json (Neo #138).
 !/src/EmbedIO/Packaging/EmbedIO-Neo.targets
+# Shared opt-in source-build TLS asset hook for the test projects.
+!/test/Shared/QuicNativeAssets.targets
 /.vscode
 /_site
 /_api

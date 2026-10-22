@@ -4,12 +4,12 @@ using System.IO;
 using System.Net;
 using System.Net.Quic;
 using System.Net.Security;
-using System.Reflection;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using EmbedIO.Tests.TestObjects;
 using NUnit.Framework;
 
 namespace EmbedIO.Tests
@@ -18,14 +18,12 @@ namespace EmbedIO.Tests
     // stream is reset or its reading is abandoned, not after reading it to FIN.
     public sealed class Http3RequestInputEndTest
     {
-        private const BindingFlags Flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
-
         [Test]
         public async Task OnlyAbandonedRequestInputIsCanceledOnTheDecoderStream()
         {
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported)
+            if (!QuicConnection.IsSupported)
             { Assert.Ignore("The host does not provide QUIC."); return; }
-            if (typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
+            if (EngineInternals.Find("EmbedIO.Net.Internal.Http3.Http3QuicConnection") == null)
             { Assert.Ignore("The netstandard asset exposes framing but no direct QUIC transport."); return; }
             await Run();
         }
@@ -42,33 +40,16 @@ namespace EmbedIO.Tests
             request.CertificateExtensions.Add(san.Build());
             using var generated = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
             using var cert = X509CertificateLoader.LoadPkcs12(generated.Export(X509ContentType.Pkcs12), null, X509KeyStorageFlags.Exportable);
-            await using var listener = await QuicListener.ListenAsync(new QuicListenerOptions
-            {
-                ListenEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
-                ApplicationProtocols = new() { new SslApplicationProtocol("h3") },
-                ConnectionOptionsCallback = (_, _, _) => ValueTask.FromResult(new QuicServerConnectionOptions
-                {
-                    DefaultCloseErrorCode = 0x100,
-                    DefaultStreamErrorCode = 0x10c,
-                    MaxInboundBidirectionalStreams = 32,
-                    MaxInboundUnidirectionalStreams = 8,
-                    ServerAuthenticationOptions = new SslServerAuthenticationOptions { ApplicationProtocols = new() { new SslApplicationProtocol("h3") }, ServerCertificate = cert }
-                })
-            }, deadline.Token);
-            var assembly = typeof(WebServer).Assembly;
-            var exchange = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicExchange", true) ?? throw new AssertionException("Missing exchange.");
-            var connection = assembly.GetType("EmbedIO.Net.Internal.Http3.Http3QuicConnection", true) ?? throw new AssertionException("Missing connection.");
-            var handler = (typeof(Http3RequestInputEndTest).GetMethod(nameof(RespondWithoutReading), Flags) ?? throw new AssertionException("Missing handler."))
-                .MakeGenericMethod(exchange).CreateDelegate(typeof(Func<,>).MakeGenericType(exchange, typeof(Task)));
+            await using var host = EngineQuicHost.Start(cert);
+            var handler = EngineQuicHost.Dispatch(typeof(Http3RequestInputEndTest), nameof(RespondWithoutReading));
             var server = Task.Run(async () =>
             {
-                var accepted = await listener.AcceptConnectionAsync(deadline.Token);
-                await ((Task)(connection.GetMethod("RunAsync", Flags)?.Invoke(null, new object[] { accepted, handler, deadline.Token })
-                    ?? throw new AssertionException("Missing runner.")));
+                var accepted = await host.AcceptTransportAsync(deadline.Token);
+                await EngineQuicHost.RunAsync(accepted, handler, deadline.Token);
             });
             await using var client = await QuicConnection.ConnectAsync(new QuicClientConnectionOptions
             {
-                RemoteEndPoint = listener.LocalEndPoint,
+                RemoteEndPoint = host.LocalEndPoint,
                 DefaultCloseErrorCode = 0x100,
                 DefaultStreamErrorCode = 0x10c,
                 MaxInboundUnidirectionalStreams = 8,
@@ -149,10 +130,9 @@ namespace EmbedIO.Tests
         private static async Task RespondWithoutReading<T>(T value)
         {
             object target = value ?? throw new AssertionException("Missing exchange.");
-            var type = target.GetType();
-            var token = (CancellationToken)(type.GetProperty("CancellationToken", Flags)?.GetValue(target) ?? throw new AssertionException("Missing token."));
-            await ((Task)(type.GetMethod("RespondAsync", Flags)?.Invoke(target, new object[] { new byte[] { (byte)'o', (byte)'k' }, token })
-                ?? throw new AssertionException("Missing response.")));
+            var token = (CancellationToken)(EngineInternals.Property(target, "CancellationToken") ?? throw new AssertionException("Missing token."));
+            await (EngineInternals.Call(target, "RespondAsync", new byte[] { (byte)'o', (byte)'k' }, token) as Task
+                ?? throw new AssertionException("Missing response."));
         }
     }
 }

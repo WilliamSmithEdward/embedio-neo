@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>EmbedIO-Neo.Quic.Native</PackageId>
+    <Description>Private TLS runtime assets for the EmbedIO.Quic managed transport engine.</Description>
+    <Authors>William Smith; OpenSSL contributors</Authors>
+    <PackageLicenseExpression>MIT AND Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/WilliamSmithEdward/embedio-neo</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/WilliamSmithEdward/embedio-neo</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EmbedIOQuicPython Condition="'$(EmbedIOQuicPython)' == ''">python3</EmbedIOQuicPython>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)../../src/Shared/AnalyzerUtilities.cs" />
+    <None Include="../../LICENSE" Link="LICENSE" Pack="true" PackagePath="" />
+    <None Condition="'$(EmbedIOQuicNativeAssetsDirectory)' != ''" Include="$(EmbedIOQuicNativeAssetsDirectory)/runtimes/**/*" Pack="true" PackagePath="runtimes/" />
+    <None Condition="'$(EmbedIOQuicNativeAssetsDirectory)' != ''" Include="$(EmbedIOQuicNativeAssetsDirectory)/provenance/**/*" Pack="true" PackagePath="provenance/" />
+    <None Condition="'$(EmbedIOQuicNativeAssetsDirectory)' != ''" Include="$(EmbedIOQuicNativeAssetsDirectory)/licenses/**/*" Pack="true" PackagePath="licenses/" />
+    <None Condition="'$(EmbedIOQuicNativeAssetsDirectory)' != ''" Include="$(EmbedIOQuicNativeAssetsDirectory)/runtime-assets.json" Pack="true" PackagePath="" />
+  </ItemGroup>
+  <Target Name="ValidateQuicRuntimeInputs" BeforeTargets="GenerateNuspec">
+    <Error Condition="'$(EmbedIOQuicNativeAssetsDirectory)' == ''" Text="Provide the verified native runtime staging directory before packing." />
+    <PropertyGroup>
+      <_QuicRuntimeSelection Condition="'$(EmbedIOQuicPreviewRid)' != ''">--rids $(EmbedIOQuicPreviewRid)</_QuicRuntimeSelection>
+    </PropertyGroup>
+    <Exec Command="&quot;$(EmbedIOQuicPython)&quot; &quot;$(MSBuildThisFileDirectory)stage.py&quot; verify --output &quot;$(EmbedIOQuicNativeAssetsDirectory)&quot; $(_QuicRuntimeSelection)" />
+  </Target>
+</Project>

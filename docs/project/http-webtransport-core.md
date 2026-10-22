@@ -7,6 +7,15 @@ integration. Nothing here is reachable from a listener, no setting is advertised
 no public API or dependency is added and both library targets are unchanged in
 shape. It is not a WebTransport implementation and claims no interoperability.
 
+Status since [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506):
+the HTTP/3 listener now drives this core for servers that opt in, over EmbedIO.Quic's
+datagrams and current-wire reliable reset. The
+[WebTransport guide](../guides/webtransport.md) describes the public API and the
+[development record](quic-development-and-testing.md) its validation. This page keeps
+the increment as it was; of its remaining gaps, the HTTP/2 mapping, keying-material
+exporters and the `WT-Available-Protocols`/`WT-Protocol` fields are still not
+implemented, and Origin checks belong to the application.
+
 ## Specification basis
 
 The applicable text on 2026-10-10 is
@@ -25,7 +34,7 @@ The IANA HTTP/3 parameter registries (last updated 2023-06-13) and the HTTP
 Capsule Types registry (last updated 2026-08-28) contain no WebTransport entry.
 Every codepoint used here is therefore a draft request, consistent with the
 [standards applicability audit](http-standards-applicability.md), which recorded
-WebTransport as experimental and unsupported. Draft section 7.1 says each draft
+WebTransport as unsupported in production. Draft section 7.1 says each draft
 version uses a distinct `SETTINGS_WT_ENABLED` codepoint; the core carries the
 -16 values and must be revised with the draft.
 

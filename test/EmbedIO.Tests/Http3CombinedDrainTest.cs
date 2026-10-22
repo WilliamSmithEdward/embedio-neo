@@ -225,12 +225,13 @@ namespace EmbedIO.Tests
             {
                 while (queue.Reader.Count < 256) await Task.Delay(10, stop.Token);
                 var drain = server.DrainAsync(cancel ? TimeSpan.FromSeconds(15) : TimeSpan.FromMilliseconds(100), cancelDrain.Token);
+                if (cancel) cancelDrain.Cancel();
+
+                await WaitForCombinedDrainAsync(drain, server);
                 if (cancel)
-                {
-                    cancelDrain.Cancel();
-                    await Assert.ThatAsync(async () => await drain.WaitAsync(TimeSpan.FromSeconds(5)), Throws.InstanceOf<OperationCanceledException>());
-                }
-                else await drain.WaitAsync(TimeSpan.FromSeconds(5));
+                    await Assert.ThatAsync(async () => await drain, Throws.InstanceOf<OperationCanceledException>());
+                else
+                    await drain;
                 foreach (var request in requests)
                     await Assert.ThatAsync(async () => { using var response = await request; }, Throws.InstanceOf<HttpRequestException>());
                 Assert.That(queue.Reader.Count, Is.Zero);
@@ -241,6 +242,34 @@ namespace EmbedIO.Tests
                 stop.Cancel();
                 foreach (var client in clients) client.Dispose();
             }
+        }
+
+        // A drain, canceled or not, ends once the transports stop, and a QUIC connection holds
+        // that through its closing period (RFC 9000 section 10.2): three probe timeouts from an
+        // RTT estimate that a loaded host inflates. Allow 5 seconds, then what remains of that
+        // period, if any, and one second more: a period that ends at the 5-second mark leaves no
+        // connection to read, but the drain still has its last steps to finish. On a miss, name
+        // the shutdown stages still pending and the state of each QUIC connection, and measure
+        // how long the drain really takes (bounded) before failing.
+        private static async Task WaitForCombinedDrainAsync(Task drain, WebServer server)
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var drained = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(5))) == drain;
+            if (!drained)
+            {
+                var closing = PendingTaskReport.RemainingCloseMilliseconds(server.Listener) ?? 0;
+                drained = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, closing) + 1000)))
+                    == drain;
+            }
+
+            if (drained) return;
+
+            var missed = clock.Elapsed;
+            var pending = PendingTaskReport.Describe(server.Listener, 8);
+            var quic = PendingTaskReport.DescribeQuicConnections(server.Listener);
+            var finished = await Task.WhenAny(drain, Task.Delay(TimeSpan.FromSeconds(25))) == drain;
+            TestContext.Error.WriteLine($"Combined drain pending at {missed}:{pending}\nQUIC connections at {missed}:{quic}\nDrain finished: {finished} after {clock.Elapsed}");
+            throw new TimeoutException("The combined drain outlasted 5 seconds and the QUIC closing period.");
         }
 
         [Test]

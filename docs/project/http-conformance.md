@@ -351,6 +351,30 @@ exactly as on Windows.
 The standards baseline was captured on **2026-10-09 between 14:36:12 and
 14:36:24 UTC** from primary sources by
 [`capture_standards.py`](../../test/EmbedIO.Conformance/standards/capture_standards.py).
+
+For a new capture, install the hash-locked development dependencies in
+[standards-capture.txt](../../.github/requirements/standards-capture.txt) into an
+isolated Python environment. The tool accepts only the RFC Editor, IANA and IETF
+Datatracker HTTPS origins, including redirect targets. Each response and the RFC
+index are limited to 64 MiB, the update graph is limited to 512 RFCs, and index
+parsing rejects DTD/entity/external declarations. Failed or refused input does
+not become a successful inventory. The original URL, final URL, UTC time,
+response bytes and SHA-256 remain in each successful capture record.
+
+The offline controls run without network access:
+
+```powershell
+python -m venv TestResults/standards-capture-venv
+$python = 'TestResults/standards-capture-venv/Scripts/python.exe'
+& $python -m pip --isolated install --require-hashes --only-binary=:all: -r .github/requirements/standards-capture.txt
+& $python -I test/EmbedIO.Conformance/standards/test_capture_standards.py
+& $python -I test/EmbedIO.Conformance/standards/capture_standards.py TestResults/standards-capture
+```
+
+On Unix, use the environment's `bin/python` path. CI reuses its hash-locked source
+quality environment, which carries the same parser version. These commands
+create a fresh inventory; they do not replace the frozen evidence below.
+
 Each response is stored under ignored `TestResults/http-conformance/standards-2026-10-09`
 with its URL, retrieval time and SHA-256; `manifest.json` lists them.
 

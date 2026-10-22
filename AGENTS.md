@@ -1,3 +1,9 @@
+## EmbedIO.Quic development
+
+- William selected `EmbedIO.Quic` for the engine project, assembly and namespace (2026-10-20). Do not label it experimental; describe implemented capabilities and remaining integration/validation work explicitly.
+- Run extensive local QUIC fuzzing across all existing engines and maintain `docs/project/quic-development-and-testing.md` with the implementation, test scope, exact completed evidence and remaining work. `scripts/run-quic-development.py` provides the multi-seed local workload; keep hosted campaigns bounded and avoid duplicate Actions dispatches.
+- The intended replacement removes production MsQuic completely, including indirect `System.Net.Quic` use. After replacement is integrated and validated, remove obsolete MsQuic-specific dependencies, quarantines and workarounds while preserving provider-independent regression coverage. Close related issues only after their concrete behavior is verified; retain historical evidence and separate remaining API/platform work. Once MsQuic is fully removed, review every open EmbedIO-Neo issue, confirm resolution against source and validation evidence, close resolved issues, and record concrete remaining work for those kept open.
+
 ## Performance priorities
 
 - William's preference (2026-10-16): prioritize warm steady-state and tail latency over cold-start latency when a tradeoff is necessary, while aiming to improve both. Measure cold and warm behavior separately; do not accept a meaningful warm regression solely for a cold-start gain. Windows desktop / embedded hosting remains the lead measurement environment.

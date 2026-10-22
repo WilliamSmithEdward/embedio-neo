@@ -1,0 +1,246 @@
+{
+  "Scenario": "server-lifecycle",
+  "Seed": 1485644649,
+  "Steps": [
+    {
+      "Actor": 0,
+      "Command": 11,
+      "Value": 34
+    },
+    {
+      "Actor": 0,
+      "Command": 7,
+      "Value": 53
+    },
+    {
+      "Actor": 0,
+      "Command": 11,
+      "Value": 60
+    },
+    {
+      "Actor": 0,
+      "Command": 10,
+      "Value": 22
+    },
+    {
+      "Actor": 2,
+      "Command": 4,
+      "Value": 47
+    },
+    {
+      "Actor": 2,
+      "Command": 0,
+      "Value": 39
+    },
+    {
+      "Actor": 0,
+      "Command": 11,
+      "Value": 59
+    },
+    {
+      "Actor": 2,
+      "Command": 3,
+      "Value": 19
+    },
+    {
+      "Actor": 1,
+      "Command": 4,
+      "Value": 50
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 34
+    },
+    {
+      "Actor": 1,
+      "Command": 2,
+      "Value": 17
+    },
+    {
+      "Actor": 1,
+      "Command": 3,
+      "Value": 16
+    },
+    {
+      "Actor": 0,
+      "Command": 6,
+      "Value": 32
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 26
+    },
+    {
+      "Actor": 1,
+      "Command": 5,
+      "Value": 50
+    },
+    {
+      "Actor": 2,
+      "Command": 3,
+      "Value": 19
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 51
+    },
+    {
+      "Actor": 2,
+      "Command": 1,
+      "Value": 11
+    },
+    {
+      "Actor": 1,
+      "Command": 5,
+      "Value": 43
+    },
+    {
+      "Actor": 0,
+      "Command": 9,
+      "Value": 15
+    },
+    {
+      "Actor": 0,
+      "Command": 7,
+      "Value": 59
+    },
+    {
+      "Actor": 1,
+      "Command": 8,
+      "Value": 41
+    },
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 4
+    },
+    {
+      "Actor": 1,
+      "Command": 6,
+      "Value": 32
+    },
+    {
+      "Actor": 0,
+      "Command": 11,
+      "Value": 51
+    },
+    {
+      "Actor": 1,
+      "Command": 4,
+      "Value": 55
+    },
+    {
+      "Actor": 1,
+      "Command": 8,
+      "Value": 4
+    },
+    {
+      "Actor": 1,
+      "Command": 11,
+      "Value": 59
+    },
+    {
+      "Actor": 2,
+      "Command": 10,
+      "Value": 8
+    },
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 51
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 52
+    },
+    {
+      "Actor": 0,
+      "Command": 3,
+      "Value": 30
+    },
+    {
+      "Actor": 1,
+      "Command": 11,
+      "Value": 44
+    },
+    {
+      "Actor": 0,
+      "Command": 8,
+      "Value": 16
+    },
+    {
+      "Actor": 0,
+      "Command": 0,
+      "Value": 35
+    },
+    {
+      "Actor": 0,
+      "Command": 7,
+      "Value": 10
+    },
+    {
+      "Actor": 1,
+      "Command": 1,
+      "Value": 6
+    },
+    {
+      "Actor": 2,
+      "Command": 8,
+      "Value": 2
+    },
+    {
+      "Actor": 0,
+      "Command": 6,
+      "Value": 42
+    },
+    {
+      "Actor": 0,
+      "Command": 7,
+      "Value": 56
+    },
+    {
+      "Actor": 1,
+      "Command": 11,
+      "Value": 1
+    },
+    {
+      "Actor": 0,
+      "Command": 10,
+      "Value": 34
+    },
+    {
+      "Actor": 2,
+      "Command": 9,
+      "Value": 40
+    },
+    {
+      "Actor": 1,
+      "Command": 0,
+      "Value": 25
+    },
+    {
+      "Actor": 0,
+      "Command": 4,
+      "Value": 63
+    },
+    {
+      "Actor": 2,
+      "Command": 2,
+      "Value": 60
+    },
+    {
+      "Actor": 1,
+      "Command": 5,
+      "Value": 12
+    },
+    {
+      "Actor": 2,
+      "Command": 8,
+      "Value": 56
+    }
+  ]
+}

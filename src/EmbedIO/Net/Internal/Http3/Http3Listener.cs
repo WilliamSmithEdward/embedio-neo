@@ -3,11 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Net.Quic;
 using System.Net.Sockets;
 using System.Runtime.Versioning;
 using System.Security.Cryptography.X509Certificates;
-using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -23,7 +21,7 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly object _sync = new();
         private readonly ServerCertificateSource _certificates;
-        private readonly bool _native;
+        private readonly Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> _bind;
         private readonly RequestPolicyResolver? _bodyPolicy;
         private readonly List<string> _prefixes = [];
         private Session? _session;
@@ -31,18 +29,24 @@ namespace EmbedIO.Net.Internal.Http3
         private bool _stopping;
         private Func<IHttpContextImpl, Task>? _dispatcher;
 
-        internal Http3Listener(X509Certificate2? certificate) : this(certificate, false) { }
+        internal Http3Listener(X509Certificate2? certificate) : this(certificate, null) { }
 
-        internal Http3Listener(X509Certificate2? certificate, bool native) : this(certificate, native, null) { }
-
-        internal Http3Listener(X509Certificate2? certificate, bool native, RequestPolicyResolver? bodyPolicy)
-            : this(FixedSource(certificate), native, bodyPolicy)
+        internal Http3Listener(X509Certificate2? certificate, RequestPolicyResolver? bodyPolicy)
+            : this(FixedSource(certificate), bodyPolicy)
         { }
 
-        internal Http3Listener(ServerCertificateSource certificates, bool native, RequestPolicyResolver? bodyPolicy)
+        internal Http3Listener(ServerCertificateSource certificates, RequestPolicyResolver? bodyPolicy)
+            : this(certificates, bodyPolicy, Http3ListenerBinding.Bind)
+        { }
+
+        internal Http3Listener(
+            ServerCertificateSource certificates,
+            RequestPolicyResolver? bodyPolicy,
+            Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> bind
+        )
         {
+            _bind = bind ?? throw new ArgumentNullException(nameof(bind));
             _certificates = certificates ?? throw new ArgumentNullException(nameof(certificates));
-            _native = native;
             _bodyPolicy = bodyPolicy;
         }
 
@@ -64,6 +68,13 @@ namespace EmbedIO.Net.Internal.Http3
 
         // Records QUIC connections. Set before Start.
         internal EmbedIO.Internal.ServerTelemetry? Telemetry { get; set; }
+
+        // WebTransport settings, or null to serve none. Set before Start.
+        internal WebTransportOptions? WebTransport { get; set; }
+
+        // How long each stream a client opens may take to complete its header; null applies
+        // the default RequestHeadersTimeout of 30 seconds. Set before Start.
+        internal TimeSpan? RequestHeadersTimeout { get; set; }
 
         public bool IsListening
         {
@@ -126,11 +137,13 @@ namespace EmbedIO.Net.Internal.Http3
                     [.. _prefixes.Select(value => new ListenerPrefix(value))],
                     _certificates,
                     TlsPolicy,
-                    _native,
                     DeferContinue,
                     Telemetry,
+                    WebTransport,
+                    RequestHeadersTimeout,
                     _bodyPolicy,
-                    _dispatcher
+                    _dispatcher,
+                    _bind
                 );
             }
         }
@@ -188,14 +201,20 @@ namespace EmbedIO.Net.Internal.Http3
 
             finally
             {
-                session.Dispose();
-
-                lock (_sync)
+                try
                 {
-                    if (ReferenceEquals(_session, session))
+                    session.Dispose();
+                }
+
+                finally
+                {
+                    lock (_sync)
                     {
-                        _session = null;
-                        _stopping = false;
+                        if (ReferenceEquals(_session, session))
+                        {
+                            _session = null;
+                            _stopping = false;
+                        }
                     }
                 }
             }
@@ -276,10 +295,7 @@ namespace EmbedIO.Net.Internal.Http3
             internal bool IsDraining { get; private set; }
             internal bool IsRunning => !_stop.IsCancellationRequested;
 
-            private readonly Dictionary<Http3ListenerBinding, (
-                ListenerPrefix[] Prefixes,
-                IPEndPoint EndPoint
-            )> _listeners = [];
+            private readonly Dictionary<Http3ListenerBinding, ListenerPrefix[]> _listeners = [];
             private readonly List<Task> _accepts = [];
             private readonly object _gate = new();
             private readonly Dictionary<long, Task> _connections = [];
@@ -289,6 +305,8 @@ namespace EmbedIO.Net.Internal.Http3
             private bool _deferContinue;
             private RequestPolicyResolver? _bodyPolicy;
             private EmbedIO.Internal.ServerTelemetry? _telemetry;
+            private WebTransportOptions? _webTransport;
+            private TimeSpan? _requestHeadersTimeout;
             private Func<IHttpContextImpl, Task>? _dispatcher;
 
             private Session() { }
@@ -300,17 +318,21 @@ namespace EmbedIO.Net.Internal.Http3
                 ListenerPrefix[] prefixes,
                 ServerCertificateSource certificates,
                 ServerTlsPolicy? policy,
-                bool native,
                 bool deferContinue,
                 EmbedIO.Internal.ServerTelemetry? telemetry,
+                WebTransportOptions? webTransport,
+                TimeSpan? requestHeadersTimeout,
                 RequestPolicyResolver? bodyPolicy,
-                Func<IHttpContextImpl, Task>? dispatcher
+                Func<IHttpContextImpl, Task>? dispatcher,
+                Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> bind
             )
             {
                 var session = new Session
                 {
                     _deferContinue = deferContinue,
                     _telemetry = telemetry,
+                    _webTransport = webTransport,
+                    _requestHeadersTimeout = requestHeadersTimeout,
                     _bodyPolicy = bodyPolicy,
                     _dispatcher = dispatcher
                 };
@@ -336,19 +358,11 @@ namespace EmbedIO.Net.Internal.Http3
                     }
 
                     foreach (var binding in endpoints)
-                    {
-                        var listener = QuicEndpointReleases.Shared.Bind(
-                            binding.Key,
-                            () => Http3ListenerBinding.Bind(binding.Key, certificates, policy, native)
-                        );
-                        session._listeners.Add(listener, (binding.Value.ToArray(), binding.Key));
-                    }
+                        session._listeners.Add(bind(binding.Key, certificates, policy), [.. binding.Value]);
 
                     // Publish accept loops only after all bindings succeeded.
                     foreach (var listener in session._listeners)
-                        session._accepts.Add(
-                            Task.Run(() => session.AcceptAsync(listener.Key, listener.Value.Prefixes))
-                        );
+                        session._accepts.Add(Task.Run(() => session.AcceptAsync(listener.Key, listener.Value)));
 
                     return session;
                 }
@@ -390,30 +404,11 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     while (true)
                     {
-                        Http3AcceptedConnection connection;
-
-                        try
-                        {
-                            connection = await listener
-                                .AcceptAsync(_acceptStop.Token)
-                                .ConfigureAwait(false);
-                        }
-
-                        catch (Exception error) when (
-                            !_acceptStop.IsCancellationRequested
-                            && (error is AuthenticationException
-                                || error is QuicException quic
-                                && quic.QuicError is QuicError.ConnectionAborted
-                                or QuicError.ConnectionTimeout
-                                or QuicError.ConnectionIdle
-                                or QuicError.TransportError)
-                        )
-                        {
-                            // The BCL reports failed peer handshakes through Accept.
-                            // They do not invalidate the listening socket or other peers.
-                            continue;
-                        }
-
+                        // The binding hands over connections before their handshake
+                        // completes; a failed handshake ends only that connection.
+                        var connection = await listener
+                            .AcceptAsync(_acceptStop.Token)
+                            .ConfigureAwait(false);
                         var rejected = false;
                         var pending = connection.HandshakePending;
 
@@ -450,7 +445,10 @@ namespace EmbedIO.Net.Internal.Http3
                                     .ConfigureAwait(false);
                             }
 
-                            catch (Exception error) when (error is QuicException or OperationCanceledException) { }
+                            catch (Exception error) when (
+                                Http3TransportFailure.IsTransport(error) || error is OperationCanceledException
+                            )
+                            { }
 
                             finally
                             {
@@ -537,7 +535,9 @@ namespace EmbedIO.Net.Internal.Http3
                                 clientCertificate
                             ),
                             _stop.Token,
-                            _drain.Token
+                            _drain.Token,
+                            _webTransport,
+                            _requestHeadersTimeout
                         )
                         .ConfigureAwait(false);
                 }
@@ -692,52 +692,123 @@ namespace EmbedIO.Net.Internal.Http3
 
             private async Task ShutdownAsync(bool graceful, TimeSpan timeout)
             {
-                if (graceful)
-                {
-                    _stop.CancelAfter(timeout);
-                    _drain.Cancel();
-                }
-
-                else _stop.Cancel();
-
-                _acceptStop.Cancel();
+                var failures = new List<Exception>();
 
                 try
                 {
-                    foreach (var listener in _listeners)
+                    if (graceful)
                     {
-                        await listener.Key
-                            .DisposeAsync()
-                            .ConfigureAwait(false);
-                        QuicEndpointReleases.Shared.Record(listener.Value.EndPoint);
+                        _stop.CancelAfter(timeout);
+                        Cancel(_drain);
                     }
 
-                    await Task
-                        .WhenAll(_accepts)
-                        .ConfigureAwait(false);
+                    else Cancel(_stop);
+
+                    Cancel(_acceptStop);
+
+                    foreach (var listener in _listeners)
+                    {
+                        try
+                        {
+                            await listener.Key
+                                .StopAcceptingAsync()
+                                .ConfigureAwait(false);
+                        }
+
+                        catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                        {
+                            Record(error);
+                            Cancel(_stop);
+                        }
+                    }
+
+                    await ObserveAsync(Task.WhenAll(_accepts)).ConfigureAwait(false);
                     Task[] connections;
 
                     lock (_gate) connections = [.. _connections.Values];
 
-                    await Task
-                        .WhenAll(connections)
-                        .ConfigureAwait(false);
+                    await ObserveAsync(Task.WhenAll(connections)).ConfigureAwait(false);
                 }
 
                 finally
                 {
-                    _stop.Cancel();
-                    Contexts.Writer.TryComplete();
+                    try
+                    {
+                        Cancel(_stop);
 
-                    while (Contexts.Reader.TryRead(out _)) { }
+                        foreach (var listener in _listeners)
+                        {
+                            try
+                            {
+                                await listener.Key
+                                    .DisposeAsync()
+                                    .ConfigureAwait(false);
+                            }
+
+                            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                            {
+                                Record(error);
+                            }
+                        }
+                    }
+
+                    finally
+                    {
+                        Contexts.Writer.TryComplete();
+
+                        while (Contexts.Reader.TryRead(out _)) { }
+                    }
+                }
+
+                if (failures.Count == 1)
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                        .Capture(failures[0])
+                        .Throw();
+
+                if (failures.Count != 0) throw new AggregateException("HTTP/3 listener shutdown failed.", failures);
+
+                void Cancel(CancellationTokenSource source)
+                {
+                    try
+                    {
+                        source.Cancel();
+                    }
+
+                    catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                    {
+                        Record(error);
+                    }
+                }
+
+                void Record(Exception error)
+                {
+                    if (error is AggregateException aggregate)
+                        foreach (var failure in aggregate.Flatten().InnerExceptions)
+                            if (!ExceptionPolicy.IsRecoverable(failure))
+                                System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                                    .Capture(failure)
+                                    .Throw();
+
+                    failures.Add(error);
+                }
+
+                async Task ObserveAsync(Task task)
+                {
+                    try
+                    {
+                        await task.ConfigureAwait(false);
+                    }
+
+                    catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                    {
+                        Record(task.Exception is { InnerExceptions.Count: > 1 } aggregate ? aggregate : error);
+                    }
                 }
             }
 
             public void Dispose()
             {
                 if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-
-                Abort();
 
                 try
                 {

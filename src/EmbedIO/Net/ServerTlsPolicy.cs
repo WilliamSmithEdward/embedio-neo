@@ -128,8 +128,8 @@ namespace EmbedIO.Net
         /// certificate.</para>
         /// </summary>
         /// <remarks>
-        /// <para>Supported on the .NET 10 asset over TCP and by the default HTTP/3 binding. The .NET Standard 2.0
-        /// asset and the native HTTP/3 binding refuse to start with a selector.</para>
+        /// <para>Supported on the .NET 10 asset over TCP and HTTP/3. The .NET Standard 2.0 asset refuses to start
+        /// with a selector.</para>
         /// <para>The function may be called concurrently. An ordinary exception thrown by it fails the handshake and is logged.
         /// Critical runtime exceptions propagate through the callback boundary.
         /// The application owns the certificates it returns.</para>
@@ -160,10 +160,10 @@ namespace EmbedIO.Net
         internal void Lock() => LockConfiguration();
 
         // Called before a listener starts with this policy; refuses settings the listener cannot honor.
-        internal void EnsureSupported(bool quic, bool nativeQuic)
+        internal void EnsureSupported(bool quic)
         {
 #if NET10_0_OR_GREATER
-            // Both TCP and the default HTTP/3 binding support selection on this asset.
+            // Both TCP and HTTP/3 support selection on this asset.
 #else
             if (_serverCertificateSelector != null)
                 throw new PlatformNotSupportedException(
@@ -175,14 +175,6 @@ namespace EmbedIO.Net
 
             if (_enabledProtocols != SslProtocols.None && (_enabledProtocols & Tls13) == 0)
                 throw new NotSupportedException("HTTP/3 requires TLS 1.3, which EnabledProtocols excludes.");
-
-            if (nativeQuic && RequestsClientCertificate)
-                throw new NotSupportedException("The native HTTP/3 binding does not support client certificates.");
-
-            if (nativeQuic && _serverCertificateSelector != null)
-                throw new NotSupportedException(
-                    "The native HTTP/3 binding does not support selecting the server certificate by server name (SNI)."
-                );
         }
 
         // The runtime's validation callback for client certificates.

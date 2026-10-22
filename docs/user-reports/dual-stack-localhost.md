@@ -8,7 +8,7 @@ The original environment was Windows 11 22H2, EmbedIO 3.5.2 and curl 7.83.1.
 
 In the [follow-up investigation](https://github.com/unosquare/embedio/issues/576#issuecomment-1504565380),
 KazWolfe identified registration of only the first DNS result and supplied an
-[experimental multi-address patch](https://gist.github.com/KazWolfe/c110d101ecd00810cc89c13413495754).
+[proposed multi-address patch](https://gist.github.com/KazWolfe/c110d101ecd00810cc89c13413495754).
 This was the key diagnosis: an IPv4 endpoint could accept the TCP connection
 without having the `localhost` prefix needed to route the HTTP request.
 

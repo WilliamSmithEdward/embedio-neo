@@ -1,8 +1,10 @@
 """Development-only independent QUIC datagram peer (RFC 9221) using pinned aioquic.
 
-The server under test is EmbedIO's internal native MsQuic provider, started by
-MsQuicNativeDatagramTest when EMBEDIO_DATAGRAM_PEER_PYTHON names a Python with
-drivers/requirements.txt installed. No production Python dependency exists.
+Http3ApplicationDatagramPeerTest runs the http-echo mode against EmbedIO's HTTP/3
+listener when EMBEDIO_DATAGRAM_PEER_PYTHON names a Python with
+drivers/requirements.txt installed. The echo and unsupported modes exercise a
+raw QUIC datagram server; no current test drives them. No production Python
+dependency exists.
 
 Modes:
   echo         advertise max_datagram_frame_size, expect the server greeting,

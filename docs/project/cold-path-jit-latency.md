@@ -3,7 +3,7 @@
 The header/logging extraction was **deferred and removed from the proposed
 production change** after mixed warm results. Only the requested listener
 branding is retained in production source. This report and its evidence describe
-the historical experimental binaries; they do not establish a speedup for
+the historical comparison binaries; they do not establish a speedup for
 current main. The test-only runner and wire regressions remain available.
 
 The experiment compares main

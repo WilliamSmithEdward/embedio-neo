@@ -27,7 +27,7 @@ namespace EmbedIO.Tests
             if (protocol == 3)
             {
                 RequireQuic();
-                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+                if (!QuicConnection.IsSupported) return;
             }
             var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var outcome = new TaskCompletionSource<(int Count, bool Pending, bool Available, int Fields)>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -80,7 +80,7 @@ namespace EmbedIO.Tests
             if (protocol == 3)
             {
                 RequireQuic();
-                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+                if (!QuicConnection.IsSupported) return;
             }
             var name = "raw-review-" + Guid.NewGuid().ToString("N");
             using var capture = new RawOwnershipMetrics(name);
@@ -204,7 +204,7 @@ namespace EmbedIO.Tests
             if (protocol == 3)
             {
                 RequireQuic();
-                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+                if (!QuicConnection.IsSupported) return;
             }
             var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             var outcome = new TaskCompletionSource<(int Count, bool Before, bool After)>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -330,7 +330,7 @@ namespace EmbedIO.Tests
             else
             {
                 RequireQuic();
-                if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+                if (!QuicConnection.IsSupported) return;
                 await using var peer = await H3Peer.ConnectAsync(host, certificate);
                 await using var request = await peer.OpenRequestAsync("POST", "/", false);
                 await entered.WaitAsync(host.Token);

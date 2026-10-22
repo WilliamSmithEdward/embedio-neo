@@ -54,7 +54,7 @@ namespace EmbedIO.Tests
 
             if (protocol == 3)
             {
-                var supported = QuicConnection.IsSupported && QuicListener.IsSupported;
+                var supported = QuicConnection.IsSupported;
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1")
                     Assert.That(supported, Is.True, "Required stock QUIC provider is unavailable.");
                 if (!supported)

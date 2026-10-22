@@ -1,5 +1,9 @@
 ﻿# Native QUIC lifetime campaigns on Apple Silicon
 
+> Historical record. The earlier HTTP/3 providers, and the code, tests and CI jobs
+> this record describes, were removed on 2026-10-22; see
+> [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+
 This record covers lifetime and resource validation of the internal MsQuic
 provider for [program #181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181),
 under the umbrella [draft PR #182](https://github.com/WilliamSmithEdward/embedio-neo/pull/182).

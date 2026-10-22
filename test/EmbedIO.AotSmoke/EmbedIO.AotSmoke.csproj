@@ -29,9 +29,13 @@
   <!-- A package consumer gets this from the package's buildTransitive folder. -->
   <Import Project="../../src/EmbedIO/Packaging/EmbedIO-Neo.targets" />
 
-  <!-- On Windows, QUIC needs msquic.dll, which .NET ships in its runtime pack but a Native AOT
-       publish leaves out. Copy it from the resolved runtime pack, as an application serving
-       HTTP/3 must. On Linux, libmsquic is a system library. -->
+  <!-- Source-reference validation receives the verified private server TLS runtime.
+       Package consumers instead use NuGet runtime-asset selection. -->
+  <Import Project="../Shared/QuicNativeAssets.targets" />
+
+  <!-- This fixture's independent BCL HTTP/3 client still needs MsQuic: Windows runtime packs
+       provide it but AOT publishing omits it. The EmbedIO.Quic server does not use it.
+       Linux supplies this client prerequisite as a pinned system library. -->
   <Target Name="PublishWindowsMsQuic" AfterTargets="ComputeLinkedFilesToPublish" Condition="$(RuntimeIdentifier.StartsWith('win-'))">
     <ItemGroup>
       <_EmbedIOMsQuic Include="@(RuntimePackAsset)" Condition="'%(Filename)%(Extension)' == 'msquic.dll'" />

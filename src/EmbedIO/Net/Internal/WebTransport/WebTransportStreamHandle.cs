@@ -27,6 +27,9 @@ namespace EmbedIO.Net.Internal.WebTransport
         public long Id { get; }
         public bool Bidirectional { get; }
 
+        // The integrating transport's stream behind this handle.
+        internal object? Transport { get; set; }
+
         // The code of the first abort, or -1 while the stream is intact.
         public long AbortErrorCode => Volatile.Read(ref _abortErrorCode);
 

@@ -34,7 +34,7 @@ namespace EmbedIO.Tests
 
         private static bool QuicUnavailable()
             => !(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                || !QuicListener.IsSupported || !QuicConnection.IsSupported
+                || !QuicConnection.IsSupported
                 || typeof(WebServer).Assembly.GetType("EmbedIO.Net.Internal.Http3.Http3Listener") == null;
 
         private static HttpClient Http3Client(X509Certificate2 certificate)

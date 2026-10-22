@@ -274,7 +274,7 @@ namespace EmbedIO.Tests.Issues
         [Test]
         public async Task QuicConnectionsAreCounted()
         {
-            var supported = System.Net.Quic.QuicListener.IsSupported && System.Net.Quic.QuicConnection.IsSupported;
+            var supported = System.Net.Quic.QuicConnection.IsSupported;
             if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1") Assert.That(supported, Is.True);
             if (!supported) Assert.Ignore("The host has no QUIC transport.");
             using var capture = new Capture();

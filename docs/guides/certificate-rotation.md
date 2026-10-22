@@ -121,8 +121,16 @@ with an explicit TLS policy.
 The .NET Standard 2.0 asset supports rotation for TCP listeners. HTTP/3
 requires the .NET 10 asset.
 
-### Native HTTP/3
+### HTTP/3 transport selection
 
+EmbedIO.Quic captures the current fallback certificate
+per handshake before parsing the ClientHello. SNI selection and client-certificate
+policy use that same production factory. Windows retains non-exportable Schannel
+key support; Unix TLS uses an owned PKCS#12 copy and requires an exportable key.
+Existing established connections retain their original certificate selection.
+
+The following native-configuration behavior concerns the earlier MsQuic provider
+in released packages through 2.16.1; this source no longer contains it.
 The native MsQuic binding loads a certificate into an MsQuic configuration once,
 so it builds a new configuration when the next connection arrives after a
 different certificate was published. Republishing a certificate with the same

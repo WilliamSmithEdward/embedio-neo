@@ -1,16 +1,30 @@
 """Check local packages, including the licenses shipped to consumers."""
 
 from pathlib import Path
+import re
 import sys
+import argparse
 from zipfile import ZipFile
 
 
-def main(directory):
+def relative_links(markdown):
+    """Link targets nuget.org cannot follow: it renders a package README without a base URL."""
+    targets = re.findall(r"\]\(\s*<?([^)\s>]+)", markdown)
+    targets += re.findall(r"^\s*\[[^\]]+\]:\s*<?([^\s>]+)", markdown, re.MULTILINE)
+    targets += re.findall(r"""\b(?:href|src)\s*=\s*["']([^"']+)""", markdown, re.IGNORECASE)
+    return [target for target in targets if not re.match(r"(?:https?:|mailto:|#)", target, re.IGNORECASE)]
+
+
+def main(directory, native_staging=None):
     packages = list(Path(directory).glob("*.nupkg"))
-    if len(packages) != 6:
-        raise ValueError(f"Expected six packages, found {len(packages)}")
+    expected_count = 7 if native_staging is not None else 6
+    if len(packages) != expected_count:
+        raise ValueError(f"Expected {expected_count} packages, found {len(packages)}")
     root = Path(__file__).resolve().parents[1]
     expected_readme = (root / "README.md").read_bytes()
+    relative = relative_links(expected_readme.decode("utf-8-sig"))
+    if relative:
+        raise ValueError(f"Every package carries README.md; use absolute links instead of: {relative}")
     expected_license = (root / "LICENSE").read_bytes()
     identities = set()
     for package in packages:
@@ -25,6 +39,18 @@ def main(directory):
             for name in (b"Samuel Neff", b"Novell", b"Xamarin", b"sta.blockhead"):
                 if name not in expected_license:
                     raise ValueError(f"Missing embedded source attribution: {name!r}")
+            if package.name.startswith("EmbedIO-Neo.Quic.Native."):
+                if native_staging is None or "EmbedIO-Neo.Quic.Native" in identities:
+                    raise ValueError("Native runtime requires complete staging verification")
+                sys.path.insert(0, str(root / "native/EmbedIO.Quic.Tls"))
+                from stage import RIDS, verify_package
+                from defusedxml import ElementTree as ET
+                version = ET.parse(root / "Directory.Build.props", forbid_dtd=True,
+                                   forbid_entities=True, forbid_external=True).findtext(".//Version")
+                verify_package(package, Path(native_staging), list(RIDS), version)
+                identities.add("EmbedIO-Neo.Quic.Native")
+                print(f"Verified {package.name}")
+                continue
             if package.name.startswith("EmbedIO-Neo.Cli."):
                 identity = "EmbedIO-Neo.Cli"
                 required = {"README.md", "licenses/embedio-cli-LICENSE",
@@ -47,4 +73,8 @@ def main(directory):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("directory")
+    parser.add_argument("--native-staging", type=Path)
+    args = parser.parse_args()
+    main(args.directory, args.native_staging)

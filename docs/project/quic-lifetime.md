@@ -1,5 +1,9 @@
 # QUIC listener disposal, rebind and workaround retirement
 
+> Historical record. The earlier HTTP/3 providers, and the code, tests and CI jobs
+> this record describes, were removed on 2026-10-22; see
+> [retiring the earlier HTTP/3 providers](quic-development-and-testing.md#retiring-the-earlier-http3-providers).
+
 This guide records the QUIC lifetime investigation for [program #181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181),
 [draft PR #200](https://github.com/WilliamSmithEdward/embedio-neo/pull/200), and the
 HTTP-engine integration in [draft PR #182](https://github.com/WilliamSmithEdward/embedio-neo/pull/182).

@@ -107,17 +107,18 @@ namespace EmbedIO
             Listener = CreateHttpListener();
         }
 
-        internal WebServer(WebServerOptions options, bool nativeHttp3) : base(options)
+        internal WebServer(
+            WebServerOptions options,
+            Func<EmbedIO.Internal.RequestPolicyResolver?, IHttpListener> http3Factory
+        ) : base(options)
         {
+            if (http3Factory == null) throw new ArgumentNullException(nameof(http3Factory));
+
+            if (options.Mode != HttpListenerMode.EmbedIOHttp3)
+                throw new ArgumentException("A transport factory requires the HTTP/3 hosting mode.", nameof(options));
+
             DrainStarted = _drainStarted.Token;
-
-            if (
-                nativeHttp3
-                && options.Mode is not HttpListenerMode.EmbedIOHttp3 and not HttpListenerMode.EmbedIOCombined
-            )
-                throw new ArgumentException("Native HTTP/3 requires an HTTP/3 hosting mode.", nameof(options));
-
-            Listener = CreateHttpListener(nativeHttp3);
+            Listener = CreateHttpListener(http3Factory: http3Factory);
         }
 
         /// <summary>
@@ -473,72 +474,82 @@ namespace EmbedIO
             X509Certificate2? certificate,
             Net.ServerCertificateSource? certificateSource,
             bool combined = false,
-            bool native = false,
             EmbedIO.Internal.RequestPolicyResolver? bodyPolicy = null
         )
         {
 #if NET10_0_OR_GREATER
-            if (
-                (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                && System.Net.Quic.QuicListener.IsSupported
-            )
+            if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
             {
+                Net.Internal.Http3.EmbedIOQuicTls.EnsureSupported();
+
                 if (certificateSource != null)
                     return combined
-                        ? new CombinedHttpListener(certificateSource, native, bodyPolicy)
-                        : new Net.Internal.Http3.Http3Listener(certificateSource, native, bodyPolicy);
+                        ? new CombinedHttpListener(certificateSource, bodyPolicy)
+                        : new Net.Internal.Http3.Http3Listener(certificateSource, bodyPolicy);
 
                 return combined
-                    ? new CombinedHttpListener(certificate, native, bodyPolicy)
-                    : new Net.Internal.Http3.Http3Listener(certificate, native, bodyPolicy);
+                    ? new CombinedHttpListener(certificate, bodyPolicy)
+                    : new Net.Internal.Http3.Http3Listener(certificate, bodyPolicy);
             }
 #endif
-            throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset and native QUIC support.");
+            throw new PlatformNotSupportedException("HTTP/3 requires the .NET 10 asset on Windows, Linux or macOS.");
         }
 
-        private IHttpListener CreateHttpListener(bool nativeHttp3 = false)
+        private IHttpListener CreateHttpListener(
+            Func<EmbedIO.Internal.RequestPolicyResolver?, IHttpListener>? http3Factory = null
+        )
         {
             var bodyPolicy = EmbedIO.Internal.RequestPolicyResolver.Create(Options);
 
-            // QUIC connections are not governed by the TCP connection limits.
-            if (Options.Mode == HttpListenerMode.EmbedIOHttp3 && Options.HasConnectionLimits)
+            // QUIC connections are not governed by the TCP connection limits;
+            // RequestHeadersTimeout applies to HTTP/3 streams as well.
+            if (Options.Mode == HttpListenerMode.EmbedIOHttp3 && Options.HasTcpOnlyConnectionLimits)
                 throw new NotSupportedException(
-                    "MaximumConnections, RequestHeadersTimeout and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode."
+                    "MaximumConnections and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode."
                 );
+
+            // WebTransport is served over HTTP/3 only.
+            if (
+                Options.WebTransport != null
+                && http3Factory == null
+                && Options.Mode is not (HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined)
+            )
+                throw new NotSupportedException("WebTransport requires EmbedIOHttp3 or EmbedIOCombined mode.");
 
             // A source replaces the fixed certificate settings, whose getter would otherwise load or register one.
             X509Certificate2? CertificateOrNull() => Options.CertificateSource != null ? null : Options.Certificate;
 
-            IHttpListener DoCreate() => Options.Mode switch
-            {
-                HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(
-                    CertificateOrNull(),
-                    Options.CertificateSource,
-                    false,
-                    nativeHttp3,
-                    bodyPolicy
-                ),
-                HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(
-                    CertificateOrNull(),
-                    Options.CertificateSource,
-                    true,
-                    nativeHttp3,
-                    bodyPolicy
-                ),
-                _ when (int)Options.Mode == 1 =>
-                    throw new NotSupportedException(
-                        "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."
-                    ),
-                _ => Options.CertificateSource != null
-                    ? new Net.HttpListener(Options.CertificateSource, bodyPolicy)
-                    : new Net.HttpListener(Options.Certificate, bodyPolicy)
-            };
+            IHttpListener DoCreate() =>
+                http3Factory != null
+                    ? http3Factory(bodyPolicy)
+                        ?? throw new InvalidOperationException("Transport factory returned no listener.")
+                    : Options.Mode switch
+                    {
+                        HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(
+                            CertificateOrNull(),
+                            Options.CertificateSource,
+                            false,
+                            bodyPolicy
+                        ),
+                        HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(
+                            CertificateOrNull(),
+                            Options.CertificateSource,
+                            true,
+                            bodyPolicy
+                        ),
+                        _ when (int)Options.Mode == 1 =>
+                            throw new NotSupportedException(
+                                "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."
+                            ),
+                        _ => Options.CertificateSource != null
+                            ? new Net.HttpListener(Options.CertificateSource, bodyPolicy)
+                            : new Net.HttpListener(Options.Certificate, bodyPolicy)
+                    };
 
             // Refuse TLS settings the selected listener cannot honor before creating it.
             var tlsPolicy = Options.TlsPolicy;
             tlsPolicy?.EnsureSupported(
-                Options.Mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined,
-                nativeHttp3
+                Options.Mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined
             );
             var listener = DoCreate();
             $"Running HTTPListener: {listener.Name}".Info(LogSource);
@@ -564,6 +575,7 @@ namespace EmbedIO
                     combined.ConnectionPolicy = connections;
                     combined.TlsPolicy = tlsPolicy;
                     combined.Telemetry = Telemetry;
+                    combined.WebTransport = Options.WebTransport;
                 }
 
                 else if (listener is Net.Internal.Http3.Http3Listener quic)
@@ -571,6 +583,8 @@ namespace EmbedIO
                     quic.DeferContinue = deferContinue;
                     quic.TlsPolicy = tlsPolicy;
                     quic.Telemetry = Telemetry;
+                    quic.WebTransport = Options.WebTransport;
+                    quic.RequestHeadersTimeout = Options.RequestHeadersTimeout;
                 }
             }
 #endif

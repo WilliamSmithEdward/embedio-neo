@@ -17,7 +17,7 @@ namespace EmbedIO.Tests
         public async Task Http3CanceledReadSettlesBeforeReusingItsBuffer(bool disposeBody)
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
+            if (!QuicConnection.IsSupported) return;
             await Http3CanceledReadBufferCore(disposeBody);
         }
 
@@ -86,19 +86,18 @@ namespace EmbedIO.Tests
             await peer.AssertHealthyAsync(host.Token);
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task Http3RequestWideCancellationRetainsFatalStopCode(bool native)
+        [Test]
+        public async Task Http3RequestWideCancellationRetainsFatalStopCode()
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
-            await Http3RequestWideCancellationCore(native);
+            if (!QuicConnection.IsSupported) return;
+            await Http3RequestWideCancellationCore();
         }
 
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task Http3RequestWideCancellationCore(bool native)
+        private static async Task Http3RequestWideCancellationCore()
         {
             using var certificate = Certificate();
             var reading = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -139,7 +138,7 @@ namespace EmbedIO.Tests
                         throw;
                     }
                 }
-            }, native: native);
+            });
             await using var peer = await H3Peer.ConnectAsync(host, certificate);
             await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
             await reading.Task.WaitAsync(host.Token);
@@ -151,24 +150,23 @@ namespace EmbedIO.Tests
             Assert.That(await canceledBeforeExit.Task.WaitAsync(host.Token), Is.True,
                 "Cancellation must reach the still-active handler before request-worker cleanup.");
             var failure = await readFailure.Task.WaitAsync(host.Token);
-            TestContext.Out.WriteLine("HTTP/3 request-wide body failure (native=" + native + "): " + failure);
+            TestContext.Out.WriteLine("HTTP/3 request-wide body failure: " + failure);
             Assert.That(failure, Is.Not.Null, "The abandoned upload must terminate its pending body read.");
             await peer.AssertHealthyAsync(host.Token);
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task PrecanceledHttp3BodyReadDoesNotAbortUpload(bool native)
+        [Test]
+        public async Task PrecanceledHttp3BodyReadDoesNotAbortUpload()
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
-            await PrecanceledHttp3BodyReadCore(native);
+            if (!QuicConnection.IsSupported) return;
+            await PrecanceledHttp3BodyReadCore();
         }
 
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task PrecanceledHttp3BodyReadCore(bool native)
+        private static async Task PrecanceledHttp3BodyReadCore()
         {
             using var certificate = Certificate();
             await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, async context =>
@@ -181,7 +179,7 @@ namespace EmbedIO.Tests
                 int count;
                 while ((count = await context.Request.InputStream.ReadAsync(buffer, context.CancellationToken)) != 0) total += count;
                 await context.SendStringAsync(total.ToString(System.Globalization.CultureInfo.InvariantCulture), "text/plain", WebServer.Utf8NoBomEncoding);
-            }, native: native);
+            });
             await using var peer = await H3Peer.ConnectAsync(host, certificate);
             await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
             await request.WriteAsync(new byte[] { 0, 3, 1, 2, 3 }, completeWrites: true, host.Token);
@@ -199,19 +197,18 @@ namespace EmbedIO.Tests
             await peer.AssertHealthyAsync(host.Token);
         }
 
-        [TestCase(false)]
-        [TestCase(true)]
-        public async Task Http3RateExpiryPreservesResponseAndGracefulUploadStop(bool native)
+        [Test]
+        public async Task Http3RateExpiryPreservesResponseAndGracefulUploadStop()
         {
             RequireQuic();
-            if (!QuicListener.IsSupported || !QuicConnection.IsSupported) return;
-            await Http3RateExpiryCore(native);
+            if (!QuicConnection.IsSupported) return;
+            await Http3RateExpiryCore();
         }
 
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
         [SupportedOSPlatform("macos")]
-        private static async Task Http3RateExpiryCore(bool native)
+        private static async Task Http3RateExpiryCore()
         {
             using var certificate = Certificate();
             await using var host = await Host.StartAsync(HttpListenerMode.EmbedIOHttp3, certificate, async context =>
@@ -220,7 +217,7 @@ namespace EmbedIO.Tests
                 var buffer = new byte[16];
                 while (await context.Request.InputStream.ReadAsync(buffer, context.CancellationToken) != 0) { }
             }, options => options.WithMinimumRequestBodyDataRate(1000, TimeSpan.FromMilliseconds(1100)),
-                server => server.OnHttpException = HttpExceptionHandler.PlainTextResponse, native: native);
+                server => server.OnHttpException = HttpExceptionHandler.PlainTextResponse);
             await using var peer = await H3Peer.ConnectAsync(host, certificate);
             await using var request = await peer.OpenRequestAsync("POST", "/upload", false);
             var clock = Stopwatch.StartNew();

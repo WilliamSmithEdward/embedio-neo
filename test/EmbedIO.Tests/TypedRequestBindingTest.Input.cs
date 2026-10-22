@@ -200,7 +200,7 @@ namespace EmbedIO.Tests
     {
         internal static async Task RunAsync(bool generated, int protocol, bool minimal)
         {
-            if (protocol == 3 && (!QuicListener.IsSupported || !QuicConnection.IsSupported))
+            if (protocol == 3 && (!QuicConnection.IsSupported))
             {
                 if (Environment.GetEnvironmentVariable("EMBEDIO_REQUIRE_QUIC") == "1")
                     Assert.Fail("QUIC is required by this job.");

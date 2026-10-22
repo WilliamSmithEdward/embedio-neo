@@ -114,6 +114,8 @@
       href: guides/openapi.md
     - name: HTTP/3 listener (Neo v2)
       href: guides/http3.md
+    - name: WebTransport over HTTP/3 (Neo v2)
+      href: guides/webtransport.md
     - name: Command-line server
       href: guides/cli.md
     - name: Static folders
@@ -417,3 +419,12 @@
 
 - name: Typed HTTP results review
   href: project/typed-results-audit.md
+
+- name: EmbedIO.Quic implementation
+  href: project/quic-engine-feasibility.md
+
+- name: QUIC development and testing record
+  href: project/quic-development-and-testing.md
+
+- name: Portable QUIC TLS build
+  href: ../native/EmbedIO.Quic.Tls/README.md

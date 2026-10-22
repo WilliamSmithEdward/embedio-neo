@@ -84,12 +84,9 @@ jobs:
         shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-        # The raw MsQuic rebind case tests MsQuic, not the SDK; CI quarantines it
-        # (docs/project/http-engine.md), so it is left out here.
         run: >-
           dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj -c Release --no-build
           --report-trx --results-directory TestResults --timeout 8m
-          --filter "FullyQualifiedName!~DisposedRuntimeListenerRebindsSameEndpoint"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

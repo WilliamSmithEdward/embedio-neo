@@ -49,3 +49,8 @@ William explicitly approved this one-rule/one-path acceptance and the matching-a
 exception on 2026-10-11 after reviewing the explanation. A fresh paginated
 open-alert query still returned zero. No alert dismissal is claimed. The acceptance
 entry is now recorded; every check on the new exact head must pass before merge.
+
+## Probe removed
+
+On 2026-10-22 the probe was removed with the MsQuic provider it measured, and its
+acceptance entry was removed with it.

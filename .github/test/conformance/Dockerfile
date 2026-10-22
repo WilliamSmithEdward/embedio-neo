@@ -1,5 +1,6 @@
 # Test-only conformance runner. Every input is pinned: images by digest, h2spec by
-# commit (its go.sum verifies dependencies), MsQuic by SHA-256 and Python packages by hash.
+# commit (its go.sum verifies dependencies) and Python packages by hash. HTTP/3
+# campaigns also need the EmbedIO.Quic native TLS runtime; see test/EmbedIO.Conformance/README.md.
 # Build from the repository root:
 #   docker build -f .github/test/conformance/Dockerfile -t embedio-conformance test/EmbedIO.Conformance
 
@@ -14,13 +15,9 @@ RUN git clone --quiet https://github.com/summerwind/h2spec.git /src \
 
 # mcr.microsoft.com/dotnet/sdk:10.0.401 (runtime 10.0.12, Ubuntu 24.04).
 FROM mcr.microsoft.com/dotnet/sdk@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317
-# Same MsQuic package and digest as the desktop CI workflow.
-RUN curl --fail --silent --show-error --location --output /tmp/libmsquic.deb \
-      https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/libm/libmsquic/libmsquic_2.6.2_amd64.deb \
- && printf '%s  %s\n' 9ac90841ad45d99c1ff85b427d6dc7f0849291d596f0049d13db779a5a66ba4e /tmp/libmsquic.deb | sha256sum --check \
- && apt-get update \
- && apt-get install --yes --no-install-recommends /tmp/libmsquic.deb python3 python3-venv \
- && rm -rf /var/lib/apt/lists/* /tmp/libmsquic.deb
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends python3 python3-venv \
+ && rm -rf /var/lib/apt/lists/*
 COPY drivers/requirements.txt /opt/drivers/requirements.txt
 RUN python3 -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir --require-hashes --only-binary=:all: -r /opt/drivers/requirements.txt

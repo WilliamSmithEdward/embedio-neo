@@ -1,0 +1,3 @@
+# Baseline compiler only; build-tool dependencies are not shipped.
+FROM quay.io/pypa/manylinux2014_aarch64@sha256:652a519c4425c720cffd07e8e4aa716b7fefc0600031eb72d1f5dac29f71d342
+RUN yum --setopt=gpgcheck=1 install -y perl-core-5.16.3-299.el7_9 && yum clean all

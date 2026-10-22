@@ -113,7 +113,7 @@ jobs:
           --config p/default --config p/csharp --config p/security-audit
           --config p/secrets --config p/github-actions
           --sarif-output=semgrep.sarif
-          src test .github scripts/security
+          src test native .github scripts/security
 
       - uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:

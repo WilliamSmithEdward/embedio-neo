@@ -17,6 +17,9 @@ namespace EmbedIO.Net.Internal.Http3
 
         // Applies the stream or connection error scope of a request failure.
         void Failed(Exception error);
+
+        // Whether a failed read reports only this side's own abort of the request input.
+        bool IsLocalReadAbort(Exception error);
     }
 
     // Pull directly from the request's QUIC stream. No independent body queue
@@ -144,10 +147,19 @@ namespace EmbedIO.Net.Internal.Http3
                 }
             }
 
-            // A canceled transport read may have consumed part of a frame and
-            // System.Net.Quic aborts that direction. Preserve output, but never
-            // resume the input parser from an uncertain boundary.
+            // A canceled transport read may have consumed part of a frame, and the
+            // transport aborts that direction. Preserve output, but never resume
+            // the input parser from an uncertain boundary.
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _inputAbandoned = true;
+                throw;
+            }
+
+            // The server stops reading when the request ends, which also ends a read the
+            // application abandoned, for example after its read deadline answered 408.
+            // That ends input; resetting the stream could discard the committed response.
+            catch (IOException error) when (_owner.IsLocalReadAbort(error))
             {
                 _inputAbandoned = true;
                 throw;
