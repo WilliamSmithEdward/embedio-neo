@@ -93,7 +93,7 @@ def inspect_darwin(architectures, loads, dependencies, exports, architecture, re
     require(len(minima) == 1, "Missing macOS minimum version")
     if requested:
         minimum = tuple(int(part) for part in minima[0].split("."))
-        require(minimum <= (15, 0, 0), "Native asset requires a newer macOS than the deployment baseline")
+        require(minimum <= (14, 0, 0), "Native asset requires a newer macOS than the deployment baseline")
     names = [line.strip().split(" (", 1)[0] for line in dependencies.splitlines()[1:] if line.strip()]
     require(names.count("@rpath/libembedio_quic_tls.dylib") == 1 and names.count("/usr/lib/libSystem.B.dylib") == 1
             and len(names) == 2, "Unexpected Mach-O identity or native dependency")

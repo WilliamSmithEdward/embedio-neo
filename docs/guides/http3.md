@@ -1,19 +1,28 @@
 # HTTP/3 listener (Neo v2)
 
-The modern engine branch adds `HttpListenerMode.EmbedIOHttp3`. This opt-in mode
-serves the normal WebServer modules over QUIC, including request bodies, routing,
-responses and sessions. It is under development in PR #182 and is not a released
-NuGet feature. The [engine program](../project/http-engine.md) records validation
-and the remaining conformance, extension and performance work.
+`HttpListenerMode.EmbedIOHttp3` serves normal WebServer modules over QUIC,
+including request bodies, routing, responses and sessions. The unmerged
+[PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506) changes its
+ordinary transport to EmbedIO.Quic; the released v2.16.0 source uses the earlier
+provider. The [development record](../project/quic-development-and-testing.md)
+distinguishes completed validation from remaining replacement acceptance.
 
 ## Requirements
 
-Use the .NET 10 library asset on a host where `QuicListener.IsSupported` is true.
-Windows requires usable TLS 1.3 support; Linux requires the native MsQuic library.
-CI also exercises macOS with its pinned native prerequisite; this is not a claim
-that every macOS deployment/runtime combination is supported. The .NET Standard
-asset rejects this mode with `PlatformNotSupportedException`.
+For the unmerged replacement, use the .NET 10 library asset in a 64-bit desktop
+process. Windows uses [Schannel TLS 1.3](https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-)
+(Windows 11 / Server 2022 and later).
+Linux/macOS use the owned `EmbedIO-Neo.Quic.Native` runtime dependency, selected
+transitively by NuGet; publish for the deployment RID when producing a targeted
+application. Server startup checks that TLS path directly, without relying on
+BCL QUIC availability. Missing Unix assets fail with `PlatformNotSupportedException`;
+an incompatible private ABI/version also fails before listening. The .NET Standard
+asset continues to reject HTTP/3. Final platform/oldest-OS acceptance remains
+pending; see [native runtime preparation](../../native/EmbedIO.Quic.Tls/README.md).
 
+For the released provider, use a host where `QuicListener.IsSupported` is true.
+Windows requires TLS 1.3 and Linux/macOS require the system MsQuic prerequisite.
+The following runtime and native-library notes apply to that earlier provider.
 On Windows, .NET bundles MsQuic, so use runtime 10.0.13 or later. It is the .NET
 security release for [CVE-2026-105016](https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-105016),
 a remote code execution vulnerability in Microsoft QUIC that MSRC rates Critical
@@ -22,8 +31,8 @@ for .NET installed on Windows. Runtime 10.0.13 bundles `msquic.dll` 2.5.11;
 host, which a runtime update does not change.
 
 Configure HTTPS prefixes and a server certificate containing its private key.
-Keep the certificate alive until the server is disposed. The OpenSSL QUIC backend
-used in validation requires an exportable key; choose provisioning appropriate to
+Keep the certificate alive until the server is disposed. The Unix TLS path
+requires an exportable key; choose provisioning appropriate to
 your host and protect the certificate/password. Use a DNS name matching the
 certificate and configure normal client trust. IP-literal URLs worked in the
 Windows fixture but failed TLS setup with the tested Linux .NET 10.0.12/MsQuic
@@ -54,7 +63,8 @@ replace `WithMode(HttpListenerMode.EmbedIOHttp3)` with
 
 Both transports are required: startup fails if either binding fails, and rolls
 back the bindings owned by that attempt. There is no silent TCP-only fallback.
-The .NET Standard asset and hosts without native QUIC reject this mode. Only
+The .NET Standard asset and hosts without the selected transport's TLS support
+reject this mode. Only
 HTTPS prefixes are accepted. Allow the intended TCP and UDP endpoints in the
 host's network policy. The certificate and client trust requirements above apply.
 
@@ -73,11 +83,16 @@ cancellation stops queue admission and aborts the remaining responses, including
 requests waiting in the bounded queue. Shared TCP endpoints keep accepting for
 sibling listeners while refusing new requests for the draining listener. V2 uses
 the original TCP HTTP engine; both inherited listener backends are removed.
-Public HTTP/3 selection still uses System.Net.Quic for its QUIC transport.
-Native-provider integration, Alt-Svc discovery and final resource/performance
-acceptance remain unfinished; TCP replacement does not establish their completion.
+The unmerged ordinary HTTP/3 binding selects EmbedIO.Quic. A legacy native
+comparison path remains internally until replacement acceptance and removal are
+complete. Alt-Svc discovery and final resource/performance acceptance remain
+separate work; TCP replacement does not establish their completion.
 
-## Runtime memory limitation
+## Earlier provider runtime memory limitation
+
+This limitation concerns the previous `System.Net.Quic` provider, which is still
+used by released v2.16.0. It does not establish the replacement engine's lifetime
+or memory behavior; that has its own acceptance work.
 
 The tested .NET 10.0.12 `System.Net.Quic` retains a native send-buffer allocation
 for each disposed stream that sent data. Long-running HTTP/3 traffic therefore

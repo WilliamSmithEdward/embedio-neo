@@ -24,7 +24,7 @@ namespace EmbedIO.Net.Internal.Http3
 
         public abstract ValueTask DisposeAsync();
 
-        // The native binding supports none of the policy's settings but EnabledProtocols, which QUIC fixes at TLS 1.3;
+        // The legacy native comparison binding supports only EnabledProtocols, fixed to TLS 1.3;
         // ServerTlsPolicy.EnsureSupported refuses the others before a session starts.
         internal static Http3ListenerBinding Bind(
             IPEndPoint endpoint,
@@ -34,7 +34,7 @@ namespace EmbedIO.Net.Internal.Http3
         ) =>
             native
                 ? NativeBinding.Create(endpoint, certificates)
-                : SystemBinding.Create(endpoint, certificates, policy);
+                : new EmbedIOQuicListenerBinding(endpoint, EmbedIOQuicTls.CreateFactory(certificates, policy));
 
         private sealed class SystemBinding : Http3ListenerBinding
         {

@@ -99,7 +99,7 @@ def load_asset(directory):
     if rid.startswith("osx-"):
         minimum = audit.get("minimumMacOS", "")
         require(audit.get("format") == "Mach-O" and minimum and
-                tuple(int(p) for p in minimum.split(".")) <= (15, 0, 0), "Native macOS baseline differs")
+                tuple(int(p) for p in minimum.split(".")) <= (14, 0, 0), "Native macOS baseline differs")
         require(audit.get("dependencies") == ["/usr/lib/libSystem.B.dylib"], "Unexpected macOS dependency")
     else:
         require(audit.get("format") == "ELF64" and all(audit.get(field) is True for field in

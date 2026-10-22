@@ -35,7 +35,8 @@ Install the hash-locked independent peer from
 The portable CI job builds this boundary and runs those checks on Linux and macOS.
 Configured jobs are not validation evidence until their exact-source runs pass.
 
-Public HTTP/3 provider selection remains unchanged. Runtime assets are built into
+The unmerged ordinary HTTP/3 binding now selects EmbedIO.Quic; released packages
+retain their previous provider. Runtime assets are built into
 a separate, unpublished development package. The unmerged modern core now depends
 on that asset-only package; .NET Standard dependencies remain unchanged. CI and
 Publish input assembly include all six runtime assets, but supported-RID execution,
@@ -48,7 +49,7 @@ Private ABI 2 adds ordered public issuer certificates separately from the leaf's
 PKCS#12 credential. The managed adapter uses normal runtime issuer discovery,
 keeps a partial chain's final issuer, omits the trust anchor and releases its
 chain copies. An older ABI fails preflight before listener readiness. This does
-not change public provider selection or client-certificate trust policy.
+not choose the public provider or change client-certificate trust policy.
 
 `verify_server_chain.py` exercises a BCL TCP control and the actual QUIC factory
 with complete, partial, two-intermediate, direct-root and self-signed profiles,
@@ -80,7 +81,8 @@ architecture, exact ABI-2 symbol versions, system-only dependencies, SONAME,
 non-executable stack, RELRO and immediate binding. Requested glibc RIDs reject
 symbol requirements newer than 2.27. A development build without `--rid` records
 its actual glibc requirement and must not be treated as a distribution artifact.
-macOS builds target 15.0 and check the actual Mach-O deployment, architecture,
+macOS builds target 14.0 to avoid imposing a newer native loading requirement
+during replacement. The build checks the actual Mach-O deployment, architecture,
 exports and dependency metadata. Musl metadata cannot prove runtime compatibility
 by itself; each supported RID still requires real execution and package testing.
 
@@ -99,7 +101,7 @@ python3 -m unittest discover -s native/EmbedIO.Quic.Tls/tests -p 'test_*.py'
 Use fresh output directories. Native binaries, their license, binary audit and
 source/output receipt are retained by the portable workflow. These are inputs to
 runtime-asset packaging. The separate package described below supplies development
-NuGet runtime assets without changing public HTTP/3 provider selection. See the development record for exact tests,
+NuGet runtime assets. The ordinary provider transition is described above. See the development record for exact tests,
 platform scope and remaining work.
 
 ## Package assembly and actual consumers

@@ -78,7 +78,7 @@ class LinuxAuditTests(unittest.TestCase):
 
 class DarwinAuditTests(unittest.TestCase):
     def inspect(self, **changes):
-        arguments = dict(architectures="arm64\n", loads="cmd LC_BUILD_VERSION\nplatform MACOS\nminos 15.0\n",
+        arguments = dict(architectures="arm64\n", loads="cmd LC_BUILD_VERSION\nplatform MACOS\nminos 14.0\n",
                          dependencies="library:\n @rpath/libembedio_quic_tls.dylib (compatibility version 0.0.0)\n /usr/lib/libSystem.B.dylib (compatibility version 1.0.0)\n",
                          exports="".join("0000000000000010 T _" + name + "\n" for name in sorted(module.EXPORTS)),
                          architecture="arm64", requested="osx-arm64")
@@ -88,14 +88,15 @@ class DarwinAuditTests(unittest.TestCase):
     def test_deployment_identity(self):
         result = self.inspect()
         self.assertEqual(result["runtimeIdentifier"], "osx-arm64")
-        self.assertEqual(result["minimumMacOS"], "15.0")
+        self.assertEqual(result["minimumMacOS"], "14.0")
 
     def test_rejects_incompatible_deployment(self):
         for changes in (dict(architectures="x86_64 arm64\n"), dict(requested="osx-x64"),
-                        dict(loads="cmd LC_BUILD_VERSION\nplatform MACCATALYST\nminos 15.0\n"),
+                        dict(loads="cmd LC_BUILD_VERSION\nplatform MACOS\nminos 15.0\n"),
+                        dict(loads="cmd LC_BUILD_VERSION\nplatform MACCATALYST\nminos 14.0\n"),
                         dict(loads="cmd LC_BUILD_VERSION\nplatform 1\nminos 26.0\n"),
                         dict(loads="cmd LC_VERSION_MIN_MACOSX\nversion 15.0\n"),
-                        dict(loads="cmd LC_BUILD_VERSION\nplatform 1\nminos 15.0\ncmd LC_RPATH\n"),
+                        dict(loads="cmd LC_BUILD_VERSION\nplatform 1\nminos 14.0\ncmd LC_RPATH\n"),
                         dict(dependencies="library:\n /usr/lib/libSystem.B.dylib (compatibility version 1.0.0)\n"),
                         dict(exports="")):
             with self.subTest(changes=changes), self.assertRaises(ValueError):

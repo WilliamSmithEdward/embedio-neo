@@ -110,6 +110,7 @@ jobs:
     uses: ./.github/workflows/malware-scan.yml
     with:
       package-artifact: nupkg
+      include-native: true
     permissions:
       contents: read
 

@@ -34,6 +34,15 @@ these features. CI publishes and runs it on Windows (`windows-2025`, `win-x64`) 
 
 ## HTTP/3 in a Native AOT application
 
+In unmerged PR #506, ordinary server HTTP/3 uses EmbedIO.Quic. The modern core
+carries the owned native TLS runtime dependency; portable, RID-specific and
+Native AOT package tests use normal NuGet selection, without a manual native
+copy. Windows uses Schannel and needs no server `msquic.dll` copy. Linux/macOS
+need their selected private TLS asset. Missing assets are rejected at public
+server construction. Final supported-platform validation remains pending.
+
+The following manual-copy workaround applies to the earlier provider in released
+v2.16.0 and to any separate BCL HTTP/3 client in an application. Earlier server
 HTTP/3 uses MsQuic. On Linux it is the system's `libmsquic`, installed as for any .NET
 HTTP/3 application. On Windows, .NET ships `msquic.dll` in its runtime, but a Native AOT
 publish leaves it out, so `QuicListener.IsSupported` is false and an HTTP/3 or combined

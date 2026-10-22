@@ -83,7 +83,7 @@ def build(args):
     options = [target, "no-shared", "no-quic", "no-tests", "no-apps", "no-docs",
                "no-autoload-config", "no-dso", "no-module", "-fPIC"]
     if system == "Darwin":
-        options.append("-mmacosx-version-min=15.0")
+        options.append("-mmacosx-version-min=14.0")
     run(["perl", str(upstream / "Configure"), *options], "configure", objects)
     run(["make", f"-j{args.jobs}", "build_libs"], "make", objects)
     for name in ("libssl.a", "libcrypto.a"):
@@ -102,7 +102,7 @@ def build(args):
         if len(names) != 15 or len(set(names)) != len(names):
             raise RuntimeError("Unexpected private native ABI export inventory")
         exports.write_text("".join("_" + name + "\n" for name in names), encoding="utf-8")
-        command += ["-mmacosx-version-min=15.0", "-Wl,-exported_symbols_list," + str(exports), "-Wl,-install_name,@rpath/" + library.name]
+        command += ["-mmacosx-version-min=14.0", "-Wl,-exported_symbols_list," + str(exports), "-Wl,-install_name,@rpath/" + library.name]
     else:
         command += ["-Wl,--exclude-libs,ALL", "-Wl,-Bsymbolic", "-Wl,-z,relro,-z,now,-z,noexecstack",
                     "-Wl,--version-script=" + str(source / "exports.map"), "-Wl,-soname," + library.name, "-ldl"]

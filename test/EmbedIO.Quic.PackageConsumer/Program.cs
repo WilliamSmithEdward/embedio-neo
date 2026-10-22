@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.Runtime.Versioning;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
@@ -9,7 +10,6 @@ using EmbedIO;
 using EmbedIO.Authentication;
 using EmbedIO.Authorization;
 using EmbedIO.Net;
-using EmbedIO.Net.Internal.Http3;
 using EmbedIO.Quic;
 using EmbedIO.Routing;
 using EmbedIO.WebApi;
@@ -22,31 +22,45 @@ namespace EmbedIO.Quic.PackageConsumer
         [SupportedOSPlatform("macos")]
         private static async Task<int> Main(string[] arguments)
         {
-            if (arguments.Length != 2) throw new ArgumentException("Supply the owned certificate and private key.");
+            if (arguments.Length != 2 && (arguments.Length != 3 || arguments[2] != "--missing-tls"))
+                throw new ArgumentException("Supply the owned certificate and private key.");
 
             if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException();
 
             using var certificate = X509Certificate2.CreateFromPemFile(arguments[0], arguments[1]);
             var source = new ServerCertificateSource(certificate);
-            await using var binding = new EmbedIOQuicListenerBinding(
-                new IPEndPoint(IPAddress.Loopback, 0),
-                EmbedIOQuicTls.CreateFactory(source, null)
-            );
-            var endpoint = binding.LocalEndPoint;
+            using var reservation = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            reservation.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+            var endpoint =
+                (IPEndPoint)(reservation.LocalEndPoint
+                    ?? throw new InvalidOperationException("Missing reserved endpoint."));
+            reservation.Dispose();
             var options = new WebServerOptions()
                 .WithMode(HttpListenerMode.EmbedIOHttp3)
                 .WithUrlPrefix($"https://127.0.0.1:{endpoint.Port}/")
                 .WithCertificateSource(source);
-            using var server = new WebServer(
-                options,
-                body => new Http3Listener(source, false, body, (requested, certificates, policy, native) =>
-                {
-                    if (!requested.Equals(endpoint) || !ReferenceEquals(source, certificates) || policy != null || native)
-                        throw new InvalidOperationException("Unexpected package-consumer listener configuration.");
 
-                    return binding;
-                })
-            );
+            if (arguments.Length == 3)
+            {
+                try
+                {
+                    using var unavailable = new WebServer(options);
+                    throw new InvalidOperationException("Missing TLS runtime was accepted.");
+                }
+
+                catch (PlatformNotSupportedException exception) when (exception.InnerException is DllNotFoundException)
+                {
+                    Console.WriteLine(
+                        JsonSerializer.Serialize(
+                            new CapabilityReport { RuntimeMissing = true },
+                            ConsumerJson.Default.CapabilityReport
+                        )
+                    );
+                    return 0;
+                }
+            }
+
+            using var server = new WebServer(options);
             var module = new WebApiModule("/", ResponseSerializer.None(false));
             module.ConfigureAuthorization(
                 new AuthorizationOptions().AddPolicy(
@@ -113,10 +127,6 @@ namespace EmbedIO.Quic.PackageConsumer
                 deadline.Cancel();
                 await running.ConfigureAwait(false);
             }
-
-            await binding
-                .DisposeAsync()
-                .ConfigureAwait(false);
 
             if (OpenSslTls.ActiveContexts != 0 || OpenSslTls.ActiveBlocks != 0 || ConsumerController.Aborted != 1)
                 throw new InvalidOperationException(
@@ -221,6 +231,11 @@ namespace EmbedIO.Quic.PackageConsumer
         public int Port { get; init; }
     }
 
+    internal sealed class CapabilityReport
+    {
+        public bool RuntimeMissing { get; init; }
+    }
+
     internal sealed class ConsumerReport
     {
         public bool Passed { get; init; }
@@ -232,6 +247,7 @@ namespace EmbedIO.Quic.PackageConsumer
     [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
     [JsonSerializable(typeof(ReadyReport))]
     [JsonSerializable(typeof(ConsumerReport))]
+    [JsonSerializable(typeof(CapabilityReport))]
     internal sealed partial class ConsumerJson : JsonSerializerContext;
 
     [GeneratedControllerBinding(typeof(ConsumerController))]

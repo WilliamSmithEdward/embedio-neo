@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -146,6 +147,14 @@ def validate(args):
                 if profile == "aot":
                     command += ["--native"]
                 run(command, name, environment, 60)
+            missing = args.output / (profile + "-missing-runtime")
+            shutil.copytree(target, missing, ignore=shutil.ignore_patterns(library))
+            entry = missing / ("EmbedIO.Quic.Development" if profile == "aot" else "EmbedIO.Quic.Development.dll")
+            command = [peer, str(ROOT / "test/EmbedIO.Quic.PackageConsumer/verify.py"), "--entry", str(entry),
+                       "--cipher", CIPHERS[0], "--missing-tls", "--output", str(args.output / (profile + "-missing-tls"))]
+            if profile == "aot":
+                command += ["--native"]
+            run(command, profile + "-missing-tls", environment, 30)
         host_project = str(ROOT / "test/EmbedIO.Quic/EmbedIO.Quic.csproj")
         host = args.output / "development-host"
         properties = ["-p:EmbedIOQuicPackageVersion=" + version,

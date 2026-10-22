@@ -12,11 +12,11 @@ dotnet restore test/EmbedIO.Fuzz/EmbedIO.Fuzz.csproj --locked-mode
 dotnet run --project test/EmbedIO.Fuzz -c Release --no-restore -- --state-machines 1729 100 websocket-budget
 ```
 
-The arguments are the campaign seed and total number of cases (1–100,000).
+The arguments are the campaign seed and total number of cases (1â€“100,000).
 Select an explicit scenario for local campaigns. Without a name, the
 runner sorts the registered names and cycles through them. Each generated case
-contains 48 commands for three actors. Actor IDs are 0–2, command IDs 0–11 and
-values 0–63; their interpretation belongs to the scenario.
+contains 48 commands for three actors. Actor IDs are 0â€“2, command IDs 0â€“11 and
+values 0â€“63; their interpretation belongs to the scenario.
 
 | Scenario | Exercised surface |
 | --- | --- |
@@ -234,5 +234,6 @@ The QUIC development core participates in the existing fuzz campaigns. See the
 [development and testing record](../project/quic-development-and-testing.md) for
 all eight targets, scheduled socket dispatch/output ownership and asynchronous application wake-ups, multi-connection
 traces, managed coverage evidence, native TLS
-mutation scope and extensive local commands. This does not activate a production
-provider or remove existing HTTP/3/MsQuic coverage.
+mutation scope and extensive local commands. The unmerged ordinary HTTP/3 binding
+now selects EmbedIO.Quic; legacy comparison coverage remains until replacement
+acceptance and removal. Fuzz configuration alone does not establish that acceptance.

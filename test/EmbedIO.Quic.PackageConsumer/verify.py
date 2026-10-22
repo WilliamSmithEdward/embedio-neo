@@ -46,8 +46,25 @@ async def main(args):
     args.output.mkdir(parents=True, exist_ok=False)
     cert_path, key_path = certificate(args.output)
     command = ([str(args.entry)] if args.native else [args.dotnet, str(args.entry)]) + [str(cert_path), str(key_path)]
+    if args.missing_tls:
+        command.append("--missing-tls")
     process = await asyncio.create_subprocess_exec(*command, stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    if args.missing_tls:
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), 15)
+        except BaseException:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+            raise
+        (args.output / "stdout.log").write_bytes(stdout)
+        (args.output / "stderr.log").write_bytes(stderr)
+        reports = [json.loads(line) for line in stdout.splitlines() if line.startswith(b"{")]
+        if process.returncode != 0 or reports != [{"runtimeMissing": True}]:
+            raise AssertionError("Missing private TLS runtime did not fail at public server construction")
+        (args.output / "result.json").write_text(json.dumps({"passed": True, "missingRuntimeRejected": True}) + "\n")
+        return
     startup, stdout, stderr = bytearray(), b"", b""
     failure, ready, requests = None, {}, 0
     try:
@@ -125,6 +142,7 @@ if __name__ == "__main__":
     parser.add_argument("--entry", type=Path, required=True)
     parser.add_argument("--dotnet", default="dotnet")
     parser.add_argument("--native", action="store_true")
+    parser.add_argument("--missing-tls", action="store_true")
     parser.add_argument("--cipher", choices=("AES_128_GCM_SHA256", "AES_256_GCM_SHA384", "CHACHA20_POLY1305_SHA256"), default="AES_128_GCM_SHA256")
     parser.add_argument("--output", type=Path, required=True)
     raise SystemExit(asyncio.run(main(parser.parse_args())))

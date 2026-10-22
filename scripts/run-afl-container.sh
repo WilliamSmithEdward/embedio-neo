@@ -8,7 +8,7 @@ mkdir -p /work /results/maps
 # AFL creates private files as container root; preserve readable evidence for
 # the host runner on successful and failed campaigns alike.
 trap 'result=$?; chmod -R a+rX /results; exit "$result"' EXIT
-tar -C /input --exclude=bin --exclude=obj -cf - src test/EmbedIO.SharpFuzz test/EmbedIO.Quic test/EmbedIO.Fuzz/MultipartFuzzChecks.cs .editorconfig Directory.Build.props Directory.Packages.props global.json README.md LICENSE images | tar -xf - -C /work
+tar -C /input --exclude=bin --exclude=obj -cf - src test/EmbedIO.SharpFuzz test/EmbedIO.Quic test/EmbedIO.Fuzz/MultipartFuzzChecks.cs test/Shared/QuicNativeAssets.targets native/EmbedIO.Quic.Tls/EmbedIO.Quic.Native.csproj native/EmbedIO.Quic.Tls/packages.lock.json .editorconfig Directory.Build.props Directory.Packages.props global.json README.md LICENSE images | tar -xf - -C /work
 cd /work
 # Match a Linux Git checkout when the read-only source comes from Windows.
 find src test -name '*.cs' -type f -exec sed -i 's/\r$//' {} +

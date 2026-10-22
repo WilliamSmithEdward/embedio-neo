@@ -9,6 +9,46 @@ namespace EmbedIO.Net.Internal.Http3
 {
     internal static class EmbedIOQuicTls
     {
+        internal static void EnsureSupported()
+        {
+            if (!Environment.Is64BitProcess)
+                throw new PlatformNotSupportedException("HTTP/3 requires a 64-bit process.");
+
+            if (OperatingSystem.IsWindows())
+            {
+                if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348))
+                    throw new PlatformNotSupportedException(
+                        "HTTP/3 requires Windows 11 or Windows Server 2022 and later."
+                    );
+
+                return;
+            }
+
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            {
+                try
+                {
+                    OpenSslTls.EnsureAvailable();
+                }
+
+                catch (Exception exception) when (
+                    exception is DllNotFoundException
+                        or EntryPointNotFoundException
+                        or BadImageFormatException
+                )
+                {
+                    throw new PlatformNotSupportedException(
+                        "HTTP/3 requires the EmbedIO.Quic native TLS runtime for this platform.",
+                        exception
+                    );
+                }
+
+                return;
+            }
+
+            throw new PlatformNotSupportedException("Recordless TLS requires a desktop platform.");
+        }
+
         internal static Func<byte[], TlsSession> CreateFactory(
             ServerCertificateSource certificates,
             ServerTlsPolicy? policy
@@ -17,9 +57,8 @@ namespace EmbedIO.Net.Internal.Http3
             ArgumentNullException.ThrowIfNull(certificates);
             policy?.EnsureSupported(true, false);
 
+            EnsureSupported();
             policy?.Lock();
-
-            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) OpenSslTls.EnsureAvailable();
 
             Func<X509Certificate2?, X509Certificate2Collection, bool>? validate = policy?.RequestsClientCertificate
                 == true

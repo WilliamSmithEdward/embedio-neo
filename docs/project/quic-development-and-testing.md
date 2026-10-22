@@ -3,10 +3,10 @@
 This record covers the development path, test architecture, reproducible local
 campaigns and remaining acceptance work for the original C# QUIC engine. It is
 maintained with the implementation. The feature is pending in draft PR #506.
-An isolated local probe selects EmbedIO.Quic for the ordinary HTTP/3 binding;
-the committed default still uses MsQuic while runtime delivery and capability
-checks are completed. The startup support gate and internal native comparison
-path also remain. No package release or
+The ordinary HTTP/3 binding now selects EmbedIO.Quic with its own TLS capability
+check and transitive runtime delivery. The earlier provider remains in internal
+comparison paths until replacement acceptance and removal. The later sections
+record the cutover evidence and remaining platform/application work. No package release or
 public WebTransport API is implied by this record. The sections retain the implementation
 sequence and its evidence; the final acceptance list describes work still outstanding.
 
@@ -1151,17 +1151,19 @@ python -m unittest discover -s test/EmbedIO.Quic -p test_http_peer.py
    host already replenishes stream counts and retires stream/application buffers.
    Receive and recovery histories retire within fixed bounds; packet encryption
    enforces per-key AES-GCM limits and ACK-confirmed local/peer key generations.
-3. Complete transport/application error classification, server reset emission, Retry,
-   path handling, post-handshake TLS, resumption and any intentionally supported
-   0-RTT policy. Features outside the supported profile must fail explicitly.
-4. Finish default provider selection, capability detection, automatic runtime delivery and public
-   WebTransport API/controller integration; broaden the actual WebServer auth/cancellation/disposal checks across
-   supported configurations and platforms.
+3. Complete the remaining transport/TLS profile, including Retry, post-handshake
+   TLS, resumption and any intentionally supported 0-RTT policy. Extend acceptance
+   of the implemented error classification, reset and path handling across peers
+   and platforms. Features outside the supported profile must fail explicitly.
+4. Validate the now-integrated ordinary provider selection, actual TLS capability
+   checks and transitive native runtime delivery across supported platforms.
+   Finish public WebTransport API/controller integration and broaden the actual
+   WebServer auth/cancellation/disposal checks across those configurations.
 5. Independent peers on Windows/Linux/macOS, browser compatibility, dependency
    packaging, and startup/warm/tail-latency measurements. Windows embedded hosting
    leads; meaningful warm regressions are not accepted for cold-start gains.
 6. Exact-source final build/diagnostic/security/package gates and full existing
-   HTTP/1-3 regressions before any change of the production provider.
+   HTTP/1-3 regressions before merging the production replacement.
 
 ## MsQuic retirement and issue closure
 
@@ -1915,3 +1917,86 @@ libraries and package-mode manual copying are rejected. Final source acceptance
 uses the prescribed source-quality and guard scripts. These local checks do not
 establish hosted workflow or supported-platform acceptance; final-head platform
 runs remain required.
+
+
+## Public HTTP/3 construction and TLS capability
+
+The unmerged ordinary HTTP/3 and combined listener now select EmbedIO.Quic.
+`WebServer` checks the actual 64-bit desktop TLS path before listening: Windows
+Schannel TLS 1.3 requires Windows 11 / Server 2022 or later, and Unix checks the
+private ABI/version. Missing libraries receive a platform-support exception with
+the loading error retained; an incompatible ABI/version remains fatal. No fallback
+to another provider is attempted on this ordinary path. Internal comparison paths
+remain until replacement acceptance is complete.
+
+The package-only application now uses the public WebServer constructor. All three
+publish modes also run in fresh processes with their private TLS library removed;
+public construction must reject that state before announcing readiness. The old
+binding accepted that missing-runtime control, reproduced in a retained local
+baseline. The corrected source passed all 34 Linux x64 package-driver steps using
+a fresh source-matched, explicitly incomplete one-RID preview. Before that run,
+MsQuic libraries were removed only inside the disposable container and an independent
+BCL capability probe confirmed QUIC support was false. All nine ordinary
+portable/RID/AOT cipher/application profiles, three missing-runtime controls and
+the full package-backed host suite passed. This is not six-RID acceptance.
+
+Windows ordinary construction passed the complete suite with 7,579 successes and
+21 existing opt-in/platform skips (7,600 total, zero failures). The private native
+build's macOS deployment target was reduced from 15.0 to 14.0 to avoid adding a
+newer loading requirement; artifact audits now reject a newer minimum. A fresh
+Linux x64 build passed the unchanged ABI/export/dependency and glibc-2.17 checks,
+and native tooling passed 27 cases with one Windows symlink-privilege skip. Real
+oldest-OS execution, particularly downlevel macOS, remains separate validation.
+
+AFL++ CI 39699515019 failed before fuzzing because its isolated workspace omitted
+the new shared test target. The workspace now includes that target and the owned
+native project's build/lock metadata, and workflow path filters include those
+inputs. A local one-minute campaign passed build, instrumentation/map checks and
+25,122 executions with no saved crash or hang. Feedback stability was 3.32%; the
+existing coverage-reliability limitation remains unresolved. No coverage or failure
+gate was relaxed.
+
+The same source checkpoint's Android HTTPS smoke exceeded its ten-second in-app
+HTTP client deadline after listener startup. Its failure/logcat evidence is
+retained; no cause correction or successful replacement run is claimed.
+Current-head platform and final source gates remain required before acceptance.
+
+
+The retained Windows native certificate campaign also exposed a client-fixture
+lifetime issue: a successful TLS/identity operation was charged for the client's
+subsequent protocol-close waiting period. Certificate exchanges now create their
+UDP context, wait for TLS and check identity inside the unchanged eight-second
+operation budget; context teardown runs outside that budget but remains within
+the unchanged overall campaign deadline. TLS acceptance/rejection codes,
+concurrency and identity assertions remain unchanged. Five isolated async cases
+cover slow close, stalled handshake/request, rejection and bounded cleanup. All
+13 peer-helper cases passed locally. This change affects test orchestration.
+
+With that helper, the unchanged 256-case campaign passed on Windows Schannel:
+73 pinned-identity acceptances, 183 expected rejections and 50 healthy sibling
+requests in 3.697 seconds. Linux's package-backed public host passed 37 pinned
+acceptances, 219 expected rejections and 63 healthy siblings in 13.013 seconds.
+Both completed cleanup/drain/rebind. These are local campaign durations, not
+latency benchmarks or proof of the hosted Windows 2025 outcome. The original
+failure and first helper attempt that omitted aioquic's explicit Initial
+transmission remain retained; the helper now starts that transmission before
+waiting for handshake completion.
+
+CI's existing package-build artifact now feeds a supplemental reusable malware
+scan on code changes. It must contain exactly seven packages, including the owned
+native runtime, and both scanners inspect their packed and unpacked contents.
+Publish sets the same seven-package requirement. The standalone source/managed
+scan retains its six-package input and required check names. The native binaries
+are reused from the one same-run build; no second native build is introduced.
+This workflow change still requires actual final-head execution.
+
+The final affected Windows body-limit selection passed all 45 cases after pinned
+formatting and diagnostic cleanup, with no skipped cases. The test file retains
+its assertions while grouping independent checks, using collection constraints
+and modern declaration/collection syntax. Both core targets, the development
+host and changed regression source had zero unsuppressed nonhidden compiler
+diagnostics; changed-file formatter/style/analyzer checks and model/dispatcher
+suites passed. Six local package-count controls checked ordinary six-package and
+native seven-package acceptance plus missing, wrong and extra package rejection,
+including rejection of the seven-package input by the old guard. Those synthetic
+inputs validate the guard only; they are not binary malware-scan evidence.

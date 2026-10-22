@@ -27,7 +27,7 @@ dotnet run --project test/EmbedIO.Fuzz -c Release --no-restore -- --fscheck 1729
 ```
 
 The first number is an unsigned 64-bit seed; the second is the number of cases
-per property (1–100,000). Defaults are seed 1729 and 10,000 cases. Repeat the
+per property (1Ã¢â‚¬â€œ100,000). Defaults are seed 1729 and 10,000 cases. Repeat the
 same command on the same source and dependency versions to reproduce a campaign.
 The Fuzz workflow uses its run ID to choose a seed and retains the output in
 the `http-transport-fuzz` artifact alongside the existing campaigns.
@@ -52,8 +52,9 @@ a score does not establish comprehensive parser coverage.
 
 ## EmbedIO.Quic
 
-The test-only QUIC core now participates in the existing fuzz campaigns. See the
+The QUIC engine's test facade participates in the existing fuzz campaigns. See the
 [development and testing record](../project/quic-development-and-testing.md) for
-all seven targets, multi-connection traces, managed coverage evidence, native TLS
-mutation scope and extensive local commands. This does not activate a production
-provider or remove existing HTTP/3/MsQuic coverage.
+all eight targets, multi-connection traces, managed coverage evidence, native TLS
+mutation scope and extensive local commands. The unmerged ordinary HTTP/3 binding
+now selects EmbedIO.Quic; legacy comparison coverage remains until replacement
+acceptance and removal. Fuzz configuration alone does not establish that acceptance.

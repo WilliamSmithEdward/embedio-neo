@@ -1,5 +1,6 @@
 """Seeded concurrent full-handshake native client-certificate mutations."""
 import argparse
+from contextlib import AsyncExitStack, asynccontextmanager
 import os
 import asyncio
 import collections
@@ -18,6 +19,20 @@ from cryptography.hazmat.primitives import serialization, hashes
 from verify import provenance
 from verify_client_certificate import certificates
 from verify_tls_listener import CertificatePeer, configuration
+
+
+@asynccontextmanager
+async def certificate_exchange(context, timeout=8):
+    # Bound UDP setup, TLS and the identity request. QUIC's closing period can
+    # legitimately take three PTOs; resource teardown remains under the outer
+    # campaign deadline rather than consuming this operation deadline.
+    async with AsyncExitStack() as resources:
+        async with asyncio.timeout(timeout):
+            peer = await resources.enter_async_context(context)
+            # aioquic defers the initial transmission when wait_connected=False.
+            peer.transmit()
+            await peer.wait_connected()
+            yield peer
 
 
 async def main(args):
@@ -54,7 +69,7 @@ async def main(args):
     failure = None
     started = time.monotonic()
 
-    def open_peer(payload=None, mismatch=False):
+    def open_peer(payload=None, mismatch=False, wait_connected=True):
         config = configuration(args.output / 'certificate.pem', 'localhost')
         config.quic_logger = QuicLogger() if payload is not None else None
         config.load_cert_chain(str(args.output / 'client.pem'), str(args.output / ('other.key' if mismatch else 'client.key')))
@@ -69,7 +84,7 @@ async def main(args):
             peer.mutation_trace = config.quic_logger
             peers.append(peer)
             return peer
-        return connect('127.0.0.1', ready['port'], configuration=config, create_protocol=create), peers
+        return connect('127.0.0.1', ready['port'], configuration=config, create_protocol=create, wait_connected=wait_connected), peers
 
     async def identity(peer):
         peer.authority = f"127.0.0.1:{ready['port']}".encode()
@@ -101,20 +116,19 @@ async def main(args):
         nonlocal completed, successes
         for index in range(worker_index, args.cases, width):
             kind, payload = mutation(index)
-            context, peers = open_peer(payload, kind == 1)
+            context, peers = open_peer(payload, kind == 1, wait_connected=False)
             try:
-                async with asyncio.timeout(8):
-                    try:
-                        async with context as peer:
-                            await identity(peer)
-                            assert kind not in (1, 6), 'A different key authenticated as the pinned client'
-                            successes += 1
-                    except ConnectionError:
-                        assert kind != 0, 'An unchanged credential was rejected'
-                        assert peers and peers[0].termination is not None
-                        code = peers[0].termination.error_code
-                        assert code in (0x128, 0x12a, 0x12b, 0x12d, 0x12e, 0x12f, 0x132, 0x133, 0x174), code
-                        codes[str(code)] += 1
+                try:
+                    async with certificate_exchange(context) as peer:
+                        await identity(peer)
+                        assert kind not in (1, 6), 'A different key authenticated as the pinned client'
+                        successes += 1
+                except ConnectionError:
+                    assert kind != 0, 'An unchanged credential was rejected'
+                    assert peers and peers[0].termination is not None
+                    code = peers[0].termination.error_code
+                    assert code in (0x128, 0x12a, 0x12b, 0x12d, 0x12e, 0x12f, 0x132, 0x133, 0x174), code
+                    codes[str(code)] += 1
                 completed += 1
             except asyncio.CancelledError:
                 raise

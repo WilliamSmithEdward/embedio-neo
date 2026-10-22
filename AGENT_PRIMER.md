@@ -368,7 +368,7 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 | Mode | Serves | Requirements |
 | --- | --- | --- |
 | `EmbedIO` (default) | HTTP/1.1 and HTTP/2 over TCP | HTTP/2 needs TLS with ALPN (`net10.0` asset) or cleartext prior knowledge |
-| `EmbedIOHttp3` | HTTP/3 over QUIC/UDP only | `net10.0`, HTTPS prefixes, a certificate with its private key, native QUIC (MsQuic), TLS 1.3 |
+| `EmbedIOHttp3` | HTTP/3 over QUIC/UDP only | `net10.0`, HTTPS prefixes, a certificate with its private key, TLS 1.3; the unmerged replacement uses owned native TLS assets on Unix and Schannel on Windows |
 | `EmbedIOCombined` | Both of the above on the same HTTPS prefixes | Everything HTTP/3 needs; both bindings must succeed |
 
 - HTTP/2 needs no opt-in in the default mode.
@@ -483,9 +483,8 @@ rent pages as data arrives and clear/return them after consumption, read abort,
 reliable-reset suffix discard, retirement or connection shutdown; empty streams do
 not reserve full payload windows. Discard retains offset/final-size validation and
 keeps application-delivered bytes under explicit consumption ownership. It has
-no public application API; the intended fully validated
-replacement will remove MsQuic from the production transport, but the current
-HTTP/3 provider remains in place. The [development and testing record](docs/project/quic-development-and-testing.md)
+no separate public engine API. The unmerged ordinary WebServer binding now uses
+EmbedIO.Quic; complete MsQuic removal still awaits replacement acceptance. The [development and testing record](docs/project/quic-development-and-testing.md)
 tracks all fuzz engines, extensive local runs and remaining production acceptance. The Windows
 validation helper checks native lifetime and a bounded first-flight matrix against
 read-only host TLS-group policy. P-256 must succeed; X25519 must succeed when enabled
@@ -1049,7 +1048,7 @@ commands and the difference between helper-output checks and wire validation.
 - Configuring options or modules after the server started.
 - Calling `RunAsync` twice, or reusing a stopped server.
 - An `https` prefix with no certificate.
-- Expecting HTTP/3 on `netstandard2.0` or without native QUIC.
+- Expecting HTTP/3 on `netstandard2.0` or without the selected transport's TLS support.
 - Relying on defaults for an internet-facing server instead of setting limits.
 - Calling `WithRequestHeaderLimits(bytes)` without a count.
 - Sending a WebSocket close code a server cannot use, such as 1006.
@@ -1256,13 +1255,12 @@ The macOS hosted package fixture adds
 127.0.0.2 to loopback only for the source-IP/CID case and removes that alias
 when validation ends; production networking does not require this fixture setup.
 
-An isolated default-selection probe routes ordinary .NET 10 HTTP/3 WebServer
-modes through `EmbedIOQuicListenerBinding`, using Schannel on Windows and the
-private pinned OpenSSL TLS runtime on Linux/macOS. The committed default and its
-startup support gate still use the previous provider. Automatic native runtime
-delivery, capability checks, full replacement acceptance and removal of the
-remaining paths are required before applying that selection change and merging;
-no released package selects this development snapshot.
+The earlier isolated default-selection probe verified ordinary .NET 10 HTTP/3
+WebServer modes through `EmbedIOQuicListenerBinding`, using Schannel on Windows
+and the private pinned OpenSSL TLS runtime on Linux/macOS. That selection and its
+actual TLS capability checks are now integrated into the unmerged source as
+described below. Full replacement acceptance and removal of the remaining
+comparison paths are still required; no released package selects this snapshot.
 
 Recovery now accumulates pacing credit at the RTT/congestion-window rate, capped
 at the initial ten-packet window and independently constrained by congestion.
@@ -1283,5 +1281,20 @@ CI shares one six-RID native build across ordinary Unix tests and package consum
 source-build tests copy only their verified platform artifact through a test-only
 opt-in. Package-mode validation rejects manual copying. Complete CI/Publish input
 assembly verifies seven packages and all six native RIDs; configured jobs still
-require final-head execution. Public default selection remains on the previous
-provider pending the capability/platform transition. No release is authorized.
+require final-head execution. CI also passes that exact seven-package artifact to
+the reusable ClamAV/YARA-X scan, including native bytes. The standalone six-package
+source/managed scan remains required. Publish likewise requires the seventh
+runtime package in its scan input. No release is authorized.
+
+
+Ordinary unmerged `EmbedIOHttp3` / `EmbedIOCombined` construction now selects
+EmbedIO.Quic through the public WebServer API. Startup checks a 64-bit desktop
+TLS path directly: Schannel requires Windows 11 / Server 2022 and later, while
+Linux/macOS must load the expected private ABI/version. Missing Unix libraries
+fail before binding; the server no longer needs BCL QUIC to be available on this
+path. Normal package consumers prove portable/RID/AOT delivery and missing-runtime
+refusal without an injected binding. The private macOS build now targets 14.0;
+metadata checks do not substitute for downlevel runtime execution. Released v2.16.0
+and the remaining internal comparison path still use the previous provider.
+Final platform acceptance, WebTransport/browser integration, lifetime/latency
+work and the complete old-provider retirement/issue audit remain outstanding.

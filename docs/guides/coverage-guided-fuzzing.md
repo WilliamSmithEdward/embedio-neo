@@ -143,5 +143,6 @@ The QUIC development core participates in the existing fuzz campaigns. See the
 [development and testing record](../project/quic-development-and-testing.md) for
 all eight targets, scheduled socket dispatch/output ownership and asynchronous application wake-ups, multi-connection
 traces, managed coverage evidence, native TLS
-mutation scope and extensive local commands. This does not activate a production
-provider or remove existing HTTP/3/MsQuic coverage.
+mutation scope and extensive local commands. The unmerged ordinary HTTP/3 binding
+now selects EmbedIO.Quic; legacy comparison coverage remains until replacement
+acceptance and removal. Fuzz configuration alone does not establish that acceptance.

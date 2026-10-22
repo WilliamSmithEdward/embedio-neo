@@ -494,9 +494,11 @@ namespace EmbedIO
 #if NET10_0_OR_GREATER
             if (
                 (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                && System.Net.Quic.QuicListener.IsSupported
+                && (!native || System.Net.Quic.QuicListener.IsSupported)
             )
             {
+                if (!native) Net.Internal.Http3.EmbedIOQuicTls.EnsureSupported();
+
                 if (certificateSource != null)
                     return combined
                         ? new CombinedHttpListener(certificateSource, native, bodyPolicy)
