@@ -546,7 +546,7 @@ internal sealed class EnduranceSampler : IAsyncDisposable
             cpuSeconds = process.TotalProcessorTime.TotalSeconds,
             userCpuSeconds = process.UserProcessorTime.TotalSeconds,
             workingSetBytes = process.WorkingSet64,
-            privateBytes = process.PrivateMemorySize64,
+            privateBytes = MacProcess.PrivateBytes(process),
             managedHeapBytes = GC.GetTotalMemory(false),
             gcHeapSizeBytes = info.HeapSizeBytes,
             gcCommittedBytes = info.TotalCommittedBytes,
@@ -558,7 +558,7 @@ internal sealed class EnduranceSampler : IAsyncDisposable
             gcCollections = new[] { GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2) },
             gcPauseMilliseconds = GC.GetTotalPauseDuration().TotalMilliseconds,
             allocatedBytes = GC.GetTotalAllocatedBytes(false),
-            handles = process.HandleCount,
+            handles = MacProcess.Handles(process),
             threads = process.Threads.Count,
             threadPoolThreads = ThreadPool.ThreadCount,
             threadPoolPending = ThreadPool.PendingWorkItemCount,
@@ -646,6 +646,38 @@ internal static class GuestMemory
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool GlobalMemoryStatusEx(ref MemoryStatus status);
+    }
+}
+
+// .NET reports 0 for HandleCount and PrivateMemorySize64 on macOS. There the open file
+// descriptors stand in for handles, and the physical footprint (what Activity Monitor calls
+// Memory: dirty and compressed private pages) stands in for private bytes.
+internal static class MacProcess
+{
+    internal static long PrivateBytes(Process process)
+    {
+        if (!OperatingSystem.IsMacOS()) return process.PrivateMemorySize64;
+        var info = new byte[NativeMethods.RusageInfoV4Bytes];
+        return NativeMethods.proc_pid_rusage(Environment.ProcessId, NativeMethods.RusageInfoV4, info) == 0
+            ? (long)BitConverter.ToUInt64(info, NativeMethods.PhysFootprintOffset)
+            : -1;
+    }
+
+    internal static int Handles(Process process) =>
+        OperatingSystem.IsMacOS() ? Directory.GetFileSystemEntries("/dev/fd").Length : process.HandleCount;
+
+    private static class NativeMethods
+    {
+        internal const int RusageInfoV4 = 4;
+
+        // sizeof(struct rusage_info_v4) is 296; ri_phys_footprint follows the 16-byte UUID
+        // and seven 64-bit counters in every version.
+        internal const int RusageInfoV4Bytes = 296;
+        internal const int PhysFootprintOffset = 72;
+
+        [DllImport("libproc.dylib")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+        internal static extern int proc_pid_rusage(int pid, int flavor, byte[] buffer);
     }
 }
 

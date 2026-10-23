@@ -418,6 +418,10 @@ Evidence in the output directory:
   server TCP connections by state, available physical memory and machine busy CPU.
   `staleGenerationRequests` counts requests or WebSocket messages handled by a server
   instance that had already been drained and replaced; any nonzero value fails the step.
+  .NET reports zero handles and private bytes on macOS, so there `handles` counts open
+  file descriptors and `privateBytes` is the physical footprint from `proc_pid_rusage`
+  (Activity Monitor's Memory column). Available physical memory is recorded on Windows
+  only (-1 elsewhere).
 - `steps.jsonl`: per step the samples at load start and stop, the drain/restart
   results, the quiesced snapshot, quiesce time, the machine TCP census and health.
   On Windows each quiesced snapshot also has `nativeHeaps`: allocated, committed and
