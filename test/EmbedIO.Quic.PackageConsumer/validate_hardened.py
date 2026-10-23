@@ -11,7 +11,9 @@ The hardened runtime enables library validation: a process may load only librari
 by Apple or with its own Team ID. An ad-hoc signature (--identity -, the default) has no
 Team ID, so ad-hoc apps need com.apple.security.cs.disable-library-validation, and a
 control without it must be refused with "different Team IDs", which shows the hardened
-runtime was enforced. With a Developer ID identity, every file is signed by one team and
+runtime was enforced. Library validation needs System Integrity Protection: where
+csrutil reports it disabled, as on some hosted runners, the controls are recorded, not
+required. With a Developer ID identity, every file is signed by one team and
 the AOT app runs with no entitlements; JIT needs com.apple.security.cs.allow-jit either way.
 """
 from __future__ import annotations
@@ -98,6 +100,12 @@ def validate(args):
             "The feed's native runtime differs from the one the consumers were checked with")
     args.output.mkdir(parents=True, exist_ok=False)
     adhoc = args.identity == "-"
+    # Library validation is enforced only with System Integrity Protection on. Hosted macOS
+    # runners may have it off, and there the controls below load the library; they are then
+    # recorded rather than required.
+    sip = subprocess.run(["csrutil", "status"], capture_output=True, text=True).stdout.strip()
+    enforced = "enabled" in sip.lower() and "disabled" not in sip.lower()
+    controls = {}
     steps = []
     environment = {**os.environ, "NUGET_PACKAGES": str(args.output / "nuget"),
                    "DOTNET_NOLOGO": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
@@ -110,9 +118,15 @@ def validate(args):
         if expect_failure is None:
             require(result.returncode == 0, "Hardened step failed: " + name)
         else:
-            require(result.returncode != 0, "Hardened control unexpectedly passed: " + name)
-            stderr = (args.output / name / "host.stderr.log").read_text(encoding="utf-8", errors="replace")
-            require(expect_failure in stderr, "Hardened control failed for another reason: " + name)
+            stderr_log = args.output / name / "host.stderr.log"
+            stderr = stderr_log.read_text(encoding="utf-8", errors="replace") if stderr_log.exists() else ""
+            refused = result.returncode != 0 and expect_failure in stderr
+            controls[name] = "refused" if refused else "loaded" if result.returncode == 0 else "failed"
+            if enforced:
+                require(result.returncode != 0, "Hardened control unexpectedly passed: " + name)
+                require(expect_failure in stderr, "Hardened control failed for another reason: " + name)
+            else:
+                require(result.returncode == 0 or refused, "Hardened control failed for another reason: " + name)
 
     def verify(entry, name, missing=False, expect_failure=None):
         command = [str(args.peer), str(ROOT / "test/EmbedIO.Quic.PackageConsumer/verify.py"), "--entry", str(entry),
@@ -194,12 +208,14 @@ def validate(args):
     result = {"passed": True, "rid": args.rid, "identity": "ad-hoc" if adhoc else "developer-identity",
               "macos": {key.strip(): value.strip() for key, value in (line.split(":", 1) for line in sw_vers.splitlines() if ":" in line)},
               "nativeSha256": receipt["nativeSha256"], "sourceCommit": receipt["sourceCommit"],
+              "systemIntegrityProtection": sip, "libraryValidationEnforced": enforced, "controls": controls,
               "signatures": signatures, "steps": steps,
               "scope": ("Signed with the hardened runtime and checked by codesign --verify --strict: the Native AOT consumer "
                         "as an .app bundle and a self-contained JIT consumer, all cipher profiles and the missing-runtime "
                         "control. Not notarized, not Gatekeeper-assessed, not App Sandbox.")}
     (args.output / "receipt.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-    print(json.dumps({"passed": True, "rid": args.rid, "identity": result["identity"], "steps": len(steps)}), flush=True)
+    print(json.dumps({"passed": True, "rid": args.rid, "identity": result["identity"], "libraryValidationEnforced": enforced,
+                      "controls": controls, "steps": len(steps)}), flush=True)
 
 
 def main():

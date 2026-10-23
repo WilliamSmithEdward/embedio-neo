@@ -2739,7 +2739,10 @@ with `--identity -`, the default, both layouts get
 `com.apple.security.cs.allow-jit`. A control of each without library validation
 disabled must be refused, and its error must say the mapping process and the library
 "have different Team IDs". That shows the hardened runtime was enforced, and that
-nothing else stops the library loading.
+nothing else stops the library loading. Library validation needs System Integrity
+Protection. On GitHub's `macos-26` image the AOT control loaded the library in run
+`40008522741`, so the script records `csrutil status` and requires the refusals only
+where it reports SIP enabled; elsewhere it records whether each control loaded.
 
 On an Apple M5 Pro with macOS 27.0.1 (26A434), SDK 10.0.402 and runtime 10.0.13,
 against CI run `40000994026`'s packages from `ded53d80`, all 12 steps passed. The AOT
