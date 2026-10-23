@@ -142,7 +142,7 @@ for a complete app you can run, then choose files or controllers as needed.
 
 - [WebSocket startup messages](user-reports/websocket-startup-messages.md): send immediately after connection, initialization ordering, cleanup and historical subscription-race validation.
 - [Managed WebSocket close acknowledgements](user-reports/managed-websocket-close-acknowledgements.md): issue #184 reproduction, receive completion and validation limits.
-- [Windows native WebSocket shutdown](user-reports/windows-native-websocket-shutdown.md): concurrent close, cancellation and the released .NET 11 recheck.
+- [Windows native WebSocket shutdown](user-reports/windows-native-websocket-shutdown.md): the legacy Microsoft-listener close workaround. v2 removed that listener, so its .NET 11 recheck no longer applies.
 - [UWP browser access](user-reports/uwp-browser-access.md): inbound/outbound isolation, scoped diagnostics and HTML/API/session verification.
 - [Unity custom diagnostics](user-reports/unity-custom-diagnostics.md): trace destinations, UI handoff and private-key HTTPS diagnostics.
 - [Argument validation](user-reports/argument-validation.md): built-in guards, legacy contracts and the fluent-validator proposal decision.
