@@ -257,9 +257,9 @@ session ended without a close, for example when the connection was lost.
 When the client's connection ends before the session does, the request is canceled
 as well. A call waiting with the request's token then either returns as it does at
 the end of a session, with `null`, or throws `OperationCanceledException`,
-depending on which the server notices first. Firefox 157 ends sessions this way: it
-closes its connection right after the page calls `close()`, so the server records
-no close code. Safari 27 sends no close capsule either; its session stream ends,
+depending on which the server notices first. Firefox ends sessions this way, 157 on
+Linux and 158 on macOS: it closes its connection right after the page calls
+`close()`, so the server records no close code. Safari 27 sends no close capsule either; its session stream ends,
 and the server records no close code.
 
 During a graceful drain the server sends each session a drain capsule, asking its
@@ -336,10 +336,10 @@ On macOS 27.0.1, the same page ran against the complete program above:
 | Chromium 152 (the Claude desktop app's browser) | draft-02 | Passed with 2.17.0 and with draft-14 support; the server recorded the close code |
 | Safari 27.0.1 | draft-14 | Passed with draft-14 support; failed with 2.17.0, which does not speak it |
 | Playwright WebKit 27.2 | draft-14 | The same as Safari |
+| Firefox 158.0.1 | draft-02 | Passed with 2.17.0 and with draft-14 support; the server recorded no close code, as on Linux |
 
 Each passing session echoed a datagram, a bidirectional stream and a unidirectional
-stream and closed with the page's code and reason. Firefox on macOS was not tested:
-Playwright 1.64.0's Firefox build did not start on macOS 27. The
+stream and closed with the page's code and reason. The
 [development record](../project/quic-development-and-testing.md) has the details.
 
 Not implemented: application protocol negotiation with `WT-Available-Protocols` and

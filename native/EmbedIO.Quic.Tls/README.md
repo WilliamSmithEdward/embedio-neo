@@ -44,7 +44,7 @@ identifiers. They passed once on macOS 14, and CI also runs them on the oldest
 glibc and musl that .NET 10 supports ([Oldest glibc and musl](#oldest-glibc-and-musl)).
 CI also runs them as ad-hoc signed hardened-runtime macOS apps, Native AOT and JIT
 ([Hardened-runtime macOS apps](../../docs/project/quic-development-and-testing.md#hardened-runtime-macos-apps));
-signing with a Developer ID is not validated.
+signing with a Developer ID is not validated, since the project has none.
 See [the development record](../../docs/project/quic-development-and-testing.md).
 
 ## Issuer chains and ownership checks
