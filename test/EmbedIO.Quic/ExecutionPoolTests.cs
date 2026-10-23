@@ -9,6 +9,7 @@
             await LimitsAndFailuresAsync().ConfigureAwait(false);
             await ShutdownRaceAsync().ConfigureAwait(false);
             await ShutdownFailuresAsync().ConfigureAwait(false);
+            await QueueDelayAsync().ConfigureAwait(false);
             await ConnectionOwnerTests
                 .RunAsync()
                 .ConfigureAwait(false);
@@ -350,6 +351,51 @@
                     .DisposeAsync()
                     .ConfigureAwait(false);
                 Check(cleaned == 2 && pool.Active == 0, "bounded workers clean once");
+            }
+
+            finally
+            {
+                release.Set();
+                await pool
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+            }
+        }
+
+        // Only a turn waiting for a worker counts: an idle pool and a running turn report
+        // no delay, a queued turn's wait grows while the worker is busy, and draining resets it.
+        private static async Task QueueDelayAsync()
+        {
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var pool = new QuicExecutionPool(1, 4);
+
+            try
+            {
+                var busy = pool.Register(
+                    () =>
+                    {
+                        entered.Set();
+                        Check(release.Wait(TimeSpan.FromSeconds(10)), "delay turn released");
+                    },
+                    static () => { }
+                );
+                var waiting = pool.Register(static () => { }, static () => { });
+                Check(pool.QueueDelay == TimeSpan.Zero, "idle pool has no queue delay");
+                Check(busy.Wake() && entered.Wait(TimeSpan.FromSeconds(10)), "only worker busy");
+                Check(pool.QueueDelay == TimeSpan.Zero, "a running turn alone is no wait");
+                Check(waiting.Wake(), "second turn queued");
+                await Task
+                    .Delay(40)
+                    .ConfigureAwait(false);
+                Check(pool.QueueDelay >= TimeSpan.FromMilliseconds(30), "queued turn's wait measured while the worker is busy");
+                release.Set();
+                using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+                while (pool.QueueDelay != TimeSpan.Zero)
+                    await Task
+                        .Delay(1, stop.Token)
+                        .ConfigureAwait(false);
             }
 
             finally

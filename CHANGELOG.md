@@ -21,6 +21,13 @@
   unchanged. `WebServerOptions.AdvertiseHttp3`, or `WithoutHttp3Advertisement()`,
   turns it off. `EmbedIO` and `EmbedIOHttp3` mode send no Alt-Svc. See
   [Combined TCP and QUIC hosting](docs/guides/http3.md#alt-svc).
+- An HTTP/3 endpoint refuses a new connection before any TLS work while it holds 768
+  connections, while its queued QUIC work, TLS handshakes included, waits longer than
+  250 ms, or while the listener has no room for another connection. The client
+  receives `CONNECTION_REFUSED` (RFC 9000 section 5.2.2) and fails at once. Before,
+  it retransmitted until its handshake timed out, or completed the handshake only to
+  be closed with `H3_EXCESSIVE_LOAD`. The server logs refusals as a warning at most
+  every ten seconds. See [overload](docs/guides/http3.md#overload).
 
 ## [2.17.0] - 2026-10-22
 

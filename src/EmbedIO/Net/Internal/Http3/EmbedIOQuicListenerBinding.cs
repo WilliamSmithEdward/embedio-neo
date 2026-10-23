@@ -9,6 +9,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using EmbedIO.Diagnostics;
 using EmbedIO.Internal;
 using EmbedIO.Quic;
 
@@ -38,6 +39,12 @@ namespace EmbedIO.Net.Internal.Http3
         private Task? _acceptanceStopped;
         private int _accepting = 1;
         private long _datagramPathErrors;
+        private int _reportedRefusals;
+        private long _refusalReport;
+
+        // New connections are refused while queued QUIC work, TLS included, waits longer
+        // than this, as MsQuic's workers bound their queue delay by default.
+        internal const double QueueDelayBoundMilliseconds = 250;
 
         // macOS reports no destination on a dual-mode socket, and .NET's ReceiveMessageFrom
         // refuses such a socket there. Its datagrams are attributed to the bound address.
@@ -73,7 +80,9 @@ namespace EmbedIO.Net.Internal.Http3
                     handshakeTimeout: 10000,
                     outputPacketCapacity: 4096,
                     outputByteCapacity: 4194304,
-                    admissionAttemptsPerSecond: 0
+                    admissionAttemptsPerSecond: 0,
+                    refuseConnections: true,
+                    queueDelayBound: QueueDelayBoundMilliseconds
                 );
                 _loop = Task.Run(RunAsync);
             }
@@ -98,12 +107,43 @@ namespace EmbedIO.Net.Internal.Http3
                 if (failure?.Length > 4096) failure = failure[..4096];
 
                 return FormattableString.Invariant(
-                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};issued-routes={_connections.IssuedRoutes};datagram-path-errors={DatagramPathErrors};last-rejection={failure}"
+                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};refused={_connections.Refused};refused-at-capacity={_connections.RefusedAtCapacity};refused-for-delay={_connections.RefusedForQueueDelay};refused-for-http3={_connections.RefusedForApplication};unsent-refusals={_connections.UnsentRefusals};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};issued-routes={_connections.IssuedRoutes};datagram-path-errors={DatagramPathErrors};last-rejection={failure}"
                 );
             }
         }
 
         internal long DatagramPathErrors => Interlocked.Read(ref _datagramPathErrors);
+
+        // The session counts a connection once its accept loop takes it from this binding, so
+        // the ones admitted but not yet created, and the ones waiting to be accepted, are
+        // passed along.
+        internal override void LimitAdmission(Func<int, bool> saturated) =>
+            _connections.Saturated = () => saturated(_connections.Admitting + _accepted.Reader.Count);
+
+        // Refusals are logged at most every ten seconds, by reason, with the queue delay and
+        // the open connections, so an operator can see which bound engaged.
+        private void ReportRefusals()
+        {
+            var capacity = _connections.RefusedAtCapacity;
+            var delay = _connections.RefusedForQueueDelay;
+            var http3 = _connections.RefusedForApplication;
+            var refused = capacity + delay + http3;
+
+            if (refused == _reportedRefusals) return;
+
+            var now = Environment.TickCount64;
+
+            if (_refusalReport != 0 && now - _refusalReport < 10000) return;
+
+            FormattableString
+                .Invariant(
+                    $"HTTP/3 on {_local} refused new connections: {refused - _reportedRefusals} since the last report. Since start: {capacity} with all 768 connection slots in use, {delay} while queued QUIC work waited longer than {QueueDelayBoundMilliseconds:F0} ms, {http3} while the HTTP/3 listener had no room, {_connections.UnsentRefusals} of them unanswered because the refusal budget or send queue was full. Queue delay now {_connections.QueueDelay.TotalMilliseconds:F0} ms; open connections: {_connections.Active}."
+                )
+                .Warn(nameof(EmbedIOQuicListenerBinding));
+            _reportedRefusals = refused;
+            _refusalReport = now;
+        }
+
         internal bool IsAccepting => Volatile.Read(ref _accepting) != 0;
         internal IPEndPoint LocalEndPoint => QuicConnectionEndpoints.Copy(_local);
 
@@ -266,6 +306,7 @@ namespace EmbedIO.Net.Internal.Http3
                         if (!await tick.ConfigureAwait(false)) break;
 
                         _connections.Tick();
+                        ReportRefusals();
                         tick = timer
                             .WaitForNextTickAsync(_stop.Token)
                             .AsTask();

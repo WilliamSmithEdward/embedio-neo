@@ -216,12 +216,25 @@ combine their prefixes/modules in one WebServer instead.
 
 All bindings must succeed before accept loops start. Failed startup releases its
 earlier bindings. Failed peer TLS handshakes do not stop healthy acceptance.
-The listener bounds pending application contexts at 256, active connections at
-256, and each connection's inbound request-stream credit at 128. These limits
-are internal defaults in this increment, not tuned performance recommendations.
-Each stream the client opens must complete its header within
-`RequestHeadersTimeout`, 30 seconds by default; see
-[connection limits](request-limits.md#connection-limits).
+The listener bounds pending application contexts at 256, connections at 256 (see
+below), and each connection's inbound request-stream credit at 128. These limits are
+internal defaults, not tuned performance recommendations. Each stream the client
+opens must complete its header within `RequestHeadersTimeout`, 30 seconds by
+default; see [connection limits](request-limits.md#connection-limits).
+
+<a id="overload"></a>
+Each UDP endpoint holds at most 768 QUIC connections, and their work, TLS handshakes
+included, runs on at most eight workers. A new connection is refused before any TLS
+work starts while the endpoint holds 768 connections, while queued work waits longer
+than 250 ms (the bound MsQuic's workers use by default), or while the listener has no
+room for it: its established connections and those still in their handshake fill its
+256 connection slots. The client receives an Initial packet with
+`CONNECTION_REFUSED` (RFC 9000 section 5.2.2) and fails at once. Established
+connections carry on. The server logs refusals as a warning at most every ten
+seconds, by reason, with the queue delay and the open connections. This is
+unreleased. In 2.17.0 a full endpoint drops new connections' packets until the
+clients' handshakes time out, and a connection the listener has no room for
+completes its TLS handshake before it is closed with `H3_EXCESSIVE_LOAD`.
 
 `Stop` and disposal cancel active requests, release pending accepts and close
 bindings. A directly used `IHttpListener` can restart after Stop; WebServer itself

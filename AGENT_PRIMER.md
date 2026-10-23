@@ -380,6 +380,11 @@ Select with `options.WithMode(HttpListenerMode.X)`:
   `Alt-Svc` is kept; `WithoutHttp3Advertisement()` turns it off. `EmbedIOHttp3`
   advertises nothing; its clients must ask for HTTP/3. See the
   [HTTP/3 guide](docs/guides/http3.md#alt-svc).
+- Under overload an HTTP/3 endpoint refuses new connections with
+  `CONNECTION_REFUSED` before any TLS work: at 768 connections, while queued QUIC
+  work waits more than 250 ms, or while established and handshaking connections fill
+  the listener's 256 slots (source after 2.17.0, unreleased). Clients see the failure
+  at once. See [overload](docs/guides/http3.md#overload).
 
 The HTTP/3 listener serves opt-in WebTransport sessions:
 `WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a

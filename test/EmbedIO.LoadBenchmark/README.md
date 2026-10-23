@@ -186,6 +186,19 @@ dotnet <runner>/EmbedIO.LoadBenchmark.dll quic-churn --output <fresh dir> [--eng
 
 See [HTTP/3 handshake and latency on a less loaded host](../../docs/project/http3-quiet-host-validation.md).
 
+Past the server's capacity the same mode shows how it sheds load. On two server CPUs,
+`--engines embedio --rates 250,1000,2000,4000 --phase-seconds 15 --server-cpus 0-1`
+overloads EmbedIO's HTTP/3 listener, and each failure keeps its error, so refusals
+(`ConnectionRefused`), connections closed after their handshake (`ConnectionAborted`
+with application error 263, H3_EXCESSIVE_LOAD) and handshake timeouts count apart. The
+client stops starting attempts while `--max-outstanding` of them (512 by default) are in
+flight, so a server that fails attempts quickly is offered more of them than one that
+fails them slowly; with `--max-outstanding 8192` a server that refuses at once faced
+every attempt at 2,000 and 4,000 per second. Set `EMBEDIO_BENCH_WARNINGS=1` to write
+EmbedIO's warnings, including the listener's refusal counts by reason, to the server's
+stderr log. See
+[Bounded TLS work under load](../../docs/project/quic-development-and-testing.md#bounded-tls-work-under-load).
+
 ## Comparing results against A/A noise
 
 `scripts/compare_load_benchmark.py <result dir> --reference baseline --aa <A/A dir>` prints each
