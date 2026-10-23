@@ -35,6 +35,9 @@ namespace EmbedIO.Net.Internal
         // Body bytes handed to the exchange, for telemetry.
         internal long SentBodyBytes => Volatile.Read(ref _sentBody);
 
+        // Alt-Svc value from combined hosting, sent unless the application set its own.
+        internal string? AlternativeService { get; set; }
+
         private bool _tunnel;
         private bool _extendedConnectAccepted;
         private bool _extendedConnectRejected;
@@ -253,6 +256,9 @@ namespace EmbedIO.Net.Internal
             }
 
             if (Headers[HttpHeaderNames.Server] == null) Headers[HttpHeaderNames.Server] = WebServer.Signature;
+
+            if (AlternativeService != null && Headers[HttpHeaderNames.AltSvc] == null)
+                Headers[HttpHeaderNames.AltSvc] = AlternativeService;
 
             if (Headers[HttpHeaderNames.Date] == null)
                 Headers[HttpHeaderNames.Date] = HttpResponseFieldSections.CurrentDate();

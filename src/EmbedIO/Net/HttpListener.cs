@@ -75,6 +75,9 @@ namespace EmbedIO.Net
         // Records the connections of the endpoints this listener opens. Set before Start.
         internal EmbedIO.Internal.ServerTelemetry? Telemetry { get; set; }
 
+        // Set by combined hosting: responses advertise the HTTP/3 endpoint on the request's port. Set before Start.
+        internal bool AdvertiseHttp3 { get; set; }
+
         /// <inheritdoc />
         public bool IsListening => _coordinator.IsListening;
 
@@ -152,10 +155,25 @@ namespace EmbedIO.Net
 
         // Both return the handler's task when the server dispatches directly, or null when the request was queued for
         // GetContextAsync.
-        internal Task? RegisterContext(IHttpContextImpl context) => _coordinator.Register(context, null);
+        internal Task? RegisterContext(IHttpContextImpl context)
+        {
+            if (AdvertiseHttp3 && context is HttpListenerContext http1)
+                http1.HttpListenerResponse.AlternativeService = HttpResponseFieldSections.Http3Alternative(
+                    http1.Request.LocalEndPoint.Port
+                );
 
-        internal Task? RegisterMultiplexedContext(IHttpContextImpl context, HttpConnection connection) =>
-            _coordinator.Register(context, connection);
+            return _coordinator.Register(context, null);
+        }
+
+        internal Task? RegisterMultiplexedContext(IHttpContextImpl context, HttpConnection connection)
+        {
+            if (AdvertiseHttp3 && context.Response is MultiplexedResponse response)
+                response.AlternativeService = HttpResponseFieldSections.Http3Alternative(
+                    context.Request.LocalEndPoint.Port
+                );
+
+            return _coordinator.Register(context, connection);
+        }
 
         internal void UnregisterContext(IHttpContextImpl context) => _coordinator.Unregister(context);
 

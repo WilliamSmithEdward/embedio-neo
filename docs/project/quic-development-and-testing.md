@@ -1170,7 +1170,10 @@ Still open after the merge, each with its tracking issue:
    do the oldest glibc and musl that .NET 10 supports
    ([Oldest glibc and musl](#oldest-glibc-and-musl)).
    [#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524).
-6. Safari and browsers on macOS, and Alt-Svc discovery.
+6. Safari and browsers on macOS. Alt-Svc discovery is in the source after 2.17.0
+   (unreleased): `EmbedIOCombined` advertises HTTP/3, and a .NET client moves to
+   HTTP/3 after its first response
+   ([Combined TCP and QUIC hosting](../guides/http3.md#alt-svc)).
    [#525](https://github.com/WilliamSmithEdward/embedio-neo/issues/525).
 
 The list this replaced, kept for its history:

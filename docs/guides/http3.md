@@ -66,9 +66,10 @@ Validation with a publicly trusted certificate remains deferred at the owner's
 request; no certificate bypass or forced QUIC was used. This does not describe
 .NET or aioquic trust behavior.
 
-HTTP/3 uses UDP. This mode does not bind a TCP listener or accept HTTP/1/HTTP/2.
-It does not currently advertise Alt-Svc or configure DNS HTTPS records. Clients
-must explicitly select HTTP/3, or discovery must be arranged by the application.
+HTTP/3 uses UDP. This mode does not bind a TCP listener or accept HTTP/1/HTTP/2,
+so no earlier TCP response can advertise HTTP/3, and it configures no DNS HTTPS
+records. Clients must select HTTP/3 explicitly, or the application arranges
+discovery. Combined mode, below, advertises HTTP/3 itself.
 Any network permission must allow the intended UDP endpoint.
 
 ## Combined TCP and QUIC hosting
@@ -86,6 +87,18 @@ reject this mode. Only
 HTTPS prefixes are accepted. Allow the intended TCP and UDP endpoints in the
 host's network policy. The certificate and client trust requirements above apply.
 
+<a id="alt-svc"></a>
+Combined mode advertises HTTP/3 the way Kestrel does. Every response, on HTTP/1.1,
+HTTP/2 and HTTP/3, carries `Alt-Svc: h3=":8443"; ma=86400`, naming the port the
+request arrived on, which serves TCP and QUIC alike, and asking clients to remember
+it for a day. Browsers, and .NET clients with `RequestVersionOrHigher`, then send
+later requests over HTTP/3: in the tests a .NET client's first request used HTTP/2
+and the next ten used HTTP/3. An `Alt-Svc` value the application sets, such as
+`clear`, is sent unchanged. `WithoutHttp3Advertisement()`, or
+`AdvertiseHttp3 = false`, sends none. Behind a proxy or port mapping that exposes a
+different port, set the header yourself or turn the advertisement off. 2.17.0 and
+earlier send no Alt-Svc; this is in the source after 2.17.0 and not yet released.
+
 Each transport has one accept pump feeding a shared queue of at most 256
 contexts. A pump can hold one additional context while waiting for queue space;
 this does not replace each protocol's connection, stream or input limits.
@@ -102,9 +115,9 @@ requests waiting in the bounded queue. Shared TCP endpoints keep accepting for
 sibling listeners while refusing new requests for the draining listener. V2 uses
 the original TCP HTTP engine; both inherited listener backends are removed.
 The ordinary HTTP/3 binding selects EmbedIO.Quic, and this source no
-longer contains the earlier providers. Alt-Svc discovery and resource and
-performance acceptance beyond the recorded endurance runs remain separate work;
-TCP replacement does not establish their completion.
+longer contains the earlier providers. Resource and performance acceptance beyond
+the recorded endurance runs remains separate work; TCP replacement does not
+establish it.
 
 <a id="runtime-memory-limitation"></a>
 ## Earlier provider runtime memory limitation
@@ -169,11 +182,10 @@ Console.WriteLine(await client.GetStringAsync("https://localhost:8443/hello"));
 
 A default .NET HttpClient does not opt into higher HTTP versions. Set
 DefaultVersionPolicy to RequestVersionOrHigher to permit negotiation above its
-requested version. HTTPS and working QUIC support are necessary for HTTP/3;
-application-arranged Alt-Svc can enable later requests to use it. Explicit
-RequestVersionExact remains useful when testing one protocol and refusing a
-fallback. These are client settings; Combined mode does not automatically emit
-Alt-Svc. See [.NET's version policy](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpversionpolicy?view=net-10.0).
+requested version. HTTPS and working QUIC support are necessary for HTTP/3,
+and the [Alt-Svc header](#alt-svc) that Combined mode sends lets later requests use
+it. Explicit RequestVersionExact remains useful when testing one protocol and
+refusing a fallback. See [.NET's version policy](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpversionpolicy?view=net-10.0).
 
 Python's standard [http.client](https://docs.python.org/3/library/http.client.html)
 uses HTTP/1.1. [HTTPX](https://www.python-httpx.org/http2/) offers optional HTTP/2,

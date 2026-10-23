@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `EmbedIOCombined` advertises its HTTP/3 endpoint as Kestrel does. Every HTTP/1.1,
+  HTTP/2 and HTTP/3 response carries `Alt-Svc: h3=":port"; ma=86400` for the port the
+  request arrived on, so browsers and .NET clients with `RequestVersionOrHigher` use
+  HTTP/3 after their first request. An `Alt-Svc` header the application sets is sent
+  unchanged. `WebServerOptions.AdvertiseHttp3`, or `WithoutHttp3Advertisement()`,
+  turns it off. `EmbedIO` and `EmbedIOHttp3` mode send no Alt-Svc. See
+  [Combined TCP and QUIC hosting](docs/guides/http3.md#alt-svc).
+
 ## [2.17.0] - 2026-10-22
 
 ### Added

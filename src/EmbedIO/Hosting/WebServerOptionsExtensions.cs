@@ -190,6 +190,23 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Stops <see cref="HttpListenerMode.EmbedIOCombined"/> from advertising its HTTP/3 endpoint in an
+        /// <c>Alt-Svc</c> header.
+        /// </summary>
+        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
+        /// <returns><paramref name="this"/> with its <see cref="WebServerOptions.AdvertiseHttp3">AdvertiseHttp3</see>
+        /// property set to <see langword="false"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
+        public static WebServerOptions WithoutHttp3Advertisement(this WebServerOptions @this)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+
+            @this.AdvertiseHttp3 = false;
+            return @this;
+        }
+
+        /// <summary>
         /// Sets the thumbprint of the X.509 certificate to use for SSL connections.
         /// </summary>
         /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
