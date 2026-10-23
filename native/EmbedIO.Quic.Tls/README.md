@@ -40,9 +40,9 @@ their previous provider. Runtime assets are built into the asset-only
 `EmbedIO-Neo.Quic.Native` package, first published with 2.17.0; the modern core depends on
 it, and .NET Standard dependencies remain unchanged. CI and Publish include all six
 runtime assets, and CI runs the package consumers on each of the six runtime
-identifiers. They passed once on macOS 14. Execution on the oldest glibc and musl
-versions the builds target, and macOS signing and hardened-runtime loading, are not
-validated.
+identifiers. They passed once on macOS 14, and CI also runs them on the oldest
+glibc and musl that .NET 10 supports ([Oldest glibc and musl](#oldest-glibc-and-musl)).
+macOS signing and hardened-runtime loading are not validated.
 See [the development record](../../docs/project/quic-development-and-testing.md).
 
 ## Issuer chains and ownership checks
@@ -170,10 +170,50 @@ packing requires `-p:EmbedIOQuicPreviewRid=<rid>`, feed sealing requires
 `--preview-rid <rid>` and the consumer requires `--preview`. These flags identify
 an incomplete development preview and are absent from distribution CI. Ordinary
 package validation requires all six RIDs. No preview is published by this workflow.
-The oldest glibc and musl versions and macOS signing and hardened-runtime loading
-remain unvalidated. Runtime results on all six RIDs and macOS 14, the malware scan of
-the seven-package payload, browser sessions and endurance runs are recorded in the
+macOS signing and hardened-runtime loading remain unvalidated. Runtime results on
+all six RIDs, the oldest glibc and musl, and macOS 14, the malware scan of the
+seven-package payload, browser sessions and endurance runs are recorded in the
 development record, and the earlier providers are removed.
+
+## Oldest glibc and musl
+
+.NET 10's own floors are glibc 2.27 on x64 and Arm64, from Ubuntu 18.04, and musl
+1.2.3, from Alpine 3.17 ([.NET 10 supported OS versions](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md#libc)).
+The glibc builds need no symbol newer than 2.27, which the audit checks, so .NET's
+floors are the oldest systems the package can run on. The portable workflow's
+`floor` job checks them on each Linux RID:
+
+1. `validate.py --consumers-only` builds and checks the portable, RID-specific and
+   Native AOT consumers on the runner, as the portable job does, and
+   `--peer-directory` keeps the independent peer's environment.
+2. `validate_floor.py` starts every consumer's server in a container of
+   `Dockerfile.floor-glibc` (Ubuntu 18.04, glibc 2.27) or `Dockerfile.floor-musl`
+   (Alpine 3.17, musl 1.2.3). The images hold only the OS packages .NET needs. The
+   script copies the one runtime the pinned SDK bundles and mounts it read-only, so
+   the server runs on the runtime that built it. The peer stays on the host and
+   reaches the server over the shared host network. Each consumer runs all three
+   cipher profiles and the missing-runtime control, and the script checks the libc
+   version the image reports.
+3. A Native AOT binary runs only on the glibc it was built against or a newer one
+   ([Native AOT deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)),
+   so on glibc the script publishes the AOT consumer again in the image's `build`
+   stage, on Ubuntu 18.04 with its own clang, and runs that binary. The musl AOT
+   consumer built on the validation image's current Alpine runs on Alpine 3.17
+   unchanged.
+
+The floor images are pinned by digest and package version and stay outside
+Dependabot, because they move only when .NET's floors do. To reproduce the glibc
+floor on a Linux host with Docker, after building the feed:
+
+```sh
+python3 test/EmbedIO.Quic.PackageConsumer/validate.py --rid linux-x64 --feed TestResults/quic-runtime-feed --output TestResults/quic-floor-consumers --consumers-only --peer-directory "$PWD/TestResults/quic-floor-peer"
+docker build -f native/EmbedIO.Quic.Tls/Dockerfile.floor-glibc --target runtime -t embedio-quic-floor native/EmbedIO.Quic.Tls
+docker build -f native/EmbedIO.Quic.Tls/Dockerfile.floor-glibc --target build -t embedio-quic-floor-build native/EmbedIO.Quic.Tls
+python3 test/EmbedIO.Quic.PackageConsumer/validate_floor.py --rid linux-x64 --feed TestResults/quic-runtime-feed --consumers TestResults/quic-floor-consumers --image embedio-quic-floor --build-image embedio-quic-floor-build --dotnet-root "$(dirname "$(readlink -f "$(command -v dotnet)")")" --peer "$PWD/TestResults/quic-floor-peer/bin/python" --output TestResults/quic-floor-validation
+```
+
+The musl floor builds its consumers in `Dockerfile.musl-validation` and takes that
+image's runtime, as the `floor` job in `quic-portable.yml` shows.
 
 
 ## Intel macOS test peer

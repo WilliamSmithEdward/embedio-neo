@@ -1127,8 +1127,9 @@ bounded and owned by the serialized connection. Windows retains Schannel.
 
 Released HTTP/3 provider selection and package dependency groups are unchanged;
 the development binding transition is described below.
-A separate unpublished native runtime package and package-only consumers are in
-development; oldest supported libc/musl and remaining RID validation are pending. Build instructions and the exact archive pin are in
+The native runtime package and the package-only consumers shipped in 2.17.0. CI runs
+the consumers on all six RIDs and on the oldest glibc and musl that .NET 10 supports.
+Build instructions and the exact archive pin are in
 [`native/EmbedIO.Quic.Tls`](native/EmbedIO.Quic.Tls/README.md). The portable CI job
 runs independent wire, SNI, publication, mutual TLS and bounded mutation checks on
 Linux and macOS; a configured job does not establish a successful run. Local Linux
@@ -1136,7 +1137,7 @@ validation passed 24 wire cases, six SNI cases, live publication, 24 certificate
 policy cases and 5,000 native-auth mutations, plus six common-factory JIT/NativeAOT
 wire cases and 3,072 wrapper-sanitizer ownership lifecycles. Those initial proofs
 used the recorded development build; final restricted native-build validation is
-recorded separately in the development guide. None of this work is released.
+recorded separately in the development guide. This work shipped in 2.17.0.
 
 The portable boundary's private ABI is now 2. Server credential preparation keeps
 runtime-discovered intermediates in order, preserves partial issuers and omits the
@@ -1181,9 +1182,9 @@ the package-based full harness retains the broader protocol and certificate suit
 A local musl x64 preview passed the initial six JIT/AOT cipher profiles; exact
 later repeats are recorded in the development guide. Single-RID preview switches
 are local development aids, not distribution acceptance. CI runs all six RIDs, and
-the final-payload scans, browser sessions and 30-minute endurance runs passed; the
-oldest glibc and musl, native signing and hardened-runtime loading, and latency
-acceptance remain open. These native package changes shipped in 2.17.0.
+the final-payload scans, browser sessions and 30-minute endurance runs passed. The
+consumers also run on glibc 2.27 and musl 1.2.3, .NET 10's floors; native signing,
+hardened-runtime loading and latency acceptance remain open. These native package changes shipped in 2.17.0.
 
 
 The development connection now honors authenticated peer `NEW_CONNECTION_ID`
@@ -1318,13 +1319,16 @@ Linux/macOS must load the expected private ABI/version. Missing Unix libraries
 fail before binding; the server no longer needs BCL QUIC to be available on this
 path. Normal package consumers prove portable/RID/AOT delivery and missing-runtime
 refusal without an injected binding. The private macOS build targets 14.0, and the
-package consumers passed on macOS 14. Packages through 2.16.1 use the previous
+package consumers passed on macOS 14. On Linux they also run on the oldest glibc and
+musl .NET 10 supports, glibc 2.27 (Ubuntu 18.04) and musl 1.2.3 (Alpine 3.17). A
+Native AOT app runs only on the glibc it was built against or a newer one, so
+publish it on the oldest distribution you deploy to. Packages through 2.16.1 use the previous
 provider; 2.17.0 and later no longer contain it. Tests that
 drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through the
 EmbedIO.Quic binding; the BCL client remains the independent test client.
 The [development record](docs/project/quic-development-and-testing.md) lists the
 platform, browser and endurance results, the open-issue audit and the work that
-remains, such as latency measurement and the oldest glibc and musl versions.
+remains, such as latency measurement and macOS hardened-runtime loading.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified

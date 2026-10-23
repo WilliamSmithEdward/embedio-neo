@@ -18,7 +18,10 @@ BCL QUIC availability. Missing Unix assets fail with `PlatformNotSupportedExcept
 an incompatible private ABI/version also fails before listening. The .NET Standard
 asset continues to reject HTTP/3. CI runs the package consumers on all six runtime
 identifiers, and they passed once on macOS 14, the oldest macOS the native build
-targets; the oldest glibc and musl versions it targets are untested. See
+targets. CI also runs them on the oldest glibc and musl that .NET 10 supports:
+glibc 2.27 (Ubuntu 18.04) and musl 1.2.3 (Alpine 3.17), on x64 and Arm64. A Native
+AOT application runs only on the glibc it was built against or a newer one, so
+publish it on the oldest distribution you deploy to. See
 [native runtime preparation](../../native/EmbedIO.Quic.Tls/README.md).
 
 For the provider in packages through 2.16.1, use a host where

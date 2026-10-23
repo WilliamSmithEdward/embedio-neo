@@ -1165,8 +1165,8 @@ Still open after the merge, each with its tracking issue:
    [#522](https://github.com/WilliamSmithEdward/embedio-neo/issues/522).
 4. Endurance longer than 30 minutes, and on macOS.
    [#523](https://github.com/WilliamSmithEdward/embedio-neo/issues/523).
-5. Execution on the oldest glibc and musl versions the native builds target, and
-   macOS signing and hardened-runtime loading.
+5. macOS signing and hardened-runtime loading. The oldest glibc and musl that .NET 10
+   supports now run in CI ([Oldest glibc and musl](#oldest-glibc-and-musl)).
    [#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524).
 6. Safari and browsers on macOS, and Alt-Svc discovery.
    [#525](https://github.com/WilliamSmithEdward/embedio-neo/issues/525).
@@ -2712,6 +2712,44 @@ the latest Xcode command line tools as the macOS prerequisite for Native AOT. Wi
 14.8.9, including the AOT publish, the AOT runs and the full protocol suites. Both
 runs came from throwaway branches, not a CI leg; GitHub retires the macOS 14 image
 on 2 November 2026.
+
+## Oldest glibc and musl
+
+.NET 10's own floors are glibc 2.27 on x64 and Arm64, from Ubuntu 18.04, and musl
+1.2.3, from Alpine 3.17 ([.NET 10 supported OS versions](https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md#libc)).
+The native glibc builds need no symbol newer than 2.27, which their audit checks, so
+these are the oldest systems the package can run on. The `floor` job in
+`quic-portable.yml` runs the package consumers there on all four Linux RIDs
+([#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524)):
+
+- The consumers are built and checked on the runner first, as in the portable job.
+  Then each consumer's server runs in a container of `Dockerfile.floor-glibc`
+  (Ubuntu 18.04, glibc 2.27-3ubuntu1.6) or `Dockerfile.floor-musl` (Alpine 3.17.10,
+  musl 1.2.3). The images hold only the packages .NET needs, and the one runtime the
+  pinned SDK bundles, 10.0.13, is mounted read-only. The aioquic peer stays on the
+  host. Each consumer runs all three cipher profiles and the missing-runtime control,
+  and the script checks the libc version each image reports.
+- On Ubuntu 18.04, .NET's own cryptography, which protects the QUIC packets, uses the
+  system OpenSSL 1.1.1 (1.1.1-1ubuntu2.1~18.04.23), the oldest OpenSSL .NET 10
+  supports. The native runtime keeps its statically linked OpenSSL 3.5.9 private, and
+  both worked in one process.
+- A Native AOT binary runs only on the glibc it was built against or a newer one
+  ([Native AOT deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)).
+  The AOT consumer published on Ubuntu 24.04 did not start on 18.04: the executable
+  itself needs `GLIBC_2.29` and `GLIBC_2.34`, which the native runtime does not. The
+  glibc floor therefore publishes its AOT consumer in the image's `build` stage, on
+  Ubuntu 18.04 with clang 6.0, the prerequisites Microsoft lists for 18.04 and later,
+  and runs that binary. On musl, the AOT consumer built on the validation image's
+  Alpine 3.24.2 (musl 1.2.6) ran on Alpine 3.17 unchanged.
+
+Before CI, the job's steps ran locally for linux-x64 and linux-musl-x64 in Docker
+against CI run `39898260505`'s packages from `a99319de`. The consumers passed on the
+current distributions (19 steps each), then on the floors: 14 steps on glibc 2.27,
+including the AOT publish there, and 12 on musl 1.2.3. Every run completed the
+consumer's whole request sequence, the request reset mid-response and the request
+after it included, and every missing-runtime control was rejected at server
+construction. The development host's protocol suites still run only on the current
+distributions.
 
 ## Last CI fixes
 
