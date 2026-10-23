@@ -199,6 +199,41 @@ EmbedIO's warnings, including the listener's refusal counts by reason, to the se
 stderr log. See
 [Bounded TLS work under load](../../docs/project/quic-development-and-testing.md#bounded-tls-work-under-load).
 
+## Cold start
+
+`cold` measures how a new server process answers its first requests. Every
+measurement starts a fresh server; one client process, started once and warmed by
+an excluded first iteration, sends the requests.
+
+```sh
+dotnet <runner>/EmbedIO.LoadBenchmark.dll cold --output <fresh dir> [--iterations 20] [--requests 32] \
+  [--transports h1,h1tls,h2tls,h3] [--engines candidate,candidate-r2r,baseline,kestrel] \
+  [--r2r-dir <ReadyToRun runner>] [--baseline-dir <baseline runner>] [--server-cpus 0-3] [--client-cpus 4-11]
+```
+
+Each measurement records the time from process start to the server's `READY`
+line, the process uptime when the listener had started, the server's own start
+time, the first request on a new connection, the second request, the median and
+maximum of the remaining requests on that connection, one request on a second
+connection, and the busy CPUs of the whole machine while it ran. Every response
+is checked. The engine order alternates by iteration, and `summary.md` gives each
+figure's median, 90th percentile and range.
+
+`--r2r-dir` adds the same runner published with ReadyToRun as `candidate-r2r`.
+Kestrel runs from the ASP.NET Core shared framework, which ships precompiled, so
+this separates EmbedIO's JIT time from the rest of its first request:
+
+```sh
+dotnet publish test/EmbedIO.LoadBenchmark/EmbedIO.LoadBenchmark.csproj -c Release -r <rid> \
+  --self-contained false -p:PublishReadyToRun=true -p:NuGetLockFilePath=<scratch>/r2r.lock.json \
+  -o <ReadyToRun runner>
+```
+
+A RID-specific restore rewrites lock files, so the command points them at a
+scratch file and leaves the repository's locks alone. `run` accepts the same
+ReadyToRun runner as `--baseline-dir` with `--modern-baseline`, to check that
+precompiling does not cost warm throughput or tail latency.
+
 ## Comparing results against A/A noise
 
 `scripts/compare_load_benchmark.py <result dir> --reference baseline --aa <A/A dir>` prints each

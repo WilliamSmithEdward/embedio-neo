@@ -53,6 +53,9 @@ internal static class ServerHost
         {
             var started = Stopwatch.StartNew();
             await server.StartAsync().ConfigureAwait(false);
+            // Process start to a listening server, before this harness hashes assemblies for READY.
+            double uptimeAtListening;
+            using (var self = Process.GetCurrentProcess()) uptimeAtListening = (DateTime.Now - self.StartTime).TotalMilliseconds;
             Control.Write("READY " + JsonSerializer.Serialize(new
             {
                 engine = settings.Engine,
@@ -61,6 +64,7 @@ internal static class ServerHost
                 protocol = settings.Protocol.ToString(),
                 tls,
                 startMilliseconds = started.Elapsed.TotalMilliseconds,
+                uptimeAtListeningMilliseconds = uptimeAtListening,
                 processId = Environment.ProcessId,
                 processorCount = Environment.ProcessorCount,
                 serverGc = GCSettings.IsServerGC,
