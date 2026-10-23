@@ -18,6 +18,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # The .NET CLI uploads telemetry from a background thread. On macOS a child it forks
+  # while that thread initializes libSystem's notify state aborts before exec, and
+  # dotnet then reports exit code 137 (#401). Every workflow that runs the CLI opts out.
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
 jobs:
   observe:
     name: Observe HTTP/1 closure (${{ matrix.os }})
