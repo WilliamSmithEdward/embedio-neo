@@ -1183,8 +1183,9 @@ A local musl x64 preview passed the initial six JIT/AOT cipher profiles; exact
 later repeats are recorded in the development guide. Single-RID preview switches
 are local development aids, not distribution acceptance. CI runs all six RIDs, and
 the final-payload scans, browser sessions and 30-minute endurance runs passed. The
-consumers also run on glibc 2.27 and musl 1.2.3, .NET 10's floors; native signing,
-hardened-runtime loading and latency acceptance remain open. These native package changes shipped in 2.17.0.
+consumers also run on glibc 2.27 and musl 1.2.3, .NET 10's floors, and as ad-hoc
+signed hardened-runtime macOS apps; Developer ID signing and latency acceptance
+remain open. These native package changes shipped in 2.17.0.
 
 
 The development connection now honors authenticated peer `NEW_CONNECTION_ID`
@@ -1322,13 +1323,17 @@ refusal without an injected binding. The private macOS build targets 14.0, and t
 package consumers passed on macOS 14. On Linux they also run on the oldest glibc and
 musl .NET 10 supports, glibc 2.27 (Ubuntu 18.04) and musl 1.2.3 (Alpine 3.17). A
 Native AOT app runs only on the glibc it was built against or a newer one, so
-publish it on the oldest distribution you deploy to. Packages through 2.16.1 use the previous
+publish it on the oldest distribution you deploy to. A hardened-runtime macOS app
+must sign `libembedio_quic_tls.dylib` with its own Team ID (library validation). JIT
+needs `com.apple.security.cs.allow-jit`; AOT should need nothing, but only ad-hoc
+signing is tested, and it also needs `com.apple.security.cs.disable-library-validation`. A refused
+library surfaces as `PlatformNotSupportedException` at server construction. Packages through 2.16.1 use the previous
 provider; 2.17.0 and later no longer contain it. Tests that
 drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through the
 EmbedIO.Quic binding; the BCL client remains the independent test client.
 The [development record](docs/project/quic-development-and-testing.md) lists the
 platform, browser and endurance results, the open-issue audit and the work that
-remains, such as latency measurement and macOS hardened-runtime loading.
+remains, such as latency measurement and Developer ID hardened-runtime loading.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified

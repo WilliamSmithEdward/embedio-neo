@@ -1165,8 +1165,10 @@ Still open after the merge, each with its tracking issue:
    [#522](https://github.com/WilliamSmithEdward/embedio-neo/issues/522).
 4. Endurance longer than 30 minutes, and on macOS.
    [#523](https://github.com/WilliamSmithEdward/embedio-neo/issues/523).
-5. macOS signing and hardened-runtime loading. The oldest glibc and musl that .NET 10
-   supports now run in CI ([Oldest glibc and musl](#oldest-glibc-and-musl)).
+5. Hardened-runtime loading with a Developer ID. Ad-hoc signed hardened apps, AOT and
+   JIT, now run in CI ([Hardened-runtime macOS apps](#hardened-runtime-macos-apps)), as
+   do the oldest glibc and musl that .NET 10 supports
+   ([Oldest glibc and musl](#oldest-glibc-and-musl)).
    [#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524).
 6. Safari and browsers on macOS, and Alt-Svc discovery.
    [#525](https://github.com/WilliamSmithEdward/embedio-neo/issues/525).
@@ -2712,6 +2714,54 @@ the latest Xcode command line tools as the macOS prerequisite for Native AOT. Wi
 14.8.9, including the AOT publish, the AOT runs and the full protocol suites. Both
 runs came from throwaway branches, not a CI leg; GitHub retires the macOS 14 image
 on 2 November 2026.
+
+## Hardened-runtime macOS apps
+
+`validate_hardened.py` signs the package consumers the way an application ships them
+and runs them with the hardened runtime ([#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524)).
+It takes `validate.py`'s output for the RID and builds two layouts:
+
+- The Native AOT consumer in an `.app` bundle, with the executable and
+  `libembedio_quic_tls.dylib` in `Contents/MacOS`. The dylib is signed first, then the
+  bundle with `--options runtime`, and `codesign --verify --strict` must accept it.
+- A self-contained JIT consumer as a flat directory. Its managed `.dll` files are not
+  code, and `codesign` refuses a bundle that has them in `Contents/MacOS`, so every
+  Mach-O file is signed separately and the apphost last, with the hardened runtime.
+
+Each runs the three cipher profiles and the missing-runtime control, and the script
+checks that every entry point carries the `runtime` flag and exactly the entitlements
+it asked for.
+
+The hardened runtime turns on library validation: the process may load only
+libraries signed by Apple or with its own Team ID. An ad-hoc signature has none, so
+with `--identity -`, the default, both layouts get
+`com.apple.security.cs.disable-library-validation`, and JIT also gets
+`com.apple.security.cs.allow-jit`. A control of each without library validation
+disabled must be refused, and its error must say the mapping process and the library
+"have different Team IDs". That shows the hardened runtime was enforced, and that
+nothing else stops the library loading.
+
+On an Apple M5 Pro with macOS 27.0.1 (26A434), SDK 10.0.402 and runtime 10.0.13,
+against CI run `40000994026`'s packages from `ded53d80`, all 12 steps passed. The AOT
+app needed no entitlement besides library validation: the native runtime has no JIT
+or writable executable memory, so `allow-jit` and `allow-unsigned-executable-memory`
+are not needed. The earlier experiments that led to the script:
+
+| Layout | Entitlements | Result |
+| --- | --- | --- |
+| AOT, ad-hoc | none | Refused: `libembedio_quic_tls.dylib` has a different Team ID |
+| AOT, ad-hoc | disable library validation | Passed |
+| JIT, framework-dependent | none or `allow-jit` | Refused before EmbedIO: Microsoft's `libhostfxr.dylib` has a different Team ID |
+| JIT, framework-dependent | disable library validation | CoreCLR failed to start (`0x80070008`) without `allow-jit` |
+| JIT, framework-dependent or self-contained | `allow-jit` and disable library validation | Passed |
+
+Each refusal ends in an unhandled `PlatformNotSupportedException` from server
+construction or a host error, so macOS writes a crash report for it.
+
+What remains is a Developer ID. With every file signed by one team, the AOT app should
+run with no entitlements and the JIT app with `allow-jit` only, but no Developer ID was
+available, so that has not run. `--identity` takes one. Notarization, Gatekeeper
+assessment and the App Sandbox are out of scope.
 
 ## Oldest glibc and musl
 

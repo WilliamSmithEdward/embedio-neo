@@ -42,7 +42,9 @@ it, and .NET Standard dependencies remain unchanged. CI and Publish include all 
 runtime assets, and CI runs the package consumers on each of the six runtime
 identifiers. They passed once on macOS 14, and CI also runs them on the oldest
 glibc and musl that .NET 10 supports ([Oldest glibc and musl](#oldest-glibc-and-musl)).
-macOS signing and hardened-runtime loading are not validated.
+CI also runs them as ad-hoc signed hardened-runtime macOS apps, Native AOT and JIT
+([Hardened-runtime macOS apps](../../docs/project/quic-development-and-testing.md#hardened-runtime-macos-apps));
+signing with a Developer ID is not validated.
 See [the development record](../../docs/project/quic-development-and-testing.md).
 
 ## Issuer chains and ownership checks
@@ -170,8 +172,8 @@ packing requires `-p:EmbedIOQuicPreviewRid=<rid>`, feed sealing requires
 `--preview-rid <rid>` and the consumer requires `--preview`. These flags identify
 an incomplete development preview and are absent from distribution CI. Ordinary
 package validation requires all six RIDs. No preview is published by this workflow.
-macOS signing and hardened-runtime loading remain unvalidated. Runtime results on
-all six RIDs, the oldest glibc and musl, and macOS 14, the malware scan of the
+Developer ID signing remains unvalidated. Runtime results on all six RIDs, the oldest
+glibc and musl, macOS 14 and ad-hoc signed hardened-runtime apps, the malware scan of the
 seven-package payload, browser sessions and endurance runs are recorded in the
 development record, and the earlier providers are removed.
 
