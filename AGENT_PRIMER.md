@@ -1191,8 +1191,8 @@ later repeats are recorded in the development guide. Single-RID preview switches
 are local development aids, not distribution acceptance. CI runs all six RIDs, and
 the final-payload scans, browser sessions and 30-minute endurance runs passed. The
 consumers also run on glibc 2.27 and musl 1.2.3, .NET 10's floors, and as ad-hoc
-signed hardened-runtime macOS apps; Developer ID signing and latency acceptance
-remain open. These native package changes shipped in 2.17.0.
+signed hardened-runtime macOS apps. Developer ID signing is not validated (the project
+has no Developer ID), and latency acceptance remains open. These native package changes shipped in 2.17.0.
 
 
 The development connection now honors authenticated peer `NEW_CONNECTION_ID`
@@ -1340,7 +1340,7 @@ drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through t
 EmbedIO.Quic binding; the BCL client remains the independent test client.
 The [development record](docs/project/quic-development-and-testing.md) lists the
 platform, browser and endurance results, the open-issue audit and the work that
-remains, such as latency measurement and Developer ID hardened-runtime loading.
+remains, such as latency measurement.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified
