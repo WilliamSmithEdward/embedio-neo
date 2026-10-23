@@ -1,0 +1,25 @@
+# The oldest glibc .NET 10 supports on x64 and Arm64: 2.27, from Ubuntu 18.04
+# (release-notes/10.0/supported-os.md in dotnet/core). The runtime stage has only the
+# OS packages .NET needs; validate_floor.py mounts the .NET runtime that built the
+# consumers. The build stage adds the Native AOT prerequisites Microsoft lists for
+# Ubuntu 18.04 and later, because an AOT binary runs only on the glibc it was built
+# against or a newer one. This floor is deliberately fixed and outside Dependabot:
+# move it when .NET's own glibc floor moves, and pin the new base digest and
+# package versions.
+FROM ubuntu:18.04@sha256:152dc042452c496007f07ca9127571cb9c29697f42acbfad72324b2bb2e43c98 AS runtime
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        libssl1.1=1.1.1-1ubuntu2.1~18.04.23 \
+        libicu60=60.2-3ubuntu3.2 \
+        tzdata=2023c-0ubuntu0.18.04 \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM runtime AS build
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        ca-certificates=20230311ubuntu0.18.04.1 \
+        clang=1:6.0-41~exp5~ubuntu1 \
+        zlib1g-dev=1:1.2.11.dfsg-0ubuntu2.2 \
+        libc6-dev=2.27-3ubuntu1.6 \
+        binutils=2.30-21ubuntu1~18.04.9 \
+    && rm -rf /var/lib/apt/lists/*

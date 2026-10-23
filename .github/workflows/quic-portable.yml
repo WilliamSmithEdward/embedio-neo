@@ -133,3 +133,92 @@ jobs:
           name: portable-quic-tls-${{ matrix.rid }}
           path: TestResults/quic-package-validation/
           if-no-files-found: error
+
+  # .NET 10's own floors are glibc 2.27 and musl 1.2.3. The consumers are built and checked
+  # on the runner's RID, then run in a container of that floor while the independent peer
+  # stays on the host (#524).
+  floor:
+    name: Oldest libc (${{ matrix.rid }})
+    needs: [package]
+    if: ${{ always() && !cancelled() && needs.package.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-24.04, rid: linux-x64, musl: false}
+          - {os: ubuntu-24.04-arm, rid: linux-arm64, musl: false}
+          - {os: ubuntu-24.04, rid: linux-musl-x64, musl: true}
+          - {os: ubuntu-24.04-arm, rid: linux-musl-arm64, musl: true}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: ${{ !matrix.musl }}
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: quic-runtime-feed
+          path: TestResults/quic-runtime-feed
+      - name: Run the package consumers on the oldest glibc or musl
+        shell: bash
+        env:
+          QUIC_RID: ${{ matrix.rid }}
+          QUIC_MUSL: ${{ matrix.musl }}
+        run: |
+          set -euo pipefail
+          python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
+          consumers=TestResults/quic-floor-consumers
+          peer="$PWD/TestResults/quic-floor-peer"
+          build=()
+          if [ "$QUIC_MUSL" = true ]; then
+            # Build and check the consumers on current Alpine, as the portable job does, and
+            # take the musl runtime they were built with from the same image.
+            docker build -f native/EmbedIO.Quic.Tls/Dockerfile.musl-validation -t embedio-quic-package-test native/EmbedIO.Quic.Tls
+            docker run --rm --cpus 3 --memory 6g --user "$(id -u):$(id -g)" \
+              --env HOME=/tmp/embedio-quic-consumer --env DOTNET_CLI_HOME=/tmp/embedio-quic-consumer \
+              --mount "type=bind,source=$PWD,target=/repo" -w /repo \
+              embedio-quic-package-test python3 test/EmbedIO.Quic.PackageConsumer/validate.py \
+              --rid "$QUIC_RID" --feed TestResults/quic-runtime-feed --output "$consumers" --consumers-only
+            sdk_container=$(docker create embedio-quic-package-test)
+            docker cp "$sdk_container:/usr/share/dotnet" TestResults/quic-floor-sdk
+            docker rm "$sdk_container"
+            dotnet_root="$PWD/TestResults/quic-floor-sdk"
+            dockerfile=native/EmbedIO.Quic.Tls/Dockerfile.floor-musl
+            # That peer was Alpine's; the host needs its own.
+            python3 -m venv "$peer"
+            "$peer/bin/python" -m pip --isolated install --require-hashes --only-binary=:all: \
+              -r test/EmbedIO.Conformance/drivers/requirements.txt
+          else
+            python3 test/EmbedIO.Quic.PackageConsumer/validate.py --rid "$QUIC_RID" --feed TestResults/quic-runtime-feed \
+              --output "$consumers" --consumers-only --peer-directory "$peer"
+            dotnet_root=$(dirname "$(readlink -f "$(command -v dotnet)")")
+            dockerfile=native/EmbedIO.Quic.Tls/Dockerfile.floor-glibc
+            # A Native AOT binary runs only on the glibc it was built against or a newer one,
+            # so the floor publishes its own AOT consumer.
+            docker build -f "$dockerfile" --target build -t embedio-quic-floor-build native/EmbedIO.Quic.Tls
+            build=(--build-image embedio-quic-floor-build)
+          fi
+          docker build -f "$dockerfile" --target runtime -t embedio-quic-floor native/EmbedIO.Quic.Tls
+          python3 test/EmbedIO.Quic.PackageConsumer/validate_floor.py --rid "$QUIC_RID" --feed TestResults/quic-runtime-feed \
+            --consumers "$consumers" --image embedio-quic-floor "${build[@]}" --dotnet-root "$dotnet_root" \
+            --peer "$peer/bin/python" --output TestResults/quic-floor-validation
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: quic-floor-${{ matrix.rid }}
+          path: |
+            TestResults/quic-floor-validation/
+            TestResults/quic-floor-consumers/*.log
+            TestResults/quic-floor-consumers/receipt.json
+            !TestResults/quic-floor-validation/dotnet/
+            !TestResults/quic-floor-validation/nuget/
+            !TestResults/quic-floor-validation/aot-floor/
+            !TestResults/quic-floor-validation/*-missing-runtime/
+          if-no-files-found: error

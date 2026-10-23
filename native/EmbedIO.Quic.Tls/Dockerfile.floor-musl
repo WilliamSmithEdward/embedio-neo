@@ -1,0 +1,13 @@
+# The oldest musl .NET 10 supports: 1.2.3, from Alpine 3.17
+# (release-notes/10.0/supported-os.md in dotnet/core). Only the OS packages .NET
+# needs are installed; the base image already has libssl3. validate_floor.py mounts
+# the .NET runtime that built the consumers. This floor is deliberately fixed and
+# outside Dependabot: move it when .NET's own musl floor moves, and pin the new base
+# digest and package versions.
+FROM alpine:3.17@sha256:8fc3dacfb6d69da8d44e42390de777e48577085db99aa4e4af35f483eb08b989 AS runtime
+RUN apk add --no-cache \
+        libgcc=12.2.1_git20220924-r4 \
+        libstdc++=12.2.1_git20220924-r4 \
+        icu-libs=72.1-r1 \
+        icu-data-full=72.1-r1 \
+        tzdata=2024a-r0

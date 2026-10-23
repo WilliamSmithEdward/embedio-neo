@@ -45,7 +45,7 @@ async def main(args):
         raise RuntimeError("Independent peer does not match the dependency lock")
     args.output.mkdir(parents=True, exist_ok=False)
     cert_path, key_path = certificate(args.output)
-    command = ([str(args.entry)] if args.native else [args.dotnet, str(args.entry)]) + [str(cert_path), str(key_path)]
+    command = args.launcher + ([str(args.entry)] if args.native else [args.dotnet, str(args.entry)]) + [str(cert_path), str(key_path)]
     if args.missing_tls:
         command.append("--missing-tls")
     process = await asyncio.create_subprocess_exec(*command, stdin=asyncio.subprocess.PIPE,
@@ -129,7 +129,7 @@ async def main(args):
     (args.output / "host.stdout.log").write_bytes(startup + stdout)
     (args.output / "host.stderr.log").write_bytes(stderr)
     result = dict(passed=failure is None, failure=failure, cipher=args.cipher, nativeAot=args.native,
-                  entrySha256=hashlib.sha256(args.entry.read_bytes()).hexdigest(), requests=requests,
+                  launcher=args.launcher, entrySha256=hashlib.sha256(args.entry.read_bytes()).hexdigest(), requests=requests,
                   peerVersion=expected[0], exit=process.returncode,
                   scope="Package-only references, verified TLS/cipher, generated controllers, bearer policy, bounded echo/rejection, request-abort propagation, healthy subsequent requests and owned cleanup.")
     (args.output / "receipt.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -142,7 +142,12 @@ if __name__ == "__main__":
     parser.add_argument("--entry", type=Path, required=True)
     parser.add_argument("--dotnet", default="dotnet")
     parser.add_argument("--native", action="store_true")
+    parser.add_argument("--launcher", type=json.loads, default=[],
+                        help="JSON array of arguments placed before the server command, such as a container run")
     parser.add_argument("--missing-tls", action="store_true")
     parser.add_argument("--cipher", choices=("AES_128_GCM_SHA256", "AES_256_GCM_SHA384", "CHACHA20_POLY1305_SHA256"), default="AES_128_GCM_SHA256")
     parser.add_argument("--output", type=Path, required=True)
-    raise SystemExit(asyncio.run(main(parser.parse_args())))
+    arguments = parser.parse_args()
+    if not isinstance(arguments.launcher, list) or not all(isinstance(item, str) for item in arguments.launcher):
+        parser.error("--launcher must be a JSON array of strings")
+    raise SystemExit(asyncio.run(main(arguments)))

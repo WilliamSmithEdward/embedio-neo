@@ -247,7 +247,10 @@ platform in the `aot-smoke-*` artifacts.
 The feature smoke host runs as Native AOT on Windows and Linux x64 only. The
 smaller HTTP/3 package consumer also publishes and runs as Native AOT on Linux x64
 and ARM64 (glibc and musl) and on macOS x64 and ARM64; mobile Native AOT has not
-been run. The smoke host checks one representative of each feature, not
+been run. On Linux it also runs on .NET 10's oldest glibc and musl. A Native AOT
+binary runs only on the glibc it was built against or a newer one, so CI publishes
+that glibc consumer on Ubuntu 18.04 itself; publish yours on the oldest distribution
+you deploy to. The smoke host checks one representative of each feature, not
 every option: for example, WebSockets over HTTP/2, the CLI and
 `EmbedIO.JsonServer` have not been exercised as Native AOT.
 

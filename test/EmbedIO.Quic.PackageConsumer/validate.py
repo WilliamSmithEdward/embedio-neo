@@ -106,7 +106,9 @@ def validate(args):
         SubElement(SubElement(mappings, "packageSource", key="nuget"), "package", pattern="*")
         config = args.output / "nuget.config"
         ElementTree(configuration).write(config, encoding="utf-8", xml_declaration=True)
-        peer_root = scratch / "peer"
+        # --peer-directory keeps the independent peer for validate_floor.py and validate_hardened.py.
+        peer_root = args.peer_directory or scratch / "peer"
+        require(not peer_root.exists(), "The peer directory already exists")
         venv.EnvBuilder(with_pip=True).create(peer_root)
         peer = str(peer_root / "bin/python")
         if peer_wheel:
@@ -155,40 +157,44 @@ def validate(args):
             if profile == "aot":
                 command += ["--native"]
             run(command, profile + "-missing-tls", environment, 30)
-        host_project = str(ROOT / "test/EmbedIO.Quic/EmbedIO.Quic.csproj")
-        host = args.output / "development-host"
-        properties = ["-p:EmbedIOQuicPackageVersion=" + version,
-                      "-p:NuGetLockFilePath=" + str(args.output / "development-host.lock.json"), "-r", args.rid]
-        run([args.dotnet, "restore", host_project, "--configfile", str(config), "--use-lock-file", *properties],
-            "development-host-restore", environment)
-        verify_transitive_runtime(args.output / "development-host.lock.json", version)
-        run([args.dotnet, "publish", host_project, "--no-restore", "-c", "Release", "--self-contained", "false",
-             "-o", str(host), *properties], "development-host-publish", environment)
-        require((host / library).read_bytes() == native_bytes, "Development host did not resolve the package native asset")
-        assembly = str(host / "EmbedIO.Quic.Development.dll")
-        common = ["--dotnet", args.dotnet, "--assembly", assembly]
-        run([peer, "-m", "unittest", "discover", "-s", str(ROOT / "test/EmbedIO.Quic"), "-p", "test_*peer.py"],
-            "peer-regressions", environment)
-        cases = (("verify.py", "wire", ["--openssl", "portable-rsa"]),
-                 ("verify_cipher_suites.py", "ciphers", ["--openssl", "portable-rsa", "--vectors", "32"]),
-                 ("verify_peer_connection_ids.py", "peer-connection-ids", []),
-                 ("verify_stateless_reset.py", "stateless-reset", []),
-                 ("verify_local_connection_ids.py", "local-connection-ids", []),
-                 ("verify_path_controls.py", "path-controls", []),
-                 ("verify_path_validation.py", "path-validation", []),
-                 ("verify_sni.py", "sni", []), ("verify_tls_listener.py", "publication", []),
-                 ("verify_client_certificate.py", "certificate-policies", ["--profile", "full"]),
-                 ("fuzz_client_certificate.py", "auth-fuzz", ["--cases", "256", "--seed", "1729"]))
-        for script, name, extra in cases:
-            run([peer, str(ROOT / "test/EmbedIO.Quic" / script), *common, *extra, "--output", str(args.output / name)],
-                name, environment)
-        if sys.platform == "linux":
-            run([peer, str(ROOT / "test/EmbedIO.Quic/verify_server_chain.py"), *common,
-                 "--output", str(args.output / "server-chains")], "server-chains",
-                {**environment, "EMBEDIO_QUIC_DISPOSABLE_CERTIFICATE_STORE": "1"})
+        if not args.consumers_only:
+            host_project = str(ROOT / "test/EmbedIO.Quic/EmbedIO.Quic.csproj")
+            host = args.output / "development-host"
+            properties = ["-p:EmbedIOQuicPackageVersion=" + version,
+                          "-p:NuGetLockFilePath=" + str(args.output / "development-host.lock.json"), "-r", args.rid]
+            run([args.dotnet, "restore", host_project, "--configfile", str(config), "--use-lock-file", *properties],
+                "development-host-restore", environment)
+            verify_transitive_runtime(args.output / "development-host.lock.json", version)
+            run([args.dotnet, "publish", host_project, "--no-restore", "-c", "Release", "--self-contained", "false",
+                 "-o", str(host), *properties], "development-host-publish", environment)
+            require((host / library).read_bytes() == native_bytes, "Development host did not resolve the package native asset")
+            assembly = str(host / "EmbedIO.Quic.Development.dll")
+            common = ["--dotnet", args.dotnet, "--assembly", assembly]
+            run([peer, "-m", "unittest", "discover", "-s", str(ROOT / "test/EmbedIO.Quic"), "-p", "test_*peer.py"],
+                "peer-regressions", environment)
+            cases = (("verify.py", "wire", ["--openssl", "portable-rsa"]),
+                     ("verify_cipher_suites.py", "ciphers", ["--openssl", "portable-rsa", "--vectors", "32"]),
+                     ("verify_peer_connection_ids.py", "peer-connection-ids", []),
+                     ("verify_stateless_reset.py", "stateless-reset", []),
+                     ("verify_local_connection_ids.py", "local-connection-ids", []),
+                     ("verify_path_controls.py", "path-controls", []),
+                     ("verify_path_validation.py", "path-validation", []),
+                     ("verify_sni.py", "sni", []), ("verify_tls_listener.py", "publication", []),
+                     ("verify_client_certificate.py", "certificate-policies", ["--profile", "full"]),
+                     ("fuzz_client_certificate.py", "auth-fuzz", ["--cases", "256", "--seed", "1729"]))
+            for script, name, extra in cases:
+                run([peer, str(ROOT / "test/EmbedIO.Quic" / script), *common, *extra, "--output", str(args.output / name)],
+                    name, environment)
+            if sys.platform == "linux":
+                run([peer, str(ROOT / "test/EmbedIO.Quic/verify_server_chain.py"), *common,
+                     "--output", str(args.output / "server-chains")], "server-chains",
+                    {**environment, "EMBEDIO_QUIC_DISPOSABLE_CERTIFICATE_STORE": "1"})
     result = {"passed": True, "previewOnly": args.preview, "rid": args.rid, "sourceCommit": head, "sdk": sdk, "packages": package_hashes,
               "nativeSha256": hashlib.sha256(native_bytes).hexdigest(), "steps": steps, "peerSourceWheel": peer_wheel,
-              "scope": "Actual-RID package-only portable/RID/AOT consumers, generated controllers/auth/limits/abort, full wire/cipher/SNI/publication/policy/mutation/issuer suites. Not oldest-OS, browser, vendor-instrumented or endurance acceptance."}
+              "consumersOnly": args.consumers_only,
+              "scope": ("Actual-RID package-only portable/RID/AOT consumers, generated controllers/auth/limits/abort. "
+                        "The development host suites did not run." if args.consumers_only else
+                        "Actual-RID package-only portable/RID/AOT consumers, generated controllers/auth/limits/abort, full wire/cipher/SNI/publication/policy/mutation/issuer suites. Not oldest-OS, browser, vendor-instrumented or endurance acceptance.")}
     (args.output / "receipt.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps({"passed": True, "rid": args.rid, "steps": len(steps)}), flush=True)
 
@@ -202,10 +208,15 @@ if __name__ == "__main__":
     parser.add_argument("--peer-wheel-directory", type=Path, help="Exact-source Intel macOS test peer wheel artifact")
     parser.add_argument("--preview-source-commit", help="Source commit of an archived local preview; requires --preview")
     parser.add_argument("--preview", action="store_true", help="Local single-RID development package; never distribution acceptance")
+    parser.add_argument("--consumers-only", action="store_true",
+                        help="Build and exercise the package consumers only, without the development host suites")
+    parser.add_argument("--peer-directory", type=Path, help="Create the independent peer's environment here and keep it")
     args = parser.parse_args()
     if args.preview_source_commit and not args.preview:
         parser.error("--preview-source-commit requires --preview")
     args.feed, args.output = args.feed.resolve(), args.output.resolve()
     if args.peer_wheel_directory:
         args.peer_wheel_directory = args.peer_wheel_directory.resolve()
+    if args.peer_directory:
+        args.peer_directory = args.peer_directory.resolve()
     validate(args)
