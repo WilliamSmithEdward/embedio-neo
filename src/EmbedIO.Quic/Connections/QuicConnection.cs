@@ -1222,7 +1222,8 @@ namespace EmbedIO.Quic
             Wire.Parameter(output, 15, _serverId);
 
             Wire.Parameter(output, 0x20, 1200);
-            Wire.Parameter(output, 0x1d, []);
+            Wire.Parameter(output, ReliableResetParameter, []);
+            Wire.Parameter(output, LegacyReliableResetParameter, []);
 
             return output.ToArray();
         }
@@ -1241,6 +1242,12 @@ namespace EmbedIO.Quic
                 throw new TransportException(8, error.Message);
             }
         }
+
+        // reset_stream_at (draft-ietf-quic-reliable-stream-reset-08 and later) and its earlier
+        // codepoint (drafts 07 and before), which WebTransport draft-14 cites and Safari 27 sends.
+        // The RESET_STREAM_AT frame is the same in both, so either enables it.
+        private const ulong ReliableResetParameter = 0x1d;
+        private const ulong LegacyReliableResetParameter = 0x17f7586d2cb571;
 
         private void ReadParameters()
         {
@@ -1265,7 +1272,7 @@ namespace EmbedIO.Quic
                 else if (id == 12 && bytes.Length != 0)
                     throw new InvalidDataException("Invalid disable-migration parameter.");
 
-                else if (id == 0x1d)
+                else if (id is ReliableResetParameter or LegacyReliableResetParameter)
                 {
                     if (bytes.Length != 0) throw new InvalidDataException("Invalid reliable-reset parameter.");
 

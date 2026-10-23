@@ -16,6 +16,9 @@ namespace EmbedIO.Net.Internal.WebTransport
 
         // The draft-02 enabling setting current browsers send instead of Enabled.
         public bool Draft02Enabled { get; private set; }
+
+        // Draft-14's SETTINGS_WT_MAX_SESSIONS, which Safari sends instead of Enabled; above 0 enables it.
+        public long Draft14MaximumSessions { get; private set; }
         public long InitialMaxData { get; private set; }
         public long InitialMaxStreamsUnidirectional { get; private set; }
         public long InitialMaxStreamsBidirectional { get; private set; }
@@ -26,7 +29,7 @@ namespace EmbedIO.Net.Internal.WebTransport
 
         // Section 3.1: a client's required SETTINGS before its sessions are processed.
         // Extended CONNECT support is advertised by the server, not required from clients.
-        public bool SettingsRequirementsMet => Datagrams && Enabled;
+        public bool SettingsRequirementsMet => Datagrams && (Enabled || Draft14MaximumSessions > 0);
 
         internal static WebTransportSettings Local(
             bool enabled,
@@ -83,6 +86,10 @@ namespace EmbedIO.Net.Internal.WebTransport
                         settings.Draft02Enabled = Http3PeerSettings.Boolean(value);
                         break;
 
+                    case WebTransportProtocol.SettingMaxSessionsDraft14:
+                        settings.Draft14MaximumSessions = value;
+                        break;
+
                     case WebTransportProtocol.SettingInitialMaxData:
                         settings.InitialMaxData = value;
                         break;
@@ -112,8 +119,9 @@ namespace EmbedIO.Net.Internal.WebTransport
         // The extension's own identifier/value pairs for the connection's SETTINGS
         // frame. The connection already sends SETTINGS_ENABLE_CONNECT_PROTOCOL and
         // owns SETTINGS_H3_DATAGRAM; zero-valued limits are omitted as defaults.
-        // With draft02, the draft-02 enabling setting is sent as well.
-        internal byte[] EncodeLocal(bool draft02 = false)
+        // With draft02, the draft-02 enabling setting is sent as well, and with a positive
+        // draft14Sessions, draft-14's SETTINGS_WT_MAX_SESSIONS with that value.
+        internal byte[] EncodeLocal(bool draft02 = false, int draft14Sessions = 0)
         {
             var bytes = new byte[80];
             var count = 0;
@@ -122,6 +130,9 @@ namespace EmbedIO.Net.Internal.WebTransport
 
             if (Enabled && draft02)
                 count += Pair(bytes, count, WebTransportProtocol.SettingEnableWebTransportDraft02, 1);
+
+            if (Enabled && draft14Sessions > 0)
+                count += Pair(bytes, count, WebTransportProtocol.SettingMaxSessionsDraft14, draft14Sessions);
 
             if (InitialMaxData != 0)
                 count += Pair(bytes, count, WebTransportProtocol.SettingInitialMaxData, InitialMaxData);

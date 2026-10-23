@@ -283,9 +283,9 @@ namespace EmbedIO.Tests
         [Test]
         public void LocalSettingsEncodeOnlyNonDefaultValues()
         {
-            Assert.That(Call(Settings(false), "EncodeLocal", false), Is.EqualTo(Array.Empty<byte>()));
-            Assert.That(Call(Settings(true), "EncodeLocal", false), Is.EqualTo(Hex("ac7cf00001")));
-            var encoded = (byte[])Get(Settings(true, 65536, 0, 3), "EncodeLocal", false);
+            Assert.That(Call(Settings(false), "EncodeLocal", false, 0), Is.EqualTo(Array.Empty<byte>()));
+            Assert.That(Call(Settings(true), "EncodeLocal", false, 0), Is.EqualTo(Hex("ac7cf00001")));
+            var encoded = (byte[])Get(Settings(true, 65536, 0, 3), "EncodeLocal", false, 0);
             var parsed = Must("WebTransportSettings", "Parse", encoded, 1024);
             Assert.That((Prop<bool>(parsed, "Enabled"), Prop<long>(parsed, "InitialMaxData"), Prop<long>(parsed, "InitialMaxStreamsBidirectional")), Is.EqualTo((true, 65536L, 3L)));
             Assert.That(Prop<bool>(parsed, "Draft02Enabled"), Is.False);
@@ -295,11 +295,36 @@ namespace EmbedIO.Tests
         public void TheBrowserDraftSettingFollowsAnEnabledServer()
         {
             // draft-ietf-webtrans-http3-02 enables sessions with SETTINGS_ENABLE_WEBTRANSPORT (0x2b603742).
-            Assert.That(Call(Settings(true), "EncodeLocal", true), Is.EqualTo(Hex("ac7cf00001ab60374201")));
-            Assert.That(Call(Settings(false), "EncodeLocal", true), Is.EqualTo(Array.Empty<byte>()));
+            Assert.That(Call(Settings(true), "EncodeLocal", true, 0), Is.EqualTo(Hex("ac7cf00001ab60374201")));
+            Assert.That(Call(Settings(false), "EncodeLocal", true, 0), Is.EqualTo(Array.Empty<byte>()));
             var parsed = Must("WebTransportSettings", "Parse", Hex("3301ab60374201"), 1024);
             Assert.That((Prop<bool>(parsed, "Draft02Enabled"), Prop<bool>(parsed, "Enabled")), Is.EqualTo((true, false)));
             AssertError("Http3ProtocolException", H3SettingsError, () => Static("WebTransportSettings", "Parse", Hex("ab60374202"), 1024));
+        }
+
+        [Test]
+        public void TheSafariDraftSettingCarriesTheSessionLimit()
+        {
+            // draft-ietf-webtrans-http3-14 enables sessions with SETTINGS_WT_MAX_SESSIONS (0x14e9cd29),
+            // whose value is the number of sessions the endpoint accepts.
+            Assert.That(Call(Settings(true), "EncodeLocal", false, 4), Is.EqualTo(Hex("ac7cf0000194e9cd2904")));
+            Assert.That(Call(Settings(true), "EncodeLocal", true, 1), Is.EqualTo(Hex("ac7cf00001ab6037420194e9cd2901")));
+            Assert.That(Call(Settings(false), "EncodeLocal", false, 4), Is.EqualTo(Array.Empty<byte>()));
+
+            // Safari 27's SETTINGS: datagrams, both max-sessions codepoints and session flow control.
+            var parsed = Must("WebTransportSettings", "Parse", Hex("3301c0000000c671706a0194e9cd29016b61808000006b6440646b654064"), 1024);
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(Prop<long>(parsed, "Draft14MaximumSessions"), Is.EqualTo(1));
+                Assert.That((Prop<bool>(parsed, "Enabled"), Prop<bool>(parsed, "Draft02Enabled")), Is.EqualTo((false, false)));
+                Assert.That(Prop<bool>(parsed, "SettingsRequirementsMet"), Is.True);
+                Assert.That(Prop<bool>(parsed, "DeclaresFlowControl"), Is.True);
+                Assert.That(Prop<long>(parsed, "InitialMaxData"), Is.EqualTo(8388608));
+            }
+
+            // A zero limit, the default, is no support at all.
+            parsed = Must("WebTransportSettings", "Parse", Hex("330194e9cd2900"), 1024);
+            Assert.That(Prop<bool>(parsed, "SettingsRequirementsMet"), Is.False);
         }
 
         // --- Capsule payload codecs (sections 4.7, 5.6, 6) ---

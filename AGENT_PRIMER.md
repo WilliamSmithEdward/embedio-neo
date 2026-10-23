@@ -375,13 +375,18 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 - `HttpListenerMode` value 1 (the old Microsoft listener) is removed and throws.
 - Unsupported HTTP/3 platforms throw `PlatformNotSupportedException` at startup.
 - There is no automatic Alt-Svc advertisement; clients must be told HTTP/3 is
-  available. See the [HTTP/3 guide](docs/guides/http3.md).
+  available. Applications send `Alt-Svc` themselves, for example from a
+  `PreRequestModule` on TCP responses in Combined mode; see
+  [Advertising HTTP/3 with Alt-Svc](docs/guides/http3.md#advertising-http3-with-alt-svc).
 
 The HTTP/3 listener serves opt-in WebTransport sessions:
 `WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a
 session through `IWebTransportContext` and use its `WebTransportSession` streams and
 datagrams. It speaks draft-ietf-webtrans-http3-16 and the draft-02 handshake
-Chromium uses, and requires 2.17.0 or later. See the
+Chromium uses, and requires 2.17.0 or later. Unreleased source also speaks draft-14,
+which Safari 27 uses (`AcceptBrowserDraft14`, on by default), and EmbedIO.Quic offers
+and accepts `reset_stream_at` under both `0x1d` and the earlier `0x17f7586d2cb571`.
+Safari pages need `datagrams.createWritable()`, not `datagrams.writable`. See the
 [WebTransport guide](docs/guides/webtransport.md). The independent
 EmbedIO.Quic generic transport core is under `src/EmbedIO.Quic`. Its separate
 `EmbedIO.Quic.Development` host is under `test/EmbedIO.Quic`, references the actual
@@ -1343,7 +1348,9 @@ the required transport parameters; the server still advertises extended CONNECT.
 Model and independent-peer checks cover omitted and zero-valued client
 advertisements. Locally, the public session API passes all 15 quic-go peer modes,
 and a Chromium 152 browser completed a draft-02 session with datagram, stream and
-close checks.
+close checks. On macOS 27, Chromium 152 passed in draft-02 and, with the unreleased
+draft-14 support, Safari 27.0.1 and Playwright WebKit 27.2 passed in draft-14; the
+peer runs every mode in both dialects (`-dialect draft-14`).
 
 The QUIC bridge fuzz target round-trips input-derived server SETTINGS through the
 HTTP/3 and WebTransport readers and probes malformed extension pairs. Local

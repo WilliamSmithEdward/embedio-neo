@@ -25,16 +25,24 @@ namespace EmbedIO.Tests
     {
         private const long WebTransportEnabledSetting = 0x2c7cf000;
         private const long WebTransportDraft02Setting = 0x2b603742;
+        private const long WebTransportDraft14MaxSessionsSetting = 0x14e9cd29;
         private const long WebTransportInitialMaxDataSetting = 0x2b61;
         private const long WebTransportInitialUnidirectionalSetting = 0x2b64;
         private const long WebTransportInitialBidirectionalSetting = 0x2b65;
         private const long H3MessageError = 0x10e;
         private const long WebTransportBufferedStreamRejected = 0x3994bd84;
 
-        [TestCase(false, false, 0)]
-        [TestCase(true, true, 100)]
-        [TestCase(true, false, 7)]
-        public async Task TheServerAdvertisesWebTransportOnlyWhenItIsEnabled(bool enabled, bool draft02, int streams)
+        [TestCase(false, false, false, 0, 1)]
+        [TestCase(true, true, true, 100, 1)]
+        [TestCase(true, false, true, 7, 3)]
+        [TestCase(true, true, false, 7, 3)]
+        public async Task TheServerAdvertisesWebTransportOnlyWhenItIsEnabled(
+            bool enabled,
+            bool draft02,
+            bool draft14,
+            int streams,
+            int sessions
+        )
         {
             if (!QuicConnection.IsSupported)
             {
@@ -51,7 +59,9 @@ namespace EmbedIO.Tests
                 configure = webTransport =>
                 {
                     webTransport.AcceptBrowserDraft02 = draft02;
+                    webTransport.AcceptBrowserDraft14 = draft14;
                     webTransport.MaximumIncomingStreamsPerSession = streams;
+                    webTransport.MaximumSessionsPerConnection = sessions;
                 };
 
             using var server = WebTransportServer(prefix, certificate, configure, _ => Task.CompletedTask);
@@ -69,6 +79,11 @@ namespace EmbedIO.Tests
                 {
                     Assert.That(Value(WebTransportEnabledSetting), Is.EqualTo(enabled ? 1 : 0));
                     Assert.That(Value(WebTransportDraft02Setting), Is.EqualTo(enabled && draft02 ? 1 : 0));
+                    // Draft-14's SETTINGS_WT_MAX_SESSIONS carries the session limit.
+                    Assert.That(
+                        Value(WebTransportDraft14MaxSessionsSetting),
+                        Is.EqualTo(enabled && draft14 ? sessions : 0)
+                    );
                     Assert.That(Value(WebTransportInitialUnidirectionalSetting), Is.EqualTo(streams));
                     Assert.That(Value(WebTransportInitialBidirectionalSetting), Is.EqualTo(streams));
                     Assert.That(
@@ -94,7 +109,7 @@ namespace EmbedIO.Tests
 
         public static IEnumerable<TestCaseData> UnnegotiatedWebTransportCases()
         {
-            foreach (var profile in new[] { "plain", "draft-16", "draft-02" })
+            foreach (var profile in new[] { "plain", "draft-16", "draft-02", "draft-14" })
                 foreach (var protocol in new[] { "webtransport-h3", "webtransport" })
                     yield return new TestCaseData(profile, protocol);
         }
@@ -158,8 +173,17 @@ namespace EmbedIO.Tests
             }
         }
 
-        [Test]
-        public async Task TheBrowserDraftTokenIsAnOrdinaryRequestWhenTheDraftIsOff()
+        // :protocol webtransport names draft-02 or draft-14. With draft-02 off it is an ordinary
+        // request unless the client declared draft-14 and the server accepts it.
+        [TestCase(false, false, "draft-02")]
+        [TestCase(false, false, "draft-14")]
+        [TestCase(false, true, "draft-02")]
+        [TestCase(false, true, "plain")]
+        public async Task TheBrowserDraftTokenIsAnOrdinaryRequestWhenTheDraftIsOff(
+            bool draft02,
+            bool draft14,
+            string profile
+        )
         {
             if (!QuicConnection.IsSupported)
             {
@@ -176,7 +200,11 @@ namespace EmbedIO.Tests
             using var server = WebTransportServer(
                 prefix,
                 certificate,
-                webTransport => webTransport.AcceptBrowserDraft02 = false,
+                webTransport =>
+                {
+                    webTransport.AcceptBrowserDraft02 = draft02;
+                    webTransport.AcceptBrowserDraft14 = draft14;
+                },
                 async context =>
                 {
                     Interlocked.Increment(ref calls);
@@ -193,7 +221,7 @@ namespace EmbedIO.Tests
                 await using var connection = await ConnectRawAsync(uri, certificate, stop.Token);
                 await using var control = await SendClientSettingsAsync(
                     connection,
-                    ClientProfile("draft-02"),
+                    ClientProfile(profile),
                     stop.Token
                 );
                 _ = await ReadServerSettingsAsync(connection, peers, stop.Token);
@@ -564,12 +592,19 @@ namespace EmbedIO.Tests
                 await handler(context);
             });
 
-        // The client's SETTINGS pairs: none of WebTransport's, draft-16's or the browsers' draft-02.
+        // The client's SETTINGS pairs: none of WebTransport's, draft-16's, Chromium's draft-02 or
+        // Safari's draft-14, which also sends draft-07's max-sessions setting and flow-control limits.
         private static long[] ClientProfile(string profile) => profile switch
         {
             "plain" => [],
             "draft-16" => [0x33, 1, WebTransportEnabledSetting, 1],
             "draft-02" => [0x33, 1, WebTransportDraft02Setting, 1],
+            "draft-14" =>
+            [
+                0x33, 1, 0xc671706a, 1, WebTransportDraft14MaxSessionsSetting, 1,
+                WebTransportInitialMaxDataSetting, 8388608, WebTransportInitialUnidirectionalSetting, 100,
+                WebTransportInitialBidirectionalSetting, 100
+            ],
             _ => throw new ArgumentOutOfRangeException(nameof(profile))
         };
 

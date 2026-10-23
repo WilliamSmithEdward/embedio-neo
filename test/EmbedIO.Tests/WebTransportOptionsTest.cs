@@ -9,7 +9,7 @@ namespace EmbedIO.Tests
     public class WebTransportOptionsTest
     {
         [Test]
-        public void TheDefaultsAdmitOneSessionAndTheBrowserDraft()
+        public void TheDefaultsAdmitOneSessionAndTheBrowserDrafts()
         {
             var options = new WebTransportOptions();
 
@@ -18,6 +18,7 @@ namespace EmbedIO.Tests
                 Assert.That(options.MaximumSessionsPerConnection, Is.EqualTo(1));
                 Assert.That(options.MaximumIncomingStreamsPerSession, Is.EqualTo(100));
                 Assert.That(options.AcceptBrowserDraft02, Is.True);
+                Assert.That(options.AcceptBrowserDraft14, Is.True);
             }
         }
 
@@ -66,6 +67,7 @@ namespace EmbedIO.Tests
                 webTransport.MaximumSessionsPerConnection = 4;
                 webTransport.MaximumIncomingStreamsPerSession = 9;
                 webTransport.AcceptBrowserDraft02 = false;
+                webTransport.AcceptBrowserDraft14 = false;
             });
             var installed = options.WebTransport
                 ?? throw new AssertionException("WithWebTransport installed no settings.");
@@ -76,6 +78,7 @@ namespace EmbedIO.Tests
                 Assert.That(installed.MaximumSessionsPerConnection, Is.EqualTo(4));
                 Assert.That(installed.MaximumIncomingStreamsPerSession, Is.EqualTo(9));
                 Assert.That(installed.AcceptBrowserDraft02, Is.False);
+                Assert.That(installed.AcceptBrowserDraft14, Is.False);
             }
 
             Assert.That(
@@ -104,6 +107,7 @@ namespace EmbedIO.Tests
                 );
                 // The server locked the settings before refusing them.
                 Assert.Throws<InvalidOperationException>(() => settings.MaximumSessionsPerConnection = 2);
+                Assert.Throws<InvalidOperationException>(() => settings.AcceptBrowserDraft14 = false);
                 Assert.Throws<InvalidOperationException>(() => options.WebTransport = null);
             }
         }

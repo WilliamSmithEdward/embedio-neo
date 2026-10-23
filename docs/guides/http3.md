@@ -54,8 +54,9 @@ request; no certificate bypass or forced QUIC was used. This does not describe
 .NET or aioquic trust behavior.
 
 HTTP/3 uses UDP. This mode does not bind a TCP listener or accept HTTP/1/HTTP/2.
-It does not currently advertise Alt-Svc or configure DNS HTTPS records. Clients
-must explicitly select HTTP/3, or discovery must be arranged by the application.
+It does not advertise Alt-Svc or configure DNS HTTPS records. Clients must
+explicitly select HTTP/3, or the application arranges discovery; see
+[Advertising HTTP/3 with Alt-Svc](#advertising-http3-with-alt-svc).
 Any network permission must allow the intended UDP endpoint.
 
 ## Combined TCP and QUIC hosting
@@ -89,9 +90,42 @@ requests waiting in the bounded queue. Shared TCP endpoints keep accepting for
 sibling listeners while refusing new requests for the draining listener. V2 uses
 the original TCP HTTP engine; both inherited listener backends are removed.
 The ordinary HTTP/3 binding selects EmbedIO.Quic, and this source no
-longer contains the earlier providers. Alt-Svc discovery and resource and
-performance acceptance beyond the recorded endurance runs remain separate work;
-TCP replacement does not establish their completion.
+longer contains the earlier providers. Resource and performance acceptance beyond
+the recorded endurance runs remains separate work; TCP replacement does not
+establish its completion.
+
+### Advertising HTTP/3 with Alt-Svc
+
+The server does not send `Alt-Svc` itself: which origins, ports and lifetimes to
+advertise is the application's decision, and a wrong advertisement sends clients to
+an endpoint that may not answer. In Combined mode, add the header to responses that
+arrive over TCP, before the modules that answer requests:
+
+```csharp
+// One port serves TCP and UDP. Responses over TCP tell the client that the same
+// origin also speaks HTTP/3 on that UDP port, for a day.
+var altSvc = $"h3=\":{port}\"; ma=86400";
+
+using var server = new WebServer(options => options
+        .WithUrlPrefix($"https://localhost:{port}/")
+        .WithMode(HttpListenerMode.EmbedIOCombined)
+        .WithCertificate(certificate))
+    .WithModule(new PreRequestModule(context =>
+    {
+        if (context.Request.ProtocolVersion.Major < 3)
+            context.Response.Headers["Alt-Svc"] = altSvc;
+
+        return Task.CompletedTask;
+    }))
+    .WithModule(new ActionModule("/", HttpVerbs.Get, context =>
+        context.SendStringAsync($"HTTP/{context.Request.ProtocolVersion}", "text/plain", WebServer.Utf8NoBomEncoding)));
+```
+
+With 2.17.0 on macOS 27, an `HttpClient` with `RequestVersionOrHigher` sent its first
+request over HTTP/2, received the header and sent the next three over HTTP/3.
+Browsers also need a publicly trusted certificate before they use an advertised
+HTTP/3 endpoint (see the certificate notes above). Advertise only an endpoint the
+UDP side actually serves; `ma` bounds how long clients remember it.
 
 <a id="runtime-memory-limitation"></a>
 ## Earlier provider runtime memory limitation
@@ -157,7 +191,8 @@ Console.WriteLine(await client.GetStringAsync("https://localhost:8443/hello"));
 A default .NET HttpClient does not opt into higher HTTP versions. Set
 DefaultVersionPolicy to RequestVersionOrHigher to permit negotiation above its
 requested version. HTTPS and working QUIC support are necessary for HTTP/3;
-application-arranged Alt-Svc can enable later requests to use it. Explicit
+application-sent Alt-Svc ([above](#advertising-http3-with-alt-svc)) lets later
+requests use it. Explicit
 RequestVersionExact remains useful when testing one protocol and refusing a
 fallback. These are client settings; Combined mode does not automatically emit
 Alt-Svc. See [.NET's version policy](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpversionpolicy?view=net-10.0).

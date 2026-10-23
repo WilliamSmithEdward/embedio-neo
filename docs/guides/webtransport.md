@@ -5,7 +5,7 @@ number of reliable streams in both directions, plus unreliable datagrams. The
 HTTP/3 listener accepts sessions when the server opts in. It was added in
 2.17.0 by [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506).
 
-The server speaks two drafts, neither a published RFC:
+The server speaks three drafts, none a published RFC:
 
 - [draft-ietf-webtrans-http3-16](https://datatracker.ietf.org/doc/draft-ietf-webtrans-http3/16/),
   requested with `:protocol webtransport-h3`.
@@ -14,6 +14,9 @@ The server speaks two drafts, neither a published RFC:
   ([QUICHE](https://github.com/google/quiche/blob/main/quiche/quic/core/http/http_constants.h))
   defines only the draft-02 and draft-07 settings, so Chromium-based browsers
   negotiate draft-02 with this server.
+- [draft-ietf-webtrans-http3-14](https://datatracker.ietf.org/doc/draft-ietf-webtrans-http3/14/),
+  also requested with `:protocol webtransport`, which Safari 27 speaks. The
+  client's SETTINGS tell it from draft-02: see [Draft-14](#draft-14).
 
 Either draft may still change on the wire before it becomes an RFC.
 
@@ -239,6 +242,10 @@ outcome: `Queued`, `Unavailable`, `TooLarge`, `QueueFull` or `Closed`.
 `MaximumPayloadLength` is the current limit after the session identifier. Delivery
 is neither reliable nor ordered.
 
+In the browser, Safari 27 exposes only the newer `datagrams.createWritable()`, and
+Chromium only `datagrams.writable`, so a page that sends datagrams should use
+whichever exists.
+
 ## Closing
 
 `CloseAsync(code, reason)` sends the close code and a message of up to 1024 UTF-8
@@ -252,7 +259,8 @@ as well. A call waiting with the request's token then either returns as it does 
 the end of a session, with `null`, or throws `OperationCanceledException`,
 depending on which the server notices first. Firefox 157 ends sessions this way: it
 closes its connection right after the page calls `close()`, so the server records
-no close code.
+no close code. Safari 27 sends no close capsule either; its session stream ends,
+and the server records no close code.
 
 During a graceful drain the server sends each session a drain capsule, asking its
 peer to finish, and lets the sessions run until the drain deadline. Draft-02 has no
@@ -279,18 +287,38 @@ bytes that name its session, and the peer may then discard it without notice. A
 draft-02 session request gets 200 with `sec-webtransport-http3-draft: draft02`.
 If no browser needs to connect, set `AcceptBrowserDraft02` to `false`.
 
+## Draft-14
+
+Safari 27 speaks draft-14. Its sessions work as draft-16 sessions do, with session
+flow control and reliable reset; the streams, capsules and flow-control settings are
+the same. What differs is how a connection enables WebTransport:
+
+- Both sides send `SETTINGS_WT_MAX_SESSIONS` (`0x14e9cd29`) instead of
+  `SETTINGS_WT_ENABLED`. The server advertises it with
+  `MaximumSessionsPerConnection`.
+- Sessions are requested with `:protocol webtransport`, the draft-02 token. A
+  connection whose client sent `SETTINGS_WT_MAX_SESSIONS`, and not the draft-16
+  setting, uses draft-14; one whose client sent draft-02's setting uses draft-02.
+- Reliable reset is negotiated with the `reset_stream_at` transport parameter of
+  draft-ietf-quic-reliable-stream-reset-07, `0x17f7586d2cb571`; later drafts use
+  `0x1d`. The frame is the same, and EmbedIO.Quic sends and accepts both codepoints
+  on every connection.
+
+Safari also needs `serverCertificateHashes`, or a certificate it trusts, to finish
+the handshake. Set `AcceptBrowserDraft14` to `false` to refuse draft-14.
+
 ## Validation
 
 The in-suite tests cover the settings the server advertises, malformed session
 requests on connections that did not negotiate WebTransport, the draft-02 token
-as an ordinary request when that dialect is off, ordinary GET and POST requests on
+as an ordinary request when no browser dialect it could name is on, ordinary GET and POST requests on
 a server with WebTransport enabled, request streams that end the same way with and
 without it, and streams refused on connections without WebTransport. Sessions
 themselves need a peer with QUIC datagrams and reliable reset, so the development
 host drives draft-16 sessions with an independent
 [quic-go](https://github.com/quic-go/quic-go) peer on Windows and Linux, and the
 complete program above passes that peer's echo, reset, large-transfer and origin
-cases.
+cases. CI runs every peer mode in draft-16 and again in draft-14.
 
 A Chromium 152 browser on Windows opened a draft-02 session from a page on
 `http://localhost`, pinning a 10-day ECDSA certificate with
@@ -299,8 +327,19 @@ unidirectional stream, and both sides recorded the close code and reason the pag
 sent. On Linux, headless Chromium 156 and Firefox 157, driven by Playwright 1.64.0,
 ran the same page against the packaged server and echoed all three; Chromium's
 close code reached the server and Firefox's did not, as described under Closing.
-Playwright's WebKit build does not implement WebTransport. Safari and browsers on
-macOS were not tested. The
+Playwright's Linux WebKit build does not implement WebTransport.
+
+On macOS 27.0.1, the same page ran against the complete program above:
+
+| Browser | Dialect | Result |
+| --- | --- | --- |
+| Chromium 152 (the Claude desktop app's browser) | draft-02 | Passed with 2.17.0 and with draft-14 support; the server recorded the close code |
+| Safari 27.0.1 | draft-14 | Passed with draft-14 support; failed with 2.17.0, which does not speak it |
+| Playwright WebKit 27.2 | draft-14 | The same as Safari |
+
+Each passing session echoed a datagram, a bidirectional stream and a unidirectional
+stream and closed with the page's code and reason. Firefox on macOS was not tested:
+Playwright 1.64.0's Firefox build did not start on macOS 27. The
 [development record](../project/quic-development-and-testing.md) has the details.
 
 Not implemented: application protocol negotiation with `WT-Available-Protocols` and
