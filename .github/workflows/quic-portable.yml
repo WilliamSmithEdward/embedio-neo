@@ -134,6 +134,52 @@ jobs:
           path: TestResults/quic-package-validation/
           if-no-files-found: error
 
+  # The package consumers as signed macOS apps with the hardened runtime: Native AOT in
+  # an .app bundle and self-contained JIT. Ad-hoc signing has no Team ID, so library
+  # validation is disabled, and a control without that must be refused (#524).
+  hardened:
+    name: Hardened runtime (osx-arm64)
+    needs: [package]
+    if: ${{ always() && !cancelled() && needs.package.result == 'success' }}
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: quic-runtime-feed
+          path: TestResults/quic-runtime-feed
+      - name: Run the package consumers as hardened-runtime apps
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip --isolated install --require-hashes --only-binary=:all: -r native/EmbedIO.Quic.Tls/requirements.txt
+          consumers=TestResults/quic-hardened-consumers
+          peer="$PWD/TestResults/quic-hardened-peer"
+          python3 test/EmbedIO.Quic.PackageConsumer/validate.py --rid osx-arm64 --feed TestResults/quic-runtime-feed \
+            --output "$consumers" --consumers-only --peer-directory "$peer"
+          python3 test/EmbedIO.Quic.PackageConsumer/validate_hardened.py --rid osx-arm64 --feed TestResults/quic-runtime-feed \
+            --consumers "$consumers" --peer "$peer/bin/python" --output TestResults/quic-hardened-validation
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: quic-hardened-osx-arm64
+          path: |
+            TestResults/quic-hardened-validation/
+            TestResults/quic-hardened-consumers/*.log
+            TestResults/quic-hardened-consumers/receipt.json
+            !TestResults/quic-hardened-validation/layouts/
+            !TestResults/quic-hardened-validation/self-contained/
+          if-no-files-found: error
+
   # .NET 10's own floors are glibc 2.27 and musl 1.2.3. The consumers are built and checked
   # on the runner's RID, then run in a container of that floor while the independent peer
   # stays on the host (#524).

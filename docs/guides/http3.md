@@ -24,6 +24,19 @@ AOT application runs only on the glibc it was built against or a newer one, so
 publish it on the oldest distribution you deploy to. See
 [native runtime preparation](../../native/EmbedIO.Quic.Tls/README.md).
 
+A macOS app signed with the hardened runtime loads `libembedio_quic_tls.dylib` like
+any other library it ships: library validation accepts it only when it is signed with
+the app's own Team ID, so sign the dylib with your identity before the app, inside
+out. The native runtime uses no JIT or writable executable memory, so a Native AOT
+app should need no entitlement for HTTP/3. A JIT app needs
+`com.apple.security.cs.allow-jit`, as any .NET app does under the hardened runtime.
+Only ad-hoc signed apps have been tested so far. An ad-hoc signature has no Team ID,
+so such an app also needs `com.apple.security.cs.disable-library-validation`; with it,
+both AOT and JIT apps passed. Without it, server construction throws
+`PlatformNotSupportedException` because the library was refused. See the
+[development record](../project/quic-development-and-testing.md#hardened-runtime-macos-apps)
+for what was tested.
+
 For the provider in packages through 2.16.1, use a host where
 `QuicListener.IsSupported` is true.
 Windows requires TLS 1.3 and Linux/macOS require the system MsQuic prerequisite.
