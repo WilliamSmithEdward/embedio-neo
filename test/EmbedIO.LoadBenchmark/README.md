@@ -359,6 +359,16 @@ dotnet <runner>/EmbedIO.LoadBenchmark.dll endurance --output TestResults/enduran
 python scripts/analyze_endurance.py TestResults/endurance/<label>
 ```
 
+On macOS, pass `--request-body-read-timeout 30`. The `faults` mix ends partial uploads
+with an RST, and macOS sometimes drops an RST that arrives while the server's receive
+window is closed; a plain Python server that reads slowly loses some too, so this is the
+kernel, not EmbedIO. The server then keeps an ESTABLISHED connection whose client is gone,
+and the request stays in flight. With no read deadline only the default 240 B/s minimum
+body rate ends it, after about the bytes already received divided by 240 seconds (over an
+hour for most of a 1 MiB upload), so the step fails to quiesce within two minutes. The
+option sets `RequestBodyReadTimeout` on both EmbedIO listeners and is recorded in
+`environment.json`; it is off by default, so plans on other platforms are unchanged.
+
 Plan steps, comma separated:
 
 - `idle:<s>`: wait, then take a quiesced snapshot (the baseline).

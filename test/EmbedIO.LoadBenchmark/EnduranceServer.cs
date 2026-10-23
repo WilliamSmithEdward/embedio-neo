@@ -28,6 +28,8 @@ internal static class EnduranceServer
         var plainPort = options.Integer("--plain-port", 0);
         var tlsPort = options.Integer("--tls-port", 0);
         var interval = TimeSpan.FromSeconds(options.Number("--sample-seconds", 5));
+        var bodyReadSeconds = options.Number("--request-body-read-timeout", 0);
+        TimeSpan? bodyReadTimeout = bodyReadSeconds > 0 ? TimeSpan.FromSeconds(bodyReadSeconds) : null;
         Payloads.Prepare(options.Integer("--reference-bytes", 1 << 20));
         var counters = new EnduranceCounters();
         AppDomain.CurrentDomain.FirstChanceException += (_, e) => counters.Exception(e.Exception);
@@ -35,7 +37,7 @@ internal static class EnduranceServer
 
         IEnduranceHost host = profile.Engine switch
         {
-            "embedio" => new EnduranceHost(certificate, plainPort, tlsPort, counters, profile),
+            "embedio" => new EnduranceHost(certificate, plainPort, tlsPort, counters, profile, bodyReadTimeout),
             "kestrel" => new KestrelEnduranceHost(certificate, plainPort, tlsPort, counters),
             var other => throw new ArgumentException("Unknown engine " + other),
         };
@@ -297,7 +299,7 @@ internal interface IEnduranceHost
     Task StopAsync();
 }
 
-internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort, int tlsPort, EnduranceCounters counters, EnduranceProfile profile) : IEnduranceHost
+internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort, int tlsPort, EnduranceCounters counters, EnduranceProfile profile, TimeSpan? bodyReadTimeout) : IEnduranceHost
 {
     private readonly List<(WebServer Server, Task Running, CancellationTokenSource Stop)> _servers = [];
 
@@ -397,6 +399,7 @@ internal sealed class EnduranceHost(X509Certificate2 certificate, int plainPort,
     private void Add(WebServerOptions options)
     {
         var generation = Generation;
+        options.RequestBodyReadTimeout = bodyReadTimeout;
         var server = new WebServer(options.WithoutAutoLoadCertificate().WithoutAutoRegisterCertificate())
             .PreferNoCompressionFor("text/*")
             .PreferNoCompressionFor("application/octet-stream")

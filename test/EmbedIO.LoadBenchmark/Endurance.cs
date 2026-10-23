@@ -33,6 +33,11 @@ internal static class Endurance
         var plan = options.Required("--plan").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var settle = options.Number("--settle", 20);
         var drainTimeout = options.Number("--drain-timeout", 10);
+        // Off unless asked for: macOS can lose a client's RST (see the README), and only a read
+        // deadline then frees a request whose client vanished mid-body within the quiesce limit.
+        var bodyReadTimeout = options.Number("--request-body-read-timeout", 0);
+        if (bodyReadTimeout < 0) throw new ArgumentException("--request-body-read-timeout must not be negative.");
+        if (bodyReadTimeout > 0 && profile.Engine != "embedio") throw new ArgumentException("--request-body-read-timeout applies only to --engine embedio.");
         var rateScale = options.Text("--rate-scale", "1");
         var serverCpus = options.Optional("--server-cpus");
         var clientCpus = options.Optional("--client-cpus");
@@ -78,6 +83,7 @@ internal static class Endurance
             ["plan"] = new JsonArray([.. plan.Select(step => (JsonNode)step)]),
             ["settleSeconds"] = settle,
             ["drainTimeoutSeconds"] = drainTimeout,
+            ["requestBodyReadTimeoutSeconds"] = bodyReadTimeout > 0 ? bodyReadTimeout : null,
             ["rateScale"] = rateScale,
             ["serverCpus"] = serverCpus,
             ["clientCpus"] = clientCpus,
@@ -96,7 +102,8 @@ internal static class Endurance
             server = ChildProcess.Start(AppContext.BaseDirectory, [
                 "endurance-server", "--plain-port", plainPort.ToString(CultureInfo.InvariantCulture), "--tls-port", tlsPort.ToString(CultureInfo.InvariantCulture),
                 "--certificate", certificatePath, "--certificate-password", password, "--sample-file", Path.Combine(output, "server-samples.jsonl"),
-                "--sample-seconds", options.Text("--sample-seconds", "5"), "--engine", profile.Engine, "--listener-profile", profile.Name], serverCpus, Path.Combine(output, "server.stderr.log"));
+                "--sample-seconds", options.Text("--sample-seconds", "5"), "--engine", profile.Engine, "--listener-profile", profile.Name,
+                "--request-body-read-timeout", bodyReadTimeout.ToString(CultureInfo.InvariantCulture)], serverCpus, Path.Combine(output, "server.stderr.log"));
             var ready = await server.ReadLineAsync(TimeSpan.FromSeconds(60)).ConfigureAwait(false);
             if (ready is null || !ready.StartsWith("READY ", StringComparison.Ordinal)) throw new InvalidOperationException("Server did not start: " + ready);
             File.Delete(certificatePath);
