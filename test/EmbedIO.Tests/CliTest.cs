@@ -166,26 +166,119 @@ namespace EmbedIO.Tests
             Assert.That(host.Server.State, Is.EqualTo(WebServerState.Stopped));
         }
 
-        private async Task WithHost(Options options, Func<CliHost, HttpClient, Task> action)
+        // FreePortPair only proves its ports were free a moment ago. Another socket on a busy
+        // runner can take one before CliHost binds it, as on Linux CI, where the bind failed
+        // with AddressAlreadyInUse. The fixture must still bring the host up on another pair.
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task HostStartSurvivesAPortTakenAfterProbing(bool watch)
         {
-            var port = FreePortPair();
-            await using var host = CliHost.Create(options with { Port = port, NoBrowser = true }, _root);
-            using var stop = new CancellationTokenSource();
-            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var running = host.RunAsync(stop.Token, () => ready.TrySetResult());
-            try
+            File.WriteAllText(Path.Combine(_root, "index.html"), "served after a taken port");
+            var taken = FreePortPair();
+            using var squatter = new TcpListener(IPAddress.Loopback, watch ? taken + 1 : taken);
+            squatter.ExclusiveAddressUse = true;
+            squatter.Start();
+            var offered = false;
+            var served = 0;
+            await WithHost(
+                new Options(NoWatch: !watch),
+                async (host, client) =>
+                {
+                    served = new Uri(host.Url).Port;
+                    Assert.That(await client.GetStringAsync("/"), Does.Contain("served after a taken port"));
+                },
+                () =>
+                {
+                    if (offered) return FreePortPair();
+
+                    offered = true;
+                    return taken;
+                }
+            );
+            Assert.That(served, Is.Not.EqualTo(taken));
+        }
+
+        // The retry is bounded: a port that stays taken still fails the test with the bind error.
+        [Test]
+        public async Task HostStartGivesUpOnAPortThatStaysTaken()
+        {
+            var taken = FreePortPair();
+            using var squatter = new TcpListener(IPAddress.Loopback, taken);
+            squatter.ExclusiveAddressUse = true;
+            squatter.Start();
+            var offers = 0;
+            var ran = false;
+            var error = await Assert.ThrowsAsync<SocketException>(
+                async () => await WithHost(
+                    new Options(NoWatch: true),
+                    (host, client) =>
+                    {
+                        ran = true;
+                        return Task.CompletedTask;
+                    },
+                    () =>
+                    {
+                        offers++;
+                        return taken;
+                    }
+                )
+            );
+            Assert.That(error?.SocketErrorCode, Is.EqualTo(SocketError.AddressAlreadyInUse));
+            Assert.That(offers, Is.EqualTo(StartAttempts));
+            Assert.That(ran, Is.False);
+        }
+
+        // A start whose bind fails because a probed port was taken in the meantime ends before
+        // the host listens; it is retried on a fresh pair. Every other failure fails the test.
+        private const int StartAttempts = 5;
+
+        private async Task WithHost(Options options, Func<CliHost, HttpClient, Task> action, Func<int>? ports = null)
+        {
+            for (var attempt = 1; ; attempt++)
             {
-                var first = await Task.WhenAny(ready.Task, running).WaitAsync(TimeSpan.FromSeconds(10));
-                await first;
-                Assert.That(ready.Task.IsCompletedSuccessfully, Is.True, "Server stopped before listening");
-                using var client = new HttpClient { BaseAddress = new Uri(host.Url), Timeout = TimeSpan.FromSeconds(10) };
-                await action(host, client);
+                var port = (ports ?? FreePortPair)();
+                await using var host = CliHost.Create(options with { Port = port, NoBrowser = true }, _root);
+                using var stop = new CancellationTokenSource();
+                var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var running = host.RunAsync(stop.Token, () => ready.TrySetResult());
+                var retried = false;
+                try
+                {
+                    var first = await Task.WhenAny(ready.Task, running).WaitAsync(TimeSpan.FromSeconds(10));
+                    if (first == running && attempt < StartAttempts && IsPortTaken(running.Exception))
+                    {
+                        retried = true;
+                        continue;
+                    }
+
+                    await first;
+                    Assert.That(ready.Task.IsCompletedSuccessfully, Is.True, "Server stopped before listening");
+                    using var client = new HttpClient { BaseAddress = new Uri(host.Url), Timeout = TimeSpan.FromSeconds(10) };
+                    await action(host, client);
+                    return;
+                }
+                finally
+                {
+                    await stop.CancelAsync();
+
+                    // A retried start has already ended with the bind failure it was retried for.
+                    if (!retried) await running.WaitAsync(TimeSpan.FromSeconds(10));
+                }
             }
-            finally
+        }
+
+        private static bool IsPortTaken(Exception? error)
+        {
+            if (error is AggregateException aggregate)
             {
-                await stop.CancelAsync();
-                await running.WaitAsync(TimeSpan.FromSeconds(10));
+                foreach (var inner in aggregate.InnerExceptions)
+                    if (IsPortTaken(inner)) return true;
+
+                return false;
             }
+
+            return error is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse }
+                || (error?.InnerException is { } cause && IsPortTaken(cause));
         }
 
         private static int FreePortPair()
