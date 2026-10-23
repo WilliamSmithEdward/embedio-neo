@@ -23,6 +23,7 @@ namespace EmbedIO.Quic
             FailedCleanupReleasesSiblings();
             OutboundQueuePressure();
             AuthenticationLimits();
+            ReliableResetParameters();
 
             foreach (var input in new byte[][]
             {
@@ -36,6 +37,90 @@ namespace EmbedIO.Quic
         }
 
         private static void OutboundQueuePressure() => QueuePressure(1024, 0, true);
+
+        // reset_stream_at is 0x1d from draft-ietf-quic-reliable-stream-reset-08 on and
+        // 0x17f7586d2cb571 before, which WebTransport draft-14 and Safari 27 use. The server
+        // offers both, either enables RESET_STREAM_AT, and a non-empty value of either is refused.
+        private static void ReliableResetParameters()
+        {
+            const ulong Current = 0x1d, Legacy = 0x17f7586d2cb571;
+            byte[]? local = null;
+
+            using (Connect([], parameters => local = parameters).Connection) { }
+
+            var offered = new Dictionary<ulong, int>();
+            var reader = new WireReader(local ?? throw new InvalidOperationException("No local parameters."));
+
+            while (reader.Remaining != 0)
+            {
+                var id = reader.Integer();
+                offered[id] = reader.Take(reader.Length(4096)).Length;
+            }
+
+            Require(
+                offered.GetValueOrDefault(Current, -1) == 0 && offered.GetValueOrDefault(Legacy, -1) == 0,
+                "reliable-reset-offered-under-both-codepoints"
+            );
+
+            foreach (var (name, ids, expected) in new (string, ulong[], bool)[]
+            {
+                ("none", [], false),
+                ("current", [Current], true),
+                ("legacy", [Legacy], true),
+                ("both", [Current, Legacy], true)
+            })
+            {
+                using var parameters = new MemoryStream();
+
+                foreach (var id in ids) Wire.Parameter(parameters, id, []);
+
+                var (connection, features) = Connect(parameters.ToArray(), null);
+
+                using (connection)
+                    Require(
+                        connection.Phase == ConnectionPhase.Active && features?.ReliableReset == expected,
+                        "reliable-reset-peer-" + name
+                    );
+            }
+
+            foreach (var id in new[] { Current, Legacy })
+            {
+                using var parameters = new MemoryStream();
+                Wire.Parameter(parameters, id, [0]);
+                var (connection, features) = Connect(parameters.ToArray(), null);
+
+                using (connection)
+                    Require(
+                        connection.Phase != ConnectionPhase.Active && features == null,
+                        "reliable-reset-value-refused-0x" + id.ToString("x")
+                    );
+            }
+        }
+
+        private static (QuicConnection Connection, QuicPeerFeatures? Features) Connect(
+            byte[] extra,
+            Action<byte[]>? local
+        )
+        {
+            using var keys = PacketKeys.Initial(Original, false);
+            var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
+            QuicPeerFeatures? features = null;
+            var connection = new QuicConnection(
+                first,
+                parameters =>
+                {
+                    local?.Invoke(parameters);
+                    return new ModelTls(true) { ExtraParameters = extra };
+                },
+                (operations, peer) =>
+                {
+                    features = peer;
+                    return new StreamEchoApplication(operations);
+                }
+            );
+            connection.Receive(first, 0);
+            return (connection, features);
+        }
 
         internal static bool MutateQueue(ReadOnlySpan<byte> data)
         {
@@ -487,6 +572,9 @@ namespace EmbedIO.Quic
             internal bool AllowEstablishment { get; set; } = establish;
             internal int DisposeCalls { get; private set; }
 
+            // Transport parameters appended to the peer's usual set.
+            internal byte[] ExtraParameters { get; init; } = [];
+
             internal override void Add(int level, ulong offset, ReadOnlySpan<byte> bytes) =>
                 _input[level].Add(offset, bytes);
 
@@ -502,6 +590,7 @@ namespace EmbedIO.Quic
                 Wire.Parameter(parameters, 7, 65536);
                 Wire.Parameter(parameters, 8, 16);
                 Wire.Parameter(parameters, 9, 16);
+                parameters.Write(ExtraParameters);
                 PeerParameters = parameters.ToArray();
                 ReadKeys[2] = new PacketKeys(new byte[PacketKeys.SecretLength(CipherSuite)], cipherSuite: CipherSuite);
                 WriteKeys[2] = new PacketKeys(new byte[PacketKeys.SecretLength(CipherSuite)], cipherSuite: CipherSuite);

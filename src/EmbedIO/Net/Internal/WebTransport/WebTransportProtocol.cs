@@ -21,6 +21,11 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal const string Draft02ResponseHeader = "sec-webtransport-http3-draft";
         internal const string Draft02ResponseValue = "draft02";
 
+        // draft-ietf-webtrans-http3-13 and -14, which Safari 27 speaks: the same :protocol value as
+        // draft-02, and SETTINGS_WT_MAX_SESSIONS in place of the later enabling setting. Its
+        // sessions are otherwise those of draft-16: streams, capsules and flow control match.
+        internal const long SettingMaxSessionsDraft14 = 0x14e9cd29;
+
         // Section 9.2 settings identifiers (all default to 0).
         internal const long SettingEnabled = 0x2c7cf000;
         internal const long SettingInitialMaxData = 0x2b61;

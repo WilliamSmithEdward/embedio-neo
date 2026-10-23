@@ -637,6 +637,12 @@ jobs:
           python3 test/EmbedIO.Quic/verify_webtransport_production.py --dotnet "$(command -v dotnet)"
           --assembly test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll
           --peer "$WEBTRANSPORT_PEER" --output TestResults/webtransport-production
+      # The same modes in draft-14, the dialect Safari 27 speaks.
+      - name: Verify draft-14 WebTransport sessions against the peer
+        run: >-
+          python3 test/EmbedIO.Quic/verify_webtransport_production.py --dotnet "$(command -v dotnet)"
+          --assembly test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll
+          --peer "$WEBTRANSPORT_PEER" --output TestResults/webtransport-production-draft14 --dialect draft-14
       # The throwaway test key stays out of the retained logs.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -644,7 +650,9 @@ jobs:
           name: webtransport-interop-${{ matrix.rid }}
           path: |
             TestResults/webtransport-production/
+            TestResults/webtransport-production-draft14/
             !TestResults/webtransport-production/key.pem
+            !TestResults/webtransport-production-draft14/key.pem
           if-no-files-found: warn
 
   ci-passed:

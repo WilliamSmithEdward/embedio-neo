@@ -37,12 +37,18 @@ namespace EmbedIO.Net.Internal.WebTransport
         private const int NoDialect = 0;
         private const int Draft16 = 1;
         private const int Draft02 = 2;
+        private const int Draft14 = 3;
+
+        // A request whose :protocol (webtransport) is shared by draft-02 and draft-14; the
+        // client's SETTINGS decide which of the two it is.
+        private const int BrowserDialect = -1;
         private readonly Http3TransportConnection _connection;
         private readonly WebTransportOptions _options;
         private readonly WebTransportSettings _local;
         private readonly WebTransportSessionRegistry _registry;
         private readonly TaskCompletionSource _settings = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _dialect;
+        private bool _peerDeclaredDraft14;
 
         internal Http3WebTransport(Http3TransportConnection connection, WebTransportOptions options)
         {
@@ -74,19 +80,34 @@ namespace EmbedIO.Net.Internal.WebTransport
         internal bool ReliableReset => _connection.ReliableReset;
 
         // The extension's pairs for the server's SETTINGS frame.
-        internal byte[] EncodeSettings() => _local.EncodeLocal(_options.AcceptBrowserDraft02);
+        internal byte[] EncodeSettings() =>
+            _local.EncodeLocal(
+                _options.AcceptBrowserDraft02,
+                _options.AcceptBrowserDraft14 ? _options.MaximumSessionsPerConnection : 0
+            );
 
-        // The peer's SETTINGS fix the dialect of every session on this connection.
-        // Draft-16 needs negotiated datagrams and reliable reset; draft-02 only datagrams.
+        // The peer's SETTINGS fix the dialect of every session on this connection, in the order
+        // draft-16, draft-14, draft-02. Draft-16 and draft-14 need negotiated datagrams and
+        // reliable reset; draft-02 only datagrams.
         internal void PeerSettingsReceived(WebTransportSettings? peer)
         {
             var settings = peer ?? WebTransportSettings.Parse([]);
+            Volatile.Write(
+                ref _peerDeclaredDraft14,
+                _options.AcceptBrowserDraft14 && settings.Draft14MaximumSessions > 0
+            );
             var datagrams = settings.Datagrams && _connection.PeerMaximumDatagramFrameSize != 0;
 
             if (settings.Enabled)
             {
                 _registry.Negotiate(settings, datagrams && _connection.ReliableReset, 1);
                 Volatile.Write(ref _dialect, _registry.Negotiated ? Draft16 : NoDialect);
+            }
+
+            else if (_options.AcceptBrowserDraft14 && settings.Draft14MaximumSessions > 0)
+            {
+                _registry.Negotiate(settings, datagrams && _connection.ReliableReset, 1);
+                Volatile.Write(ref _dialect, _registry.Negotiated ? Draft14 : NoDialect);
             }
 
             else if (_options.AcceptBrowserDraft02 && settings.Draft02Enabled && datagrams)
@@ -117,9 +138,9 @@ namespace EmbedIO.Net.Internal.WebTransport
             var dialect = method == "CONNECT" && protocol != null
                 ? HttpUpgradeProtocols.Matches(protocol, WebTransportProtocol.ProtocolToken)
                     ? Draft16
-                    : _options.AcceptBrowserDraft02
+                    : (_options.AcceptBrowserDraft02 || _options.AcceptBrowserDraft14)
                         && HttpUpgradeProtocols.Matches(protocol, WebTransportProtocol.Draft02ProtocolToken)
-                        ? Draft02
+                        ? BrowserDialect
                         : NoDialect
                 : NoDialect;
 
@@ -142,7 +163,22 @@ namespace EmbedIO.Net.Internal.WebTransport
                 return (WebTransportRequestOutcome.RequirementsNotMet, null);
             }
 
-            if (Volatile.Read(ref _dialect) != dialect)
+            var negotiated = Volatile.Read(ref _dialect);
+
+            if (dialect == BrowserDialect)
+            {
+                if (negotiated is Draft02 or Draft14) dialect = negotiated;
+
+                // Without draft-02 the token means draft-14 only, so a client that did not declare
+                // draft-14 sent an ordinary request, as it did before draft-14 was accepted.
+                else if (!_options.AcceptBrowserDraft02 && !Volatile.Read(ref _peerDeclaredDraft14))
+                {
+                    _registry.NoteRequestStream(streamId);
+                    return (WebTransportRequestOutcome.NotWebTransport, null);
+                }
+            }
+
+            if (negotiated != dialect)
             {
                 _registry.NoteRequestStream(streamId);
                 return (WebTransportRequestOutcome.RequirementsNotMet, null);

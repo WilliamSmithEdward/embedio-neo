@@ -1170,11 +1170,12 @@ Still open after the merge, each with its tracking issue:
    do the oldest glibc and musl that .NET 10 supports
    ([Oldest glibc and musl](#oldest-glibc-and-musl)).
    [#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524).
-6. Safari and browsers on macOS. Alt-Svc discovery is in the source after 2.17.0
-   (unreleased): `EmbedIOCombined` advertises HTTP/3, and a .NET client moves to
-   HTTP/3 after its first response
+6. Firefox on macOS. Safari 27 and Chromium on macOS now pass
+   ([macOS browsers and draft-14](#macos-browsers-and-draft-14)). Alt-Svc discovery is
+   in the source after 2.17.0 (unreleased): `EmbedIOCombined` advertises HTTP/3, and a
+   .NET client moves to HTTP/3 after its first response
    ([Combined TCP and QUIC hosting](../guides/http3.md#alt-svc)).
-   [#525](https://github.com/WilliamSmithEdward/embedio-neo/issues/525).
+   [#537](https://github.com/WilliamSmithEdward/embedio-neo/issues/537).
 
 The list this replaced, kept for its history:
 
@@ -2699,7 +2700,67 @@ nuget.org's public 2.16.0 out. Playwright 1.64.0 drove headless browsers:
   capsule rests on Firefox's log and the server's observations, not on a capture.
 - Playwright's WebKit 27.2 build has no `WebTransport` (`ReferenceError`).
 
-Not covered yet: Safari, and browsers on macOS.
+### macOS browsers and draft-14
+
+[#525](https://github.com/WilliamSmithEdward/embedio-neo/issues/525) ran the page on
+macOS 27.0.1 (Apple M5 Pro). The server was the guide's complete echo program,
+built against CI run `40000994026`'s 2.17.0 packages from `ded53d80`, and printing
+how each session ended. The page posts its outcome back to the harness, so Safari ran
+without remote automation.
+
+- Chromium 152.0.7977.149, the Claude desktop app's browser, passed in draft-02, and
+  the server recorded close code 7 and reason "done".
+- Safari 27.0.1 (26A434) failed before `ready` with a `WebTransportError` that gave
+  no message. Playwright's macOS WebKit 27.2, unlike its Linux build, has
+  `WebTransport` and failed the same way.
+- Playwright 1.64.0's Firefox did not start on macOS 27 ("Could not find profile
+  folder"), so Firefox on macOS is untested.
+
+A UDP relay recorded Safari's exchange. A local build that also wrote the server's
+traffic secrets, never committed, let aioquic decrypt it:
+
+- With `serverCertificateHashes` the handshake finished; without them Safari sent
+  TLS alert 46, `certificate_unknown`.
+- Safari's SETTINGS carry `SETTINGS_WT_MAX_SESSIONS` under draft-07's `0xc671706a`
+  and draft-13/14's `0x14e9cd29`, and the flow-control settings `0x2b61`, `0x2b64`
+  and `0x2b65`, but neither `0x2b603742` (draft-02) nor `0x2c7cf000` (draft-15/16).
+- Its transport parameters carry `reset_stream_at` as `0x17f7586d2cb571`, the
+  codepoint of draft-ietf-quic-reliable-stream-reset-07 and earlier, which draft-14
+  cites. Drafts 08 to 10 use `0x1d`, which was all EmbedIO.Quic sent and accepted.
+- Without a dialect and reset parameter it knew, Safari never sent the CONNECT: it
+  reset request stream 0 with `H3_REQUEST_CANCELLED` and closed with `H3_NO_ERROR`.
+  Offering only the reset codepoint, or only the setting, failed the same way.
+  With both, Safari sent `:protocol webtransport` with an empty
+  `wt-available-protocols`, which 2.17.0 refused with `H3_MESSAGE_ERROR`, because it
+  read that token as draft-02 only.
+
+Draft-14 differs from draft-16 only in the enabling setting, the token and two error
+codes added later; its streams, capsules and flow-control settings are the same, and
+the `RESET_STREAM_AT` frame is the same in both reliable-reset drafts. The server
+now advertises `SETTINGS_WT_MAX_SESSIONS` with `MaximumSessionsPerConnection`,
+negotiates draft-14 when a client sends that setting and not the draft-16 one, maps
+`:protocol webtransport` to draft-14 or draft-02 by what was negotiated, and runs
+draft-14 sessions on the draft-16 code. `AcceptBrowserDraft14`, on by default,
+refuses it. EmbedIO.Quic sends and accepts `reset_stream_at` under both codepoints.
+With draft-02 off, the token stays an ordinary request unless the client declared
+draft-14.
+
+With that change, Safari 27.0.1 and Playwright WebKit 27.2 passed the page: datagram,
+bidirectional and unidirectional echoes, and the page's close. Chromium 152 still
+passed in draft-02 against the same server. Safari sent no close capsule, and the
+handler saw `AcceptStreamAsync` return `null` in two of four runs and
+`OperationCanceledException` in two, as the guide's Closing section describes. Safari
+uses `datagrams.createWritable()`; it has no `datagrams.writable`. Its retransmitted
+first Initial packets went out unpadded in 1,038-byte datagrams, against RFC 9000
+section 14.1, but its first flight was padded, so this did not affect the session.
+
+The quic-go peer gained `-dialect draft-14`, which sends `0x14e9cd29` and
+`:protocol webtransport`; `verify_webtransport_production.py --dialect draft-14`
+runs every mode that way, and CI runs both dialects. Locally on macOS all 15 modes
+passed in each dialect. One draft-16 `siblings` run timed out in the peer's
+handshake ("no recent network activity") and passed in five repeats and a full
+rerun. The connection self-tests check that both reset codepoints are offered, that
+either enables reliable reset and that a non-empty value of either is refused.
 
 ## Oldest macOS
 

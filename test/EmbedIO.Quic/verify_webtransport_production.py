@@ -3,7 +3,9 @@
 Each case starts the development host's serve-webtransport command, an ordinary
 WebServer in EmbedIOHttp3 mode that echoes streams and datagrams through
 IWebTransportContext, runs one peer mode against it, then closes the host's
-standard input and checks the report the host prints.
+standard input and checks the report the host prints. --dialect draft-14 runs the
+same modes in the dialect Safari 27 speaks (SETTINGS_WT_MAX_SESSIONS and
+:protocol webtransport), which the server negotiates as well.
 """
 import argparse
 import asyncio
@@ -50,7 +52,7 @@ async def case(args, mode):
         environment = dict(os.environ, EMBEDIO_QUIC_PROBE_TOKEN=ready["authorization"])
         peer = await asyncio.create_subprocess_exec(
             args.peer, "-port", str(ready["port"]), "-authority", f"localhost:{ready['port']}",
-            "-ca", str(args.output / "certificate.pem"), "-mode", mode,
+            "-ca", str(args.output / "certificate.pem"), "-mode", mode, "-dialect", args.dialect,
             env=environment, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         peer_out, peer_err = await asyncio.wait_for(peer.communicate(), 30)
     except (TimeoutError, ValueError, OSError, KeyError) as error:
@@ -101,7 +103,7 @@ async def main(args):
         result = await case(args, mode)
         results.append(result)
         print(json.dumps(result), flush=True)
-    receipt = {"passed": all(r["passed"] for r in results), "cases": results,
+    receipt = {"passed": all(r["passed"] for r in results), "dialect": args.dialect, "cases": results,
                "assemblySha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
                "peerSha256": hashlib.sha256(Path(args.peer).read_bytes()).hexdigest()}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
@@ -114,4 +116,6 @@ if __name__ == "__main__":
         parser.add_argument("--" + name, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--modes", nargs="*", help="Peer modes to run; all by default.")
+    parser.add_argument("--dialect", choices=("draft-16", "draft-14"), default="draft-16",
+                        help="WebTransport dialect the peer speaks.")
     raise SystemExit(asyncio.run(main(parser.parse_args())))

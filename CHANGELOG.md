@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- WebTransport also speaks draft-ietf-webtrans-http3-14, the dialect Safari 27 uses.
+  The server advertises `SETTINGS_WT_MAX_SESSIONS` and runs draft-14 sessions as
+  draft-16 ones; `:protocol webtransport` means draft-14 or draft-02 by what the
+  client's SETTINGS negotiated. `WebTransportOptions.AcceptBrowserDraft14`, on by
+  default, turns it off. See [Draft-14](docs/guides/webtransport.md#draft-14).
+- EmbedIO.Quic offers and accepts the `reset_stream_at` transport parameter under the
+  earlier codepoint `0x17f7586d2cb571` as well as `0x1d`; Safari 27 uses the former.
+
 ### Changed
 
 - `EmbedIOCombined` advertises its HTTP/3 endpoint as Kestrel does. Every HTTP/1.1,

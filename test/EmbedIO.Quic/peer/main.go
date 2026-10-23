@@ -85,6 +85,18 @@ func write(w io.Writer, b []byte) error {
 // non-default port expects that port in it.
 var requestAuthority = "localhost"
 
+// draft14 selects draft-ietf-webtrans-http3-14, the dialect Safari 27 speaks:
+// SETTINGS_WT_MAX_SESSIONS (0x14e9cd29) for SETTINGS_WT_ENABLED and :protocol
+// webtransport for webtransport-h3. Sessions are otherwise those of draft-16.
+var draft14 = false
+
+func sessionProtocol() string {
+	if draft14 {
+		return "webtransport"
+	}
+	return "webtransport-h3"
+}
+
 func connectSession(ctx context.Context, conn *quic.Conn, token, origin string) (*quic.Stream, string, error) {
 	stream, err := conn.OpenStreamSync(ctx)
 	if err != nil {
@@ -92,7 +104,7 @@ func connectSession(ctx context.Context, conn *quic.Conn, token, origin string) 
 	}
 	var block bytes.Buffer
 	enc := qpack.NewEncoder(&block)
-	for _, h := range []qpack.HeaderField{{Name: ":method", Value: "CONNECT"}, {Name: ":protocol", Value: "webtransport-h3"}, {Name: ":scheme", Value: "https"}, {Name: ":authority", Value: requestAuthority}, {Name: ":path", Value: "/echo"}, {Name: "origin", Value: origin}, {Name: "authorization", Value: "Bearer " + token}} {
+	for _, h := range []qpack.HeaderField{{Name: ":method", Value: "CONNECT"}, {Name: ":protocol", Value: sessionProtocol()}, {Name: ":scheme", Value: "https"}, {Name: ":authority", Value: requestAuthority}, {Name: ":path", Value: "/echo"}, {Name: "origin", Value: origin}, {Name: "authorization", Value: "Bearer " + token}} {
 		if err = enc.WriteField(h); err != nil {
 			return nil, "", err
 		}
@@ -131,8 +143,13 @@ func run() error {
 	ca := flag.String("ca", "", "test CA")
 	mode := flag.String("mode", "echo", "case")
 	authority := flag.String("authority", "localhost", ":authority of session requests")
+	dialect := flag.String("dialect", "draft-16", "WebTransport dialect: draft-16 or draft-14")
 	flag.Parse()
 	requestAuthority = *authority
+	draft14 = *dialect == "draft-14"
+	if !draft14 && *dialect != "draft-16" {
+		return errors.New("unknown dialect " + *dialect)
+	}
 	pem, err := os.ReadFile(*ca)
 	if err != nil {
 		return err
@@ -217,7 +234,11 @@ func run() error {
 						}
 						values[id] = v
 					}
-					if values[8] != 1 || values[0x33] != 1 || values[0x2c7cf000] != 1 {
+					enabled := values[0x2c7cf000] == 1
+					if draft14 {
+						enabled = values[0x14e9cd29] >= 1
+					}
+					if values[8] != 1 || values[0x33] != 1 || !enabled {
 						ready <- errors.New("settings not negotiated")
 						return
 					}
@@ -237,7 +258,11 @@ func run() error {
 		return err
 	}
 	settings := []byte{}
-	for _, pair := range [][2]uint64{{0x33, 1}, {0x2c7cf000, 1}, {0x2b61, 65536}, {0x2b64, 8}, {0x2b65, 8}} {
+	enabling := [2]uint64{0x2c7cf000, 1}
+	if draft14 {
+		enabling = [2]uint64{0x14e9cd29, 1}
+	}
+	for _, pair := range [][2]uint64{{0x33, 1}, enabling, {0x2b61, 65536}, {0x2b64, 8}, {0x2b65, 8}} {
 		settings = append(settings, integer(pair[0])...)
 		settings = append(settings, integer(pair[1])...)
 	}
