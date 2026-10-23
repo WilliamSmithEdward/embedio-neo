@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Buffers.Binary;
+using System.Net;
 
 namespace EmbedIO.Quic
 {
@@ -48,6 +49,10 @@ namespace EmbedIO.Quic
             await EndpointOwnershipAsync().ConfigureAwait(false);
             await AdmissionWindowAsync(0).ConfigureAwait(false);
             await AdmissionWindowAsync(1).ConfigureAwait(false);
+            await RefusalAtCapacityAsync().ConfigureAwait(false);
+            await RefusalPastQueueDelayAsync().ConfigureAwait(false);
+            await RefusalWhileApplicationIsFullAsync().ConfigureAwait(false);
+            await AdmittingAsync().ConfigureAwait(false);
             await ProductionListenerLifecycleTests
                 .RunAsync()
                 .ConfigureAwait(false);
@@ -867,6 +872,269 @@ namespace EmbedIO.Quic
                     && dispatcher.FailedOwners == 0,
                 "dispatcher-final-ownership"
             );
+        }
+
+        // RFC 9000 5.2.2: past capacity a new Initial is answered with an Initial the client
+        // can read, carrying CONNECTION_CLOSE(CONNECTION_REFUSED), and no connection starts.
+        private static async Task RefusalAtCapacityAsync()
+        {
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var created = 0;
+            await using var dispatcher = new QuicConnectionDispatcher(
+                (packet, now, _, _) =>
+                {
+                    Interlocked.Increment(ref created);
+                    return Connection(
+                        packet,
+                        now,
+                        new ControlledTls(
+                            () =>
+                            {
+                                entered.Set();
+                                Check(release.Wait(TimeSpan.FromSeconds(10)), "capacity owner released");
+                            },
+                            static () => { }
+                        )
+                    );
+                },
+                static () => 0,
+                capacity: 1,
+                workers: 1,
+                refuseConnections: true
+            );
+
+            try
+            {
+                Check(dispatcher.Receive(Packet(1), new IPEndPoint(IPAddress.Loopback, 17001)), "capacity owner admitted");
+                Check(entered.Wait(TimeSpan.FromSeconds(10)), "capacity owner executing");
+                Check(
+                    !dispatcher.Receive(Packet(2), new IPEndPoint(IPAddress.Loopback, 17002)),
+                    "Initial past capacity rejected"
+                );
+                Check(
+                    dispatcher.Active == 1 && dispatcher.Refused == 1 && dispatcher.Rejected == 1 && created == 1,
+                    "refusal counted without connection state"
+                );
+                var (peer, refusal) = await NextOutputAsync(dispatcher).ConfigureAwait(false);
+                Check(peer == 17002, "refusal returns to the refused client");
+                CheckRefusal(refusal, [2, 2, 3, 4, 5, 6, 7, 8]);
+            }
+
+            finally
+            {
+                release.Set();
+                await dispatcher
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+            }
+
+            Check(dispatcher.PendingOutputPackets == 0, "refusal output released");
+        }
+
+        // While queued work waits longer than the bound, a new Initial is refused; admission
+        // resumes once the queue drains.
+        private static async Task RefusalPastQueueDelayAsync()
+        {
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            await using var dispatcher = new QuicConnectionDispatcher(
+                (packet, now, _, _) =>
+                {
+                    var blocked = packet[6] == 1;
+                    return Connection(
+                        packet,
+                        now,
+                        new ControlledTls(
+                            () =>
+                            {
+                                if (!blocked) return;
+
+                                entered.Set();
+                                Check(release.Wait(TimeSpan.FromSeconds(10)), "delayed owner released");
+                            },
+                            static () => { }
+                        )
+                    );
+                },
+                static () => 0,
+                capacity: 8,
+                workers: 1,
+                refuseConnections: true,
+                queueDelayBound: 50
+            );
+
+            try
+            {
+                Check(dispatcher.Receive(Packet(1), new IPEndPoint(IPAddress.Loopback, 17001)), "blocking owner admitted");
+                Check(entered.Wait(TimeSpan.FromSeconds(10)), "only worker blocked");
+                Check(dispatcher.QueueDelay < TimeSpan.FromMilliseconds(50), "a running turn alone is no wait");
+                Check(
+                    dispatcher.Receive(Packet(2), new IPEndPoint(IPAddress.Loopback, 17002)),
+                    "second owner admitted under the bound"
+                );
+                await UntilAsync(() => dispatcher.QueueDelay > TimeSpan.FromMilliseconds(60)).ConfigureAwait(false);
+                Check(
+                    !dispatcher.Receive(Packet(3), new IPEndPoint(IPAddress.Loopback, 17003)),
+                    "Initial past the delay bound rejected"
+                );
+                Check(dispatcher.Refused == 1 && dispatcher.Active == 2, "delay refusal counted without connection state");
+                release.Set();
+                await UntilAsync(() => dispatcher.QueueDelay < TimeSpan.FromMilliseconds(50)).ConfigureAwait(false);
+                Check(
+                    dispatcher.Receive(Packet(4), new IPEndPoint(IPAddress.Loopback, 17004)),
+                    "admission resumes once queued work drains"
+                );
+            }
+
+            finally
+            {
+                release.Set();
+                await dispatcher
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+            }
+        }
+
+        // While the application layer reports no room, a new Initial is refused before any
+        // connection or TLS state exists; admission resumes when it has room again.
+        private static async Task RefusalWhileApplicationIsFullAsync()
+        {
+            var created = 0;
+            var saturated = true;
+            await using var dispatcher = new QuicConnectionDispatcher(
+                (packet, now, _, _) =>
+                {
+                    Interlocked.Increment(ref created);
+                    return Connection(packet, now, new ControlledTls(static () => { }, static () => { }));
+                },
+                static () => 0,
+                capacity: 8,
+                workers: 1,
+                refuseConnections: true
+            );
+            dispatcher.Saturated = () => Volatile.Read(ref saturated);
+
+            Check(
+                !dispatcher.Receive(Packet(1), new IPEndPoint(IPAddress.Loopback, 17011)),
+                "Initial refused while the application is full"
+            );
+            Check(
+                created == 0 && dispatcher.Active == 0 && dispatcher.Refused == 1 && dispatcher.RefusedForApplication == 1
+                    && dispatcher.RefusedAtCapacity == 0 && dispatcher.RefusedForQueueDelay == 0,
+                "application refusal counted without connection state"
+            );
+            var (peer, refusal) = await NextOutputAsync(dispatcher).ConfigureAwait(false);
+            Check(peer == 17011, "refusal returns to the refused client");
+            CheckRefusal(refusal, [1, 2, 3, 4, 5, 6, 7, 8]);
+            Volatile.Write(ref saturated, false);
+            Check(
+                dispatcher.Receive(Packet(2), new IPEndPoint(IPAddress.Loopback, 17012)),
+                "admission resumes when the application has room"
+            );
+            await UntilAsync(() => Volatile.Read(ref created) != 0).ConfigureAwait(false);
+            Check(Volatile.Read(ref created) == 1 && dispatcher.Active == 1, "only the admitted connection was created");
+        }
+
+        // An admitted connection counts as admitting until its first turn creates it, so the
+        // application layer can count connections it has not been handed yet.
+        private static async Task AdmittingAsync()
+        {
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var created = 0;
+            await using var dispatcher = new QuicConnectionDispatcher(
+                (packet, now, _, _) =>
+                {
+                    Interlocked.Increment(ref created);
+                    var blocked = packet[6] == 1;
+                    return Connection(
+                        packet,
+                        now,
+                        new ControlledTls(
+                            () =>
+                            {
+                                if (!blocked) return;
+
+                                entered.Set();
+                                Check(release.Wait(TimeSpan.FromSeconds(10)), "blocking owner released");
+                            },
+                            static () => { }
+                        )
+                    );
+                },
+                static () => 0,
+                capacity: 8,
+                workers: 1,
+                refuseConnections: true
+            );
+
+            try
+            {
+                Check(dispatcher.Receive(Packet(1), new IPEndPoint(IPAddress.Loopback, 17021)), "blocking owner admitted");
+                Check(entered.Wait(TimeSpan.FromSeconds(10)), "only worker blocked");
+                Check(dispatcher.Admitting == 0, "a created connection no longer counts as admitting");
+                Check(dispatcher.Receive(Packet(2), new IPEndPoint(IPAddress.Loopback, 17022)), "second owner admitted");
+                Check(
+                    dispatcher.Admitting == 1 && Volatile.Read(ref created) == 1,
+                    "an admitted connection counts before its turn creates it"
+                );
+                release.Set();
+                await UntilAsync(() => Volatile.Read(ref created) == 2 && dispatcher.Admitting == 0).ConfigureAwait(false);
+            }
+
+            finally
+            {
+                release.Set();
+                await dispatcher
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+            }
+        }
+
+        private static async Task<(int Port, byte[] Bytes)> NextOutputAsync(QuicConnectionDispatcher dispatcher)
+        {
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            Check(await dispatcher.WaitForOutputAsync(stop.Token).ConfigureAwait(false), "output becomes ready");
+            (int Port, byte[] Bytes) sent = default;
+            Check(
+                await dispatcher
+                    .SendOneAsync(output =>
+                    {
+                        sent = (output.Peer.Port, output.Bytes);
+                        return ValueTask.CompletedTask;
+                    })
+                    .ConfigureAwait(false),
+                "output sent"
+            );
+            return sent;
+        }
+
+        private static void CheckRefusal(byte[] datagram, byte[] original)
+        {
+            Check(datagram.Length == 1200, "refusal padded to 1200 bytes");
+            var header = new WireReader(datagram);
+            Check((header.Byte() & 0xf0) == 0xc0, "refusal is an Initial");
+            Check(BinaryPrimitives.ReadUInt32BigEndian(header.Take(4)) == 1, "refusal is QUIC version 1");
+            Check(
+                header
+                    .Take(header.Byte())
+                    .SequenceEqual(new byte[] { 9, 10, 11, 12, 13, 14, 15, 16 }),
+                "refusal addresses the client's source ID"
+            );
+            header.Take(header.Byte());
+            Check(header.Length(4096) == 0, "refusal carries no token");
+            var length = header.Length(datagram.Length);
+            var offset = datagram.Length - header.Remaining;
+            using var keys = PacketKeys.Initial(original, true);
+            var plaintext = keys.Unprotect(datagram.AsSpan(0, offset + length), offset, 0, out var number);
+            var frame = new WireReader(plaintext);
+            Check(
+                number == 0 && frame.Integer() == 0x1c && frame.Integer() == 0x02 && frame.Integer() == 0
+                    && frame.Integer() == 0,
+                "refusal is CONNECTION_CLOSE(CONNECTION_REFUSED)"
+            );
+            Check(plaintext.AsSpan(4).IndexOfAnyExcept((byte)0) < 0, "refusal pads with PADDING frames");
         }
 
         private static async Task UntilAsync(Func<bool> complete)

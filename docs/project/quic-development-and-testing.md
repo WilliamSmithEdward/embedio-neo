@@ -1158,7 +1158,8 @@ Still open after the merge, each with its tracking issue:
    implemented, and features outside the supported profile fail explicitly.
    Non-exportable keys work on Windows only; Unix TLS needs an exportable key.
    [#520](https://github.com/WilliamSmithEdward/embedio-neo/issues/520).
-2. Bounded native TLS worker scheduling under sustained load, beyond the endurance runs.
+2. Resolved: past its bounds an HTTP/3 endpoint refuses new connections before any TLS
+   work ([Bounded TLS work under load](#bounded-tls-work-under-load)).
    [#521](https://github.com/WilliamSmithEdward/embedio-neo/issues/521).
 3. Startup, warm and tail-latency measurement. Windows embedded hosting leads, and a
    meaningful warm regression is not accepted for a cold-start gain.
@@ -3002,3 +3003,161 @@ column below says the merge is all that remains are closed when this work merges
 | [#399](https://github.com/WilliamSmithEdward/embedio-neo/issues/399) | The native MsQuic listener and the tests that failed are removed. | The merge. |
 | [#401](https://github.com/WilliamSmithEdward/embedio-neo/issues/401) | Unrelated to the QUIC work: the macOS compatibility audit's `dotnet list` call. The same exit 137 hit `dotnet nuget locals` in `setup-dotnet`'s cleanup on the macOS interop job in CI `39794451873`. | Its own investigation, since finished: on macOS a child that the .NET CLI forked aborted before `exec`, and every workflow now turns CLI telemetry off. |
 | [#181](https://github.com/WilliamSmithEdward/embedio-neo/issues/181) | The umbrella program; it stays open for the remaining engine work. | Not applicable. |
+
+## Bounded TLS work under load
+
+[#521](https://github.com/WilliamSmithEdward/embedio-neo/issues/521) asked how native
+TLS work queues under sustained and bursty handshake load, for a bound on it, and for
+what happens past the bound.
+
+### How the work is scheduled
+
+Each UDP endpoint admits at most 768 connections, and every connection's work, its TLS
+handshake steps included, runs as turns on a pool of at most eight workers
+(`Math.Clamp(Environment.ProcessorCount, 1, 8)`); a connection has at most one turn
+queued or running. Handshakes that do not finish in ten seconds expire. The HTTP/3
+listener above the endpoint holds 256 established connections and closes any other
+with `H3_EXCESSIVE_LOAD`.
+
+Before this change nothing bounded how long a turn waited for a worker. A full
+endpoint dropped new Initials silently, so those clients retransmitted until their own
+handshake timeout. A connection the listener had no room for still completed its TLS
+handshake, and was then closed.
+
+### The bound
+
+The execution pool measures how long turns wait for a worker: MsQuic's worker average
+(seven parts history, one part the latest wait), reset whenever nothing waits, or,
+while turns wait, the time since a worker last took one, whichever is longer. A new
+connection is refused while that exceeds 250 ms, MsQuic's default worker queue delay,
+while the endpoint holds 768 connections, or while the listener has no room for it.
+The refusal answers the Initial with an Initial carrying
+`CONNECTION_CLOSE(CONNECTION_REFUSED)` (RFC 9000 section 5.2.2), protected with the
+client's Initial keys; the server creates no connection and starts no TLS work.
+Established connections are unaffected. Refusals are budgeted at 4,096 per second per
+endpoint, with at most 512 queued for sending; past either an Initial is dropped. The
+binding counts refusals by reason in its closing diagnostics and logs them as a
+warning at most every ten seconds.
+
+The listener has room while its established connections, those in their handshake and
+those the endpoint has admitted but not yet handed over number fewer than 256. The
+last group matters: the endpoint admits a connection on its socket loop, a worker
+creates it in its first turn, and the listener's accept loop takes it from a hand-off
+queue after that, so a burst admitted between those steps was invisible to the count.
+A first version counted only what the listener had accepted. On Linux, with 8,192
+attempts in flight at 4,000 per second, it saturated the server's two CPUs at the start
+of the phase and completed 512 and 458 connections in two rounds where main completed
+2,646 and 2,697. With the hand-off queue counted but not the uncreated connections, it
+still closed 2,701 attempts after their handshake in one Windows phase. The endpoint
+now counts a connection from its admission until a worker creates it, and passes that
+count and the hand-off queue's to the listener.
+
+### Overload runs
+
+The load benchmark's `quic-churn` mode opens a connection per attempt, sends one GET
+on a request stream, closes the connection, and records every failure with the stage
+it ended in. Each run offered a fixed rate for 15 seconds per phase, 5 seconds apart,
+to a server pinned to two CPUs, and the client stopped starting attempts while 512
+were in flight, counting the ones it skipped. Main was `554d7a3f`, the change was this
+branch built on it, and the change's load benchmark was the client for both. Each ran
+two rounds, in alternating order. On Windows:
+
+```
+dotnet <change runner>/EmbedIO.LoadBenchmark.dll quic-churn --engines embedio --rates 250,1000,2000,4000 --phase-seconds 15 --idle 5 --server-dir <main or change runner> --server-cpus 0-1 --client-cpus 4-11 --max-baseline-busy-cpus 2.0 --process-cpu-diagnostics --output <fresh dir>
+```
+
+Windows was Windows 11 build 26300 on a 16-thread Ryzen 7 9800X3D with .NET 10.0.13,
+and its .NET client used MsQuic 2.5.11. Linux was a container on eight CPUs in Docker
+Desktop's WSL2 VM (kernel 6.18.33) with the same .NET and libmsquic 2.6.2; the client
+ran on CPUs 4-7, without `--process-cpu-diagnostics`. The machine is a desktop in use,
+so each run started only after the Windows host averaged under 2 busy CPUs for 5
+seconds. In the Windows runs other programs used at most 1.7 CPUs in any phase,
+mostly a .NET build running elsewhere on the machine. For Linux runs the host's busy
+CPUs above the VM's own were 0.1 to 3.0 per phase, which includes the VM's overhead.
+
+"Closed after TLS" counts attempts whose handshake completed before the server closed
+the connection with `H3_EXCESSIVE_LOAD`. "Timed out" counts handshake and idle
+timeouts at any stage. Each cell is round 1 / round 2.
+
+Windows:
+
+| Offered | Server | Attempts | Completed | Refused before TLS | Closed after TLS | Timed out | Skipped at cap | Handshake p50 ms | Refusal median ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 250/s | main | 3,750 / 3,750 | 3,750 / 3,750 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 7 / 7 | - / - |
+| 250/s | change | 3,750 / 3,750 | 3,750 / 3,750 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 7 / 7 | - / - |
+| 1,000/s | main | 9,557 / 8,885 | 3,887 / 3,537 | 0 / 0 | 5,670 / 5,348 | 0 / 0 | 5,443 / 6,115 | 68 / 72 | - / - |
+| 1,000/s | change | 14,938 / 15,000 | 7,131 / 7,386 | 7,702 / 7,516 | 105 / 98 | 0 / 0 | 62 / 0 | 31 / 31 | 6 / 6 |
+| 2,000/s | main | 8,557 / 8,543 | 2,620 / 2,648 | 0 / 0 | 5,937 / 5,895 | 0 / 0 | 21,443 / 21,457 | 84 / 84 | - / - |
+| 2,000/s | change | 21,689 / 12,932 | 6,631 / 6,722 | 14,969 / 6,150 | 89 / 29 | 0 / 31 | 8,311 / 17,068 | 34 / 39 | 8 / 11 |
+| 4,000/s | main | 8,670 / 7,369 | 2,326 / 4,623 | 0 / 0 | 6,344 / 2,746 | 0 / 0 | 51,330 / 52,631 | 87 / 64 | - / - |
+| 4,000/s | change | 16,266 / 24,522 | 6,415 / 6,754 | 9,819 / 17,718 | 30 / 50 | 2 / 0 | 43,734 / 35,478 | 34 / 36 | 9 / 10 |
+
+Linux:
+
+| Offered | Server | Attempts | Completed | Refused before TLS | Closed after TLS | Timed out | Skipped at cap | Handshake p50 ms | Refusal median ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 250/s | main | 3,750 / 3,750 | 3,734 / 3,750 | 0 / 0 | 16 / 0 | 0 / 0 | 0 / 0 | 6 / 6 | - / - |
+| 250/s | change | 3,750 / 3,750 | 3,750 / 3,718 | 0 / 32 | 0 / 0 | 0 / 0 | 0 / 0 | 6 / 7 | - / 1 |
+| 1,000/s | main | 5,244 / 5,214 | 3,206 / 3,703 | 0 / 0 | 2,031 / 1,511 | 7 / 0 | 9,756 / 9,786 | 77 / 73 | - / - |
+| 1,000/s | change | 9,876 / 10,275 | 4,469 / 4,675 | 5,368 / 5,594 | 4 / 6 | 35 / 0 | 5,124 / 4,725 | 48 / 57 | 4 / 4 |
+| 2,000/s | main | 5,430 / 4,272 | 1,725 / 3,999 | 0 / 0 | 3,705 / 171 | 0 / 102 | 24,570 / 25,728 | 151 / 76 | - / - |
+| 2,000/s | change | 11,429 / 15,852 | 4,628 / 4,929 | 6,723 / 10,922 | 3 / 1 | 75 / 0 | 18,571 / 14,148 | 45 / 59 | 5 / 5 |
+| 4,000/s | main | 5,253 / 4,268 | 1,467 / 3,752 | 0 / 0 | 3,786 / 516 | 0 / 0 | 54,747 / 55,732 | 149 / 70 | - / - |
+| 4,000/s | change | 17,685 / 18,698 | 4,862 / 4,722 | 12,792 / 13,941 | 0 / 4 | 31 / 31 | 42,315 / 41,302 | 55 / 46 | 4 / 4 |
+
+In every overloaded phase of these runs the change completed more connections than
+main: 1.5 to 2.8 times as many on Windows and 1.2 to 3.3 times on Linux, where main's
+own two rounds differed by up to 2.6 times. It closed at most 105 attempts per phase
+after their handshake, where main closed 1,500 to 6,300 (171 and 516 in one Linux
+round), and its refusals took a median of 4 to 5 ms on Linux and 6 to 11 ms on
+Windows. The client offered the change more attempts because a refused attempt ends at
+once and frees its place under the cap.
+
+At 250 attempts per second every attempt completed on Windows. On Linux, two runs had
+about 300 attempts in flight at that rate, their closes taking 125 ms at the median and
+1.5 and 2.4 s at the 99th percentile, and the listener's 256 slots filled briefly: main
+closed 16 attempts after TLS in one and the change refused 32 in the other.
+
+With the cap at 512 the two servers face different numbers of attempts. With
+`--max-outstanding 8192` at 2,000 and 4,000 attempts per second the change took every
+attempt offered (all but 5,426 in one Linux phase), while main's slow failures kept
+its client at the cap:
+
+Windows, cap 8,192:
+
+| Offered | Server | Attempts | Completed | Refused before TLS | Closed after TLS | Timed out | Skipped at cap | Handshake p50 ms | Refusal median ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2,000/s | main | 19,376 / 19,013 | 3,490 / 3,570 | 0 / 0 | 7,331 / 7,279 | 8,518 / 8,164 | 10,624 / 10,987 | 3,067 / 3,041 | - / - |
+| 2,000/s | change | 30,000 / 30,000 | 6,279 / 6,257 | 23,658 / 23,683 | 62 / 60 | 0 / 0 | 0 / 0 | 37 / 44 | 9 / 10 |
+| 4,000/s | main | 20,909 / 21,359 | 4,234 / 3,461 | 0 / 0 | 6,267 / 7,210 | 10,408 / 10,686 | 39,091 / 38,641 | 3,041 / 1,167 | - / - |
+| 4,000/s | change | 60,000 / 60,000 | 6,082 / 6,124 | 53,581 / 53,717 | 5 / 159 | 332 / 0 | 0 / 0 | 77 / 26 | 14 / 8 |
+
+Linux, cap 8,192:
+
+| Offered | Server | Attempts | Completed | Refused before TLS | Closed after TLS | Timed out | Skipped at cap | Handshake p50 ms | Refusal median ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2,000/s | main | 16,290 / 14,672 | 2,798 / 3,099 | 0 / 0 | 3,844 / 2,901 | 9,648 / 8,664 | 13,710 / 15,328 | 3,067 / 3,041 | - / - |
+| 2,000/s | change | 30,000 / 30,000 | 4,856 / 4,425 | 25,138 / 25,553 | 6 / 22 | 0 / 0 | 0 / 0 | 73 / 57 | 4 / 4 |
+| 4,000/s | main | 18,779 / 19,085 | 2,951 / 2,151 | 0 / 0 | 4,304 / 4,520 | 11,520 / 12,412 | 41,221 / 40,915 | 3,041 / 3,041 | - / - |
+| 4,000/s | change | 60,000 / 54,574 | 4,899 / 3,062 | 54,485 / 51,269 | 10 / 4 | 606 / 239 | 0 / 5,426 | 97 / 74 | 11 / 67 |
+
+Main completed 2,151 to 4,234 connections per phase and timed out 8,164 to 12,412
+attempts, with a median handshake of 1.2 to 3.1 seconds. The change completed 3,062 to
+6,279, 1.4 to 1.8 times main's, while refusing 23,658 to 54,485 attempts, the median
+refusal taking 4 to 14 ms (67 ms in one Linux phase). A few attempts failed in the
+client itself and are not in the tables: the client's MsQuic ended 37 of main's
+streams with an internal error in one Windows phase and 14 across main's Linux phases,
+and three Windows handshakes, two of them main's, failed with WSAENOBUFS.
+
+One more run per platform repeated the change at this load with
+`EMBEDIO_BENCH_WARNINGS=1`. The listener having no room accounted for all 76,673
+refusals on Windows and 81,319 of 81,353 on Linux, where queued work briefly waited
+more than 250 ms and the delay bound refused the other 34; the 768-connection limit
+never engaged. At 4,000 attempts per second the budget or the send queue left 293
+refusals unsent on Windows and 5,234 on Linux, and those clients sent their Initial
+again.
+
+The server used 0.3 to 0.6 of its two CPUs on Windows and 1.0 to 1.7 on Linux, so on
+Windows its CPUs did not limit how many connections it completed. Its one socket loop,
+which handles at most one received and one sent datagram per iteration, is the first
+suspect.

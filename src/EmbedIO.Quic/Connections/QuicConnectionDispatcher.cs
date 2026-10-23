@@ -39,7 +39,13 @@ namespace EmbedIO.Quic
             string[] TokenIdentities
         );
 
-        private sealed record Output(Entry? Entry, byte[] Bytes, IPEndPoint? Peer = null, ulong? PathId = null);
+        private sealed record Output(
+            Entry? Entry,
+            byte[] Bytes,
+            IPEndPoint? Peer = null,
+            ulong? PathId = null,
+            bool Refusal = false
+        );
 
         private sealed class PeerGroup
         {
@@ -66,16 +72,36 @@ namespace EmbedIO.Quic
                 Endpoints = new QuicConnectionEndpoints(Peer, Local);
                 Owner = new QuicConnectionOwner(
                     dispatcher._pool,
-                    (packet, now) => create(
-                        packet,
-                        now,
-                        Owner ?? throw new InvalidOperationException("Connection owner was not initialized."),
-                        new QuicConnectionEndpoints(Peer, Local)
-                    ),
+                    (packet, now) =>
+                    {
+                        try
+                        {
+                            return create(
+                                packet,
+                                now,
+                                Owner ?? throw new InvalidOperationException("Connection owner was not initialized."),
+                                new QuicConnectionEndpoints(Peer, Local)
+                            );
+                        }
+
+                        finally
+                        {
+                            FinishAdmission(dispatcher);
+                        }
+                    },
                     () => dispatcher.ConnectionClock(this),
                     output => dispatcher.Publish(this, output),
                     connectionIds: dispatcher._connectionIds
                 );
+            }
+
+            // The entry counts in the dispatcher's Admitting from its admission until its first
+            // turn has created the connection, or until it retires without one.
+            private int _uncreated = 1;
+
+            internal void FinishAdmission(QuicConnectionDispatcher dispatcher)
+            {
+                if (Interlocked.Exchange(ref _uncreated, 0) == 1) Interlocked.Decrement(ref dispatcher._admitting);
             }
 
             internal string Original { get; }
@@ -107,6 +133,8 @@ namespace EmbedIO.Quic
         private readonly int _capacity;
         private readonly int _attemptLimit;
         private readonly double _handshakeTimeout;
+        private readonly bool _refuse;
+        private readonly double _queueDelayBound;
         private readonly int _outputPacketCapacity;
         private readonly int _outputByteCapacity;
         private readonly Channel<Output> _output;
@@ -121,6 +149,11 @@ namespace EmbedIO.Quic
         private int _pendingResets;
         private int _resetAttempts;
         private double _resetWindow;
+        private int _pendingRefusals;
+        private int _admitting;
+        private volatile Func<bool>? _saturated;
+        private int _refusalAttempts;
+        private double _refusalWindow;
         private Task? _shutdown;
         private TaskCompletionSource? _sendFinished;
         private bool _sending;
@@ -139,7 +172,9 @@ namespace EmbedIO.Quic
             double handshakeTimeout = 3000,
             int outputPacketCapacity = 256,
             int outputByteCapacity = 1048576,
-            int? admissionAttemptsPerSecond = null
+            int? admissionAttemptsPerSecond = null,
+            bool refuseConnections = false,
+            double queueDelayBound = 0
         )
         {
             ArgumentNullException.ThrowIfNull(create);
@@ -154,12 +189,17 @@ namespace EmbedIO.Quic
             if (!double.IsFinite(handshakeTimeout) || handshakeTimeout <= 0)
                 throw new ArgumentOutOfRangeException(nameof(handshakeTimeout));
 
+            if (!double.IsFinite(queueDelayBound) || queueDelayBound < 0 || (queueDelayBound > 0 && !refuseConnections))
+                throw new ArgumentOutOfRangeException(nameof(queueDelayBound));
+
             _create = create;
             _clock = clock;
             _capacity = capacity;
             _attemptLimit = admissionAttemptsPerSecond ?? capacity;
             ArgumentOutOfRangeException.ThrowIfNegative(_attemptLimit);
             _handshakeTimeout = handshakeTimeout;
+            _refuse = refuseConnections;
+            _queueDelayBound = queueDelayBound;
             _outputPacketCapacity = outputPacketCapacity;
             _outputByteCapacity = outputByteCapacity;
             _output = Channel.CreateBounded<Output>(new BoundedChannelOptions(outputPacketCapacity)
@@ -181,6 +221,32 @@ namespace EmbedIO.Quic
         internal int Retired { get; private set; }
         internal int Peak { get; private set; }
         internal int Rejected { get; private set; }
+
+        // New connections answered with CONNECTION_REFUSED.
+        internal int Refused { get; private set; }
+
+        // Why new connections were refused, whether or not the answer was sent: the endpoint
+        // was full, queued work waited past the bound, or the application layer had no room.
+        internal int RefusedAtCapacity { get; private set; }
+        internal int RefusedForQueueDelay { get; private set; }
+        internal int RefusedForApplication { get; private set; }
+
+        // Connections admitted whose first turn has not created them yet. The application
+        // layer is handed a connection only once it exists, so it cannot count these itself.
+        internal int Admitting => Volatile.Read(ref _admitting);
+
+        // Set by the application layer: true while it has no room for another connection, so
+        // a new one is refused before any connection state or TLS work starts.
+        internal Func<bool>? Saturated
+        {
+            get => _saturated;
+            set => _saturated = value;
+        }
+
+        // Refusals not sent because their per-second budget or the output queue was full.
+        internal int UnsentRefusals { get; private set; }
+        internal TimeSpan QueueDelay => _pool.QueueDelay;
+        private bool Overloaded => _queueDelayBound > 0 && _pool.QueueDelay.TotalMilliseconds > _queueDelayBound;
         internal int ExpiredHandshakes { get; private set; }
         internal int FailedOwners { get; private set; }
         internal Exception? LastOwnerFailure { get; private set; }
@@ -246,8 +312,17 @@ namespace EmbedIO.Quic
 
                 if (!initial) return SendReset(bytes, peer, now) || Reject();
 
-                if (!Accepting || !initial || bytes.Length is < 1200 or > 65535 || _entries.Count >= _capacity)
+                if (!Accepting || !initial || bytes.Length is < 1200 or > 65535) return Reject();
+
+                // Past capacity, while queued work waits longer than the bound, or while the
+                // application layer has no room, no connection state or TLS work starts for a
+                // new Initial.
+                if (Refuses())
+                {
+                    if (_refuse) SendRefusal(bytes, peer, now);
+
                     return Reject();
+                }
 
                 if (_attemptLimit != 0)
                 {
@@ -272,6 +347,7 @@ namespace EmbedIO.Quic
                 entry.Group.Count++;
                 entry.Groups.Add(groupKey);
                 _entries.Add(entry);
+                Interlocked.Increment(ref _admitting);
                 _initials.Add((entry.Peer, entry.Local, id), entry);
                 Peak = Math.Max(Peak, _entries.Count);
             }
@@ -354,6 +430,79 @@ namespace EmbedIO.Quic
                 _pendingResets++;
                 return true;
             }
+        }
+
+        // RFC 9000 5.2.2: a server that refuses a connection answers its Initial with
+        // CONNECTION_CLOSE(CONNECTION_REFUSED), so the client fails at once instead of
+        // retransmitting until its handshake times out. A per-second budget bounds the
+        // key derivation and sealing this costs the receive loop under a flood, and the
+        // reply is no larger than the Initial it answers.
+        private void SendRefusal(ReadOnlySpan<byte> bytes, IPEndPoint peer, double now)
+        {
+            if (now - _refusalWindow >= 1000)
+            {
+                _refusalWindow = now;
+                _refusalAttempts = 0;
+            }
+
+            if (_refusalAttempts >= RefusalsPerSecond)
+            {
+                UnsentRefusals++;
+                return;
+            }
+
+            var refusal = ConnectionRefusal.Create(bytes);
+
+            if (refusal == null) return;
+
+            _refusalAttempts++;
+
+            lock (_outputGate)
+            {
+                if (_closing) return;
+
+                if (
+                    _pendingRefusals >= RefusalQueueLimit
+                    || _pendingPackets >= _outputPacketCapacity
+                    || refusal.Length > _outputByteCapacity - _pendingBytes
+                )
+                {
+                    UnsentRefusals++;
+                    DroppedOutput++;
+                    return;
+                }
+
+                if (
+                    !_output.Writer.TryWrite(
+                        new Output(null, refusal, QuicConnectionEndpoints.Copy(peer), Refusal: true)
+                    )
+                )
+                    throw new InvalidOperationException("QUIC refusal queue lost capacity.");
+
+                _pendingPackets++;
+                _pendingBytes += refusal.Length;
+                _pendingRefusals++;
+                Refused++;
+            }
+        }
+
+        // Refusals queue behind established connections' packets; an eighth of the output
+        // queue, at most 512, holds them so that a burst is answered rather than dropped.
+        private int RefusalQueueLimit => Math.Min(512, Math.Max(1, _outputPacketCapacity / 8));
+
+        private const int RefusalsPerSecond = 4096;
+
+        private bool Refuses()
+        {
+            if (_entries.Count >= _capacity) RefusedAtCapacity++;
+
+            else if (Overloaded) RefusedForQueueDelay++;
+
+            else if (_saturated?.Invoke() == true) RefusedForApplication++;
+
+            else return false;
+
+            return true;
         }
 
         internal void Tick()
@@ -670,7 +819,9 @@ namespace EmbedIO.Quic
             _pendingPackets--;
             _pendingBytes -= output.Bytes.Length;
 
-            if (output.Entry == null) _pendingResets--;
+            if (output.Refusal) _pendingRefusals--;
+
+            else if (output.Entry == null) _pendingResets--;
 
             else
             {
@@ -686,6 +837,7 @@ namespace EmbedIO.Quic
                 if (!entry.Owner.Completion.IsCompleted) continue;
 
                 _entries.Remove(entry);
+                entry.FinishAdmission(this);
 
                 foreach (var key in entry.Groups)
                     if (--_peerGroups[key].Count == 0) _peerGroups.Remove(key);

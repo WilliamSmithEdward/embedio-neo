@@ -365,7 +365,11 @@ namespace EmbedIO.Net.Internal.Http3
                     }
 
                     foreach (var binding in endpoints)
-                        session._listeners.Add(bind(binding.Key, certificates, policy), [.. binding.Value]);
+                    {
+                        var listener = bind(binding.Key, certificates, policy);
+                        session._listeners.Add(listener, [.. binding.Value]);
+                        listener.LimitAdmission(session.Saturated);
+                    }
 
                     // Publish accept loops only after all bindings succeeded.
                     foreach (var listener in session._listeners)
@@ -483,6 +487,15 @@ namespace EmbedIO.Net.Internal.Http3
             }
 
             private const string NameForLog = "HTTP/3 listener";
+
+            // A handshake that completes while no established slot is free is closed with
+            // H3_EXCESSIVE_LOAD, and the handshakes already running claim the free slots
+            // first. Once established and handshaking connections, with those the binding has
+            // admitted but this session has not accepted yet, fill the 256 slots, the binding
+            // refuses a new connection before its handshake instead. Read without the lock; a
+            // stale count only moves the refusal by a connection or two.
+            private bool Saturated(int queued) =>
+                Volatile.Read(ref _activeConnections) + Volatile.Read(ref _pendingHandshakes) + queued >= 256;
 
             private async Task RunConnectionAsync(
                 long id,

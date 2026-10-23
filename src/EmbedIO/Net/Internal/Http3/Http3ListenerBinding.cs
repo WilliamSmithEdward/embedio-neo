@@ -17,6 +17,11 @@ namespace EmbedIO.Net.Internal.Http3
 
         internal virtual ValueTask StopAcceptingAsync() => DisposeAsync();
 
+        // Lets the HTTP/3 session refuse new connections before any TLS work while it has no
+        // room for them. The binding passes how many connections it admitted that the session
+        // has not accepted yet. A binding without its own admission ignores it.
+        internal virtual void LimitAdmission(Func<int, bool> saturated) { }
+
         public abstract ValueTask DisposeAsync();
 
         internal static Http3ListenerBinding Bind(

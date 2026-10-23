@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
@@ -16,6 +18,9 @@ namespace EmbedIO.Quic
         private readonly Task[] _workers;
         private readonly int _capacity;
         private Task? _shutdown;
+        private long _waiting;
+        private long _progress;
+        private long _averageWait;
 
         internal QuicExecutionPool(int workers, int capacity)
         {
@@ -47,6 +52,24 @@ namespace EmbedIO.Quic
             }
         }
 
+        // How long a turn waits for a worker, in Stopwatch ticks: MsQuic's worker average
+        // (seven parts history, one part the latest wait), reset whenever nothing waits, or,
+        // while turns wait, the time since a worker last took one, whichever is longer.
+        // A connection's TLS work runs in its turns, so admission refuses new connections
+        // above a bound and queued handshake work stays near it.
+        internal TimeSpan QueueDelay
+        {
+            get
+            {
+                var delay = Volatile.Read(ref _averageWait);
+
+                if (Volatile.Read(ref _waiting) > 0)
+                    delay = Math.Max(delay, Stopwatch.GetTimestamp() - Volatile.Read(ref _progress));
+
+                return Stopwatch.GetElapsedTime(0, delay);
+            }
+        }
+
         internal Registration Register(Action execute, Action cleanup)
         {
             ArgumentNullException.ThrowIfNull(execute);
@@ -67,10 +90,33 @@ namespace EmbedIO.Quic
 
         private void Schedule(Registration owner)
         {
+            // Without waiting turns no worker is late; the clock starts with this one.
+            if (Interlocked.Increment(ref _waiting) == 1) Volatile.Write(ref _progress, owner.QueuedAt);
+
             // Capacity is the registration limit, and each registration occupies
             // at most one slot. A full or completed queue is an invariant failure.
             if (!_ready.Writer.TryWrite(owner))
                 throw new InvalidOperationException("QUIC execution queue lost capacity.");
+        }
+
+        private void Started(long queuedAt)
+        {
+            var now = Stopwatch.GetTimestamp();
+            Volatile.Write(ref _progress, now);
+
+            if (Interlocked.Decrement(ref _waiting) == 0)
+            {
+                Volatile.Write(ref _averageWait, 0);
+                return;
+            }
+
+            var wait = now - queuedAt;
+            long current;
+
+            do
+                current = Volatile.Read(ref _averageWait);
+
+            while (Interlocked.CompareExchange(ref _averageWait, (current * 7 + wait) / 8, current) != current);
         }
 
         private void Release(Registration owner)
@@ -135,6 +181,9 @@ namespace EmbedIO.Quic
 
             internal Task Completion => _completion.Task;
 
+            // When the waiting turn was queued, in Stopwatch ticks.
+            internal long QueuedAt { get; private set; }
+
             internal bool Closing
             {
                 get
@@ -160,6 +209,7 @@ namespace EmbedIO.Quic
                 if (_queued || _running) return;
 
                 _queued = true;
+                QueuedAt = Stopwatch.GetTimestamp();
                 _pool.Schedule(this);
             }
 
@@ -196,6 +246,7 @@ namespace EmbedIO.Quic
                     closing = _closing;
                 }
 
+                _pool.Started(QueuedAt);
                 Exception? failure = null;
 
                 if (!closing)

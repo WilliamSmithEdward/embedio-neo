@@ -73,6 +73,14 @@ internal sealed class EmbedIOServer(ServerSettings settings) : IBenchmarkServer
     public Task StartAsync()
     {
         EmbedIO.Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.Off;
+        // Diagnostic opt-in: EmbedIO's warnings, such as the HTTP/3 listener's refusal
+        // counts, on this process's stderr log.
+        if (Environment.GetEnvironmentVariable("EMBEDIO_BENCH_WARNINGS") == "1")
+        {
+            System.Diagnostics.Trace.AutoFlush = true;
+            EmbedIO.Diagnostics.Log.Source.Switch.Level = System.Diagnostics.SourceLevels.Warning;
+            EmbedIO.Diagnostics.Log.Source.Listeners.Add(new System.Diagnostics.TextWriterTraceListener(Console.Error));
+        }
         var scheme = settings.Tls ? "https" : "http";
         var mode = settings.Protocol == Protocol.Http3 ? HttpListenerMode.EmbedIOHttp3 : HttpListenerMode.EmbedIO;
         var options = new WebServerOptions()
