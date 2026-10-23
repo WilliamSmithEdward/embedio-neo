@@ -1152,18 +1152,24 @@ Validated before the merge, each recorded in its own section:
   on Linux.
 - 30-minute endurance runs on Windows and Linux ([Endurance](#endurance)).
 
-Still open after the merge:
+Still open after the merge, each with its tracking issue:
 
 1. The transport/TLS profile: Retry, post-handshake TLS, resumption and 0-RTT are not
    implemented, and features outside the supported profile fail explicitly.
    Non-exportable keys work on Windows only; Unix TLS needs an exportable key.
+   [#520](https://github.com/WilliamSmithEdward/embedio-neo/issues/520).
 2. Bounded native TLS worker scheduling under sustained load, beyond the endurance runs.
+   [#521](https://github.com/WilliamSmithEdward/embedio-neo/issues/521).
 3. Startup, warm and tail-latency measurement. Windows embedded hosting leads, and a
    meaningful warm regression is not accepted for a cold-start gain.
+   [#522](https://github.com/WilliamSmithEdward/embedio-neo/issues/522).
 4. Endurance longer than 30 minutes, and on macOS.
+   [#523](https://github.com/WilliamSmithEdward/embedio-neo/issues/523).
 5. Execution on the oldest glibc and musl versions the native builds target, and
    macOS signing and hardened-runtime loading.
+   [#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524).
 6. Safari and browsers on macOS, and Alt-Svc discovery.
+   [#525](https://github.com/WilliamSmithEdward/embedio-neo/issues/525).
 
 The list this replaced, kept for its history:
 
