@@ -11,9 +11,16 @@
   default, turns it off. See [Draft-14](docs/guides/webtransport.md#draft-14).
 - EmbedIO.Quic offers and accepts the `reset_stream_at` transport parameter under the
   earlier codepoint `0x17f7586d2cb571` as well as `0x1d`; Safari 27 uses the former.
-- Guidance on advertising HTTP/3 with `Alt-Svc` from the application in Combined
-  mode; the server still sends none itself. See
-  [Advertising HTTP/3 with Alt-Svc](docs/guides/http3.md#advertising-http3-with-alt-svc).
+
+### Changed
+
+- `EmbedIOCombined` advertises its HTTP/3 endpoint as Kestrel does. Every HTTP/1.1,
+  HTTP/2 and HTTP/3 response carries `Alt-Svc: h3=":port"; ma=86400` for the port the
+  request arrived on, so browsers and .NET clients with `RequestVersionOrHigher` use
+  HTTP/3 after their first request. An `Alt-Svc` header the application sets is sent
+  unchanged. `WebServerOptions.AdvertiseHttp3`, or `WithoutHttp3Advertisement()`,
+  turns it off. `EmbedIO` and `EmbedIOHttp3` mode send no Alt-Svc. See
+  [Combined TCP and QUIC hosting](docs/guides/http3.md#alt-svc).
 
 ## [2.17.0] - 2026-10-22
 

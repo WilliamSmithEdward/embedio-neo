@@ -467,7 +467,7 @@ production code.
 | HTTP/2 resource abuse | RFC 9113 10.5 | `h2` flood cases | CONTINUATION flood bounded; other floods unbounded by policy (O3) |
 | HTTP/3 request streams and cancellation | RFC 9114 4 | `h3` cases, `h3-fuzz` | Cancellation can stop the listener (F3) |
 | QPACK | RFC 9204 | aioquic/ls-qpack decoding every response | Conforms |
-| HTTP/3 discovery | RFC 9114 3.1.1; RFC 7838 | Not yet tested | No Alt-Svc is emitted; tracked by #182 |
+| HTTP/3 discovery | RFC 9114 3.1.1; RFC 7838 | Conforms (.NET client) | `EmbedIOCombined` sends `Alt-Svc: h3=":port"; ma=86400` unless the application sets its own; a .NET client moves to HTTP/3 after its first response (#525). Browser discovery is not tested |
 | WebSocket over any version | RFC 6455, 8441, 9220 | Out of scope (#190) | Not assessed here |
 | TLS and QUIC transport | RFC 9846, 9000-9002 | Exercised implicitly by every TLS and QUIC case | Delegated to platform stacks |
 
@@ -634,7 +634,7 @@ stopped listener. The earliest campaign runs predate those corrections.
 - Windows for HTTP/2 and HTTP/3 campaigns: only the NUnit reproductions ran, and F3
   and F4 did not reproduce. The heavy campaigns run in Linux containers by design.
 - The .NET Standard 2.0 asset, the Microsoft listener backend, WebSocket (#190),
-  browsers, HTTP/3 discovery (no Alt-Svc emitted) and long soak runs (only scale 1)
+  browsers, HTTP/3 discovery and long soak runs (only scale 1)
   are not covered by these results.
 - Throughput and latency are not measured here; the separate benchmark work owns them.
 

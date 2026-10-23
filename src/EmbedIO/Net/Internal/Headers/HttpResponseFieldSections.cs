@@ -89,6 +89,18 @@ namespace EmbedIO.Net.Internal
             internal readonly string Text;
         }
 
+        private sealed class CachedAlternative
+        {
+            internal CachedAlternative(int port, string text)
+            {
+                Port = port;
+                Text = text;
+            }
+
+            internal readonly int Port;
+            internal readonly string Text;
+        }
+
         private sealed class CachedContentType
         {
             internal CachedContentType(string contentType, string charset, string text)
@@ -104,6 +116,7 @@ namespace EmbedIO.Net.Internal
         }
 
         private static CachedDate? _date;
+        private static CachedAlternative? _alternative;
         private static CachedContentType? _contentTypeWithCharset;
 
         // RFC 1123 dates have one-second resolution, so one string serves a whole second.
@@ -117,6 +130,19 @@ namespace EmbedIO.Net.Internal
 
             var text = HttpDate.Format(now);
             Volatile.Write(ref _date, new CachedDate(second, text));
+            return text;
+        }
+
+        // Kestrel's Alt-Svc value for an endpoint that serves HTTP/3 on the same port,
+        // kept for a day. A server usually listens on one port, so the last value is reused.
+        internal static string Http3Alternative(int port)
+        {
+            var cached = Volatile.Read(ref _alternative);
+
+            if (cached != null && cached.Port == port) return cached.Text;
+
+            var text = "h3=\":" + port.ToString(CultureInfo.InvariantCulture) + "\"; ma=86400";
+            Volatile.Write(ref _alternative, new CachedAlternative(port, text));
             return text;
         }
 
