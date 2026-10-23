@@ -1170,7 +1170,7 @@ Still open after the merge, each with its tracking issue:
    do the oldest glibc and musl that .NET 10 supports
    ([Oldest glibc and musl](#oldest-glibc-and-musl)).
    [#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524).
-6. Firefox on macOS. Safari 27 and Chromium on macOS now pass
+6. Resolved: Safari 27, Chromium and Firefox on macOS pass
    ([macOS browsers and draft-14](#macos-browsers-and-draft-14)). Alt-Svc discovery is
    in the source after 2.17.0 (unreleased): `EmbedIOCombined` advertises HTTP/3, and a
    .NET client moves to HTTP/3 after its first response
@@ -2714,7 +2714,16 @@ without remote automation.
   no message. Playwright's macOS WebKit 27.2, unlike its Linux build, has
   `WebTransport` and failed the same way.
 - Playwright 1.64.0's Firefox did not start on macOS 27 ("Could not find profile
-  folder"), so Firefox on macOS is untested.
+  folder"). Firefox 158.0.1 from Mozilla (SHA-256 checked against the release's
+  `SHA256SUMS`) failed the same way when started directly from the test shell, but
+  started when macOS launched it (`open -n -a Firefox.app --args --headless
+  --profile <empty folder> <page>`), as Safari was. It passed the page in draft-02,
+  three runs against the 2.17.0 packages from nuget.org and three against the
+  draft-14 build: datagram, bidirectional and unidirectional echoes, and the page's
+  close. Each request carried `sec-webtransport-http3-draft02: 1`, so draft-14
+  support does not take Firefox over. As on Linux the server recorded no close code:
+  five sessions ended without one and one request was canceled
+  ([#537](https://github.com/WilliamSmithEdward/embedio-neo/issues/537)).
 
 A UDP relay recorded Safari's exchange. A local build that also wrote the server's
 traffic secrets, never committed, let aioquic decrypt it:

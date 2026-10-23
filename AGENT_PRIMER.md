@@ -1356,8 +1356,10 @@ Model and independent-peer checks cover omitted and zero-valued client
 advertisements. Locally, the public session API passes all 15 quic-go peer modes,
 and a Chromium 152 browser completed a draft-02 session with datagram, stream and
 close checks. On macOS 27, Chromium 152 passed in draft-02 and, with the unreleased
-draft-14 support, Safari 27.0.1 and Playwright WebKit 27.2 passed in draft-14; the
-peer runs every mode in both dialects (`-dialect draft-14`).
+draft-14 support, Safari 27.0.1 and Playwright WebKit 27.2 passed in draft-14, and
+Firefox 158.0.1 passed in draft-02 (started through `open -n -a`; launched directly
+from a tool shell it fails with "Could not find profile folder"). The peer runs every
+mode in both dialects (`-dialect draft-14`).
 
 The QUIC bridge fuzz target round-trips input-derived server SETTINGS through the
 HTTP/3 and WebTransport readers and probes malformed extension pairs. Local
