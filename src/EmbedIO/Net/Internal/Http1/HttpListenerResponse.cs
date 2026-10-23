@@ -73,6 +73,9 @@ namespace EmbedIO.Net.Internal
         }
 
         internal bool HeadersSent { get; set; }
+
+        // Alt-Svc value from combined hosting, sent unless the application set its own.
+        internal string? AlternativeService { get; set; }
         internal bool IsHeadResponse => _request.HttpVerb == HttpVerbs.Head;
         internal bool IsTunnelResponse => _handoff;
         internal bool SuppressesBody => IsHeadResponse || _status < 200 || _status is 204 or 205 or 304;
@@ -329,6 +332,9 @@ namespace EmbedIO.Net.Internal
             }
 
             if (Headers[HttpHeaderNames.Server] == null) Headers.Add(HttpHeaderNames.Server, WebServer.Signature);
+
+            if (AlternativeService != null && Headers[HttpHeaderNames.AltSvc] == null)
+                Headers.Add(HttpHeaderNames.AltSvc, AlternativeService);
 
             if (Headers[HttpHeaderNames.Date] == null)
                 Headers.Add(HttpHeaderNames.Date, HttpResponseFieldSections.CurrentDate());

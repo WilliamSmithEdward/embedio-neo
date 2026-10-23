@@ -330,7 +330,7 @@ limits and validation. The table below keeps its frozen observations of earlier 
 
 | Item | Engine | Status |
 | --- | --- | --- |
-| Alt-Svc header or ALTSVC frame | Never emitted; constant only (`HttpHeaderNames.cs:104`) | M. Without it or an HTTPS record, browsers will not use HTTP/3 (documented in `docs/guides/http3.md:26`) |
+| Alt-Svc header or ALTSVC frame | Never emitted at the audit; constant only (`HttpHeaderNames.cs:104`). `EmbedIOCombined` later sends the header (#525) | M. Without it or an HTTPS record, browsers will not use HTTP/3 (documented in `docs/guides/http3.md:26`) |
 | ORIGIN frame (h2, h3) | Not sent; received frames ignored as unknown | M (optional) |
 
 ## Findings
@@ -348,7 +348,7 @@ or an approved draft and therefore needs William's approval before implementatio
 | F6 | On managed HTTP/1, `FlushAsync` before the first write does not send the response head, so applications cannot send headers ahead of content (early responses, RFC 10036's bidirectional use). HTTP/2 and HTTP/3 flush headers. | Capability | Source (`ResponseStream.cs:50-56`) |
 | F7 | Priority affects only HTTP/2 flow-credit admission; HTTP/3 does not schedule; there is no application API to read or set priority, and server `Priority` responses are ignored. No independent peer sends priority signals in any test. | Optional, partial | Source; test inventory |
 | F8 | Draft #224 blocks only `websocket` among tunnel tokens. An application can accept `h2c` (obsolete) or registered tokens such as `connect-udp`/`connect-ip` without their RFC 9298/9484 obligations. Documenting those obligations, or rejecting `h2c`, would close the gap. `HttpCapsuleProtocol.IsEnabled` has no production caller. | API safety | Source (`a2dc18c`) |
-| F9 | Discovery is absent: no Alt-Svc, ALTSVC or ORIGIN. HTTP/3 is reachable only by clients with prior knowledge. | Optional, needed for browsers | Source |
+| F9 | Discovery is absent: no Alt-Svc, ALTSVC or ORIGIN. HTTP/3 is reachable only by clients with prior knowledge. Later resolved for `EmbedIOCombined`, which sends an Alt-Svc header (#525); ALTSVC frames and ORIGIN remain absent. | Optional, needed for browsers | Source |
 | F10 | `SETTINGS_H3_DATAGRAM` is parsed but unused, there is no native QUIC datagram path, and no WebTransport session support on either head. Correct for what is advertised; a capability limit to state wherever capsules are described. | Capability limit | Source |
 
 Documentation drift found during the audit, for the owners of those files:

@@ -576,6 +576,7 @@ namespace EmbedIO
                     combined.TlsPolicy = tlsPolicy;
                     combined.Telemetry = Telemetry;
                     combined.WebTransport = Options.WebTransport;
+                    combined.AdvertiseHttp3 = Options.AdvertiseHttp3;
                 }
 
                 else if (listener is Net.Internal.Http3.Http3Listener quic)

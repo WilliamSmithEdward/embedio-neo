@@ -76,6 +76,9 @@ namespace EmbedIO.Net.Internal.Http3
         // the default RequestHeadersTimeout of 30 seconds. Set before Start.
         internal TimeSpan? RequestHeadersTimeout { get; set; }
 
+        // Set by combined hosting: responses advertise this HTTP/3 endpoint with Alt-Svc. Set before Start.
+        internal bool AdvertiseHttp3 { get; set; }
+
         public bool IsListening
         {
             get
@@ -141,6 +144,7 @@ namespace EmbedIO.Net.Internal.Http3
                     Telemetry,
                     WebTransport,
                     RequestHeadersTimeout,
+                    AdvertiseHttp3,
                     _bodyPolicy,
                     _dispatcher,
                     _bind
@@ -307,6 +311,7 @@ namespace EmbedIO.Net.Internal.Http3
             private EmbedIO.Internal.ServerTelemetry? _telemetry;
             private WebTransportOptions? _webTransport;
             private TimeSpan? _requestHeadersTimeout;
+            private bool _advertiseHttp3;
             private Func<IHttpContextImpl, Task>? _dispatcher;
 
             private Session() { }
@@ -322,6 +327,7 @@ namespace EmbedIO.Net.Internal.Http3
                 EmbedIO.Internal.ServerTelemetry? telemetry,
                 WebTransportOptions? webTransport,
                 TimeSpan? requestHeadersTimeout,
+                bool advertiseHttp3,
                 RequestPolicyResolver? bodyPolicy,
                 Func<IHttpContextImpl, Task>? dispatcher,
                 Func<IPEndPoint, ServerCertificateSource, ServerTlsPolicy?, Http3ListenerBinding> bind
@@ -333,6 +339,7 @@ namespace EmbedIO.Net.Internal.Http3
                     _telemetry = telemetry,
                     _webTransport = webTransport,
                     _requestHeadersTimeout = requestHeadersTimeout,
+                    _advertiseHttp3 = advertiseHttp3,
                     _bodyPolicy = bodyPolicy,
                     _dispatcher = dispatcher
                 };
@@ -598,6 +605,11 @@ namespace EmbedIO.Net.Internal.Http3
             )
             {
                 var context = new MultiplexedContext(exchange, local, remote, true, clientCertificate);
+
+                if (_advertiseHttp3)
+                    ((MultiplexedResponse)context.Response).AlternativeService = HttpResponseFieldSections.Http3Alternative(
+                        local.Port
+                    );
 
                 try
                 {

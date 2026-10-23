@@ -374,8 +374,12 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 - HTTP/2 needs no opt-in in the default mode.
 - `HttpListenerMode` value 1 (the old Microsoft listener) is removed and throws.
 - Unsupported HTTP/3 platforms throw `PlatformNotSupportedException` at startup.
-- There is no automatic Alt-Svc advertisement; clients must be told HTTP/3 is
-  available. See the [HTTP/3 guide](docs/guides/http3.md).
+- `EmbedIOCombined` sends `Alt-Svc: h3=":port"; ma=86400` on every response
+  (source after 2.17.0, unreleased; 2.17.0 sends none), so browsers and .NET
+  clients with `RequestVersionOrHigher` move to HTTP/3. An application-set
+  `Alt-Svc` is kept; `WithoutHttp3Advertisement()` turns it off. `EmbedIOHttp3`
+  advertises nothing; its clients must ask for HTTP/3. See the
+  [HTTP/3 guide](docs/guides/http3.md#alt-svc).
 
 The HTTP/3 listener serves opt-in WebTransport sessions:
 `WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a

@@ -24,6 +24,7 @@ namespace EmbedIO
         private Net.ServerCertificateSource? _certificateSource;
         private Net.ServerTlsPolicy? _tlsPolicy;
         private WebTransportOptions? _webTransport;
+        private bool _advertiseHttp3 = true;
         private string? _certificateThumbprint;
         private bool _autoLoadCertificate;
         private bool _autoRegisterCertificate;
@@ -130,6 +131,30 @@ namespace EmbedIO
             {
                 EnsureConfigurationNotLocked();
                 _webTransport = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether <see cref="HttpListenerMode.EmbedIOCombined"/> advertises its
+        /// HTTP/3 endpoint to clients. The default is <see langword="true"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>Every response then carries <c>Alt-Svc: h3=":port"; ma=86400</c>, naming the port the request
+        /// arrived on, which serves TCP and QUIC alike. Clients that honor it, such as browsers and .NET clients
+        /// with <c>RequestVersionOrHigher</c>, move to HTTP/3 for later requests. An <c>Alt-Svc</c> header that
+        /// the application sets is sent unchanged.</para>
+        /// <para>The other modes send no Alt-Svc header: EmbedIO serves no HTTP/3, and EmbedIOHttp3 serves
+        /// nothing else.</para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">This property is being set,
+        /// and this instance's configuration is locked.</exception>
+        public bool AdvertiseHttp3
+        {
+            get => _advertiseHttp3;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _advertiseHttp3 = value;
             }
         }
 

@@ -168,9 +168,10 @@ on .NET Standard does not provide TLS negotiation support.
 
 Follow the [HTTP/3 deployment guide](../guides/http3.md) for certificate lifetime,
 key provisioning, hostname validation, native libraries and platform limits.
-HTTP/3 availability does not imply automatic Alt-Svc discovery or an available
-WebTransport server. 2.17.0 adds opt-in WebTransport sessions, with their
-datagrams, through `IWebTransportContext`;
+`EmbedIOCombined` advertises HTTP/3 with an Alt-Svc header after 2.17.0
+(unreleased); `EmbedIOHttp3` serves only HTTP/3 and advertises nothing. HTTP/3
+availability does not imply an available WebTransport server. 2.17.0 adds opt-in
+WebTransport sessions, with their datagrams, through `IWebTransportContext`;
 the [WebTransport guide](../guides/webtransport.md) gives its drafts, limits and
 validation. Consult the
 [capability status](../project/http-engine.md) before selecting those features.
