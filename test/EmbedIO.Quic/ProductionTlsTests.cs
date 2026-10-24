@@ -15,32 +15,45 @@ namespace EmbedIO.Quic
         {
             Check(typeof(SchannelTls).Assembly == typeof(WebServer).Assembly, "native TLS belongs to the library");
             var source = new ServerCertificateSource(first.BorrowCertificate());
-            var factory = EmbedIOQuicTls.CreateFactory(source, null);
 
-            using (var started = (SchannelTls)factory([]))
+            using (var factory = EmbedIOQuicTls.CreateFactory(source, null))
             {
-                source.Publish(replacement.BorrowCertificate());
-                using var later = (SchannelTls)factory([]);
-                FirstFlight(started);
-                FirstFlight(later);
-                Check(
-                    started.SelectedCertificateSha256
-                        == first
-                            .BorrowCertificate()
-                            .GetCertHashString(HashAlgorithmName.SHA256)
-                        && later.SelectedCertificateSha256
-                            == replacement
+                using (var started = (SchannelTls)factory.Create([]))
+                {
+                    source.Publish(replacement.BorrowCertificate());
+                    using var later = (SchannelTls)factory.Create([]);
+                    FirstFlight(started);
+                    FirstFlight(later);
+                    Check(
+                        started.SelectedCertificateSha256
+                            == first
                                 .BorrowCertificate()
-                                .GetCertHashString(HashAlgorithmName.SHA256),
-                    "certificate publication affects only later handshakes"
-                );
+                                .GetCertHashString(HashAlgorithmName.SHA256)
+                            && later.SelectedCertificateSha256
+                                == replacement
+                                    .BorrowCertificate()
+                                    .GetCertHashString(HashAlgorithmName.SHA256),
+                        "certificate publication affects only later handshakes"
+                    );
+                    Check(
+                        started.Diagnostics.Count == 0 && later.Diagnostics.Count == 0,
+                        "ordinary TLS does not collect development diagnostics"
+                    );
+                    Check(
+                        SchannelTls.ActiveCredentials == 2 && factory.CachedCredentials == 1,
+                        "a handshake that started before a publication does not cache the replaced certificate"
+                    );
+                }
+
                 Check(
-                    started.Diagnostics.Count == 0 && later.Diagnostics.Count == 0,
-                    "ordinary TLS does not collect development diagnostics"
+                    SchannelTls.ActiveCredentials == 1 && factory.CachedCredentials == 1,
+                    "the replaced certificate's credential ends with its handshake"
                 );
             }
 
+            Check(SchannelTls.ActiveCredentials == 0, "a disposed factory frees its credentials");
             source.Publish(first.BorrowCertificate());
+            SharedCredentials(first, replacement);
 
             foreach (var selected in new[] { false, true })
             {
@@ -56,8 +69,8 @@ namespace EmbedIO.Quic
                         return selected ? replacement.BorrowCertificate() : null;
                     }
                 };
-                var select = EmbedIOQuicTls.CreateFactory(source, policy);
-                using var tls = (SchannelTls)select([]);
+                using var select = EmbedIOQuicTls.CreateFactory(source, policy);
+                using var tls = (SchannelTls)select.Create([]);
                 var hello = TlsHelloTests.NativeHello(
                     [],
                     "h3",
@@ -102,10 +115,11 @@ namespace EmbedIO.Quic
 
             foreach (var mode in new[] { ClientCertificateMode.Allow, ClientCertificateMode.Require })
             {
-                using var tls = EmbedIOQuicTls.CreateFactory(
+                using var factory = EmbedIOQuicTls.CreateFactory(
                     source,
                     new ServerTlsPolicy { ClientCertificateMode = mode }
-                )([]);
+                );
+                using var tls = factory.Create([]);
                 tls.Add(0, 0, TlsHelloTests.NativeHello([], "h3"));
                 tls.Pump();
                 Check(
@@ -122,7 +136,9 @@ namespace EmbedIO.Quic
 
             try
             {
-                EmbedIOQuicTls.CreateFactory(source, new ServerTlsPolicy { EnabledProtocols = SslProtocols.Tls12 });
+                EmbedIOQuicTls
+                    .CreateFactory(source, new ServerTlsPolicy { EnabledProtocols = SslProtocols.Tls12 })
+                    .Dispose();
                 throw new InvalidOperationException("TLS 1.2-only policy was ignored.");
             }
 
@@ -131,7 +147,8 @@ namespace EmbedIO.Quic
             var failure = new InvalidOperationException("selector failure");
             var failingPolicy = new ServerTlsPolicy { ServerCertificateSelector = _ => throw failure };
 
-            using (var tls = EmbedIOQuicTls.CreateFactory(source, failingPolicy)([]))
+            using (var factory = EmbedIOQuicTls.CreateFactory(source, failingPolicy))
+            using (var tls = factory.Create([]))
             {
                 tls.Add(0, 0, TlsHelloTests.NativeHello([], "h3"));
 
@@ -149,10 +166,11 @@ namespace EmbedIO.Quic
 
             var critical = new OutOfMemoryException("critical selector fixture");
 
-            using (var tls = EmbedIOQuicTls.CreateFactory(
+            using (var factory = EmbedIOQuicTls.CreateFactory(
                 source,
                 new ServerTlsPolicy { ServerCertificateSelector = _ => throw critical }
-            )([]))
+            ))
+            using (var tls = factory.Create([]))
             {
                 tls.Add(0, 0, TlsHelloTests.NativeHello([], "h3"));
 
@@ -166,9 +184,107 @@ namespace EmbedIO.Quic
             }
         }
 
-        private static void FirstFlight(SchannelTls tls)
+        // Handshakes that select one certificate object share its Schannel credential. A
+        // publication or the factory's disposal drops it from the cache, and a handshake that
+        // still holds it keeps it until it ends.
+        private static void SharedCredentials(SchannelTestCertificate first, SchannelTestCertificate replacement)
         {
-            tls.Add(0, 0, TlsHelloTests.NativeHello([], "h3"));
+            var source = new ServerCertificateSource(first.BorrowCertificate());
+            var selector = new ServerTlsPolicy
+            {
+                ServerCertificateSelector = name =>
+                    StringComparer.OrdinalIgnoreCase.Equals(name, "selected.example")
+                        ? replacement.BorrowCertificate()
+                        : null
+            };
+            var selected = TlsHelloTests.NativeHello(
+                [],
+                "h3",
+                (0, TlsHelloTests.ServerName(Encoding.ASCII.GetBytes("selected.example")))
+            );
+            var factory = EmbedIOQuicTls.CreateFactory(source, selector);
+            SchannelTls? survivor = null;
+            SchannelTls? pending = null;
+
+            try
+            {
+                using (var one = (SchannelTls)factory.Create([]))
+                using (var two = (SchannelTls)factory.Create([]))
+                using (var named = (SchannelTls)factory.Create([]))
+                using (var renamed = (SchannelTls)factory.Create([]))
+                {
+                    FirstFlight(one);
+                    FirstFlight(two);
+                    FirstFlight(named, selected);
+                    FirstFlight(renamed, selected);
+                    Check(
+                        SchannelTls.ActiveCredentials == 2
+                            && factory.CachedCredentials == 2
+                            && named.SelectedCertificateSha256
+                                == replacement
+                                    .BorrowCertificate()
+                                    .GetCertHashString(HashAlgorithmName.SHA256),
+                        "handshakes that select one certificate share its credential"
+                    );
+                }
+
+                Check(SchannelTls.ActiveCredentials == 2, "the listener keeps credentials between handshakes");
+                survivor = (SchannelTls)factory.Create([]);
+                FirstFlight(survivor);
+                source.Publish(replacement.BorrowCertificate());
+
+                using (var next = (SchannelTls)factory.Create([]))
+                {
+                    FirstFlight(next);
+                    Check(
+                        SchannelTls.ActiveCredentials == 2 && factory.CachedCredentials == 1,
+                        "publication drops the cache's credentials while a handshake keeps its own"
+                    );
+                }
+
+                survivor.Dispose();
+                survivor = null;
+                Check(SchannelTls.ActiveCredentials == 1, "the last handshake holding a dropped credential frees it");
+                pending = (SchannelTls)factory.Create([]);
+                FirstFlight(pending);
+                factory.Dispose();
+                Check(
+                    SchannelTls.ActiveCredentials == 1 && factory.CachedCredentials == 0,
+                    "a handshake keeps its credential after the listener stops"
+                );
+                pending.Dispose();
+                pending = null;
+                Check(SchannelTls.ActiveCredentials == 0, "the last holder frees the credential once");
+
+                using var late = factory.Create([]);
+                late.Add(0, 0, TlsHelloTests.NativeHello([], "h3"));
+
+                try
+                {
+                    late.Pump();
+                    throw new InvalidOperationException("A stopped listener prepared a credential.");
+                }
+
+                catch (InvalidDataException)
+                {
+                    Check(
+                        late.AlertCode == 80 && SchannelTls.ActiveCredentials == 0,
+                        "a stopped listener refuses new handshakes"
+                    );
+                }
+            }
+
+            finally
+            {
+                survivor?.Dispose();
+                pending?.Dispose();
+                factory.Dispose();
+            }
+        }
+
+        private static void FirstFlight(SchannelTls tls, byte[]? hello = null)
+        {
+            tls.Add(0, 0, hello ?? TlsHelloTests.NativeHello([], "h3"));
             tls.Pump();
             Check(tls.WriteKeys[1] != null && tls.AlertCode == null, "native TLS first flight succeeds");
         }

@@ -47,13 +47,25 @@ CI also runs them as ad-hoc signed hardened-runtime macOS apps, Native AOT and J
 signing with a Developer ID is not validated, since the project has none.
 See [the development record](../../docs/project/quic-development-and-testing.md).
 
-## Issuer chains and ownership checks
+## Credentials, issuer chains and ownership checks
 
-Private ABI 2 adds ordered public issuer certificates separately from the leaf's
-PKCS#12 credential. The managed adapter uses normal runtime issuer discovery,
-keeps a partial chain's final issuer, omits the trust anchor and releases its
-chain copies. An older ABI fails preflight before listener readiness. This does
-not choose the public provider or change client-certificate trust policy.
+Private ABI 3 separates the server credential from the connection. A credential
+holds the key and leaf parsed once from the selected certificate's PKCS#12 export,
+which managed code clears as soon as the parse returns, and the ordered public
+issuer certificates. Connections install it by reference: each takes its own
+OpenSSL references to the key, leaf and chain, so the owner may free the credential
+while those connections continue. A refused issuer retires the credential, and
+installing a retired credential retires the connection. The managed adapter keeps
+one credential per selected certificate for each listener and frees it when the
+certificate source publishes a replacement, the certificate is disposed or the
+listener stops; a certificate whose chain the stores cannot complete gets one per
+handshake. ABI 2 installed the credential and its issuers into each connection;
+ABI 1 had no issuers.
+
+The managed adapter uses normal runtime issuer discovery, keeps a partial chain's
+final issuer, omits the trust anchor and releases its chain copies. An older ABI
+fails preflight before listener readiness. This does not choose the public provider
+or change client-certificate trust policy.
 
 `verify_server_chain.py` exercises a BCL TCP control and the actual QUIC factory
 with complete, partial, two-intermediate, direct-root and self-signed profiles,
@@ -63,8 +75,9 @@ CI user profile. It adds public certificates only to the temporary current-user
 CA store and removes its entries afterward. It never adds a trusted root.
 
 The standalone Linux ownership test also checks 32 issuer entries, excess and
-malformed input, allocation cleanup and native error retirement. After the native
-build above, use the pinned independent-peer Python environment:
+malformed input, a credential that four connections share and that is freed before
+them, allocation cleanup and native error retirement. After the native build above,
+use the pinned independent-peer Python environment:
 
 ```sh
 python3 native/EmbedIO.Quic.Tls/tests/create_fixtures.py TestResults/quic-owned-fixtures
@@ -81,7 +94,7 @@ vendor archives and assembler are not compiler-instrumented by this command.
 `build.py --rid <rid>` requests a distribution identity. The build runs `audit.py`
 without loading the native code and records the result and tool/source hashes in
 `binary-audit.json` and `build-receipt.json`. Linux checks the actual ELF64
-architecture, exact ABI-2 symbol versions, system-only dependencies, SONAME,
+architecture, exact ABI-3 symbol versions, system-only dependencies, SONAME,
 non-executable stack, RELRO and immediate binding. Requested glibc RIDs reject
 symbol requirements newer than 2.27. A development build without `--rid` records
 its actual glibc requirement and must not be treated as a distribution artifact.

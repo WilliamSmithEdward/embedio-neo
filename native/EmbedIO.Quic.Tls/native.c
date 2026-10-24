@@ -25,13 +25,24 @@ struct connection {
     SSL *tls;
     struct block *input[3], *tail[3], *held, *events, *last_event;
     size_t input_bytes, input_count, event_bytes, event_count;
-    int read_level, write_level, credential_set, error, alert, server_chain_count;
+    int read_level, write_level, credential_set, error, alert;
     unsigned char alpn[255], parameters[4096];
     size_t alpn_length, parameters_length;
+};
+/* A selected certificate's key, leaf and issuer chain, parsed once and shared by the
+   connections that install it. Each connection takes its own OpenSSL references. The
+   managed owner completes the issuer chain before it shares the credential; a refused
+   issuer retires the credential, as it retired the connection in ABI 2. */
+struct credential {
+    EVP_PKEY *key;
+    X509 *certificate;
+    STACK_OF(X509) *chain;
+    int error;
 };
 
 static _Atomic uint64_t live_connections;
 static _Atomic uint64_t live_blocks;
+static _Atomic uint64_t live_credentials;
 
 static void release_block(struct block *value)
 {
@@ -182,7 +193,8 @@ static const OSSL_DISPATCH dispatch[] = {
 
 __attribute__((visibility("default"))) uint64_t embedio_quic_tls_connections(void) { return atomic_load_explicit(&live_connections, memory_order_relaxed); }
 __attribute__((visibility("default"))) uint64_t embedio_quic_tls_blocks(void) { return atomic_load_explicit(&live_blocks, memory_order_relaxed); }
-__attribute__((visibility("default"))) unsigned int embedio_quic_tls_abi(void) { return 2; }
+__attribute__((visibility("default"))) uint64_t embedio_quic_tls_credentials(void) { return atomic_load_explicit(&live_credentials, memory_order_relaxed); }
+__attribute__((visibility("default"))) unsigned int embedio_quic_tls_abi(void) { return 3; }
 __attribute__((visibility("default"))) const char *embedio_quic_tls_version(void) { return OpenSSL_version(OPENSSL_VERSION); }
 __attribute__((visibility("default"))) void embedio_quic_tls_free(struct connection *owner)
 {
@@ -285,51 +297,68 @@ __attribute__((visibility("default"))) int embedio_quic_tls_server_name(struct c
     memcpy(output, name, length);
     return (int)length;
 }
-__attribute__((visibility("default"))) int embedio_quic_tls_set_credential(struct connection *owner, const unsigned char *data, size_t length)
+__attribute__((visibility("default"))) void embedio_quic_tls_credential_free(struct credential *credential)
+{
+    if (credential != NULL) {
+        atomic_fetch_sub_explicit(&live_credentials, 1, memory_order_relaxed);
+        EVP_PKEY_free(credential->key);
+        X509_free(credential->certificate);
+        sk_X509_pop_free(credential->chain, X509_free);
+        OPENSSL_clear_free(credential, sizeof(*credential));
+    }
+}
+/* Parse the selected certificate's PKCS#12 export, protected by an empty password. */
+__attribute__((visibility("default"))) struct credential *embedio_quic_tls_credential_new(const unsigned char *data, size_t length)
 {
     const unsigned char *cursor = data;
-    PKCS12 *encoded = NULL;
-    EVP_PKEY *key = NULL;
-    X509 *certificate = NULL;
-    STACK_OF(X509) *additional = NULL;
-    int result = 0;
-    if (owner == NULL || owner->credential_set || owner->error || data == NULL
-            || length == 0 || length > 1048576) return 0;
+    PKCS12 *encoded;
+    struct credential *credential;
+    int parsed;
+    if (data == NULL || length == 0 || length > 1048576) return NULL;
+    credential = OPENSSL_zalloc(sizeof(*credential));
+    if (credential == NULL) return NULL;
+    atomic_fetch_add_explicit(&live_credentials, 1, memory_order_relaxed);
     encoded = d2i_PKCS12(NULL, &cursor, (long)length);
-    if (encoded == NULL || cursor != data + length
-            || !PKCS12_parse(encoded, "", &key, &certificate, &additional)
-            || key == NULL || certificate == NULL
-            || !SSL_use_certificate(owner->tls, certificate)
-            || !SSL_use_PrivateKey(owner->tls, key) || !SSL_check_private_key(owner->tls)
-            || !SSL_clear_chain_certs(owner->tls)) goto done;
-    if (sk_X509_num(additional) > 32) goto done;
-    for (int index = 0; index < sk_X509_num(additional); index++)
-        if (!SSL_add1_chain_cert(owner->tls, sk_X509_value(additional, index))) goto done;
-    owner->server_chain_count = sk_X509_num(additional);
-    if (owner->server_chain_count < 0) owner->server_chain_count = 0;
-    result = 1; owner->credential_set = 1;
-done:
-    PKCS12_free(encoded); EVP_PKEY_free(key); X509_free(certificate);
-    sk_X509_pop_free(additional, X509_free);
-    if (!result) fail(owner);
-    return result;
+    parsed = encoded != NULL && cursor == data + length
+        && PKCS12_parse(encoded, "", &credential->key, &credential->certificate, &credential->chain);
+    PKCS12_free(encoded);
+    if (!parsed || credential->key == NULL || credential->certificate == NULL
+            || !X509_check_private_key(credential->certificate, credential->key)
+            || sk_X509_num(credential->chain) > 32
+            || (credential->chain == NULL && (credential->chain = sk_X509_new_null()) == NULL)) {
+        embedio_quic_tls_credential_free(credential);
+        return NULL;
+    }
+    return credential;
 }
-/* Append public issuer certificates in managed chain order before TLS resumes. */
-__attribute__((visibility("default"))) int embedio_quic_tls_add_chain(struct connection *owner,
+/* Append public issuer certificates in managed chain order. Only before the credential is
+   shared: use_credential duplicates this stack without a lock. */
+__attribute__((visibility("default"))) int embedio_quic_tls_credential_add_chain(struct credential *credential,
         const unsigned char *data, size_t length)
 {
     const unsigned char *cursor = data;
     X509 *certificate;
-    int result;
-    if (owner == NULL || owner->error || !owner->credential_set
-            || SSL_is_init_finished(owner->tls) || owner->server_chain_count >= 32
+    if (credential == NULL || credential->error || sk_X509_num(credential->chain) >= 32
             || data == NULL || length == 0 || length > CHUNK_LIMIT) return 0;
     certificate = d2i_X509(NULL, &cursor, (long)length);
-    result = certificate != NULL && cursor == data + length
-        && SSL_add1_chain_cert(owner->tls, certificate);
-    X509_free(certificate);
-    if (!result) return fail(owner);
-    owner->server_chain_count++;
+    if (certificate == NULL || cursor != data + length || !sk_X509_push(credential->chain, certificate)) {
+        X509_free(certificate);
+        credential->error = 1;
+        return 0;
+    }
+    return 1;
+}
+/* Install a credential for this connection's handshake. The connection holds its own
+   references afterward, so the owner may free the credential while TLS continues. */
+__attribute__((visibility("default"))) int embedio_quic_tls_use_credential(struct connection *owner,
+        const struct credential *credential)
+{
+    if (owner == NULL || owner->credential_set || owner->error) return 0;
+    if (credential == NULL || credential->error
+            || !SSL_use_certificate(owner->tls, credential->certificate)
+            || !SSL_use_PrivateKey(owner->tls, credential->key) || !SSL_check_private_key(owner->tls)
+            || !SSL_set1_chain(owner->tls, credential->chain)) return fail(owner);
+    owner->credential_set = 1;
     return 1;
 }
 __attribute__((visibility("default"))) int embedio_quic_tls_next(struct connection *owner, int *kind, int *level, int *cipher,

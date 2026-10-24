@@ -99,6 +99,9 @@ async def case(args, mode, client, allowed):
     ready = {}
     failure = None
     peers = []
+    # The listener's handshakes share one credential per certificate; the server issues no
+    # session tickets, so no connection resumes with another's client identity.
+    tickets = []
     rejection = None
     async def request(peer, path, expected, body=None, **kwargs):
         peer.authority = f"127.0.0.1:{ready['port']}".encode()
@@ -141,7 +144,8 @@ async def case(args, mode, client, allowed):
             peer = CertificatePeer(*values, **kwargs)
             peers.append(peer)
             return peer
-        return connect('127.0.0.1', ready['port'], configuration=config, create_protocol=create)
+        return connect('127.0.0.1', ready['port'], configuration=config, create_protocol=create,
+                       session_ticket_handler=tickets.append)
     sibling = not allowed and mode == 'require-pin' and client in ('missing', 'other', 'mismatch', 'malformed', 'unsupported-key')
     async with contextlib.AsyncExitStack() as connections:
         try:
@@ -224,9 +228,9 @@ async def case(args, mode, client, allowed):
               and report.get('secureRequests') == (1 if allowed else 0)
               and report.get('drainCompleted') == (allowed or sibling)
               and report.get('healthRequests') == int(sibling)
-              and (allowed or rejection is not None) and observations_ok and revocation_ok
+              and (allowed or rejection is not None) and observations_ok and revocation_ok and not tickets
               and report.get('retainedCertificates') == (2 if allowed and client != 'missing' and mode != 'none' else 0), 'failure': failure, 'rejection': rejection, 'healthySibling': sibling, 'crlRequests': requests,
-              'server': report, 'exit': process.returncode}
+              'sessionTickets': len(tickets), 'server': report, 'exit': process.returncode}
     (output / 'receipt.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
     print(json.dumps(result), flush=True)
     return result

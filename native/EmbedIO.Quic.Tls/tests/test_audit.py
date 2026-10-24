@@ -18,7 +18,7 @@ DYNAMIC = """0x1 (NEEDED) Shared library: [libc.so.6]
 0x18 (BIND_NOW)
 """
 VERSIONS = "Name: GLIBC_2.2.5 Flags: none\nName: GLIBC_2.17 Flags: none\n"
-EXPORTS = "0000000000000000 A EMBEDIO_QUIC_TLS_2\n" + "".join("0000000000000010 T " + symbol + "@@EMBEDIO_QUIC_TLS_2\n" for symbol in sorted(module.EXPORTS))
+EXPORTS = "0000000000000000 A EMBEDIO_QUIC_TLS_3\n" + "".join("0000000000000010 T " + symbol + "@@EMBEDIO_QUIC_TLS_3\n" for symbol in sorted(module.EXPORTS))
 
 
 class LinuxAuditTests(unittest.TestCase):
@@ -55,8 +55,9 @@ class LinuxAuditTests(unittest.TestCase):
                  dict(segments=SEGMENTS.replace("RW 0x10", "RWE 0x10")),
                  dict(segments=SEGMENTS.replace("GNU_RELRO", "OTHER")),
                  dict(segments=""), dict(exports=""),
-                 dict(exports=EXPORTS.replace(" A EMBEDIO_QUIC_TLS_2", " A EMBEDIO_QUIC_TLS_3")),
-                 dict(exports=EXPORTS.replace("@@EMBEDIO_QUIC_TLS_2", "@@OTHER")),
+                 dict(exports=EXPORTS.replace(" A EMBEDIO_QUIC_TLS_3", " A EMBEDIO_QUIC_TLS_2")),
+                 dict(exports=EXPORTS.replace("@@EMBEDIO_QUIC_TLS_3", "@@EMBEDIO_QUIC_TLS_2")),
+                 dict(exports=EXPORTS.replace("@@EMBEDIO_QUIC_TLS_3", "@@OTHER")),
                  dict(exports=EXPORTS + "0000000000000020 T SSL_new\n"),
                  dict(exports=EXPORTS.replace(" T ", " D ", 1))]
         for changes in cases:

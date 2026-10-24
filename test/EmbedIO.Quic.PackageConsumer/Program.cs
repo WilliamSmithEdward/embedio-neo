@@ -128,7 +128,12 @@ namespace EmbedIO.Quic.PackageConsumer
                 await running.ConfigureAwait(false);
             }
 
-            if (OpenSslTls.ActiveContexts != 0 || OpenSslTls.ActiveBlocks != 0 || ConsumerController.Aborted != 1)
+            if (
+                OpenSslTls.ActiveContexts != 0
+                || OpenSslTls.ActiveBlocks != 0
+                || OpenSslTls.ActiveCredentials != 0
+                || ConsumerController.Aborted != 1
+            )
                 throw new InvalidOperationException(
                     "Package consumer did not release its transport/application state."
                 );
@@ -140,7 +145,8 @@ namespace EmbedIO.Quic.PackageConsumer
                         Passed = true,
                         Aborted = 1,
                         Contexts = 0,
-                        Blocks = 0
+                        Blocks = 0,
+                        Credentials = 0
                     },
                     ConsumerJson.Default.ConsumerReport
                 )
@@ -242,6 +248,7 @@ namespace EmbedIO.Quic.PackageConsumer
         public int Aborted { get; init; }
         public ulong Contexts { get; init; }
         public ulong Blocks { get; init; }
+        public ulong Credentials { get; init; }
     }
 
     [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]

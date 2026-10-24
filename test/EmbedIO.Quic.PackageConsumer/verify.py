@@ -113,7 +113,8 @@ async def main(args):
         await process.stdin.drain()
         stdout, stderr = await asyncio.wait_for(process.communicate(), 8)
         reports = [json.loads(line) for line in stdout.splitlines() if line.startswith(b"{")]
-        if process.returncode != 0 or not reports or reports[-1] != dict(passed=True, aborted=1, contexts=0, blocks=0):
+        if process.returncode != 0 or not reports or reports[-1] != dict(passed=True, aborted=1, contexts=0, blocks=0,
+                                                                         credentials=0):
             raise AssertionError((process.returncode, reports, stderr.decode("utf-8", "replace")))
     except Exception as error:
         failure = repr(error)

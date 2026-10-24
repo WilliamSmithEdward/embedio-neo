@@ -70,7 +70,8 @@ namespace EmbedIO.Quic
                     leaf,
                     profile == "self-signed" ? leaf : root,
                     expected,
-                    directory
+                    directory,
+                    profile != "partial"
                 ).ConfigureAwait(false);
             }
 
@@ -124,12 +125,15 @@ namespace EmbedIO.Quic
             return certificate.CopyWithPrivateKey(key);
         }
 
+        // A complete chain's credential is cached; a partial one is prepared per handshake, so
+        // an issuer the store gains later is sent without a publication.
         [SupportedOSPlatform("linux")]
         private static async Task<int> RunWireAsync(
             X509Certificate2 leaf,
             X509Certificate2 trust,
             List<X509Certificate2> expected,
-            string directory
+            string directory,
+            bool complete
         )
         {
             var context = SslStreamCertificateContext.Create(leaf, null, offline: true);
@@ -171,6 +175,7 @@ namespace EmbedIO.Quic
             EndPoint? remote = null;
             var buffer = new byte[65536];
             var echoes = 0;
+            var cached = -1;
 
             try
             {
@@ -199,7 +204,7 @@ namespace EmbedIO.Quic
 
                         connection ??= new QuicConnection(
                             buffer.AsSpan(0, length),
-                            tls,
+                            tls.Create,
                             (operations, _) => new StreamEchoApplication(operations),
                             clock.Elapsed.TotalMilliseconds
                         );
@@ -213,11 +218,13 @@ namespace EmbedIO.Quic
                 }
 
                 echoes = (connection?.Application as StreamEchoApplication)?.Echoes ?? 0;
+                cached = tls.CachedCredentials;
             }
 
             finally
             {
                 connection?.Dispose();
+                tls.Dispose();
                 tcp.Stop();
                 deadline.Cancel();
                 await tcpTask.ConfigureAwait(false);
@@ -228,11 +235,19 @@ namespace EmbedIO.Quic
             var report = new
             {
                 echoes,
+                cached,
                 contexts = OpenSslTls.ActiveContexts,
-                blocks = OpenSslTls.ActiveBlocks
+                blocks = OpenSslTls.ActiveBlocks,
+                credentials = OpenSslTls.ActiveCredentials
             };
             Console.WriteLine(JsonSerializer.Serialize(report));
-            return echoes == 1 && OpenSslTls.ActiveContexts == 0 && OpenSslTls.ActiveBlocks == 0 ? 0 : 1;
+            return echoes == 1
+                && cached == (complete ? 1 : 0)
+                && OpenSslTls.ActiveContexts == 0
+                && OpenSslTls.ActiveBlocks == 0
+                && OpenSslTls.ActiveCredentials == 0
+                ? 0
+                : 1;
         }
     }
 }
