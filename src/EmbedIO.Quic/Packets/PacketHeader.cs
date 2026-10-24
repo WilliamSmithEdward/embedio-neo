@@ -37,6 +37,48 @@ namespace EmbedIO.Quic
             return true;
         }
 
+        // The source ID and the token of a version 1 Initial (RFC 9000 17.2.2).
+        internal static bool TryInitialToken(
+            ReadOnlySpan<byte> packet,
+            out ReadOnlySpan<byte> source,
+            out ReadOnlySpan<byte> token
+        )
+        {
+            source = default;
+            token = default;
+
+            if (
+                packet.Length < 7
+                || (packet[0] & 0xf0) != 0xc0
+                || BinaryPrimitives.ReadUInt32BigEndian(packet.Slice(1, 4)) != 1
+            )
+                return false;
+
+            if (packet[5] > 20) return false;
+
+            var offset = 6 + packet[5];
+
+            if (offset >= packet.Length || packet[offset] > 20 || offset + 1 + packet[offset] >= packet.Length)
+                return false;
+
+            source = packet.Slice(offset + 1, packet[offset]);
+            offset += 1 + packet[offset];
+            var size = 1 << (packet[offset] >> 6);
+
+            if (offset + size > packet.Length) return false;
+
+            var length = packet[offset] & 0x3fUL;
+
+            for (var index = 1; index < size; index++) length = (length << 8) | packet[offset + index];
+
+            offset += size;
+
+            if (length > 4096 || length > (ulong)(packet.Length - offset)) return false;
+
+            token = packet.Slice(offset, (int)length);
+            return true;
+        }
+
         internal static bool TryRead(
             ReadOnlySpan<byte> packet,
             ReadOnlySpan<byte> originalId,

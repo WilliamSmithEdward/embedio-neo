@@ -60,7 +60,8 @@ namespace EmbedIO.Quic
                 string original,
                 IPEndPoint peer,
                 IPEndPoint? local,
-                double deadline
+                double deadline,
+                QuicRetry? retry
             )
             {
                 ArgumentNullException.ThrowIfNull(dispatcher);
@@ -91,7 +92,8 @@ namespace EmbedIO.Quic
                     },
                     () => dispatcher.ConnectionClock(this),
                     output => dispatcher.Publish(this, output),
-                    connectionIds: dispatcher._connectionIds
+                    connectionIds: dispatcher._connectionIds,
+                    retry: retry
                 );
             }
 
@@ -135,6 +137,7 @@ namespace EmbedIO.Quic
         private readonly double _handshakeTimeout;
         private readonly bool _refuse;
         private readonly double _queueDelayBound;
+        private readonly RetryTokens? _tokens;
         private readonly int _outputPacketCapacity;
         private readonly int _outputByteCapacity;
         private readonly Channel<Output> _output;
@@ -154,6 +157,8 @@ namespace EmbedIO.Quic
         private volatile Func<bool>? _saturated;
         private int _refusalAttempts;
         private double _refusalWindow;
+        private int _retryAttempts;
+        private double _retryWindow;
         private Task? _shutdown;
         private TaskCompletionSource? _sendFinished;
         private bool _sending;
@@ -174,7 +179,8 @@ namespace EmbedIO.Quic
             int outputByteCapacity = 1048576,
             int? admissionAttemptsPerSecond = null,
             bool refuseConnections = false,
-            double queueDelayBound = 0
+            double queueDelayBound = 0,
+            bool validateAddresses = false
         )
         {
             ArgumentNullException.ThrowIfNull(create);
@@ -200,6 +206,7 @@ namespace EmbedIO.Quic
             _handshakeTimeout = handshakeTimeout;
             _refuse = refuseConnections;
             _queueDelayBound = queueDelayBound;
+            _tokens = validateAddresses ? new RetryTokens() : null;
             _outputPacketCapacity = outputPacketCapacity;
             _outputByteCapacity = outputByteCapacity;
             _output = Channel.CreateBounded<Output>(new BoundedChannelOptions(outputPacketCapacity)
@@ -246,6 +253,10 @@ namespace EmbedIO.Quic
         // Refusals not sent because their per-second budget or the output queue was full.
         internal int UnsentRefusals { get; private set; }
         internal TimeSpan QueueDelay => _pool.QueueDelay;
+
+        // Retry packets sent, and Initials closed because their token failed validation.
+        internal int RetriesSent { get; private set; }
+        internal int InvalidTokens { get; private set; }
         private bool Overloaded => _queueDelayBound > 0 && _pool.QueueDelay.TotalMilliseconds > _queueDelayBound;
         internal int ExpiredHandshakes { get; private set; }
         internal int FailedOwners { get; private set; }
@@ -324,6 +335,38 @@ namespace EmbedIO.Quic
                     return Reject();
                 }
 
+                QuicRetry? retry = null;
+
+                // RFC 9000 8.1.2: an Initial without a token, or with one this listener did not
+                // seal, gets a Retry and no state. Its own Retry token that fails validation gets
+                // CONNECTION_CLOSE(INVALID_TOKEN) instead (8.1.3), since the client will not accept
+                // a second Retry. A redeemed token names the first Initial's destination and
+                // proves the client's address.
+                if (_tokens != null)
+                {
+                    if (!PacketHeader.TryInitialToken(bytes, out var source, out var token)) return Reject();
+
+                    byte[]? original = null;
+                    var outcome = token.IsEmpty
+                        ? RetryTokens.Outcome.Unknown
+                        : _tokens.Redeem(token, peer.Address, destination, now, out original);
+
+                    if (outcome == RetryTokens.Outcome.Unknown)
+                    {
+                        SendRetry(destination, source, peer, now);
+                        return Reject();
+                    }
+
+                    if (outcome != RetryTokens.Outcome.Redeemed || original == null)
+                    {
+                        InvalidTokens++;
+                        SendRefusal(bytes, peer, now, ConnectionRefusal.InvalidToken);
+                        return Reject();
+                    }
+
+                    retry = new QuicRetry(original);
+                }
+
                 if (_attemptLimit != 0)
                 {
                     if (now >= _window + 1000)
@@ -337,7 +380,7 @@ namespace EmbedIO.Quic
                     _attempts++;
                 }
 
-                entry = new Entry(this, _create, id, peer, local, now + _handshakeTimeout);
+                entry = new Entry(this, _create, id, peer, local, now + _handshakeTimeout, retry);
                 var groupKey = (entry.Peer, entry.Local);
 
                 if (_peerGroups.TryGetValue(groupKey, out var group)) entry.Group = group;
@@ -437,7 +480,12 @@ namespace EmbedIO.Quic
         // retransmitting until its handshake times out. A per-second budget bounds the
         // key derivation and sealing this costs the receive loop under a flood, and the
         // reply is no larger than the Initial it answers.
-        private void SendRefusal(ReadOnlySpan<byte> bytes, IPEndPoint peer, double now)
+        private void SendRefusal(
+            ReadOnlySpan<byte> bytes,
+            IPEndPoint peer,
+            double now,
+            ulong error = ConnectionRefusal.ConnectionRefused
+        )
         {
             if (now - _refusalWindow >= 1000)
             {
@@ -451,7 +499,7 @@ namespace EmbedIO.Quic
                 return;
             }
 
-            var refusal = ConnectionRefusal.Create(bytes);
+            var refusal = ConnectionRefusal.Create(bytes, error);
 
             if (refusal == null) return;
 
@@ -491,6 +539,61 @@ namespace EmbedIO.Quic
         private int RefusalQueueLimit => Math.Min(512, Math.Max(1, _outputPacketCapacity / 8));
 
         private const int RefusalsPerSecond = 4096;
+
+        // While addresses are validated every new connection costs one Retry. Retries share the
+        // refusals' queue limit; past the budget the Initial is dropped and the client
+        // retransmits it.
+        private void SendRetry(ReadOnlySpan<byte> original, ReadOnlySpan<byte> source, IPEndPoint peer, double now)
+        {
+            var tokens = _tokens ?? throw new InvalidOperationException("Address validation is off.");
+
+            if (now - _retryWindow >= 1000)
+            {
+                _retryWindow = now;
+                _retryAttempts = 0;
+            }
+
+            if (_retryAttempts >= RetriesPerSecond) return;
+
+            _retryAttempts++;
+            Span<byte> retryId = stackalloc byte[QuicConnectionIdIssuer.Length];
+            RandomNumberGenerator.Fill(retryId);
+            var packet = RetryPacket.Create(
+                source,
+                retryId,
+                tokens.Issue(original, retryId, peer.Address, now),
+                original
+            );
+
+            lock (_outputGate)
+            {
+                if (_closing) return;
+
+                if (
+                    _pendingRefusals >= RefusalQueueLimit
+                    || _pendingPackets >= _outputPacketCapacity
+                    || packet.Length > _outputByteCapacity - _pendingBytes
+                )
+                {
+                    DroppedOutput++;
+                    return;
+                }
+
+                if (
+                    !_output.Writer.TryWrite(
+                        new Output(null, packet, QuicConnectionEndpoints.Copy(peer), Refusal: true)
+                    )
+                )
+                    throw new InvalidOperationException("QUIC retry queue lost capacity.");
+
+                _pendingPackets++;
+                _pendingBytes += packet.Length;
+                _pendingRefusals++;
+                RetriesSent++;
+            }
+        }
+
+        private const int RetriesPerSecond = 4096;
 
         private bool Refuses()
         {
@@ -928,6 +1031,7 @@ namespace EmbedIO.Quic
             await workers.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             CryptographicOperations.ZeroMemory(_resetKey);
             _connectionIds.Dispose();
+            _tokens?.Dispose();
 
             lock (_outputGate)
             {

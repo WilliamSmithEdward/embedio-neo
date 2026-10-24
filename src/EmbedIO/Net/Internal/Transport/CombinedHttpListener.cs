@@ -62,6 +62,9 @@ namespace EmbedIO.Net.Internal
         // WebTransport settings for the QUIC transport, or null to serve none. Set before Start.
         internal WebTransportOptions? WebTransport { get; set; }
 
+        // Answers new QUIC connections with Retry until they prove their address. Set before Start.
+        internal bool ValidateAddresses { get; set; }
+
         // Advertises the HTTP/3 endpoint with Alt-Svc on both transports' responses. Set before Start.
         internal bool AdvertiseHttp3 { get; set; }
         public string Name => "EmbedIO TCP and QUIC listener";
@@ -154,6 +157,7 @@ namespace EmbedIO.Net.Internal
                     ConnectionPolicy,
                     Telemetry,
                     WebTransport,
+                    ValidateAddresses,
                     AdvertiseHttp3,
                     _bodyPolicy
                 );
@@ -318,6 +322,7 @@ namespace EmbedIO.Net.Internal
                 TcpConnectionPolicy connections,
                 EmbedIO.Internal.ServerTelemetry? telemetry,
                 WebTransportOptions? webTransport,
+                bool validateAddresses,
                 bool advertiseHttp3,
                 RequestPolicyResolver? bodyPolicy
             )
@@ -331,6 +336,7 @@ namespace EmbedIO.Net.Internal
                 tcp.Telemetry = telemetry;
                 quic.Telemetry = telemetry;
                 quic.WebTransport = webTransport;
+                quic.ValidateAddresses = validateAddresses;
                 tcp.AdvertiseHttp3 = advertiseHttp3;
                 quic.AdvertiseHttp3 = advertiseHttp3;
                 // The TCP policy carries the configured or default RequestHeadersTimeout.

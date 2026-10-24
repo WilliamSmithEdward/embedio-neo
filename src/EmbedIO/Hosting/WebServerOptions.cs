@@ -24,6 +24,7 @@ namespace EmbedIO
         private Net.ServerCertificateSource? _certificateSource;
         private Net.ServerTlsPolicy? _tlsPolicy;
         private WebTransportOptions? _webTransport;
+        private bool _requireHttp3AddressValidation;
         private bool _advertiseHttp3 = true;
         private string? _certificateThumbprint;
         private bool _autoLoadCertificate;
@@ -131,6 +132,32 @@ namespace EmbedIO
             {
                 EnsureConfigurationNotLocked();
                 _webTransport = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether HTTP/3 makes each new client prove its address
+        /// before any TLS work starts. The default is <see langword="false"/>.
+        /// </summary>
+        /// <remarks>
+        /// <para>When enabled, the server answers a new connection's first packet with a Retry
+        /// carrying an address-validation token (RFC 9000 section 8.1.2) and keeps no state for it;
+        /// the handshake starts only when the client returns the token from the same IP address.
+        /// This stops spoofed source addresses from consuming TLS work, at the cost of one more
+        /// round trip for every new connection.</para>
+        /// <para>It needs <see cref="HttpListenerMode.EmbedIOHttp3"/> or
+        /// <see cref="HttpListenerMode.EmbedIOCombined"/> on the .NET 10 asset; other modes refuse to
+        /// start with it.</para>
+        /// </remarks>
+        /// <exception cref="InvalidOperationException">This property is being set,
+        /// and this instance's configuration is locked.</exception>
+        public bool RequireHttp3AddressValidation
+        {
+            get => _requireHttp3AddressValidation;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _requireHttp3AddressValidation = value;
             }
         }
 

@@ -385,6 +385,11 @@ Select with `options.WithMode(HttpListenerMode.X)`:
   work waits more than 250 ms, or while established and handshaking connections fill
   the listener's 256 slots (source after 2.17.0, unreleased). Clients see the failure
   at once. See [overload](docs/guides/http3.md#overload).
+- `WithHttp3AddressValidation()` makes every new HTTP/3 connection prove its address
+  with a Retry before the handshake (source after 2.17.0, unreleased); it costs one
+  round trip. There is no TLS session resumption or 0-RTT, and on Linux and macOS
+  the certificate key must be exportable. See
+  [address validation](docs/guides/http3.md#address-validation).
 
 The HTTP/3 listener serves opt-in WebTransport sessions:
 `WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a

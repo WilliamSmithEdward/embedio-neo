@@ -53,7 +53,8 @@ namespace EmbedIO.Quic
             Action<QuicConnectionOutput> publish,
             int packetCapacity = 64,
             int byteCapacity = 262144,
-            IQuicConnectionIdSource? connectionIds = null
+            IQuicConnectionIdSource? connectionIds = null,
+            QuicRetry? retry = null
         )
         {
             ArgumentNullException.ThrowIfNull(pool);
@@ -65,6 +66,7 @@ namespace EmbedIO.Quic
             ArgumentOutOfRangeException.ThrowIfLessThan(byteCapacity, 1);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(byteCapacity, 16777216);
             ConnectionIds = connectionIds;
+            Retry = retry;
             _create = create;
             _clock = clock;
             _publish = publish;
@@ -74,6 +76,9 @@ namespace EmbedIO.Quic
         }
 
         internal IQuicConnectionIdSource? ConnectionIds { get; }
+
+        // The redeemed Retry token of the connection's first Initial, or null without Retry.
+        internal QuicRetry? Retry { get; }
         internal Task Completion => _execution.Completion;
         internal Exception? CleanupFailure { get; private set; }
 

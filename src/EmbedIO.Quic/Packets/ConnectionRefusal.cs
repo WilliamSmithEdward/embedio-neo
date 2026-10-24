@@ -6,12 +6,14 @@ using System.Security.Cryptography;
 namespace EmbedIO.Quic
 {
     // The Initial packet a server sends to refuse a connection (RFC 9000 5.2.2): one
-    // CONNECTION_CLOSE with CONNECTION_REFUSED, protected with the Initial keys that the
-    // client's chosen destination ID derives (RFC 9001 5.2), so the client can read it
-    // without any connection state on this side.
+    // CONNECTION_CLOSE, usually with CONNECTION_REFUSED, protected with the Initial keys
+    // that the client's chosen destination ID derives (RFC 9001 5.2), so the client can
+    // read it without any connection state on this side. INVALID_TOKEN answers a Retry
+    // token that fails validation (RFC 9000 8.1.3).
     internal static class ConnectionRefusal
     {
         internal const ulong ConnectionRefused = 0x02;
+        internal const ulong InvalidToken = 0x0b;
 
         // Null when the datagram does not start with a version 1 Initial header.
         internal static byte[]? Create(ReadOnlySpan<byte> initial, ulong error = ConnectionRefused)

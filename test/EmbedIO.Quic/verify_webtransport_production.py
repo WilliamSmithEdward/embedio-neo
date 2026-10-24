@@ -5,7 +5,9 @@ WebServer in EmbedIOHttp3 mode that echoes streams and datagrams through
 IWebTransportContext, runs one peer mode against it, then closes the host's
 standard input and checks the report the host prints. --dialect draft-14 runs the
 same modes in the dialect Safari 27 speaks (SETTINGS_WT_MAX_SESSIONS and
-:protocol webtransport), which the server negotiates as well.
+:protocol webtransport), which the server negotiates as well. --address-validation
+turns on the server's HTTP/3 address validation, so every connection the peer opens
+must return a Retry's token before its handshake starts.
 """
 import argparse
 import asyncio
@@ -41,6 +43,7 @@ async def case(args, mode):
     server = await asyncio.create_subprocess_exec(
         args.dotnet, args.assembly, "serve-webtransport",
         str(args.output / "certificate.pem"), str(args.output / "key.pem"),
+        *(["address-validation"] if args.address_validation else []),
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
     peer = None
     line = b""
@@ -103,7 +106,8 @@ async def main(args):
         result = await case(args, mode)
         results.append(result)
         print(json.dumps(result), flush=True)
-    receipt = {"passed": all(r["passed"] for r in results), "dialect": args.dialect, "cases": results,
+    receipt = {"passed": all(r["passed"] for r in results), "dialect": args.dialect,
+               "addressValidation": args.address_validation, "cases": results,
                "assemblySha256": hashlib.sha256(Path(args.assembly).read_bytes()).hexdigest(),
                "peerSha256": hashlib.sha256(Path(args.peer).read_bytes()).hexdigest()}
     (args.output / "receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
@@ -118,4 +122,6 @@ if __name__ == "__main__":
     parser.add_argument("--modes", nargs="*", help="Peer modes to run; all by default.")
     parser.add_argument("--dialect", choices=("draft-16", "draft-14"), default="draft-16",
                         help="WebTransport dialect the peer speaks.")
+    parser.add_argument("--address-validation", action="store_true",
+                        help="Answer every new connection with a Retry first.")
     raise SystemExit(asyncio.run(main(parser.parse_args())))

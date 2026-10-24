@@ -508,6 +508,14 @@ namespace EmbedIO
                     "MaximumConnections and KeepAliveTimeout apply to TCP listeners. Use EmbedIO or EmbedIOCombined mode."
                 );
 
+            if (
+                Options.RequireHttp3AddressValidation
+                && Options.Mode is not (HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined)
+            )
+                throw new NotSupportedException(
+                    "HTTP/3 address validation requires EmbedIOHttp3 or EmbedIOCombined mode."
+                );
+
             // WebTransport is served over HTTP/3 only.
             if (
                 Options.WebTransport != null
@@ -576,6 +584,7 @@ namespace EmbedIO
                     combined.TlsPolicy = tlsPolicy;
                     combined.Telemetry = Telemetry;
                     combined.WebTransport = Options.WebTransport;
+                    combined.ValidateAddresses = Options.RequireHttp3AddressValidation;
                     combined.AdvertiseHttp3 = Options.AdvertiseHttp3;
                 }
 
@@ -585,6 +594,7 @@ namespace EmbedIO
                     quic.TlsPolicy = tlsPolicy;
                     quic.Telemetry = Telemetry;
                     quic.WebTransport = Options.WebTransport;
+                    quic.ValidateAddresses = Options.RequireHttp3AddressValidation;
                     quic.RequestHeadersTimeout = Options.RequestHeadersTimeout;
                 }
             }

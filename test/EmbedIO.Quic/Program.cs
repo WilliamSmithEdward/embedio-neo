@@ -147,6 +147,9 @@ namespace EmbedIO.Quic
                     await DispatcherTests
                         .RunAsync()
                         .ConfigureAwait(false);
+                    await RetryTests
+                        .RunAsync()
+                        .ConfigureAwait(false);
                     return 0;
                 }
 
@@ -175,6 +178,11 @@ namespace EmbedIO.Quic
                 if (arguments is ["serve-webtransport", var webTransportCertificate, var webTransportKey])
                     return await ProductionWebTransportHost
                         .RunAsync(webTransportCertificate, webTransportKey)
+                        .ConfigureAwait(false);
+
+                if (arguments is ["serve-webtransport", var retryCertificate, var retryKey, "address-validation"])
+                    return await ProductionWebTransportHost
+                        .RunAsync(retryCertificate, retryKey, validateAddresses: true)
                         .ConfigureAwait(false);
 
                 if (
@@ -225,7 +233,7 @@ namespace EmbedIO.Quic
                     ).ConfigureAwait(false);
 
                 Console.Error.WriteLine(
-                    "Usage: self-test | certificate <output-directory> | serve[-h3] <absolute-openssl-directory> <certificate.pem> <key.pem> | serve-webtransport <certificate.pem> <key.pem>"
+                    "Usage: self-test | certificate <output-directory> | serve[-h3] <absolute-openssl-directory> <certificate.pem> <key.pem> | serve-webtransport <certificate.pem> <key.pem> [address-validation]"
                 );
                 return 2;
             }
