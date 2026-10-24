@@ -51,6 +51,15 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly bool _reportsDestinations;
 
         internal EmbedIOQuicListenerBinding(IPEndPoint endpoint, Func<byte[], TlsSession> createTls)
+            : this(endpoint, createTls, false)
+        { }
+
+        // With validateAddresses every new connection must first return a Retry's token.
+        internal EmbedIOQuicListenerBinding(
+            IPEndPoint endpoint,
+            Func<byte[], TlsSession> createTls,
+            bool validateAddresses
+        )
         {
             ArgumentNullException.ThrowIfNull(endpoint);
             ArgumentNullException.ThrowIfNull(createTls);
@@ -82,7 +91,8 @@ namespace EmbedIO.Net.Internal.Http3
                     outputByteCapacity: 4194304,
                     admissionAttemptsPerSecond: 0,
                     refuseConnections: true,
-                    queueDelayBound: QueueDelayBoundMilliseconds
+                    queueDelayBound: QueueDelayBoundMilliseconds,
+                    validateAddresses: validateAddresses
                 );
                 _loop = Task.Run(RunAsync);
             }
@@ -107,7 +117,7 @@ namespace EmbedIO.Net.Internal.Http3
                 if (failure?.Length > 4096) failure = failure[..4096];
 
                 return FormattableString.Invariant(
-                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};refused={_connections.Refused};refused-at-capacity={_connections.RefusedAtCapacity};refused-for-delay={_connections.RefusedForQueueDelay};refused-for-http3={_connections.RefusedForApplication};unsent-refusals={_connections.UnsentRefusals};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};issued-routes={_connections.IssuedRoutes};datagram-path-errors={DatagramPathErrors};last-rejection={failure}"
+                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};refused={_connections.Refused};refused-at-capacity={_connections.RefusedAtCapacity};refused-for-delay={_connections.RefusedForQueueDelay};refused-for-http3={_connections.RefusedForApplication};unsent-refusals={_connections.UnsentRefusals};retries={_connections.RetriesSent};invalid-tokens={_connections.InvalidTokens};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};issued-routes={_connections.IssuedRoutes};datagram-path-errors={DatagramPathErrors};last-rejection={failure}"
                 );
             }
         }
@@ -168,7 +178,8 @@ namespace EmbedIO.Net.Internal.Http3
                     InboundUnidirectionalStreams = 16,
                     IdleTimeoutMilliseconds = 60000
                 },
-                connectionIds: owner.ConnectionIds
+                connectionIds: owner.ConnectionIds,
+                retry: owner.Retry
             );
 
             if (Volatile.Read(ref _accepting) == 0 || !_accepted.Writer.TryWrite(peer)) owner.RequestClose();

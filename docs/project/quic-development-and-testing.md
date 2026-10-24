@@ -1154,9 +1154,10 @@ Validated before the merge, each recorded in its own section:
 
 Still open after the merge, each with its tracking issue:
 
-1. The transport/TLS profile: Retry, post-handshake TLS, resumption and 0-RTT are not
-   implemented, and features outside the supported profile fail explicitly.
-   Non-exportable keys work on Windows only; Unix TLS needs an exportable key.
+1. Resolved: Retry is an option, checked against the .NET client and the quic-go peer;
+   resumption, 0-RTT and other post-handshake TLS messages stay outside the supported
+   profile, and Unix TLS keeps needing an exportable key
+   ([Retry and the supported TLS profile](#retry-and-the-supported-tls-profile)).
    [#520](https://github.com/WilliamSmithEdward/embedio-neo/issues/520).
 2. Resolved: past its bounds an HTTP/3 endpoint refuses new connections before any TLS
    work ([Bounded TLS work under load](#bounded-tls-work-under-load)).
@@ -3161,3 +3162,64 @@ The server used 0.3 to 0.6 of its two CPUs on Windows and 1.0 to 1.7 on Linux, s
 Windows its CPUs did not limit how many connections it completed. Its one socket loop,
 which handles at most one received and one sent datagram per iteration, is the first
 suspect.
+
+## Retry and the supported TLS profile
+
+[#520](https://github.com/WilliamSmithEdward/embedio-neo/issues/520) asked for Retry,
+resumption, 0-RTT and non-exportable keys on Linux and macOS. Retry is now an option;
+the other three stay outside the supported profile, for the reasons below and in the
+[HTTP/3 guide](../guides/http3.md#address-validation).
+
+### Retry
+
+`RequireHttp3AddressValidation`, or `WithHttp3AddressValidation()`, turns it on for
+`EmbedIOHttp3` and `EmbedIOCombined`.
+
+- The dispatcher answers an Initial without a token with a Retry (RFC 9000 section
+  17.2.5) and creates no connection. The Retry's source ID is 16 random bytes, the
+  length of the server's connection IDs, and its integrity tag follows RFC 9001
+  section 5.8; a test reproduces the RFC 9001 appendix A.4 vector.
+- The token is AES-256-GCM under a key each dispatcher draws at startup, with a
+  nonce made of a random prefix and a counter, so no nonce repeats under the key. It
+  seals the time it was issued, the first Initial's destination ID and the Retry's
+  source ID, with the client's IP address as associated data, and lives ten seconds.
+- An Initial whose token redeems, from the same address and sent to the Retry's
+  source ID, starts the connection. Its transport parameters carry
+  `original_destination_connection_id` and `retry_source_connection_id` (RFC 9000
+  section 7.3), and its address counts as validated, which lifts the
+  anti-amplification limit (section 8.1). A first version set only the connection's
+  flag, while the initial path kept its own limit until the handshake; a development
+  host test now sends a 9,000-byte first flight and checks that only a Retry lets it
+  past 3,600 bytes.
+- A token the dispatcher sealed that is expired or sent to another destination ID
+  gets an Initial with `CONNECTION_CLOSE(INVALID_TOKEN)` (section 8.1.3) and no
+  connection, since the client will not accept a second Retry. A token it cannot
+  open, such as another server's or one from a different address, is treated as
+  missing and gets a Retry.
+- Retries are budgeted at 4,096 per second per endpoint and share the refusals' queue
+  limit; past them an Initial is dropped and the client retransmits it.
+- Overload refusals (see [Bounded TLS work under load](#bounded-tls-work-under-load))
+  come first, so an overloaded endpoint refuses rather than sends a Retry.
+
+With address validation on, no connection starts without a redeemed token, so a
+client that completes a session has handled the Retry. The .NET client (MsQuic)
+completes requests through a relay that sees the server's Retry
+(`Http3ListenerTest.AddressValidationRetriesBeforeTheHandshake`). The independent
+quic-go peer's 15 WebTransport modes passed on Windows with address validation on
+and off, and CI runs them with it on Linux and macOS (`--address-validation`).
+
+### Left out
+
+- Session resumption. Every connection runs a full handshake and the server sends no
+  tickets. Resumption needs a ticket-encryption key that the server creates, rotates
+  and protects, on both the Schannel and the OpenSSL path. It would save one
+  certificate signature and the chain per reconnection; no measurement here calls for
+  it.
+- 0-RTT. It depends on resumption, and early data can be replayed (RFC 9001 section
+  9.2), so it would need an application policy for which requests may be replayed and
+  425 Too Early (RFC 8470) for the rest.
+- Keys that cannot be exported, on Linux and macOS. The TLS runtime there is the
+  OpenSSL inside `EmbedIO-Neo.Quic.Native`, which receives the key exported from the
+  certificate; a hardware- or store-held key never reaches it. A signing callback from
+  native code into .NET on every handshake would lift this. Schannel uses the key in
+  place, so Windows accepts non-exportable CNG keys.

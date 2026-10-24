@@ -14,12 +14,13 @@ namespace EmbedIO.Quic
     // protocol through the public API only. Streams echo incrementally: the peer's
     // unidirectional upload is answered on a server stream opened at its first byte.
     // The host stops when its standard input closes, then prints what it served.
-    // Diagnostics go to standard error with the time since start.
+    // Diagnostics go to standard error with the time since start. With address
+    // validation every connection must first return a Retry's token.
     internal static class ProductionWebTransportHost
     {
         private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
-        internal static async Task<int> RunAsync(string certificatePath, string keyPath)
+        internal static async Task<int> RunAsync(string certificatePath, string keyPath, bool validateAddresses = false)
         {
             using var pem = X509Certificate2.CreateFromPemFile(certificatePath, keyPath);
             using var certificate = X509CertificateLoader.LoadPkcs12(
@@ -36,6 +37,9 @@ namespace EmbedIO.Quic
                 .WithMode(HttpListenerMode.EmbedIOHttp3)
                 .WithCertificate(certificate)
                 .WithWebTransport(webTransport => webTransport.MaximumSessionsPerConnection = 2);
+
+            if (validateAddresses) options.WithHttp3AddressValidation();
+
             using var server = new WebServer(options);
             server.WithModule(
                 new ActionModule("/", HttpVerbs.Any, context => ServeAsync(context, authorization, counts))

@@ -11,6 +11,11 @@
   default, turns it off. See [Draft-14](docs/guides/webtransport.md#draft-14).
 - EmbedIO.Quic offers and accepts the `reset_stream_at` transport parameter under the
   earlier codepoint `0x17f7586d2cb571` as well as `0x1d`; Safari 27 uses the former.
+- `RequireHttp3AddressValidation` and `WithHttp3AddressValidation()`: HTTP/3 answers
+  every new connection with a Retry and starts the handshake only when the client
+  returns its address-validation token (RFC 9000 section 8.1.2). Off by default; it
+  costs each new connection one round trip. See
+  [address validation](docs/guides/http3.md#address-validation).
 
 ### Changed
 

@@ -47,6 +47,7 @@ namespace EmbedIO.Quic
 
         private readonly byte[] _originalId;
         private readonly byte[] _clientId;
+        private readonly QuicRetry? _retry;
         private byte[] _destinationId;
         private PeerConnectionIds? _peerIds;
         private IReadOnlyList<QuicPathRoute>? _retirementPaths;
@@ -98,6 +99,10 @@ namespace EmbedIO.Quic
             {
                 _paths = new QuicPathValidation(endpoints);
                 _congestionAddress = endpoints.Peer.Address;
+
+                // A redeemed Retry token already proved this address (RFC 9000 8.1.2), so the
+                // initial path is not held to three times what the client sent.
+                if (_retry != null) _paths.ValidateInitial();
             }
 
             _incomingEndpoints = endpoints;
@@ -156,7 +161,8 @@ namespace EmbedIO.Quic
             int encryptionLimit = PacketKeys.MaximumEncryptions,
             ulong authenticationLimit = 1UL << 52,
             QuicConnectionLimits? limits = null,
-            IQuicConnectionIdSource? connectionIds = null
+            IQuicConnectionIdSource? connectionIds = null,
+            QuicRetry? retry = null
         )
         {
             ArgumentNullException.ThrowIfNull(tlsFactory);
@@ -198,6 +204,10 @@ namespace EmbedIO.Quic
                 .Take(length)
                 .ToArray();
             _destinationId = _clientId;
+            // After a Retry this Initial's destination is the Retry's source ID; the token
+            // carried the first Initial's destination, and the client proved its address.
+            _retry = retry;
+            _addressValidated = retry != null;
             reader.Take(reader.Length(4096));
             var payloadLength = reader.Length(firstPacket.Length);
             var numberOffset = firstPacket.Length - reader.Remaining;
@@ -1207,7 +1217,11 @@ namespace EmbedIO.Quic
         private byte[] LocalParameters()
         {
             using var output = new MemoryStream();
-            Wire.Parameter(output, 0, _originalId);
+            // RFC 9000 7.3: after a Retry, the first Initial's destination and the Retry's source.
+            Wire.Parameter(output, 0, _retry?.OriginalDestinationId ?? _originalId);
+
+            if (_retry != null) Wire.Parameter(output, 16, _originalId);
+
             Wire.Parameter(output, 1, (ulong)_limits.IdleTimeoutMilliseconds);
             Wire.Parameter(output, 2, _localIds.InitialToken);
             Wire.Parameter(output, 3, 1472);

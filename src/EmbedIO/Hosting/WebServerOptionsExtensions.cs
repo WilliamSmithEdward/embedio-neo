@@ -190,6 +190,24 @@ namespace EmbedIO
         }
 
         /// <summary>
+        /// Makes HTTP/3 answer each new connection with a Retry, so the client proves its address
+        /// before any TLS work starts.
+        /// </summary>
+        /// <param name="this">The <see cref="WebServerOptions"/> on which this method is called.</param>
+        /// <returns><paramref name="this"/> with its
+        /// <see cref="WebServerOptions.RequireHttp3AddressValidation">RequireHttp3AddressValidation</see>
+        /// property set to <see langword="true"/>.</returns>
+        /// <exception cref="NullReferenceException"><paramref name="this"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException">The configuration of <paramref name="this"/> is locked.</exception>
+        public static WebServerOptions WithHttp3AddressValidation(this WebServerOptions @this)
+        {
+            if (@this is null) throw new System.NullReferenceException();
+
+            @this.RequireHttp3AddressValidation = true;
+            return @this;
+        }
+
+        /// <summary>
         /// Stops <see cref="HttpListenerMode.EmbedIOCombined"/> from advertising its HTTP/3 endpoint in an
         /// <c>Alt-Svc</c> header.
         /// </summary>

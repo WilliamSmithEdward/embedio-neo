@@ -304,6 +304,38 @@ Priorities/datagrams, dynamic response QPACK,
 discovery and broader shared-endpoint validation remain under development. No throughput
 or latency improvement is claimed by these interoperability tests.
 
+<a id="address-validation"></a>
+## Address validation and the TLS profile
+
+`WithHttp3AddressValidation()`, or `RequireHttp3AddressValidation = true`, makes the
+server answer the first packet of every new connection with a Retry (RFC 9000
+section 8.1.2). The Retry carries a token sealed with a key the listener draws at
+startup; it binds the client's IP address and expires after ten seconds. The server
+keeps no state and starts no TLS work until the client returns the token from the
+same address, so spoofed source addresses cannot spend the server's handshake work.
+Each new connection costs one more round trip. A token the server sealed that is
+expired or sent to the wrong connection ID closes the attempt with `INVALID_TOKEN`;
+a token it cannot open, such as another server's, gets a new Retry. It is off by
+default, and it needs `EmbedIOHttp3` or `EmbedIOCombined` mode; other modes refuse
+to start with it. This option is unreleased; 2.17.0 does not send Retry.
+
+The rest of the TLS profile is deliberately narrow:
+
+- No session resumption. Every connection runs a full TLS 1.3 handshake, and the
+  server sends no session tickets. Resumption needs a ticket-encryption key the
+  server must create, rotate and protect, on both the Schannel and the OpenSSL
+  paths; it would save one certificate signature and the chain per reconnection.
+- No 0-RTT. It depends on resumption, and its early data can be replayed (RFC 9001
+  section 9.2), so an application would have to choose which requests are safe to
+  replay and answer the others with 425 Too Early (RFC 8470). Clients send their
+  first request after the handshake.
+- On Linux and macOS the certificate's private key must be exportable. The TLS
+  runtime there is its own OpenSSL, inside `EmbedIO-Neo.Quic.Native`, and it receives
+  the key exported from the certificate; a hardware- or store-held key that cannot be
+  exported cannot reach it. Supporting such keys would need a signing callback from
+  native code into .NET for every handshake. Windows uses Schannel with the key in
+  place, so non-exportable CNG keys work there.
+
 ## WebSockets over HTTP/3
 
 The listener advertises extended CONNECT support (RFC 9220) and routes

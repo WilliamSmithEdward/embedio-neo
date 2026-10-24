@@ -172,7 +172,7 @@ jobs:
         shell: bash
         env:
           EMBEDIO_REQUIRE_QUIC: '1'
-          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7499'
+          EMBEDIO_MINIMUM_REGRESSION_TESTS: '7502'
           # Scheduling allowance; case deadlines and discovery stay enforced.
           EMBEDIO_REGRESSION_TIMEOUT: '12m'
         run: |
@@ -643,6 +643,13 @@ jobs:
           python3 test/EmbedIO.Quic/verify_webtransport_production.py --dotnet "$(command -v dotnet)"
           --assembly test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll
           --peer "$WEBTRANSPORT_PEER" --output TestResults/webtransport-production-draft14 --dialect draft-14
+      # The same modes with HTTP/3 address validation: the server answers every new
+      # connection with a Retry, so a session opens only if the peer returns its token.
+      - name: Verify WebTransport sessions through a Retry
+        run: >-
+          python3 test/EmbedIO.Quic/verify_webtransport_production.py --dotnet "$(command -v dotnet)"
+          --assembly test/EmbedIO.Quic/bin/Release/net10.0/EmbedIO.Quic.Development.dll
+          --peer "$WEBTRANSPORT_PEER" --output TestResults/webtransport-production-retry --address-validation
       # The throwaway test key stays out of the retained logs.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -651,8 +658,10 @@ jobs:
           path: |
             TestResults/webtransport-production/
             TestResults/webtransport-production-draft14/
+            TestResults/webtransport-production-retry/
             !TestResults/webtransport-production/key.pem
             !TestResults/webtransport-production-draft14/key.pem
+            !TestResults/webtransport-production-retry/key.pem
           if-no-files-found: warn
 
   ci-passed:

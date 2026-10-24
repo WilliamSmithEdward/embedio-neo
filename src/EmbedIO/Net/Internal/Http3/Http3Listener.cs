@@ -36,8 +36,16 @@ namespace EmbedIO.Net.Internal.Http3
         { }
 
         internal Http3Listener(ServerCertificateSource certificates, RequestPolicyResolver? bodyPolicy)
-            : this(certificates, bodyPolicy, Http3ListenerBinding.Bind)
-        { }
+        {
+            _bind = (endpoint, source, policy) => Http3ListenerBinding.Bind(
+                endpoint,
+                source,
+                policy,
+                ValidateAddresses
+            );
+            _certificates = certificates ?? throw new ArgumentNullException(nameof(certificates));
+            _bodyPolicy = bodyPolicy;
+        }
 
         internal Http3Listener(
             ServerCertificateSource certificates,
@@ -75,6 +83,9 @@ namespace EmbedIO.Net.Internal.Http3
         // How long each stream a client opens may take to complete its header; null applies
         // the default RequestHeadersTimeout of 30 seconds. Set before Start.
         internal TimeSpan? RequestHeadersTimeout { get; set; }
+
+        // Answers new connections with Retry until they prove their address. Set before Start.
+        internal bool ValidateAddresses { get; set; }
 
         // Set by combined hosting: responses advertise this HTTP/3 endpoint with Alt-Svc. Set before Start.
         internal bool AdvertiseHttp3 { get; set; }
