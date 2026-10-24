@@ -49,7 +49,8 @@ namespace EmbedIO.Net.Internal.Http3
             throw new PlatformNotSupportedException("Recordless TLS requires a desktop platform.");
         }
 
-        internal static Func<byte[], TlsSession> CreateFactory(
+        // The caller owns the factory and disposes it when its listener stops.
+        internal static EmbedIOQuicTlsFactory CreateFactory(
             ServerCertificateSource certificates,
             ServerTlsPolicy? policy
         )
@@ -59,36 +60,7 @@ namespace EmbedIO.Net.Internal.Http3
 
             EnsureSupported();
             policy?.Lock();
-
-            Func<X509Certificate2?, X509Certificate2Collection, bool>? validate = policy?.RequestsClientCertificate
-                == true
-                ? (certificate, additional) => ValidateClientCertificate(policy, certificate, additional)
-                : null;
-            return parameters =>
-            {
-                // Capture the fallback per handshake, before a fragmented ClientHello
-                // or a later publication can change this connection's selection.
-                var fallback = certificates.Current;
-
-                if (OperatingSystem.IsWindows())
-                    return new SchannelTls(
-                        name => SelectCertificate(policy, fallback, name),
-                        parameters,
-                        "h3",
-                        false,
-                        validate
-                    );
-
-                if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                    return new OpenSslTls(
-                        name => SelectCertificate(policy, fallback, name),
-                        parameters,
-                        "h3",
-                        validate
-                    );
-
-                throw new PlatformNotSupportedException("Recordless TLS requires a desktop platform.");
-            };
+            return new EmbedIOQuicTlsFactory(certificates, policy);
         }
 
         internal static bool ValidateClientCertificate(
@@ -117,17 +89,6 @@ namespace EmbedIO.Net.Internal.Http3
                 ? certificate
                 : X509CertificateLoader.LoadCertificate(certificate.RawData);
             return policy.ValidateClientCertificate(policy, callbackCertificate, chain, errors);
-        }
-
-        private static X509Certificate2 SelectCertificate(
-            ServerTlsPolicy? policy,
-            X509Certificate2 fallback,
-            string? name
-        )
-        {
-            var selected = policy == null ? fallback : policy.SelectServerCertificate(name, fallback);
-            return selected as X509Certificate2
-                ?? throw new InvalidOperationException("TLS selection returned an unsupported certificate type.");
         }
     }
 }

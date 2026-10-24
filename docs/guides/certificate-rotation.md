@@ -129,6 +129,20 @@ policy use that same production factory. Windows retains non-exportable Schannel
 key support; Unix TLS uses an owned PKCS#12 copy and requires an exportable key.
 Existing established connections retain their original certificate selection.
 
+Each HTTP/3 listener prepares the TLS credential for a certificate once, the first
+time a handshake selects that certificate object, and later handshakes that select
+the same object reuse it (source after 2.17.0, unreleased). On Linux and macOS the
+exported PKCS#12 copy exists only while the native TLS runtime parses it. Publishing
+to the source drops the prepared credentials, and disposing a certificate drops its
+own at the next handshake; connections that already selected a replaced certificate
+keep theirs until they close, and the listener frees the rest when it stops. An SNI
+selector that returns the same `X509Certificate2` instance for a host name gets the
+reuse; one that loads a new instance per handshake prepares a credential every time,
+as before. A listener keeps at most 32 credentials and drops the least recently used.
+A certificate whose issuer chain the server's certificate stores cannot complete is
+prepared for each handshake, as before, so an issuer installed later is sent without
+publishing again.
+
 The following native-configuration behavior concerns the earlier MsQuic provider
 in packages through 2.16.1; 2.17.0 and later no longer contain it.
 The native MsQuic binding loads a certificate into an MsQuic configuration once,

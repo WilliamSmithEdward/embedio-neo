@@ -137,7 +137,7 @@ def stage(output, directories, rids):
     path.parent.mkdir(parents=True)
     path.write_bytes((ROOT / "OpenSSL-LICENSE.txt").read_bytes())
     entries[license_name] = digest(path.read_bytes())
-    manifest = {"schemaVersion": 1, "abi": 2, "opensslVersion": pins.VERSION,
+    manifest = {"schemaVersion": 1, "abi": 3, "opensslVersion": pins.VERSION,
                 "opensslArchiveSha256": pins.SHA256, "rids": sorted(rids),
                 "completeDistribution": set(rids) == set(RIDS),
                 "sourceHashFormat": "SHA-256 of UTF-8 source with CRLF normalized to LF",
@@ -151,7 +151,7 @@ def stage(output, directories, rids):
 
 def verify(output, rids):
     manifest = decode(read(output / "runtime-assets.json"))
-    require(manifest.get("schemaVersion") == 1 and manifest.get("abi") == 2 and
+    require(manifest.get("schemaVersion") == 1 and manifest.get("abi") == 3 and
             manifest.get("opensslVersion") == pins.VERSION and manifest.get("opensslArchiveSha256") == pins.SHA256,
             "Unknown native runtime manifest")
     require(bool(rids) and manifest.get("rids") == sorted(rids) and len(rids) == len(set(rids)) and set(rids) <= set(RIDS),

@@ -10,6 +10,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 using EmbedIO.Internal;
+using EmbedIO.Net.Internal.Http3;
 
 namespace EmbedIO.Quic
 {
@@ -19,7 +20,11 @@ namespace EmbedIO.Quic
     [SupportedOSPlatform("macos")]
     internal sealed unsafe partial class OpenSslTls : TlsSession
     {
+        // Marks a refused issuer, which fails the handshake with internal_error, as it did
+        // when each handshake installed its own issuers.
+        private const string IssuerRefused = "EmbedIO.Quic.IssuerRefused";
         private Func<string?, X509Certificate2?>? _selector;
+        private readonly Func<X509Certificate2, Credential>? _credentials;
         private readonly Func<X509Certificate2?, X509Certificate2Collection, bool>? _validateClientCertificate;
         private X509Certificate2? _clientCertificate;
         private readonly NativeHandle _owner;
@@ -28,12 +33,15 @@ namespace EmbedIO.Quic
         private readonly List<string>? _diagnostics;
         private QuicCipherSuite? _cipher;
 
+        // credentials supplies the selected certificate's shared credential with a reference
+        // for this session. Without it the session prepares a credential of its own.
         internal OpenSslTls(
             Func<string?, X509Certificate2?> selector,
             byte[] parameters,
             string protocol = "h3",
             Func<X509Certificate2?, X509Certificate2Collection, bool>? validateClientCertificate = null,
-            bool recordDiagnostics = false
+            bool recordDiagnostics = false,
+            Func<X509Certificate2, Credential>? credentials = null
         )
         {
             ArgumentNullException.ThrowIfNull(selector);
@@ -50,6 +58,7 @@ namespace EmbedIO.Quic
             EnsureAvailable();
 
             _selector = selector;
+            _credentials = credentials;
 
             if (recordDiagnostics) _diagnostics = [];
 
@@ -79,7 +88,7 @@ namespace EmbedIO.Quic
         internal static void EnsureAvailable()
         {
             if (
-                NativeMethods.Abi() != 2
+                NativeMethods.Abi() != 3
                 || Marshal.PtrToStringUTF8(NativeMethods.Version()) != "OpenSSL 3.5.9 29 Sep 2026"
             )
                 throw new InvalidOperationException("Unexpected native TLS ABI or version.");
@@ -87,6 +96,7 @@ namespace EmbedIO.Quic
 
         internal static ulong ActiveContexts => NativeMethods.Connections();
         internal static ulong ActiveBlocks => NativeMethods.Blocks();
+        internal static ulong ActiveCredentials => NativeMethods.Credentials();
 
         internal override void Add(int level, ulong offset, ReadOnlySpan<byte> bytes)
         {
@@ -168,20 +178,29 @@ namespace EmbedIO.Quic
                 if (certificate == null || !certificate.HasPrivateKey)
                     throw Failure(80, "The selected TLS certificate has no private key.");
 
-                var credential = certificate.Export(X509ContentType.Pkcs12);
+                Credential credential;
 
                 try
                 {
-                    fixed (byte* input = credential)
-                        if (NativeMethods.SetCredential(_owner, input, (nuint)credential.Length) != 1)
-                            throw new InvalidDataException("Native TLS credential rejected.");
+                    credential = _credentials?.Invoke(certificate) ?? Credential.Create(certificate);
+                }
 
-                    InstallServerChain(certificate);
+                catch (InvalidDataException error) when (error.Data.Contains(IssuerRefused))
+                {
+                    AlertCode ??= 80;
+                    throw;
+                }
+
+                try
+                {
+                    if (NativeMethods.UseCredential(_owner, credential.Handle) != 1)
+                        throw new InvalidDataException("Native TLS credential rejected.");
                 }
 
                 finally
                 {
-                    CryptographicOperations.ZeroMemory(credential);
+                    // The connection's TLS state holds its own references to the key and chain.
+                    credential.Release();
                 }
             }
 
@@ -191,45 +210,105 @@ namespace EmbedIO.Quic
         internal override X509Certificate2? CopyClientCertificate() =>
             _clientCertificate == null ? null : X509CertificateLoader.LoadCertificate(_clientCertificate.RawData);
 
-        private void InstallServerChain(X509Certificate2 certificate)
+        // A server credential for one selected certificate, which the handshakes that select
+        // it share: native code holds the parsed key, the certificate and the issuer chain the
+        // connection sends, and each connection takes its own references when it installs them.
+        // The exported key bytes are cleared as soon as native code has parsed them. A credential
+        // whose chain the stores could not complete serves only its own handshake, as before.
+        internal sealed class Credential : SharedCredential
         {
-            using var chain = new X509Chain();
-            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            private readonly CredentialHandle _handle;
 
-            // This chooses the configured server's outgoing chain, not peer trust.
-            // Keep the runtime's normal issuer discovery behavior.
-            try
+            // An explicit constructor: the pinned Semgrep cannot parse this class's primary
+            // constructor in this file and stops scanning it.
+            private Credential(CredentialHandle handle, bool cacheable) : base(cacheable) => _handle = handle;
+
+            internal CredentialHandle Handle => _handle;
+
+            // The caller holds the only reference.
+            internal static Credential Create(X509Certificate2 certificate)
             {
-                _ = chain.Build(certificate);
-                var incomplete = false;
+                CredentialHandle created;
+                var exported = certificate.Export(X509ContentType.Pkcs12);
 
-                foreach (var status in chain.ChainStatus)
-                    incomplete |= (status.Status & X509ChainStatusFlags.PartialChain) != 0;
-
-                var end = chain.ChainElements.Count - (incomplete ? 0 : 1);
-
-                for (var index = 1; index < end; index++)
+                try
                 {
-                    var encoded = chain.ChainElements[index].Certificate.RawData;
+                    fixed (byte* input = exported)
+                        created = new CredentialHandle(NativeMethods.CreateCredential(input, (nuint)exported.Length));
+                }
 
-                    try
-                    {
-                        fixed (byte* input = encoded)
-                            if (NativeMethods.AddChain(_owner, input, (nuint)encoded.Length) != 1)
-                                throw Failure(80, "Native TLS issuer certificate rejected.");
-                    }
+                finally
+                {
+                    CryptographicOperations.ZeroMemory(exported);
+                }
 
-                    finally
-                    {
-                        CryptographicOperations.ZeroMemory(encoded);
-                    }
+                try
+                {
+                    if (created.IsInvalid) throw new InvalidDataException("Native TLS credential rejected.");
+
+                    return new Credential(created, AddServerChain(created, certificate));
+                }
+
+                catch
+                {
+                    created.Dispose();
+                    throw;
                 }
             }
 
-            finally
+            protected override int Free()
             {
-                foreach (var element in chain.ChainElements)
-                    if (!ReferenceEquals(element.Certificate, certificate)) element.Certificate.Dispose();
+                _handle.Dispose();
+                return 0;
+            }
+
+            // Whether the stores and issuer discovery completed the chain.
+            private static bool AddServerChain(CredentialHandle credential, X509Certificate2 certificate)
+            {
+                using var chain = new X509Chain();
+                chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+
+                // This chooses the configured server's outgoing chain, not peer trust.
+                // Keep the runtime's normal issuer discovery behavior.
+                try
+                {
+                    _ = chain.Build(certificate);
+                    var incomplete = false;
+
+                    foreach (var status in chain.ChainStatus)
+                        incomplete |= (status.Status & X509ChainStatusFlags.PartialChain) != 0;
+
+                    var end = chain.ChainElements.Count - (incomplete ? 0 : 1);
+
+                    for (var index = 1; index < end; index++)
+                    {
+                        var encoded = chain.ChainElements[index].Certificate.RawData;
+
+                        try
+                        {
+                            fixed (byte* input = encoded)
+                                if (NativeMethods.AddCredentialChain(credential, input, (nuint)encoded.Length) != 1)
+                                {
+                                    var refused = new InvalidDataException("Native TLS issuer certificate rejected.");
+                                    refused.Data[IssuerRefused] = true;
+                                    throw refused;
+                                }
+                        }
+
+                        finally
+                        {
+                            CryptographicOperations.ZeroMemory(encoded);
+                        }
+                    }
+
+                    return !incomplete;
+                }
+
+                finally
+                {
+                    foreach (var element in chain.ChainElements)
+                        if (!ReferenceEquals(element.Certificate, certificate)) element.Certificate.Dispose();
+                }
             }
         }
 
@@ -423,6 +502,17 @@ namespace EmbedIO.Quic
             }
         }
 
+        internal sealed class CredentialHandle : SafeHandleZeroOrMinusOneIsInvalid
+        {
+            internal CredentialHandle(nint pointer) : base(true) => SetHandle(pointer);
+
+            protected override bool ReleaseHandle()
+            {
+                NativeMethods.FreeCredential(handle);
+                return true;
+            }
+        }
+
         private static partial class NativeMethods
         {
             private const string Library = "embedio_quic_tls";
@@ -436,6 +526,11 @@ namespace EmbedIO.Quic
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
             [LibraryImport(Library, EntryPoint = "embedio_quic_tls_blocks")]
             internal static partial ulong Blocks();
+
+            [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
+            [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_credentials")]
+            internal static partial ulong Credentials();
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
@@ -480,13 +575,23 @@ namespace EmbedIO.Quic
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_set_credential")]
-            internal static partial int SetCredential(NativeHandle owner, byte* bytes, nuint length);
+            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_credential_new")]
+            internal static partial nint CreateCredential(byte* bytes, nuint length);
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_add_chain")]
-            internal static partial int AddChain(NativeHandle owner, byte* bytes, nuint length);
+            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_credential_add_chain")]
+            internal static partial int AddCredentialChain(CredentialHandle credential, byte* bytes, nuint length);
+
+            [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
+            [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_credential_free")]
+            internal static partial void FreeCredential(nint credential);
+
+            [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
+            [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_use_credential")]
+            internal static partial int UseCredential(NativeHandle owner, CredentialHandle credential);
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

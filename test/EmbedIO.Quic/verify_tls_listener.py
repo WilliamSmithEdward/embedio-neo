@@ -41,10 +41,13 @@ async def exercise(args, process, port):
     replacement = args.output / 'certificate.pem.replacement.pem'
     observations = []
     rejected = []
+    # Handshakes share the listener's credential for a certificate; the server still issues
+    # no session tickets, so no connection can resume another's session.
+    tickets = []
 
     def open_peer(certificate, name):
         return connect('127.0.0.1', port, configuration=configuration(certificate, name),
-                       create_protocol=CertificatePeer)
+                       create_protocol=CertificatePeer, session_ticket_handler=tickets.append)
 
     async def expect(peer, path, status, body=None, **kwargs):
         peer.authority = f'127.0.0.1:{port}'.encode()
@@ -101,6 +104,7 @@ async def exercise(args, process, port):
         await process.stdin.drain()
         fields, body = await asyncio.wait_for(pending, 8)
         assert dict(fields)[b':status'] == b'200' and body == b'd' * 131072
+    assert not tickets, f'The server issued {len(tickets)} session tickets'
     return observations, rejected
 
 

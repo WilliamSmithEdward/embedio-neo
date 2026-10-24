@@ -40,6 +40,18 @@
   listener refused new connections while its slots held connections that could no
   longer serve. The endpoint still counts a closing connection among its 768. See
   [overload](docs/guides/http3.md#overload).
+- An HTTP/3 listener prepares the TLS credential for each certificate once and reuses
+  it for later handshakes that select the same certificate object, as MsQuic reuses a
+  configuration's credential. A new connection no longer copies the certificate and
+  acquires a Schannel credential on Windows, or exports, parses and chains the key on
+  Linux and macOS. In the load benchmark's cold mode a second HTTP/3 connection takes
+  6.1 rather than 7.4 ms on Windows and 5.8 rather than 9.0 ms on Linux, and the first
+  request of a new Windows process 2.3 ms longer. Publishing to the
+  `ServerCertificateSource` drops the prepared credentials, disposing a certificate
+  drops its own, and the listener frees the rest when it stops. A certificate whose
+  issuer chain the server's stores cannot complete is still prepared for each
+  handshake. The TLS runtime in `EmbedIO-Neo.Quic.Native` moves to private ABI 3. See
+  [certificate rotation](docs/guides/certificate-rotation.md#http3-transport-selection).
 
 ## [2.17.0] - 2026-10-22
 

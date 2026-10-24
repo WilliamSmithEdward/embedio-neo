@@ -629,6 +629,61 @@ namespace EmbedIO.Tests.Issues
             Assert.That(seen, Is.EqualTo(new[] { Hash(first), Hash(second), Hash(first) }));
         }
 
+        // The native TLS credentials alive in the process: Schannel credential handles on Windows,
+        // prepared OpenSSL credentials elsewhere.
+        private static long LiveTlsCredentials()
+        {
+            var counter = EngineInternals.Type(OperatingSystem.IsWindows() ? "EmbedIO.Quic.SchannelTls" : "EmbedIO.Quic.OpenSslTls")
+                .GetProperty("ActiveCredentials", EngineInternals.Members)
+                ?? throw new AssertionException("Missing TLS credential counter.");
+            return Convert.ToInt64(counter.GetValue(null), CultureInfo.InvariantCulture);
+        }
+
+        // Open connections that selected one certificate share its credential, and stopping the
+        // server frees it. Without sharing, each connection would hold a credential of its own.
+        [Test]
+        public async Task Http3ConnectionsShareTheCertificatesCredential()
+        {
+            RequireHttp3();
+            using var first = Create("first");
+            var source = new ServerCertificateSource(first);
+            var before = LiveTlsCredentials();
+            var seen = new ConcurrentQueue<string>();
+            var clients = Enumerable.Range(0, 4).Select(_ => CreateClient(seen)).ToArray();
+
+            try
+            {
+                await using (var host = new Host(source, HttpListenerMode.EmbedIOHttp3, LocalhostUrl()))
+                {
+                    using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+                    foreach (var client in clients)
+                    {
+                        using var request = new HttpRequestMessage(HttpMethod.Get, host.Url)
+                        {
+                            Version = HttpVersion.Version30,
+                            VersionPolicy = HttpVersionPolicy.RequestVersionExact,
+                        };
+                        using var response = await client.SendAsync(request, stop.Token);
+                        Assert.That(await response.Content.ReadAsStringAsync(stop.Token), Is.EqualTo("ok:3.0"));
+                    }
+
+                    // A credential freed elsewhere in the process can only lower the count.
+                    Assert.That(LiveTlsCredentials() - before, Is.LessThanOrEqualTo(1));
+                    Assert.That(seen, Has.Count.EqualTo(4));
+                    Assert.That(seen, Is.All.EqualTo(Hash(first)));
+                }
+
+                Assert.That(LiveTlsCredentials(), Is.LessThanOrEqualTo(before));
+            }
+
+            finally
+            {
+                foreach (var client in clients)
+                    client.Dispose();
+            }
+        }
+
         // Combined hosting shares one source between TCP and QUIC.
         [Test]
         public async Task CombinedHostingRotatesEveryProtocol()
