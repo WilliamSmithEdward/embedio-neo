@@ -1169,7 +1169,10 @@ Still open after the merge, each with its tracking issue:
    first request with no warm cost
    ([Startup, warm and tail latency](#startup-warm-and-tail-latency)).
    [#522](https://github.com/WilliamSmithEdward/embedio-neo/issues/522).
-4. Endurance longer than 30 minutes, and on macOS.
+4. Resolved: runs of three hours on Windows and Linux and of 30 minutes on macOS
+   finished without a client error ([Endurance](#endurance)). Linux native memory and
+   Windows handles rose slowly over the three hours; whether they level off is tracked
+   in [#552](https://github.com/WilliamSmithEdward/embedio-neo/issues/552).
    [#523](https://github.com/WilliamSmithEdward/embedio-neo/issues/523).
 5. Resolved: ad-hoc signed hardened apps, AOT and JIT, run in CI
    ([Hardened-runtime macOS apps](#hardened-runtime-macos-apps)), as do the oldest
@@ -2991,6 +2994,84 @@ libmsquic mapped only in the client and the EmbedIO TLS library only in the serv
 Two earlier Linux attempts are not results: one built a source export with CRLF line
 endings, which failed IDE0055, and the next lacked the client's libmsquic, so no
 HTTP/3 request left the client.
+
+### 30 minutes on macOS
+
+The README's 30-minute plan also ran on macOS 27.0.1 on an Apple M5 Pro (18 logical
+CPUs), with .NET SDK 10.0.402 and runtime 10.0.13, on `a99319de` with two benchmark
+fixes merged locally.
+[#531](https://github.com/WilliamSmithEdward/embedio-neo/pull/531) records handles and
+private memory, which the benchmark had recorded as 0 on macOS
+([#529](https://github.com/WilliamSmithEdward/embedio-neo/issues/529)).
+[#533](https://github.com/WilliamSmithEdward/embedio-neo/pull/533) adds the opt-in
+`--request-body-read-timeout`, set to 30 seconds here, because `faults` steps could
+not quiesce while macOS drops some client resets
+([#532](https://github.com/WilliamSmithEdward/embedio-neo/issues/532)). macOS has no
+CPU pinning, so server and client shared the machine; the client loaded the libmsquic
+2.6.2 bottle CI pins. On macOS the benchmark records open file descriptors as handles
+and the physical footprint as private memory.
+
+| | macOS |
+| --- | --- |
+| Steps passed | 8 of 8 |
+| Client errors | 0 |
+| Validated requests | 5,023,105 |
+| Of them over HTTP/3 | 483,214 |
+| Quiesced managed heap, first after warm-up to last | 4,470 to 5,206 KiB |
+| Open file descriptors, first to last | 137 to 137 |
+| Threads, first to last | 56 to 56 |
+| Physical footprint outside the GC's committed memory, first to last | 98.1 to 104.0 MiB |
+
+Memory outside the GC stayed between 98 and 104 MiB at every quiesced snapshot after
+warm-up, through 2.44 million mixed-load requests. During the drains, 13 first-chance
+`NullReferenceException`s were thrown inside the runtime's macOS TLS callback,
+`SafeDeleteSslContext.WriteToConnection`, when a TLS write met a stream the drain had
+disposed. The runtime caught them, and no client or handler failed. An earlier attempt
+is not a result: it launched the runner through `caffeinate`, and macOS strips
+`DYLD_*` variables when it starts a protected system binary, so the client could not
+find libmsquic and every HTTP/3 request failed.
+
+### Three-hour runs
+
+Windows and Linux then each ran a 2.96-hour plan on `5bc8899e`, whose source 2.18.0
+ships unchanged: idle, steady load for ten minutes, the fault mix for four, WebSockets
+for two, then six cycles of mixed load for 18 minutes, the fault mix for two, a drain
+under mixed load and two idle restarts, then WebSockets for two minutes, steady load
+for ten and idle for five. Every cycle carried the same traffic. Server CPUs were 0-3
+and client CPUs 4-7, with runtime 10.0.13. Linux ran in the same pinned container as
+its 30-minute run, with the CI-built TLS library for this revision (SHA-256
+`2968a832...`); during the first steady load, a census found the TLS library mapped
+only in the server and libmsquic only in the client.
+
+| | Windows | Linux |
+| --- | --- | --- |
+| Steps passed | 31 of 31 | 31 of 31 |
+| Client errors | 0 | 0 |
+| Validated requests | 30,812,608 | 45,611,552 |
+| Of them over HTTP/3 | 4,439,726 | 4,411,114 |
+| Quiesced managed heap, first after warm-up to last | 3,823 to 3,819 KiB | 4,010 to 3,539 KiB |
+| Handles, first to last | 572 to 601 | 134 to 134 |
+| Threads, first to last | 18 to 21 | 20 to 21 |
+| Working set after the first and last cycles | 86.8 and 87.2 MiB | 145.4 and 151.8 MiB |
+| Private memory outside the GC's committed memory, after the first and last cycles | 21.6 and 23.4 MiB | 240.9 and 253.6 MiB |
+
+Every drain and restart left nothing in flight, and no replaced server instance served
+a request. Small-request p99 held: on every protocol, the medians of the run's first
+and last quarters differ by at most 0.61 ms.
+
+On Linux, .NET reads private memory from VmData (`ProcessManager.Linux.cs` at
+v10.0.13), which counts writable private mappings whether or not they are resident.
+Thread stacks and allocator arenas count in full, so private memory runs about 110 MiB
+above the working set in both Linux runs. The managed heap held and GC committed
+memory fell, so what grew is native: the working set rose by 2.7, 1.5, 1.8, -0.3 and
+0.7 MiB from one cycle to the next. Every cycle carried about 6.2 million mixed-load
+requests, so a fixed cost per request or per cycle would add about the same each time;
+these increments shrank, which fits an allocator approaching its high-water mark. On
+Windows, memory held flat but handles rose, mostly in the first hour as threads went
+from 18 to 21, and then, with 21 threads, from 587 after the second cycle to 601 at
+the end. Three hours cannot show that either series stops;
+[#552](https://github.com/WilliamSmithEdward/embedio-neo/issues/552) tracks both, with
+an 8-hour plan and finer instruments.
 
 ## Open-issue audit
 
