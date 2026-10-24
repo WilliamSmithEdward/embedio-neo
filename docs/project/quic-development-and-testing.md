@@ -3223,3 +3223,196 @@ and off, and CI runs them with it on Linux and macOS (`--address-validation`).
   certificate; a hardware- or store-held key never reaches it. A signing callback from
   native code into .NET on every handshake would lift this. Schannel uses the key in
   place, so Windows accepts non-exportable CNG keys.
+
+## Per-certificate TLS credentials
+
+[#522](https://github.com/WilliamSmithEdward/embedio-neo/issues/522) found that a second
+HTTP/3 connection to a warm server cost EmbedIO 6.9 to 7.2 ms on Windows and 9.0 to 9.2 ms
+on Linux, against 3.8 and 4.1 ms for Kestrel, and that part of the difference was TLS
+setup that EmbedIO.Quic repeated for every connection after selecting its certificate:
+
+- Windows copied the certificate and acquired a Schannel credential
+  (`AcquireCredentialsHandleW`).
+- Linux and macOS exported the certificate and its key as PKCS#12, created the OpenSSL
+  state, parsed the PKCS#12 into it and built the outgoing chain with `X509Chain.Build`.
+
+MsQuic loads a credential once per listener configuration and reuses it. EmbedIO.Quic now
+does the same per certificate.
+
+### The credential cache
+
+Each HTTP/3 listener binding owns an `EmbedIOQuicTlsFactory`, which creates the TLS session
+of each new connection and holds a `ServerCredentialCache` of the credentials those
+sessions share.
+
+- The key is the certificate object the handshake selected, the source's current
+  certificate or the one an SNI selector returned, compared by reference. A listener's TLS
+  policy is fixed, so the credential's client-certificate flag is too. Two objects holding
+  the same certificate never share a credential. A selector that returns the same instance
+  for a host name gets the reuse; one that loads a new object per handshake prepares a
+  credential each time, as before.
+- A handshake selects its certificate exactly as before, after the complete ClientHello,
+  then takes the cached credential or prepares one. The cache and every session that uses
+  a credential hold a reference and release it once; the last release frees the native
+  handle.
+- `ServerCertificateSource.Publish` increments the source's version, and the next
+  handshake drops every cached credential. Sessions that hold one keep it until their
+  connection closes. A handshake that captured its fallback before a publication gets a
+  credential of its own, so the replaced certificate does not return to the cache; the
+  factory reads the version before the certificate, so a publication between the two
+  reads marks the handshake as older.
+- A certificate the application has disposed can no longer be selected, so its entry goes
+  at the next handshake. That covers rotation inside an SNI selector, which leaves the
+  source's version alone, when the application disposes what it replaced.
+- The cache holds at most 32 certificates and drops the least recently used. The binding
+  disposes the factory after its connections, which frees the rest.
+- A credential prepared while the certificate stores could not complete the issuer chain
+  is not cached: that handshake uses it and the next one prepares again, as every
+  handshake did before. Otherwise a transient failure to find an issuer, or one installed
+  later, would leave the partial chain in every handshake until a publication. On Linux
+  and macOS the chain the credential sends decides this. On Windows, where Schannel builds
+  the chain, a managed `X509Chain` build at preparation does, without downloading issuers;
+  a self-issued certificate skips it.
+- On Windows a credential is the certificate copy and its Schannel credential handle.
+  Sessions use the handle value and still create their own security context.
+- On Linux and macOS private native ABI 3 adds a credential object: the key and leaf
+  parsed once from the PKCS#12 export, and the issuer chain the connection sends. Managed
+  code clears the exported bytes as soon as the parse returns. A connection installs the
+  credential by reference (`SSL_use_certificate`, `SSL_use_PrivateKey`, `SSL_set1_chain`)
+  and holds its own OpenSSL references, so the session releases its lease at once. ABI 2's
+  per-connection `set_credential` and `add_chain` are gone; an older library fails the
+  preflight check.
+- Each connection still creates its OpenSSL state (`SSL_CTX_new` and `SSL_new`), which the
+  probe below measured at 0.05 ms. Sharing one `SSL_CTX` per listener would save that and
+  would need a further ABI change.
+
+What did not change: SNI selection runs once per handshake with the original name,
+client-certificate policy validates every handshake on its own security context, and the
+cipher profiles are the same. There is still no resumption: Schannel credentials keep
+`SCH_CRED_DISABLE_RECONNECTS`, and each OpenSSL connection keeps its own `SSL_CTX` with the
+session cache off and no tickets. `verify_tls_listener.py` and
+`verify_client_certificate.py` now record session tickets and require none; the second
+runs in Windows CI. An aioquic server that does issue tickets makes the same client
+handler record one, so the check is not vacuous.
+
+### Per-connection setup
+
+A probe timed the per-connection TLS work on one thread, 2,000 times per step after 50
+warm-up runs, with the load benchmark's kind of certificate (ECDSA P-256, self-signed,
+exportable key), in two rounds in reversed order. "First flight" is the production path
+for a new connection: the listener's factory creates the session, it reads a complete
+ClientHello, selects the certificate, takes or prepares the credential and produces the
+server's first flight (ServerHello to Finished), and the session is disposed. One
+ClientHello is reused, so the client's key generation is not timed. Windows ran on the
+host, Linux in the measurement image on CPUs 0-3, as #522's probe did; #522's probe of
+main's separate steps ran beside it. Medians, both rounds:
+
+| Platform | Per new connection | Main | This change |
+| --- | --- | ---: | ---: |
+| Windows | First flight | 1.58 ms | 0.41 ms |
+| Windows | Certificate copy and Schannel credential | 0.81 ms | cached (0.81 to 0.83 ms once per certificate) |
+| Linux | First flight | 4.06 to 4.11 ms | 0.16 to 0.19 ms |
+| Linux | PKCS#12 export | 2.92 to 3.04 ms | cached |
+| Linux | OpenSSL state and its credential | 0.65 to 0.68 ms, PKCS#12 parsed in | 0.05 ms, cached credential installed |
+| Linux | Outgoing chain (`X509Chain.Build`) | 0.14 to 0.17 ms | cached |
+
+On Linux a credential costs 3.81 ms once per certificate: the export, the parse and the
+chain. Taking a cached credential and releasing it costs 0.1 microseconds or less on both
+platforms, and installing it in a connection's OpenSSL state adds under 2 microseconds to
+that state's 0.05 ms.
+
+### Second connection
+
+The load benchmark's `cold` mode from #522, for HTTP/3 only: a fresh server process per
+measurement and one long-lived client, 32 requests on a new connection, then one on a
+second connection. 30 measured iterations per server, in alternating order; the change
+against main `19ccc261` and Kestrel 10.0.13. Windows ran the server on CPUs 0-3 and the
+client on 4-11; Linux ran in the measurement image on CPUs 0-7, server 0-3 and client
+4-7, with MsQuic 2.6.2 serving the .NET client and Kestrel. Medians, with the 90th
+percentile in brackets, in milliseconds:
+
+| Platform | Server | First HTTP/3 request | Second HTTP/3 connection |
+| --- | --- | ---: | ---: |
+| Windows | EmbedIO, main | 107.6 [113.1] | 7.36 [7.88] |
+| Windows | EmbedIO, this change | 109.9 [112.9] | 6.07 [6.66] |
+| Windows | Kestrel | 34.8 [37.2] | 4.01 [4.75] |
+| Linux | EmbedIO, main | 141.6 [147.2] | 9.03 [11.32] |
+| Linux | EmbedIO, this change | 142.2 [149.3] | 5.76 [6.68] |
+| Linux | Kestrel | 82.7 [86.7] | 3.66 [8.53] |
+
+- A second connection costs 1.3 ms less on Windows and 3.3 ms less on Linux, and its 90th
+  percentile 1.2 and 4.6 ms less. The gap to Kestrel falls from 3.35 to 2.06 ms on
+  Windows and from 5.37 to 2.10 ms on Linux. Earlier runs on the previous commit measured
+  6.12 against 7.39 ms on Windows and 5.76 against 8.63 ms on Linux.
+- The first request of a fresh Windows process is 2.3 ms slower, in both Windows runs.
+  Timing only the first handshake of 20 fresh processes per side puts the difference
+  there: 16.4 against 14.3 ms. The self-issued check accounts for 0.05 ms of that; the
+  rest is not attributed, most likely the first compilation of the new code on that path.
+  Linux differs by 0.5 ms. A first version of the Windows chain check built an
+  `X509Chain` at every first preparation. The first build in a process took 11.7 to
+  16.1 ms in three fresh processes, and it added 10 ms to the first request (118.0
+  against 107.7 ms) until self-issued certificates skipped it.
+- The host's busy CPUs, sampled every second, averaged 2.7 to 3.6 during each run, the
+  benchmark's own processes included, with one-second peaks to 11.4. One Windows repeat
+  ran during 13 to 16 busy CPUs of outside load; it was discarded and run again.
+
+### Validation
+
+New and changed checks:
+
+- The development host's `self-test` runs `ServerCredentialCacheTests` with counted
+  stand-in credentials: sharing by object, publication, handshakes older than a
+  publication, uncacheable credentials, disposed certificates, eviction order, disposal
+  (also racing a preparation, and a failed preparation), 4,000 leases on eight threads
+  while the source publishes, and chain completeness.
+- `schannel-self-test` checks with real Schannel credentials that handshakes selecting one
+  certificate share its credential, by fallback and by SNI, that a publication drops the
+  cache's credentials while a handshake keeps its own, that disposing the factory leaves a
+  running handshake its credential, that a stopped listener refuses new handshakes, and
+  that the native counts return to zero.
+- The NUnit test `Http3ConnectionsShareTheCertificatesCredential` keeps four HTTP/3
+  connections open through the real `WebServer` and requires them to hold at most one more
+  native credential, and none after the server stops, on all three platforms.
+- The production listener host behind the publication, SNI and client-certificate
+  verifiers, and the package consumer on all six runtime identifiers, require zero native
+  credentials after the listener stops. `ServerChainTests` requires the partial-chain
+  profile to cache nothing and the other four one credential.
+- The native ownership test now covers a credential with 32 issuers that four connections
+  install and that is freed before them, a retired credential and a missing one. Under
+  ASan, UBSan and LeakSanitizer it ran 8,192 connection and 3,072 credential lifecycles and
+  retained nothing. `test_audit.py` requires the ABI 3 symbol version and export inventory.
+
+Five deliberate defects, each built and run: no sharing, no drop on publication, no
+eviction, caching handshakes older than a publication, and a factory that keeps its
+credentials. Each failed `self-test` or `schannel-self-test`. A factory that never
+disposes its cache does not compile (CA2213).
+
+Local results, on commit `04c82d03` (the last commit, which only changes the cache's
+entry type, passed both self-tests):
+
+- NUnit HTTP/3, WebTransport and certificate-rotation subset, 856 cases: Windows 854
+  passed and 2 platform skips; Linux, in the measurement image with the change's native
+  library, 855 passed and 1 skip.
+- `scripts/run-quic-schannel.ps1`, the Windows CI script, passed in full, the six
+  client-certificate cases with no session tickets, and `verify_tls_listener.py` passed.
+- The native build's binary audit for linux-x64, the 28 native unit tests (one platform
+  skip), and the source-quality, formatting and both suppression gates passed.
+
+A private adversarial review of the cached key material, with an independent read-only
+pass, is kept outside the repository. It found no use-after-free, double free or
+wrong-certificate path. The partial-chain and disposed-certificate rules above came from
+it. It accepts three residual risks: a cached key lives until publication, eviction,
+disposal or the listener stops rather than until the last connection that used it; a
+client can tell from the handshake's timing whether anyone selected a host name's
+certificate since the last publication or eviction, as with .NET's own credential caches;
+and freed PKCS#12 parse buffers inside OpenSSL are not cleansed, as before, though now
+once per credential rather than per handshake.
+
+### Left out
+
+- Sharing the OpenSSL `SSL_CTX` per listener (0.05 ms per connection, above).
+- Reuse across different objects that hold the same certificate. .NET's SslStream keys its
+  credential cache by thumbprint; keying by reference keeps a credential tied to the
+  object, and so the key, it came from.
+- Dropping credentials at the moment of publication. They go at the next handshake, and no
+  handshake after the publication can use them.

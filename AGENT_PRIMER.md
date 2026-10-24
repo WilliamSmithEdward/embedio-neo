@@ -390,6 +390,12 @@ Select with `options.WithMode(HttpListenerMode.X)`:
   round trip. There is no TLS session resumption or 0-RTT, and on Linux and macOS
   the certificate key must be exportable. See
   [address validation](docs/guides/http3.md#address-validation).
+- An HTTP/3 listener prepares each certificate's TLS credential once and reuses it
+  for later handshakes that select the same `X509Certificate2` object (source after
+  2.17.0, unreleased). `ServerCertificateSource.Publish` drops the prepared
+  credentials, disposing a certificate drops its own, and stopping the listener frees
+  them. Return the same instance from an SNI selector to get the reuse. See
+  [certificate rotation](docs/guides/certificate-rotation.md#http3-transport-selection).
 
 The HTTP/3 listener serves opt-in WebTransport sessions:
 `WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a
@@ -456,10 +462,12 @@ fields to its control stream, validates the client's, and admits draft-16 sessio
 only with negotiated datagrams and reliable reset, draft-02 sessions with
 datagrams. Without it, the SETTINGS bytes and request handling are unchanged.
 The Windows TLS factory captures the fallback certificate when
-constructing each handshake, then selects and clones the certificate after a complete
+constructing each handshake, then selects the certificate after a complete
 ClientHello. It preserves bounded ASCII SNI spelling, calls the configured selector
-once and isolates selector failures. Later publication applies to new handshakes;
-existing connections keep their original credential. Ordinary library TLS omits
+once and isolates selector failures. The listener clones a selected certificate and
+acquires its credential once, and later handshakes that select the same object share
+it. Later publication applies to new handshakes; existing connections keep their
+original credential. Ordinary library TLS omits
 development diagnostic strings. Its Windows path honors `ClientCertificateMode.None`,
 `Allow` and `Require`, builds the client-authentication chain using presented intermediates,
 and applies the existing validator and revocation option before TLS completion. Supplied
@@ -1156,9 +1164,13 @@ wire cases and 3,072 wrapper-sanitizer ownership lifecycles. Those initial proof
 used the recorded development build; final restricted native-build validation is
 recorded separately in the development guide. This work shipped in 2.17.0.
 
-The portable boundary's private ABI is now 2. Server credential preparation keeps
+The portable boundary's private ABI is now 3 (source after 2.17.0, unreleased; 2.17.0
+ships ABI 2). A native credential holds the key and leaf parsed once from the selected
+certificate's PKCS#12 export and the issuer chain; each connection installs it by
+reference, and the listener keeps one per selected certificate until the source
+publishes or the listener stops. Server credential preparation keeps
 runtime-discovered intermediates in order, preserves partial issuers and omits the
-trust anchor; issuer installation transfers only public DER. Native ABI 1 is
+trust anchor; issuer installation transfers only public DER. Older native ABIs are
 rejected during preflight. Local Linux tests compare five chain profiles with a
 BCL TCP control and check exact peer-visible issuer order and cleanup. The store
 fixture requires an explicitly disposable Linux profile and stores public CA
