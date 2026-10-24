@@ -1061,7 +1061,10 @@ protocol and optionally a ReadyToRun copy of the runner. The
 [HTTP/3 latency record](docs/project/quic-development-and-testing.md#startup-warm-and-tail-latency)
 has its results for the 2.17.0 code: JIT is most of a fresh process's first HTTP/3
 request, ReadyToRun cut it from 106 to 48 ms on Windows with no warm cost, and a
-warm small HTTP/3 request costs EmbedIO.Quic 2 to 6 times Kestrel's CPU.
+warm small HTTP/3 request costs EmbedIO.Quic 2 to 6 times Kestrel's CPU. The
+unreleased [socket loop and per-request cost](docs/project/quic-development-and-testing.md#socket-loop-and-per-request-cost)
+change cuts the per-datagram and per-request cost; its profiled runs are recorded
+there, and its role-alternated measurements are still to run.
 
 ### Response-pipeline validation (2.3.0 source tree)
 

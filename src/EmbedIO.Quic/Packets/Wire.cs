@@ -47,20 +47,42 @@ namespace EmbedIO.Quic
     {
         internal static void Integer(Stream target, ulong value)
         {
+            Span<byte> bytes = stackalloc byte[8];
+            target.Write(bytes[..Integer(bytes, value)]);
+        }
+
+        internal static int IntegerLength(ulong value)
+        {
             if (value >= 1UL << 62) throw new ArgumentOutOfRangeException(nameof(value));
 
-            var length = value < 64 ? 1 : value < 16384 ? 2 : value < 1073741824 ? 4 : 8;
-            Span<byte> bytes = stackalloc byte[8];
-            BinaryPrimitives.WriteUInt64BigEndian(bytes, value);
-            bytes[8 - length] |=
-                (byte)(length switch
-                {
-                    1 => 0,
-                    2 => 64,
-                    4 => 128,
-                    _ => 192
-                });
-            target.Write(bytes[(8 - length)..]);
+            return value < 64 ? 1 : value < 16384 ? 2 : value < 1073741824 ? 4 : 8;
+        }
+
+        // Writes the variable-length integer at the start of target and returns its length.
+        internal static int Integer(Span<byte> target, ulong value)
+        {
+            var length = IntegerLength(value);
+
+            switch (length)
+            {
+                case 1:
+                    target[0] = (byte)value;
+                    break;
+
+                case 2:
+                    BinaryPrimitives.WriteUInt16BigEndian(target, (ushort)(value | 0x4000));
+                    break;
+
+                case 4:
+                    BinaryPrimitives.WriteUInt32BigEndian(target, (uint)value | 0x80000000);
+                    break;
+
+                default:
+                    BinaryPrimitives.WriteUInt64BigEndian(target, value | 0xc000000000000000);
+                    break;
+            }
+
+            return length;
         }
 
         internal static void Parameter(Stream target, ulong id, ReadOnlySpan<byte> value)
@@ -77,22 +99,32 @@ namespace EmbedIO.Quic
             Parameter(target, id, encoded.ToArray());
         }
 
-        internal static byte[] Frame(params ulong[] values)
+        internal static byte[] Frame(params ReadOnlySpan<ulong> values)
         {
-            using var encoded = new MemoryStream();
+            var length = 0;
 
-            foreach (var value in values) Integer(encoded, value);
+            foreach (var value in values) length += IntegerLength(value);
 
-            return encoded.ToArray();
+            var frame = new byte[length];
+            var offset = 0;
+
+            foreach (var value in values) offset += Integer(frame.AsSpan(offset), value);
+
+            return frame;
         }
     }
 
     // Fixed bounds limit CRYPTO reassembly independently of packet lifetime.
     // Retaining consumed bytes lets overlapping retransmissions be checked exactly.
+    // Storage grows with the highest offset received, up to the bound: a handshake
+    // flight is a few kilobytes of a 64 KiB bound.
     internal sealed class Reassembly(int capacity)
     {
-        private readonly byte[] _bytes = new byte[capacity];
-        private readonly bool[] _present = new bool[capacity];
+        private readonly int _capacity = capacity >= 0
+            ? capacity
+            : throw new ArgumentOutOfRangeException(nameof(capacity));
+        private byte[] _bytes = [];
+        private bool[] _present = [];
         private int _contiguous;
         private int _consumed;
         private ulong? _finalSize;
@@ -102,7 +134,7 @@ namespace EmbedIO.Quic
 
         internal void Add(ulong offset, ReadOnlySpan<byte> bytes, bool final = false)
         {
-            if (offset > (ulong)_bytes.Length || (ulong)bytes.Length > (ulong)_bytes.Length - offset)
+            if (offset > (ulong)_capacity || (ulong)bytes.Length > (ulong)_capacity - offset)
                 throw new InvalidDataException("Reassembly budget exceeded.");
 
             var end = offset + (ulong)bytes.Length;
@@ -118,6 +150,13 @@ namespace EmbedIO.Quic
                 _finalSize = end;
             }
 
+            if ((int)end > _bytes.Length)
+            {
+                var size = (int)Math.Min(_capacity, Math.Max((long)end, Math.Max(1024L, 2L * _bytes.Length)));
+                Array.Resize(ref _bytes, size);
+                Array.Resize(ref _present, size);
+            }
+
             for (var i = 0; i < bytes.Length; i++)
             {
                 var index = (int)offset + i;
@@ -129,7 +168,7 @@ namespace EmbedIO.Quic
                 _present[index] = true;
             }
 
-            while (_contiguous < _bytes.Length && _present[_contiguous]) _contiguous++;
+            while (_contiguous < _present.Length && _present[_contiguous]) _contiguous++;
         }
 
         internal byte[] Consume(int maximum = int.MaxValue)

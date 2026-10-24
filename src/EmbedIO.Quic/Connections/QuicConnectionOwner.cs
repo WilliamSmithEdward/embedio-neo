@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -21,8 +22,11 @@ namespace EmbedIO.Quic
     internal sealed class QuicConnectionOwner : IAsyncDisposable
     {
         private readonly object _gate = new();
+
+        // Copies are rented and cleared before they are returned.
         private readonly Queue<(
             byte[] Bytes,
+            int Length,
             QuicConnectionOwner? ResetOwner,
             QuicConnectionEndpoints? Endpoints
         )> _packets = new();
@@ -54,7 +58,8 @@ namespace EmbedIO.Quic
             int packetCapacity = 64,
             int byteCapacity = 262144,
             IQuicConnectionIdSource? connectionIds = null,
-            QuicRetry? retry = null
+            QuicRetry? retry = null,
+            Action? completed = null
         )
         {
             ArgumentNullException.ThrowIfNull(pool);
@@ -72,7 +77,7 @@ namespace EmbedIO.Quic
             _publish = publish;
             _packetCapacity = packetCapacity;
             _byteCapacity = byteCapacity;
-            _execution = pool.Register(Execute, Cleanup);
+            _execution = pool.Register(Execute, Cleanup, completed);
         }
 
         internal IQuicConnectionIdSource? ConnectionIds { get; }
@@ -112,12 +117,22 @@ namespace EmbedIO.Quic
 
                 if (_pendingPackets >= _packetCapacity || bytes.Length > _byteCapacity - _pendingBytes) return false;
 
-                _packets.Enqueue((bytes.ToArray(), resetOwner, endpoints));
+                var copy = ArrayPool<byte>.Shared.Rent(bytes.Length);
+                bytes.CopyTo(copy);
+                _packets.Enqueue((copy, bytes.Length, resetOwner, endpoints));
                 _pendingPackets++;
                 _pendingBytes += bytes.Length;
             }
 
             return _execution.Wake();
+        }
+
+        private static void Return(byte[] packet, int length)
+        {
+            packet
+                .AsSpan(0, length)
+                .Clear();
+            ArrayPool<byte>.Shared.Return(packet);
         }
 
         internal void Notify() => _execution.Wake();
@@ -145,9 +160,29 @@ namespace EmbedIO.Quic
             return now;
         }
 
+        // Queued datagrams one turn processes before other connections' turns run.
+        private const int PacketsPerTurn = 16;
+
         private void Execute()
         {
+            var processed = 0;
+
+            while (processed < PacketsPerTurn && Process(processed == 0)) processed++;
+
+            bool pending;
+
+            lock (_gate) pending = _packets.Count != 0 || _tick;
+
+            if (pending) _execution.Wake();
+        }
+
+        // Processes the next queued datagram. With none queued, only a turn's first call runs
+        // the timer or application work instead. Returns whether it processed a datagram and
+        // the connection is still open.
+        private bool Process(bool first)
+        {
             byte[]? packet;
+            int length;
             QuicConnectionOwner? resetOwner;
             QuicConnectionEndpoints? endpoints;
             bool tick;
@@ -157,13 +192,17 @@ namespace EmbedIO.Quic
                 if (_packets.TryDequeue(out var pending))
                 {
                     packet = pending.Bytes;
+                    length = pending.Length;
                     resetOwner = pending.ResetOwner;
                     endpoints = pending.Endpoints;
                 }
 
+                else if (!first) return false;
+
                 else
                 {
                     packet = null;
+                    length = 0;
                     resetOwner = null;
                     endpoints = null;
                 }
@@ -176,7 +215,7 @@ namespace EmbedIO.Quic
             {
                 if (packet != null && _connection == null)
                 {
-                    _connection = _create(packet, ReadClock())
+                    _connection = _create(packet.AsSpan(0, length), ReadClock())
                         ?? throw new InvalidOperationException("QUIC factory returned no connection.");
                     _connection.UseExecutionClock(ReadClock);
                     _id = _connection.ServerId.ToArray();
@@ -184,12 +223,12 @@ namespace EmbedIO.Quic
 
                 var connection = _connection;
 
-                if (connection == null) return;
+                if (connection == null) return false;
 
                 connection.BeginRouting(endpoints);
                 var output = packet == null
                     ? tick ? connection.Tick(ReadClock()) : connection.PumpApplications(ReadClock())
-                    : connection.Receive(packet, ReadClock());
+                    : connection.Receive(packet.AsSpan(0, length), ReadClock());
 
                 // A shared-endpoint token candidate is forwarded only after the
                 // header owner fails authentication. Its bounded mailbox performs
@@ -200,7 +239,7 @@ namespace EmbedIO.Quic
                     && !connection.DatagramAuthenticated
                     && !connection.StatelessResetReceived
                 )
-                    resetOwner.Receive(packet, endpoints: endpoints);
+                    resetOwner.Receive(packet.AsSpan(0, length), endpoints: endpoints);
 
                 if (packet != null && tick && !connection.Closed) output.AddRange(connection.Tick(ReadClock()));
 
@@ -242,25 +281,27 @@ namespace EmbedIO.Quic
                     );
                 }
 
-                if (connection.Closed) RequestClose();
+                if (connection.Closed)
+                {
+                    RequestClose();
+                    return false;
+                }
+
+                return packet != null;
             }
 
             finally
             {
-                bool pending;
-
-                lock (_gate)
+                if (packet != null)
                 {
-                    if (packet != null)
+                    lock (_gate)
                     {
-                        _pendingBytes -= packet.Length;
+                        _pendingBytes -= length;
                         _pendingPackets--;
                     }
 
-                    pending = _packets.Count != 0 || _tick;
+                    Return(packet, length);
                 }
-
-                if (pending) _execution.Wake();
             }
         }
 
@@ -282,7 +323,9 @@ namespace EmbedIO.Quic
             lock (_gate)
             {
                 _closing = true;
-                _packets.Clear();
+
+                while (_packets.TryDequeue(out var packet)) Return(packet.Bytes, packet.Length);
+
                 _pendingBytes = 0;
                 _pendingPackets = 0;
                 _tick = false;

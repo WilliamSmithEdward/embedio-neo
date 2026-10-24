@@ -16,6 +16,9 @@ namespace EmbedIO.Quic
 
         internal abstract void Stream(ulong id, byte[] bytes, bool fin);
 
+        // Data received in order is passed straight from the packet; it must be copied to be kept.
+        internal virtual void Stream(ulong id, ReadOnlySpan<byte> bytes, bool fin) => Stream(id, bytes.ToArray(), fin);
+
         internal abstract void Reset(ulong id, ulong error, ulong reliableSize);
 
         internal virtual void Stop(ulong id, ulong error) { }

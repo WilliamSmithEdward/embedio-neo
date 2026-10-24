@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -25,11 +26,15 @@ namespace EmbedIO.Tests
                 return;
             }
 
-            var quic = EngineInternals.Create(
-                streamType,
-                0UL,
-                (Action)(() => { })
-            );
+            // The stream reports itself to its readiness callback; this one has nothing to do.
+            var ready = Expression
+                .Lambda(
+                    typeof(Action<>).MakeGenericType(streamType),
+                    Expression.Empty(),
+                    Expression.Parameter(streamType)
+                )
+                .Compile();
+            var quic = EngineInternals.Create(streamType, 0UL, ready);
             // A HEADERS frame; the request reader hands its field section on undecoded.
             EngineInternals.Call(quic, "Receive", new byte[] { 1, 2, 0, 0 }, false);
             var transport = EngineInternals.Create("EmbedIO.Net.Internal.Http3.EmbedIOQuicTransportStream", quic);

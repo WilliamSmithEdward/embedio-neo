@@ -3544,3 +3544,131 @@ The times are elapsed time on the calling thread. They make up 0.8 ms of the 3.1
 Linux. MsQuic loads its credential once per listener configuration and reuses it.
 Caching the credential and the exported key per certificate would take these steps
 out of every handshake after the first; it is not part of this change.
+
+## Socket loop and per-request cost
+
+Under overload in [#521](https://github.com/WilliamSmithEdward/embedio-neo/issues/521)'s
+runs the Windows HTTP/3 server used 0.3 to 0.6 of its two CPUs, and the warm runs above
+found small requests costing 2 to 6 times Kestrel's server CPU with about 100 KB
+allocated per request, 1 MiB transfers costing about 9 times the CPU at around 10 bytes
+allocated per byte, and new connections completing at half Kestrel's rate.
+
+### What the profiles showed
+
+Sampled CPU and allocation profiles of the warm scenarios (`run --profile`) located the
+costs:
+
+- A 13-byte response allocated 96 KB, 64 KiB of it a receive ring that each request
+  stream allocated whole when its first byte arrived. Each connection also allocated
+  384 KiB of CRYPTO reassembly storage, 64 KiB of bytes and 64 KiB of flags per
+  encryption level.
+- The socket loop handled one received and one sent datagram per iteration and
+  allocated on every wait. A received packet was copied and decrypted into new arrays,
+  and a sent one was assembled through a `MemoryStream` and several intermediate arrays.
+- Every frame left in a packet of its own, and every ack-eliciting 1-RTT packet was
+  acknowledged at once in another.
+- Loss recovery scanned every outstanding packet, and up to 4,096 packets retained after
+  loss, for each ACK frame and each 2 ms tick. Each acknowledged packet scanned the loss
+  history, and each loss sorted up to 12,288 acknowledgment times.
+- Header protection called `Aes.EncryptEcb`, which imports the key again on every call
+  (`BCryptImportKey` on Windows), for every packet sent and received.
+
+### Changes
+
+The socket loop:
+
+- Receiving, sending and the 2 ms timer run as three loops, each taking one lock around
+  its dispatcher calls, so the dispatcher still has one owner at a time and keeps its
+  output order, refusal budget and admission accounting
+  ([#540](https://github.com/WilliamSmithEdward/embedio-neo/pull/540)). The old loop
+  awaited `Task.WhenAny` over a receive, the timer and the output channel and handled at
+  most one received and one sent datagram per iteration.
+- A receive that finds a queued datagram completes at once, so every datagram already
+  waiting is read before the loop waits. The send loop sends every queued datagram, in
+  the dispatcher's order, before it waits. No wait allocates: the receive and send use
+  the `SocketAddress` overloads with cached peers, the send loop waits on a one-item
+  channel the dispatcher signals, and the dispatcher queues datagrams as structs.
+- A socket bound to one address no longer asks for each datagram's destination; only
+  wildcard sockets read packet information.
+- Both socket buffers are 4 MiB where the operating system allows, as MsQuic sizes its
+  own. .NET has no batched UDP send, so each datagram is still one system call.
+
+Per datagram:
+
+- A received datagram is copied once, into pooled memory, and its packets are
+  unprotected and decrypted in place there. A connection's turn processes up to 16
+  queued datagrams.
+- A sent packet is assembled and sealed in one array: header, frames and padding are
+  written where they go and encrypted in place.
+- Header protection keeps one AES-ECB encryptor per key.
+- With packet sharing, which the listener binding turns on, frames queued together share
+  a packet of up to 1,200 bytes. A 1-RTT packet is acknowledged at once when it arrives
+  out of order or is the second unacknowledged ack-eliciting one, otherwise with the next
+  packet sent or after 1 ms (RFC 9000 sections 13.2.1 and 13.2.2). MAX_STREAMS goes out
+  with other frames, or alone once the peer has fewer than half its streams left. A small
+  response, its acknowledgment and the stream credit it frees usually leave in one
+  packet. The engine's packet-level tests keep sharing off, as they expect one frame per
+  packet; `PacketSharingTests` covers it there.
+- Loss recovery keeps each packet number space's outstanding packets, and those retained
+  after loss, in packet-number order. An ACK range finds its packets by binary search,
+  loss detection walks only the outstanding packets below the largest acknowledged one,
+  and the probe timeout no longer scans every packet. Persistent congestion is evaluated
+  only when the lost packets span its duration.
+
+Per stream and per request:
+
+- A stream's receive ring starts at 512 bytes and grows, pooled, toward the 64 KiB window
+  as data arrives. In-order STREAM data passes from the packet to the stream without the
+  reassembly pages.
+- A write is framed straight from the application's buffer when the stream has no earlier
+  write queued; only what flow control holds back is copied. Acknowledged frames leave a
+  stream's retransmission list from its front, not by a pass over it.
+- CRYPTO reassembly storage grows with the handshake, to the same 64 KiB bound.
+
+One fix the faster engine exposed:
+
+- A request stream now counts against the peer's stream limit until its worker disposes
+  it, as a stream does in MsQuic until the application closes it. Before, a request
+  stream retired, returning its MAX_STREAMS credit, as soon as both directions had
+  finished, even while its handler was still completing. With 32 streams per connection
+  a client could then push a connection past its 128 outstanding application callbacks,
+  and the server reset requests with H3_EXCESSIVE_LOAD (0x107). The first profiled run of
+  the change failed that way after 20,736 requests. Main has the same window, which its
+  lower throughput rarely reaches.
+
+### Profiled results
+
+One profiled round per engine on Windows: the machine above, server on CPUs 0-3 and
+client on 4-11, 3 s warmup, 8 s measurement, `dotnet-trace` attached to the server, run
+under `scripts/guarded_load_benchmark.py`. The change is `86694f02`, before the formatter
+pass and before main's #542 and #543 were merged in; main is `19ccc261`. These locate the
+gains; they are not the role-alternated comparison, which is still to run.
+
+| Scenario | Server | req/s | server CPU per request | allocated per request | p50 | p99 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| h3 small c64x1 | main | 24,488 | 144 us | 97 KB | 2.51 | 3.48 |
+| | change | 91,154 | 40 us | 14 KB | 0.56 | 1.66 |
+| h3 small c8x32 | main | 27,598 | 138 us | 103 KB | 7.48 | 41.0 |
+| | change | 201,088 | 19 us | 12 KB | 1.05 | 3.99 |
+| h3 large1m c4x4 | main | 76 | 41.8 ms | 10.0 MB | 162 | 682 |
+| | change | 156 | 22.2 ms | 3.1 MB | 102 | 138 |
+| h3 upload1m c4x4 | main | 159 | 22.8 ms | 11.9 MB | 86.8 | 351 |
+| | change | 417 | 8.2 ms | 0.86 MB | 38.5 | 50.8 |
+| h3 churn c16 | main | 881 | 1.73 ms | 877 KB | 16.0 | 54.9 |
+| | change | 998 | 1.55 ms | 237 KB | 15.0 | 30.7 |
+
+Most of a small request's remaining 12 to 14 KB is the request context it shares with
+HTTP/2. In the 1 MiB transfers, sending is now the largest single cost: one system call
+per datagram.
+
+### Left
+
+- The role-alternated `run` comparison of all eight `h3-` scenarios, three rounds, on
+  Windows and in the Linux container, between main and the change after both include #543.
+- Batched UDP sends (`UDP_SEGMENT` on Linux, `UDP_SEND_MSG_SIZE` on Windows), as MsQuic
+  uses, for the per-datagram system call.
+- Sending STREAM data from a stream's send buffer when the packet is built, rather than
+  as frames held for retransmission, and pooling packet buffers: a 1 MiB response still
+  allocates about 3 bytes per byte.
+- Fewer thread-pool hops per request, and ticks only for connections with a timer due:
+  every connection is woken every 2 ms.

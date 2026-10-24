@@ -60,6 +60,8 @@
             ConfiguredCapacity(16, 128, true);
             ConfiguredCapacity(1, 1, false);
             ReadWrite();
+            RetainUntilDisposed();
+            RingGrowth();
             ResetCredit();
             ResetDiscard();
             FlowBackpressure();
@@ -240,6 +242,54 @@
             Check(peer.Application.Retained == 0, "configured-queued-owners-disposed");
         }
 
+        // The receive ring starts small and grows as data arrives. Growing while the buffered
+        // bytes wrap around the ring's end keeps them in order.
+        private static void RingGrowth()
+        {
+            using var peer = new Peer();
+            var sent = new byte[1000];
+
+            for (var index = 0; index < sent.Length; index++) sent[index] = (byte)(index * 7);
+
+            peer.Streams.Receive(0, 0, sent.AsSpan(0, 400), false);
+            using var stream = Await(
+                peer.Application
+                    .AcceptInboundStreamAsync()
+                    .AsTask()
+            );
+            var received = new byte[sent.Length];
+            var count = Await(
+                stream
+                    .ReadAsync(received.AsMemory(0, 300))
+                    .AsTask()
+            );
+            // 100 bytes remain from offset 300 of the first ring; the next 300 wrap its end.
+            peer.Streams.Receive(0, 400, sent.AsSpan(400, 300), false);
+            peer.Streams.Receive(0, 700, sent.AsSpan(700, 300), true);
+
+            while (count < received.Length)
+            {
+                var read = Await(
+                    stream
+                        .ReadAsync(received.AsMemory(count))
+                        .AsTask()
+                );
+                Check(read != 0, "ring-growth-ends-early");
+                count += read;
+            }
+
+            Check(received.AsSpan().SequenceEqual(sent), "ring-growth-keeps-order");
+            Check(
+                Await(
+                    stream
+                        .ReadAsync(new byte[1])
+                        .AsTask()
+                )
+                    == 0,
+                "ring-growth-eof"
+            );
+        }
+
         private static void ReadWrite()
         {
             using var peer = new Peer();
@@ -342,6 +392,47 @@
                 empty.Streams.RetiredStreams == 1 && empty.Application.Retained == 0,
                 "empty-accepted-stream-retires"
             );
+        }
+
+        // A stream held until disposal keeps its count against the peer's stream limit after both
+        // directions have ended, and retires, returning that count, once its owner disposes it.
+        private static void RetainUntilDisposed()
+        {
+            using var peer = new Peer();
+            peer.Streams.Receive(0, 0, [1], true);
+            var stream = Await(
+                peer.Application
+                    .AcceptInboundStreamAsync()
+                    .AsTask()
+            );
+            stream.RetainUntilDisposed();
+            Check(
+                Await(
+                    stream
+                        .ReadAsync(new byte[2])
+                        .AsTask()
+                )
+                    == 1,
+                "retained-stream-reads-request"
+            );
+            var write = stream
+                .WriteOwnedAsync(new byte[] { 2 }, true, default)
+                .AsTask();
+            peer.Pump();
+            Await(write);
+            peer.Ack();
+            Await(stream.WritesClosed);
+            Check(
+                peer.Streams.RetiredStreams == 0 && peer.Application.Retained == 1,
+                "retained-stream-keeps-its-count-after-both-directions-end"
+            );
+            stream.Dispose();
+            peer.Pump();
+            Check(
+                peer.Streams.RetiredStreams == 1 && peer.Application.Retained == 0,
+                "retained-stream-retires-when-disposed"
+            );
+            Check(!peer.Sent.Any(item => item.Bytes[0] is 4 or 5 or 0x24), "retained-stream-disposal-does-not-abort");
         }
 
         private static void ResetCredit()

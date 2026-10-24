@@ -667,6 +667,10 @@ namespace EmbedIO.Net.Internal.Http3
 
         private async Task ProcessRequestAsync(Http3TransportStream stream, RequestScope scope, byte[]? prefix)
         {
+            // The stream then counts against the peer's stream limit until this worker disposes
+            // it. The EmbedIO.Quic binding allows 128 request streams, as many as
+            // MaximumApplications, so only handlers that outlive their requests can reach it.
+            stream.RetainUntilDisposed();
             var requestStop = scope.Stop;
             var requestToken = requestStop.Token;
             // FIN is a successful half-close. Only faulted direction completion

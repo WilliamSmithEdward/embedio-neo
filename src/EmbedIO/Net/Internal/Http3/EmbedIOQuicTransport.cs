@@ -107,6 +107,8 @@ namespace EmbedIO.Net.Internal.Http3
             _applicationBody = true;
         }
 
+        internal override void RetainUntilDisposed() => _stream.RetainUntilDisposed();
+
         internal override void Abort(Http3AbortDirection direction, long code)
         {
             if (code < 0 || (ulong)code > StreamReassembly.MaximumOffset)

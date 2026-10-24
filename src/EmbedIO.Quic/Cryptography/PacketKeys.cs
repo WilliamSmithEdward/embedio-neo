@@ -14,6 +14,12 @@ namespace EmbedIO.Quic
         private readonly ChaCha20Poly1305? _chacha;
         private readonly byte[] _headerKey = [];
         private readonly Aes? _aesHeader;
+
+        // One ECB encryptor for the keys' lifetime: Aes.EncryptEcb imports the key again for
+        // every call, and every packet sent or received computes a mask.
+        private readonly ICryptoTransform? _headerTransform;
+        private readonly byte[] _sample = new byte[16];
+        private readonly byte[] _mask = new byte[16];
         private readonly byte[] _iv;
         private readonly byte[] _secret;
         private bool _disposed;
@@ -68,6 +74,9 @@ namespace EmbedIO.Quic
                     _aead = new AesGcm(key, 16);
                     _aesHeader = Aes.Create();
                     _aesHeader.Key = headerKey;
+                    _aesHeader.Mode = CipherMode.ECB;
+                    _aesHeader.Padding = PaddingMode.None;
+                    _headerTransform = _aesHeader.CreateEncryptor();
                 }
             }
 
@@ -75,6 +84,7 @@ namespace EmbedIO.Quic
             {
                 _aead?.Dispose();
                 _chacha?.Dispose();
+                _headerTransform?.Dispose();
                 _aesHeader?.Dispose();
                 CryptographicOperations.ZeroMemory(_iv);
                 CryptographicOperations.ZeroMemory(_secret);
@@ -132,7 +142,7 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal byte[] Protect(byte[] header, int numberOffset, ulong number, ReadOnlySpan<byte> plaintext)
+        internal byte[] Protect(ReadOnlySpan<byte> header, int numberOffset, ulong number, ReadOnlySpan<byte> plaintext)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -141,7 +151,7 @@ namespace EmbedIO.Quic
 
             Encryptions++;
             var packet = new byte[header.Length + plaintext.Length + 16];
-            header.CopyTo(packet, 0);
+            header.CopyTo(packet);
             Span<byte> nonce = stackalloc byte[12];
             Nonce(number, nonce);
 
@@ -169,6 +179,29 @@ namespace EmbedIO.Quic
             return packet;
         }
 
+        // Protect for a packet assembled in place: its header, the plaintext and 16 bytes for
+        // the tag. The payload is encrypted where it lies.
+        internal void Seal(Span<byte> packet, int headerLength, int numberOffset, ulong number)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (!CanEncrypt || number > PacketNumberWindow.Maximum)
+                throw new InvalidOperationException("Packet encryption limit reached.");
+
+            Encryptions++;
+            var payload = packet[headerLength..^16];
+            Span<byte> nonce = stackalloc byte[12];
+            Nonce(number, nonce);
+
+            if (_aead != null) _aead.Encrypt(nonce, payload, payload, packet[^16..], packet[..headerLength]);
+
+            else if (_chacha != null) _chacha.Encrypt(nonce, payload, payload, packet[^16..], packet[..headerLength]);
+
+            else throw new InvalidOperationException("Packet AEAD is unavailable.");
+
+            Mask(packet, numberOffset, 4);
+        }
+
         internal readonly record struct ProtectedPacket(byte[] Bytes, int HeaderLength, ulong Number)
         {
             internal bool LongHeader => (Bytes[0] & 128) != 0;
@@ -184,13 +217,7 @@ namespace EmbedIO.Quic
 
             var packet = protectedPacket.ToArray();
             Span<byte> mask = stackalloc byte[16];
-
-            if (_aesHeader is Aes _header)
-                _header.EncryptEcb(packet.AsSpan(numberOffset + 4, 16), mask, PaddingMode.None);
-
-            else
-                ChaChaHeaderMask.Write(_headerKey, packet.AsSpan(numberOffset + 4, 16), mask);
-
+            HeaderMask(packet.AsSpan(numberOffset + 4, 16), mask);
             var longHeader = (packet[0] & 128) != 0;
             packet[0] ^= (byte)(mask[0] & (longHeader ? 15 : 31));
             var length = (packet[0] & 3) + 1;
@@ -216,6 +243,59 @@ namespace EmbedIO.Quic
             var packet = Decode(protectedPacket, numberOffset, expected);
             number = packet.Number;
             return Unprotect(packet, phase);
+        }
+
+        // Decode and Unprotect for a packet the caller owns: header protection is removed and
+        // the payload decrypted in place. Unmask returns the header length.
+        internal int Unmask(Span<byte> packet, int numberOffset, ulong expected, out ulong number)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (numberOffset < 0 || numberOffset + 20 > packet.Length)
+                throw new InvalidDataException("Short protected packet.");
+
+            Span<byte> mask = stackalloc byte[16];
+            HeaderMask(packet.Slice(numberOffset + 4, 16), mask);
+            var longHeader = (packet[0] & 128) != 0;
+            packet[0] ^= (byte)(mask[0] & (longHeader ? 15 : 31));
+            var length = (packet[0] & 3) + 1;
+            ulong truncated = 0;
+
+            for (var i = 0; i < length; i++)
+            {
+                packet[numberOffset + i] ^= mask[i + 1];
+                truncated = (truncated << 8) | packet[numberOffset + i];
+            }
+
+            number = Reconstruct(truncated, length, expected);
+            return numberOffset + length;
+        }
+
+        // Returns the plaintext, which replaces the ciphertext. A failed authentication
+        // leaves the payload cleared.
+        internal Span<byte> Open(Span<byte> packet, int headerLength, ulong number, bool phase)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var payload = packet[headerLength..^16];
+            Span<byte> nonce = stackalloc byte[12];
+            Nonce(number, nonce);
+
+            if (_aead != null) _aead.Decrypt(nonce, payload, packet[^16..], payload, packet[..headerLength]);
+
+            else if (_chacha != null) _chacha.Decrypt(nonce, payload, packet[^16..], payload, packet[..headerLength]);
+
+            else throw new InvalidOperationException("Packet AEAD is unavailable.");
+
+            var longHeader = (packet[0] & 128) != 0;
+
+            if (
+                (packet[0] & (longHeader ? 12 : 24)) != 0
+                || (!longHeader && ((packet[0] & 4) != 0) != phase)
+                || number > PacketNumberWindow.Maximum
+            )
+                throw new InvalidDataException("Invalid reserved bits, key phase or packet number.");
+
+            return payload;
         }
 
         internal byte[] Unprotect(ProtectedPacket packet, bool phase)
@@ -274,13 +354,7 @@ namespace EmbedIO.Quic
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             Span<byte> mask = stackalloc byte[16];
-
-            if (_aesHeader is Aes _header)
-                _header.EncryptEcb(packet.Slice(offset + 4, 16), mask, PaddingMode.None);
-
-            else
-                ChaChaHeaderMask.Write(_headerKey, packet.Slice(offset + 4, 16), mask);
-
+            HeaderMask(packet.Slice(offset + 4, 16), mask);
             return ((packet[0] ^ mask[0]) & 4) != 0;
         }
 
@@ -297,19 +371,28 @@ namespace EmbedIO.Quic
             return candidate;
         }
 
-        private void Mask(byte[] packet, int offset, int length)
+        private void Mask(Span<byte> packet, int offset, int length)
         {
             Span<byte> mask = stackalloc byte[16];
-
-            if (_aesHeader is Aes _header)
-                _header.EncryptEcb(packet.AsSpan(offset + 4, 16), mask, PaddingMode.None);
-
-            else
-                ChaChaHeaderMask.Write(_headerKey, packet.AsSpan(offset + 4, 16), mask);
-
+            HeaderMask(packet.Slice(offset + 4, 16), mask);
             packet[0] ^= (byte)(mask[0] & ((packet[0] & 128) != 0 ? 15 : 31));
 
             for (var i = 0; i < length; i++) packet[offset + i] ^= mask[i + 1];
+        }
+
+        // The header-protection mask of RFC 9001 section 5.4 for a 16-byte sample.
+        private void HeaderMask(ReadOnlySpan<byte> sample, Span<byte> mask)
+        {
+            if (_headerTransform != null)
+            {
+                sample.CopyTo(_sample);
+                _headerTransform.TransformBlock(_sample, 0, 16, _mask, 0);
+                _mask
+                    .AsSpan()
+                    .CopyTo(mask);
+            }
+
+            else ChaChaHeaderMask.Write(_headerKey, sample, mask);
         }
 
         private void Nonce(ulong number, Span<byte> nonce)
@@ -328,9 +411,12 @@ namespace EmbedIO.Quic
             _disposed = true;
             _aead?.Dispose();
             _chacha?.Dispose();
+            _headerTransform?.Dispose();
             _aesHeader?.Dispose();
 
             CryptographicOperations.ZeroMemory(_headerKey);
+            CryptographicOperations.ZeroMemory(_sample);
+            CryptographicOperations.ZeroMemory(_mask);
 
             CryptographicOperations.ZeroMemory(_iv);
             CryptographicOperations.ZeroMemory(_secret);

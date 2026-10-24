@@ -40,6 +40,15 @@
   listener refused new connections while its slots held connections that could no
   longer serve. The endpoint still counts a closing connection among its 768. See
   [overload](docs/guides/http3.md#overload).
+- EmbedIO.Quic's HTTP/3 server costs much less per datagram and per request. Its
+  socket loop reads and sends every queued datagram before it waits, packets are
+  decrypted and sealed in place, frames share packets and 1-RTT acknowledgments wait
+  briefly for one to share, and loss recovery finds acknowledged packets by search
+  rather than by scanning every packet. A small request allocates about 13 KB instead
+  of about 100 KB. A request stream now counts against the client's stream limit until
+  its request has ended, so a client within that limit is no longer reset with
+  `H3_EXCESSIVE_LOAD`. See
+  [socket loop and per-request cost](docs/project/quic-development-and-testing.md#socket-loop-and-per-request-cost).
 
 ## [2.17.0] - 2026-10-22
 
