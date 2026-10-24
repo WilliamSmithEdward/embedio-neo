@@ -35,6 +35,38 @@ class EnduranceReportTests(unittest.TestCase):
             self.run_report(root)
             self.assertIn("| small-http1 | 8 | 5.00 | 1.00 | 9.00 |", (root / "endurance-summary.md").read_text())
 
+    def test_native_census_series_and_handle_types(self):
+        def snapshot(minute, handles, events, anonymous_mib, malloc_mib):
+            return {
+                "utc": f"2026-10-24T00:{minute:02d}:00Z", "managedHeapBytes": 4 << 20, "gcCommittedBytes": 10 << 20,
+                "workingSetBytes": 100 << 20, "privateBytes": 200 << 20, "handles": handles, "threads": 20,
+                "threadPoolThreads": 5, "timers": 5, "inFlightRequests": 0, "webSocketsActive": 0, "serverTcp": {},
+                "availablePhysicalBytes": -1, "staleGenerationRequests": 0,
+                "handleTypes": {"handles": handles, "types": {"Event": events, "File": 30}},
+                "linuxMemory": {
+                    "status": {"RssAnon": anonymous_mib << 20, "RssFile": 40 << 20},
+                    "smapsRollup": {"Private_Dirty": anonymous_mib << 20},
+                    "malloc": {"allocatedBytes": malloc_mib << 20, "mmappedBytes": 1 << 20, "freeBytes": 2 << 20},
+                },
+            }
+
+        with tempfile.TemporaryDirectory(dir=TEMP_ROOT) as directory:
+            root = Path(directory)
+            self.fixture(root)
+            steps = [{"index": 1, "step": "idle:60", "quiesced": snapshot(0, 90, 40, 50, 5)},
+                     {"index": 2, "step": "load:steady:60", "quiesced": snapshot(1, 95, 45, 52, 6)}]
+            steps += [{"index": 3 + cycle, "step": "restart:1", "cycles": [
+                {"cycle": 1, "quiesced": snapshot(2 + cycle, 100 + 2 * cycle, 50 + 2 * cycle, 60 + cycle, 7 + cycle)}]} for cycle in range(4)]
+            (root / "steps.jsonl").write_text("\n".join(json.dumps(step) for step in steps))
+            self.run_report(root)
+            summary = (root / "endurance-summary.md").read_text()
+            self.assertIn("## Like-for-like series: every `restart:1 c1` snapshot", summary)
+            self.assertIn("| Handles | 100, 102, 104, 106 | +2, +2, +2 | +6 |", summary)
+            self.assertIn("| Resident anonymous MiB | 60.0, 61.0, 62.0, 63.0 | +1.0, +1.0, +1.0 | +3.0 |", summary)
+            self.assertIn("| malloc in use MiB | 8.0, 9.0, 10.0, 11.0 | +1.0, +1.0, +1.0 | +3.0 |", summary)
+            self.assertIn("| Event | 50 | 56 | +6 |", summary)
+            self.assertIn("| File | 30 | 30 | +0 |", summary)
+
     def test_rejected_runs_cannot_generate_retention_or_latency_claims(self):
         for marker in ("INVALID.txt", "ABORTED.txt"):
             with self.subTest(marker=marker), tempfile.TemporaryDirectory(dir=TEMP_ROOT) as directory:

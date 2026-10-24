@@ -401,6 +401,11 @@ Every step uses a fresh client process.
 Run `dotnet <runner>/EmbedIO.LoadBenchmark.dll endurance-verdict-check` to check
 the verdict boundary without network timing. It covers clean, failed and malformed
 drain reports, retained failures and validation errors during planned disruption.
+`native-census-check` checks that the native census in quiesced snapshots sees a known
+change: on Windows the handle census must count 64 created events under `Event` and
+agree with the process handle count, and on Linux malloc's allocated and mapped bytes
+and resident anonymous memory must rise and fall with 1,024 one-KiB blocks and one
+written 64 MiB block. CI runs the Linux check.
 
 ```sh
 dotnet <runner>/EmbedIO.LoadBenchmark.dll endurance --output TestResults/endurance/<label>   --plan idle:60,load:steady:300,load:faults:240,load:ws:120,drain:mixed:60:3,restart:5,load:mixed:420,idle:60   --settle 20 --server-cpus 0-7 --client-cpus 8-19 --revision <sha>
@@ -431,7 +436,11 @@ requests and WebSockets (at most two minutes, otherwise the step fails), waits
 `--settle` seconds, takes a forced, compacting GC snapshot and then runs a 10-second
 validated health check on every protocol plus WebSocket echo. Retention is judged
 only from these quiesced snapshots; `analyze_endurance.py` compares early and late
-values and fits a least-squares slope after excluding warm-up snapshots.
+values and fits a least-squares slope after excluding warm-up snapshots. It also lists
+the snapshots taken at the same point of every cycle (the most frequent label, or
+`--series-label`) with the change from each to the next, which shows whether a series
+levels off, and compares the first and last of them by handle type and by default-heap
+block size where the snapshots record those.
 
 Mixes (`--rate-scale` multiplies paced rates):
 
@@ -487,7 +496,21 @@ Evidence in the output directory:
   block counts by size in the default process heap (`HeapWalk`, sizes only, the 80
   largest totals). A size whose count grows with requests fingerprints retained native
   allocations without a dump. The walk runs inside a GC no-GC region because it holds
-  the heap lock; it is skipped (null) when the region cannot be entered.
+  the heap lock; it is skipped (null) when the region cannot be entered. `handleTypes`
+  counts the open handles by object type from a snapshot of the handle table
+  (`PssCaptureSnapshot`; handles it cannot duplicate, such as ETW registrations, are
+  named with `NtQueryObject`). Only type names are read, never object names; the total
+  runs a few handles below `handles`, which also counts handles opened around the
+  snapshot.
+  On Linux each quiesced snapshot has `linuxMemory`: `status` from `/proc/self/status`
+  (`VmRSS`, `RssAnon`, `RssFile`, `RssShmem`, `VmData`, `VmSwap`), `smapsRollup` from
+  `/proc/self/smaps_rollup` (`Rss`, `Pss`, `Anonymous`, `Private_Clean`,
+  `Private_Dirty`, `Swap`), all in bytes, and `malloc` from glibc's `mallinfo2`, which
+  sums every arena: `arenaBytes` from the system, split into `allocatedBytes` and
+  `freeBytes`, plus `mmappedBytes` for blocks mapped separately. Growth in allocated
+  bytes is live native state; growth in free bytes is memory the allocator keeps.
+  `privateBytes` there is `VmData`, which also counts mappings that are not resident.
+  `malloc` is null with musl or a glibc older than 2.33.
 - The server's `READY` record (first line of `steps.jsonl`) names the msquic.dll actually
   loaded, with its version and SHA-256, which differs from `environment.json`'s runtime
   copy when `System.Net.Quic.AppLocalMsQuic` selects an application-local build.

@@ -579,8 +579,11 @@ internal sealed class EnduranceSampler : IAsyncDisposable
             serverTcp = sockets,
             availablePhysicalBytes = GuestMemory.AvailablePhysicalBytes(),
             machineBusyCpuSeconds = SystemCpu.BusyTime().TotalSeconds,
-            // Only quiesced snapshots walk the process heaps; periodic samples stay cheap.
+            // Only quiesced snapshots walk the process heaps, the handle table and the
+            // memory map; periodic samples stay cheap.
             nativeHeaps = forced && _nativeDiagnostics ? NativeHeaps.Summarize() : null,
+            handleTypes = forced && _nativeDiagnostics ? HandleCensus.Summarize() : null,
+            linuxMemory = forced && _nativeDiagnostics ? LinuxMemory.Summarize() : null,
         };
     }
 
@@ -901,5 +904,340 @@ internal static class NativeHeaps
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool HeapWalk(IntPtr heap, ref HeapEntry entry);
+    }
+}
+
+// Open handles by object type, from a snapshot of the process handle table
+// (PssCaptureSnapshot; the entry layout is the Windows SDK's ProcessSnapshot.h). Only type
+// names are captured, never object names. A type whose count grows across quiesced
+// snapshots while the thread count holds names what keeps the handles.
+internal static class HandleCensus
+{
+    internal static object? Summarize()
+    {
+        if (!OperatingSystem.IsWindows()) return null;
+        var (error, handles, types) = Count();
+        return types is null
+            ? new { error }
+            : (object)new
+            {
+                handles,
+                types = types.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal)
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
+            };
+    }
+
+    // Creates 64 events, one kernel Event handle each, and closes them again. The census
+    // must count them under "Event" both ways and agree with the process handle count.
+    internal static int CheckCounter()
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Handle census check requires Windows.");
+        var events = new ManualResetEvent?[64];
+        _ = Count(); // Load the snapshot API before the baseline.
+        var before = Events();
+        int during;
+        try
+        {
+            for (var index = 0; index < events.Length; index++) events[index] = new ManualResetEvent(false);
+            during = Events();
+        }
+        finally
+        {
+            foreach (var created in events) created?.Dispose();
+        }
+
+        var after = Events();
+        var (error, census, types) = Count();
+        using var process = Process.GetCurrentProcess();
+        var handleCount = process.HandleCount;
+        var passed = error == 0 && before >= 0 && during - before >= events.Length && during - after >= events.Length
+            && Math.Abs(census - handleCount) <= 16;
+        Control.Write(JsonSerializer.Serialize(new { before, during, after, created = events.Length, census, handleCount, error, types, passed }));
+        return passed ? 0 : 1;
+
+        static int Events() => Count() is { Types: { } types } ? types.GetValueOrDefault("Event") : -1;
+    }
+
+    internal static (uint Error, int Handles, Dictionary<string, int>? Types) Count()
+    {
+        // HandleEntry below is the 64-bit layout.
+        if (IntPtr.Size != 8) return (NativeMethods.ErrorNotSupported, 0, null);
+        var process = NativeMethods.GetCurrentProcess();
+        var error = NativeMethods.PssCaptureSnapshot(process, NativeMethods.CaptureHandles | NativeMethods.CaptureHandleBasicInformation, 0, out var snapshot);
+        if (error != 0) return (error, 0, null);
+        try
+        {
+            error = NativeMethods.PssWalkMarkerCreate(IntPtr.Zero, out var marker);
+            if (error != 0) return (error, 0, null);
+            var information = Marshal.AllocHGlobal(NativeMethods.TypeInformationBytes);
+            try
+            {
+                var types = new Dictionary<string, int>(StringComparer.Ordinal);
+                var handles = 0;
+                var entry = default(NativeMethods.HandleEntry);
+                var size = (uint)Marshal.SizeOf<NativeMethods.HandleEntry>();
+                while ((error = NativeMethods.PssWalkSnapshot(snapshot, NativeMethods.WalkHandles, marker, ref entry, size)) == 0)
+                {
+                    handles++;
+                    var type = TypeName(entry, information);
+                    types[type] = types.GetValueOrDefault(type) + 1;
+                }
+
+                return error == NativeMethods.ErrorNoMoreItems ? (0, handles, types) : (error, handles, null);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(information);
+                _ = NativeMethods.PssWalkMarkerFree(marker);
+            }
+        }
+        finally
+        {
+            _ = NativeMethods.PssFreeSnapshot(process, snapshot);
+        }
+    }
+
+    // The snapshot's type name counts its terminating NUL. The snapshot captures nothing for
+    // a handle it cannot duplicate (flags 0), so those ask the handle itself, which is
+    // still open in this process unless it closed after the capture.
+    private static string TypeName(in NativeMethods.HandleEntry entry, IntPtr information)
+    {
+        if ((entry.Flags & NativeMethods.HaveType) != 0 && entry.TypeName != IntPtr.Zero)
+            return Marshal.PtrToStringUni(entry.TypeName, entry.TypeNameLength / sizeof(char)).TrimEnd('\0');
+        if (NativeMethods.NtQueryObject(entry.Handle, NativeMethods.ObjectTypeInformation, information, NativeMethods.TypeInformationBytes, out _) < 0)
+            return "unknown";
+        // PUBLIC_OBJECT_TYPE_INFORMATION starts with the UNICODE_STRING TypeName: a byte
+        // length, then the buffer pointer at offset 8 on 64-bit Windows.
+        var length = (ushort)Marshal.ReadInt16(information, 0);
+        var name = Marshal.ReadIntPtr(information, 8);
+        return name == IntPtr.Zero ? "unknown" : Marshal.PtrToStringUni(name, length / sizeof(char));
+    }
+
+    private static class NativeMethods
+    {
+        internal const int ObjectTypeInformation = 2;
+        internal const int TypeInformationBytes = 1024;
+        internal const uint CaptureHandles = 0x04; // PSS_CAPTURE_HANDLES
+        internal const uint CaptureHandleBasicInformation = 0x10; // PSS_CAPTURE_HANDLE_BASIC_INFORMATION
+        internal const int WalkHandles = 2; // PSS_WALK_HANDLES
+        internal const uint HaveType = 0x01; // PSS_HANDLE_HAVE_TYPE
+        internal const uint ErrorNoMoreItems = 259;
+        internal const uint ErrorNotSupported = 50;
+
+        // PSS_HANDLE_ENTRY on 64-bit Windows: each FILETIME as two DWORDs, and the 48-byte
+        // type-specific union (its Thread member is the largest) left uninterpreted.
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct HandleEntry
+        {
+            internal IntPtr Handle;
+            internal uint Flags;
+            internal uint ObjectType;
+            internal uint CaptureTimeLow;
+            internal uint CaptureTimeHigh;
+            internal uint Attributes;
+            internal uint GrantedAccess;
+            internal uint HandleCount;
+            internal uint PointerCount;
+            internal uint PagedPoolCharge;
+            internal uint NonPagedPoolCharge;
+            internal uint CreationTimeLow;
+            internal uint CreationTimeHigh;
+            internal ushort TypeNameLength;
+            internal IntPtr TypeName;
+            internal ushort ObjectNameLength;
+            internal IntPtr ObjectName;
+            internal ulong TypeSpecific0;
+            internal ulong TypeSpecific1;
+            internal ulong TypeSpecific2;
+            internal ulong TypeSpecific3;
+            internal ulong TypeSpecific4;
+            internal ulong TypeSpecific5;
+        }
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern IntPtr GetCurrentProcess();
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern uint PssCaptureSnapshot(IntPtr process, uint captureFlags, uint threadContextFlags, out IntPtr snapshot);
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern uint PssFreeSnapshot(IntPtr process, IntPtr snapshot);
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern uint PssWalkMarkerCreate(IntPtr allocator, out IntPtr marker);
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern uint PssWalkMarkerFree(IntPtr marker);
+
+        [DllImport("kernel32.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern uint PssWalkSnapshot(IntPtr snapshot, int informationClass, IntPtr marker, ref HandleEntry buffer, uint bufferLength);
+
+        [DllImport("ntdll.dll")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static extern int NtQueryObject(IntPtr handle, int informationClass, IntPtr information, int informationLength, out int returnLength);
+    }
+}
+
+// Resident memory and glibc allocator totals on Linux, for quiesced snapshots. .NET reports
+// VmData as private bytes there, which also counts mappings that are not resident.
+// /proc/self/status splits the resident set into anonymous (RssAnon) and file-backed
+// (RssFile) pages, and smaps_rollup adds the private dirty pages. mallinfo2 sums every
+// glibc arena: growth in allocated bytes is live native state, growth in free bytes is
+// memory the allocator keeps. It takes each arena's lock only inside native code, so a GC
+// cannot suspend this thread while it holds one.
+internal static class LinuxMemory
+{
+    private static readonly string[] StatusFields = ["VmRSS", "RssAnon", "RssFile", "RssShmem", "VmData", "VmSwap"];
+    private static readonly string[] RollupFields = ["Rss", "Pss", "Anonymous", "Private_Clean", "Private_Dirty", "Swap"];
+
+    internal static object? Summarize()
+    {
+        if (!OperatingSystem.IsLinux()) return null;
+        var (status, rollup, malloc) = Read();
+        return new
+        {
+            status,
+            smapsRollup = rollup,
+            malloc = malloc is { } totals
+                ? new
+                {
+                    arenaBytes = totals.ArenaBytes,
+                    mmappedBytes = totals.MmappedBytes,
+                    mmappedRegions = totals.MmappedRegions,
+                    allocatedBytes = totals.AllocatedBytes,
+                    freeBytes = totals.FreeBytes,
+                    freeChunks = totals.FreeChunks,
+                    releasableBytes = totals.ReleasableBytes,
+                }
+                : null,
+        };
+    }
+
+    // Allocates 1,024 one-KiB blocks, which malloc serves from an arena, and one 64 MiB
+    // block, which it maps, writes every page of the large block and frees both. The census
+    // must see allocated, mapped and resident anonymous bytes rise by those amounts and
+    // fall back.
+    internal static int CheckCounters()
+    {
+        if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Linux memory census check requires Linux.");
+        const int smallBytes = 1024;
+        const int largeBytes = 64 << 20;
+        var small = new IntPtr[1024];
+        var large = IntPtr.Zero;
+        _ = Read(); // Load the readers and the mallinfo2 stub before the baseline.
+        var before = Read();
+        (Dictionary<string, long>? Status, Dictionary<string, long>? Rollup, MallocTotals? Malloc) during;
+        try
+        {
+            for (var index = 0; index < small.Length; index++) small[index] = Marshal.AllocHGlobal(smallBytes);
+            large = Marshal.AllocHGlobal(largeBytes);
+            for (var offset = 0; offset < largeBytes; offset += Environment.SystemPageSize) Marshal.WriteByte(large, offset, 1);
+            during = Read();
+        }
+        finally
+        {
+            foreach (var block in small)
+                if (block != IntPtr.Zero) Marshal.FreeHGlobal(block);
+            if (large != IntPtr.Zero) Marshal.FreeHGlobal(large);
+        }
+
+        var after = Read();
+        var allocated = Change(before.Malloc?.AllocatedBytes, during.Malloc?.AllocatedBytes, after.Malloc?.AllocatedBytes);
+        var mapped = Change(before.Malloc?.MmappedBytes, during.Malloc?.MmappedBytes, after.Malloc?.MmappedBytes);
+        var anonymous = Change(before.Status?.GetValueOrDefault("RssAnon"), during.Status?.GetValueOrDefault("RssAnon"), after.Status?.GetValueOrDefault("RssAnon"));
+        var rollup = Change(before.Rollup?.GetValueOrDefault("Anonymous"), during.Rollup?.GetValueOrDefault("Anonymous"), after.Rollup?.GetValueOrDefault("Anonymous"));
+        var smallTotal = (long)small.Length * smallBytes;
+        var resident = largeBytes / 8 * 7;
+        var passed = allocated is { Rise: var allocatedRise, Fall: var allocatedFall } && allocatedRise >= smallTotal && allocatedFall >= smallTotal / 8 * 7
+            && mapped is { Rise: var mappedRise, Fall: var mappedFall } && mappedRise >= largeBytes && mappedFall >= largeBytes
+            && anonymous is { Rise: var anonymousRise, Fall: var anonymousFall } && anonymousRise >= resident && anonymousFall >= resident
+            && rollup is { Rise: var rollupRise, Fall: var rollupFall } && rollupRise >= resident && rollupFall >= resident;
+        Control.Write(JsonSerializer.Serialize(new { smallBlocks = small.Length, smallBytes, largeBytes, allocated, mapped, anonymous, rollup, passed }));
+        return passed ? 0 : 1;
+
+        static Movement? Change(long? before, long? during, long? after)
+            => before is { } start && during is { } peak && after is { } end ? new Movement(peak - start, peak - end) : null;
+    }
+
+    internal static (Dictionary<string, long>? Status, Dictionary<string, long>? Rollup, MallocTotals? Malloc) Read()
+        => (Fields("/proc/self/status", StatusFields), Fields("/proc/self/smaps_rollup", RollupFields), Malloc());
+
+    // "Name:   1234 kB" lines, in bytes. A file the kernel does not provide gives null, and a
+    // field it does not report is left out.
+    private static Dictionary<string, long>? Fields(string path, string[] names)
+    {
+        string[] lines;
+        try
+        {
+            lines = File.ReadAllLines(path);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        var fields = new Dictionary<string, long>(StringComparer.Ordinal);
+        foreach (var line in lines)
+        {
+            var colon = line.IndexOf(':', StringComparison.Ordinal);
+            if (colon <= 0 || Array.IndexOf(names, line[..colon]) < 0) continue;
+            var value = line[(colon + 1)..].Trim();
+            if (value.EndsWith(" kB", StringComparison.Ordinal)
+                && long.TryParse(value[..^3], NumberStyles.None, CultureInfo.InvariantCulture, out var kilobytes))
+                fields[line[..colon]] = kilobytes * 1024;
+        }
+
+        return fields;
+    }
+
+    // glibc 2.33 and later; null with musl or an older glibc.
+    private static MallocTotals? Malloc()
+    {
+        try
+        {
+            var info = NativeMethods.mallinfo2();
+            return new MallocTotals((long)info.Arena, (long)info.MmappedBytes, (long)info.MmappedRegions,
+                (long)info.AllocatedBytes, (long)info.FreeBytes, (long)info.FreeChunks, (long)info.ReleasableBytes);
+        }
+        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    internal readonly record struct MallocTotals(long ArenaBytes, long MmappedBytes, long MmappedRegions, long AllocatedBytes, long FreeBytes, long FreeChunks, long ReleasableBytes);
+
+    internal readonly record struct Movement(long Rise, long Fall);
+
+    private static class NativeMethods
+    {
+        // struct mallinfo2 from glibc's malloc.h, field for field. Arena counts the arenas'
+        // memory from the system, AllocatedBytes and FreeBytes split it, MmappedBytes is
+        // what large blocks map separately, and ReleasableBytes is the main arena's top.
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct MallInfo2
+        {
+            internal nuint Arena;
+            internal nuint FreeChunks;
+            internal nuint FastbinFreeChunks;
+            internal nuint MmappedRegions;
+            internal nuint MmappedBytes;
+            internal nuint Unused;
+            internal nuint FastbinFreeBytes;
+            internal nuint AllocatedBytes;
+            internal nuint FreeBytes;
+            internal nuint ReleasableBytes;
+        }
+
+        // The soname is the same on every glibc platform .NET supports.
+        [DllImport("libc.so.6")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+        internal static extern MallInfo2 mallinfo2();
     }
 }
