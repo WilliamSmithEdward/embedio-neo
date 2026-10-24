@@ -3717,9 +3717,9 @@ formatting and documentation, and merge main:
 - The native build's binary audit for linux-x64 and the 28 native unit tests (one
   platform skip) passed.
 
-On `e893ede9`, after the merge with main, `self-test`, `schannel-self-test`, the
-source-quality, formatting and both suppression gates, the AnalyzerGuard and test
-discovery (7,503 cases) passed.
+On `4b77cda2`, which merges main with #543's slot release, `self-test`,
+`schannel-self-test`, the source-quality, formatting and both suppression gates, the
+AnalyzerGuard and test discovery (7,504 cases) passed.
 
 A private adversarial review of the cached key material, with an independent read-only
 pass, is kept outside the repository. It found no use-after-free, double free or
