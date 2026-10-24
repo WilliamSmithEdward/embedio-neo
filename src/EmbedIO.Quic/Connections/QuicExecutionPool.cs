@@ -70,7 +70,8 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal Registration Register(Action execute, Action cleanup)
+        // completed runs on the worker that finishes the registration, just before Completion does.
+        internal Registration Register(Action execute, Action cleanup, Action? completed = null)
         {
             ArgumentNullException.ThrowIfNull(execute);
             ArgumentNullException.ThrowIfNull(cleanup);
@@ -82,7 +83,7 @@ namespace EmbedIO.Quic
                 if (_owners.Count >= _capacity)
                     throw new InvalidOperationException("QUIC execution owner limit exceeded.");
 
-                var owner = new Registration(this, execute, cleanup);
+                var owner = new Registration(this, execute, cleanup, completed);
                 _owners.Add(owner);
                 return owner;
             }
@@ -163,12 +164,14 @@ namespace EmbedIO.Quic
             private readonly QuicExecutionPool _pool;
             private readonly Action _execute;
             private readonly Action _cleanup;
+            private readonly Action? _completed;
 
-            internal Registration(QuicExecutionPool pool, Action execute, Action cleanup)
+            internal Registration(QuicExecutionPool pool, Action execute, Action cleanup, Action? completed = null)
             {
                 _pool = pool;
                 _execute = execute;
                 _cleanup = cleanup;
+                _completed = completed;
             }
 
             private readonly object _gate = new();
@@ -304,6 +307,7 @@ namespace EmbedIO.Quic
                 }
 
                 _pool.Release(this);
+                _completed?.Invoke();
 
                 if (failure == null) _completion.TrySetResult();
 

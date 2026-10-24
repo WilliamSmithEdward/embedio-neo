@@ -52,6 +52,15 @@
   issuer chain the server's stores cannot complete is still prepared for each
   handshake. The TLS runtime in `EmbedIO-Neo.Quic.Native` moves to private ABI 3. See
   [certificate rotation](docs/guides/certificate-rotation.md#http3-transport-selection).
+- EmbedIO.Quic's HTTP/3 server costs much less per datagram and per request. Its
+  socket loop reads and sends every queued datagram before it waits, packets are
+  decrypted and sealed in place, frames share packets and 1-RTT acknowledgments wait
+  briefly for one to share, and loss recovery finds acknowledged packets by search
+  rather than by scanning every packet. A small request now takes 13 to 26 percent of
+  its former server CPU and allocates about 13 KB instead of about 100 KB. A request
+  stream counts against the client's stream limit until its request has ended, so a
+  client within that limit is no longer reset with `H3_EXCESSIVE_LOAD`. See
+  [socket loop and per-request cost](docs/project/quic-development-and-testing.md#socket-loop-and-per-request-cost).
 
 ## [2.17.0] - 2026-10-22
 

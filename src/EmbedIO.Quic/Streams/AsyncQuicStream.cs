@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Buffers;
 using System.IO;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,9 +14,15 @@ namespace EmbedIO.Quic
     }
 
     // The connection owner alone calls Receive/Process. Application operations
-    // synchronize their buffers with that owner and wake it without a timer poll.
-    internal sealed class AsyncQuicStream(ulong id, Action ready) : Stream
+    // synchronize their buffers with that owner and wake it without a timer poll;
+    // ready names the stream that has work for Process.
+    internal sealed class AsyncQuicStream(ulong id, Action<AsyncQuicStream> ready) : Stream
     {
+        // Queued while the stream waits for its application to call Process (guarded by the
+        // application), and Polling while that pass, on the connection owner, includes it.
+        internal bool Queued;
+        internal bool Polling;
+
         private sealed class ReadRequest(
             AsyncQuicStream owner,
             Memory<byte> memory,
@@ -67,6 +75,7 @@ namespace EmbedIO.Quic
         private bool _ended;
         private bool _writeAcknowledged;
         private bool _disposed;
+        private bool _retainUntilDisposed;
         private bool _retired;
         private Exception? _readError;
         private Exception? _writeError;
@@ -142,8 +151,17 @@ namespace EmbedIO.Quic
                         && _consumed == 0
                         && _read == null
                         && (!Writable || _writeAcknowledged)
-                        && _write == null;
+                        && _write == null
+                        && (!_retainUntilDisposed || _disposed);
             }
+        }
+
+        // Retiring returns the stream's count to the peer's stream limit (RFC 9000 section 4.6).
+        // Held until Dispose, the stream counts against that limit for as long as its owner works
+        // on it, as a stream does in MsQuic until the application closes it.
+        internal void RetainUntilDisposed()
+        {
+            lock (_gate) _retainUntilDisposed = true;
         }
 
         public override bool CanRead
@@ -225,7 +243,7 @@ namespace EmbedIO.Quic
                 if (_count != 0)
                 {
                     var copied = Copy(buffer.Span);
-                    ready();
+                    ready(this);
                     return ValueTask.FromResult(copied);
                 }
 
@@ -274,7 +292,10 @@ namespace EmbedIO.Quic
             return count;
         }
 
-        internal void Receive(byte[] bytes, bool fin)
+        internal void Receive(byte[] bytes, bool fin) => Deliver(bytes, fin);
+
+        // Receive for data the connection passes straight from a packet; it is copied here.
+        internal void Deliver(ReadOnlySpan<byte> bytes, bool fin)
         {
             lock (_gate)
             {
@@ -283,29 +304,69 @@ namespace EmbedIO.Quic
                 if (_disposed || _readError != null)
                 {
                     _consumed += bytes.Length;
-                    ready();
+                    ready(this);
                     return;
                 }
 
-                if (bytes.Length > 65536 - _count) throw new InvalidDataException("Async receive window exceeded.");
+                if (bytes.Length > ReceiveWindow - _count)
+                    throw new InvalidDataException("Async receive window exceeded.");
 
                 if (bytes.Length != 0)
                 {
-                    _buffer ??= new byte[65536];
-                    var tail = (_head + _count) % _buffer.Length;
-                    var first = Math.Min(bytes.Length, _buffer.Length - tail);
-                    bytes
-                        .AsSpan(0, first)
-                        .CopyTo(_buffer.AsSpan(tail));
-                    bytes
-                        .AsSpan(first)
-                        .CopyTo(_buffer);
+                    var buffer = Reserve(bytes.Length);
+                    var tail = (_head + _count) % buffer.Length;
+                    var first = Math.Min(bytes.Length, buffer.Length - tail);
+                    bytes[..first].CopyTo(buffer.AsSpan(tail));
+                    bytes[first..].CopyTo(buffer);
                     _count += bytes.Length;
                 }
 
                 _fin |= fin;
                 CompleteRead();
             }
+        }
+
+        // The window is fixed, but the ring grows to it only as data arrives: most request
+        // streams carry a few hundred bytes. Rings are pooled and cleared when returned.
+        private const int ReceiveWindow = 65536;
+        private const int MinimumRing = 512;
+
+        private byte[] Reserve(int count)
+        {
+            var buffer = _buffer;
+
+            if (buffer != null && buffer.Length - _count >= count) return buffer;
+
+            var size = Math.Min(
+                ReceiveWindow,
+                Math.Max(MinimumRing, (int)BitOperations.RoundUpToPowerOf2((uint)(_count + count)))
+            );
+            var next = ArrayPool<byte>.Shared.Rent(size);
+
+            if (buffer != null)
+            {
+                var first = Math.Min(_count, buffer.Length - _head);
+                buffer
+                    .AsSpan(_head, first)
+                    .CopyTo(next);
+                buffer
+                    .AsSpan(0, _count - first)
+                    .CopyTo(next.AsSpan(first));
+                ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
+            }
+
+            _head = 0;
+            _buffer = next;
+            return next;
+        }
+
+        private void ReleaseBuffer()
+        {
+            var buffer = _buffer;
+            _buffer = null;
+            _head = 0;
+
+            if (buffer != null) ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
         }
 
         private void CompleteRead()
@@ -321,7 +382,7 @@ namespace EmbedIO.Quic
                     var count = Copy(request.Memory.Span);
                     request.Memory = default;
                     request.Completion.TrySetResult(count);
-                    ready();
+                    ready(this);
                 }
 
                 else
@@ -345,8 +406,7 @@ namespace EmbedIO.Quic
 
             else _readsClosed?.TrySetResult();
 
-            _buffer = null;
-            _head = 0;
+            ReleaseBuffer();
         }
 
         private void CancelRead(ReadRequest request)
@@ -359,7 +419,7 @@ namespace EmbedIO.Quic
                 request.Memory = default;
                 AbortReadCore(request.Code);
                 request.Completion.TrySetCanceled(request.Token);
-                ready();
+                ready(this);
             }
         }
 
@@ -383,7 +443,7 @@ namespace EmbedIO.Quic
                         .Clear();
                     _count = keep;
                     _consumed += discard;
-                    ready();
+                    ready(this);
                 }
 
                 _readError ??= new QuicStreamFailure(code, true);
@@ -404,7 +464,7 @@ namespace EmbedIO.Quic
 
                 AbortReadCore(code);
                 CompleteRead();
-                ready();
+                ready(this);
             }
         }
 
@@ -423,11 +483,7 @@ namespace EmbedIO.Quic
         {
             _consumed += _count;
             _count = 0;
-            _head = 0;
-
-            if (_buffer != null) Array.Clear(_buffer);
-
-            _buffer = null;
+            ReleaseBuffer();
         }
 
         public override void Write(byte[] buffer, int offset, int count) =>
@@ -460,7 +516,7 @@ namespace EmbedIO.Quic
                 request = new WriteRequest(this, buffer, fin, true, token);
                 _write = request;
                 _ended = fin;
-                ready();
+                ready(this);
             }
 
             return AwaitWriteAsync(request);
@@ -514,7 +570,7 @@ namespace EmbedIO.Quic
 
                 _reliablePrefix = prefix.ToArray();
                 _prefixInstalled = true;
-                ready();
+                ready(this);
             }
         }
 
@@ -531,7 +587,7 @@ namespace EmbedIO.Quic
                 CheckWritable();
                 _ended = true;
                 _write = new WriteRequest(this, default, true, false, default);
-                ready();
+                ready(this);
             }
         }
 
@@ -549,7 +605,7 @@ namespace EmbedIO.Quic
                 else _ended = false;
 
                 request.Completion?.TrySetCanceled(request.Token);
-                ready();
+                ready(this);
             }
         }
 
@@ -573,7 +629,7 @@ namespace EmbedIO.Quic
                 if (!Writable) throw new NotSupportedException();
 
                 AbortWriteCore(code);
-                ready();
+                ready(this);
             }
         }
 
@@ -617,11 +673,12 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal void Process(StreamOperations operations)
+        // Returns whether a write still waits for the connection to accept it.
+        internal bool Process(StreamOperations operations)
         {
             lock (_gate)
             {
-                if (_connectionError != null || _retired) return;
+                if (_connectionError != null || _retired) return false;
 
                 if (_consumed != 0)
                 {
@@ -654,7 +711,7 @@ namespace EmbedIO.Quic
                     var end = request.Position + count == request.Memory.Length;
 
                     if (!operations.TryWrite(Id, request.Memory.Slice(request.Position, count), end && request.Fin))
-                        return;
+                        return true;
 
                     _writeStarted = true;
                     request.Progress = true;
@@ -667,8 +724,10 @@ namespace EmbedIO.Quic
                         request.Completion?.TrySetResult();
                     }
 
-                    else ready();
+                    else ready(this);
                 }
+
+                return false;
             }
         }
 
@@ -676,7 +735,7 @@ namespace EmbedIO.Quic
         {
             lock (_gate) _accepted = true;
 
-            ready();
+            ready(this);
         }
 
         public override async ValueTask DisposeAsync()
@@ -706,7 +765,7 @@ namespace EmbedIO.Quic
                 if (!CanRetire) throw new InvalidOperationException("Async stream retired before completion.");
 
                 _retired = true;
-                _buffer = null;
+                ReleaseBuffer();
             }
         }
 
@@ -759,7 +818,7 @@ namespace EmbedIO.Quic
                             if (Writable) AbortWriteCore(0x10c);
 
                             CompleteRead();
-                            ready();
+                            ready(this);
                         }
 
                         _disposed = true;

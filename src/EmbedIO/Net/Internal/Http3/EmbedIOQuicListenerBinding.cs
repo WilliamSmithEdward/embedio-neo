@@ -24,6 +24,22 @@ namespace EmbedIO.Net.Internal.Http3
     {
         private readonly Socket _socket;
         private readonly QuicConnectionDispatcher _connections;
+
+        // Taken by the receive, send and timer loops around every dispatcher call.
+        private readonly object _owner = new();
+
+        // Holds an item while the dispatcher has output the send loop has not taken.
+        private readonly Channel<bool> _outputReady = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            AllowSynchronousContinuations = false,
+            FullMode = BoundedChannelFullMode.DropWrite
+        });
+
+        // Local endpoints by reported destination address; null when the socket's own
+        // address is every datagram's destination.
+        private readonly Dictionary<IPAddress, IPEndPoint>? _destinations;
         private readonly CancellationTokenSource _stop = new();
         private readonly Channel<Peer> _accepted = Channel.CreateBounded<Peer>(new BoundedChannelOptions(512)
         {
@@ -47,9 +63,9 @@ namespace EmbedIO.Net.Internal.Http3
         // than this, as MsQuic's workers bound their queue delay by default.
         internal const double QueueDelayBoundMilliseconds = 250;
 
-        // macOS reports no destination on a dual-mode socket, and .NET's ReceiveMessageFrom
-        // refuses such a socket there. Its datagrams are attributed to the bound address.
-        private readonly bool _reportsDestinations;
+        // A burst the loops have not read yet waits in the socket rather than being dropped,
+        // as MsQuic also sizes its sockets past the operating system's defaults.
+        private const int SocketBufferBytes = 4 << 20;
 
         internal EmbedIOQuicListenerBinding(IPEndPoint endpoint, Func<byte[], TlsSession> createTls)
             : this(endpoint, createTls, false)
@@ -90,10 +106,19 @@ namespace EmbedIO.Net.Internal.Http3
 
                 if (endpoint.Address.Equals(IPAddress.IPv6Any)) _socket.DualMode = true;
 
-                _reportsDestinations = !_socket.DualMode || !OperatingSystem.IsMacOS();
+                // Only a wildcard socket needs each datagram's destination. macOS reports none
+                // on a dual-mode socket, and .NET's ReceiveMessageFrom refuses such a socket
+                // there, so its datagrams are attributed to the bound address.
+                if (
+                    (endpoint.Address.Equals(IPAddress.Any) || endpoint.Address.Equals(IPAddress.IPv6Any))
+                    && (!_socket.DualMode || !OperatingSystem.IsMacOS())
+                )
+                {
+                    ReceiveDestinations(_socket);
+                    _destinations = [];
+                }
 
-                if (_reportsDestinations) ReceiveDestinations(_socket);
-
+                SizeBuffers(_socket);
                 _socket.Bind(endpoint);
                 _local = QuicConnectionEndpoints.Copy(
                     (IPEndPoint)(_socket.LocalEndPoint
@@ -111,7 +136,8 @@ namespace EmbedIO.Net.Internal.Http3
                     admissionAttemptsPerSecond: 0,
                     refuseConnections: true,
                     queueDelayBound: QueueDelayBoundMilliseconds,
-                    validateAddresses: validateAddresses
+                    validateAddresses: validateAddresses,
+                    outputReady: () => _outputReady.Writer.TryWrite(true)
                 );
                 _loop = Task.Run(RunAsync);
             }
@@ -195,7 +221,8 @@ namespace EmbedIO.Net.Internal.Http3
                 {
                     InboundBidirectionalStreams = 128,
                     InboundUnidirectionalStreams = 16,
-                    IdleTimeoutMilliseconds = 60000
+                    IdleTimeoutMilliseconds = 60000,
+                    SharePackets = true
                 },
                 connectionIds: owner.ConnectionIds,
                 retry: owner.Retry
@@ -282,99 +309,33 @@ namespace EmbedIO.Net.Internal.Http3
             if (failures.Count != 0) throw new AggregateException("QUIC listener shutdown failed.", failures);
         }
 
+        // Receiving, sending and the timer run as three loops, so a burst of datagrams in
+        // one direction does not wait for the other. Each takes _owner around its
+        // dispatcher calls, which keeps the dispatcher on one owner at a time, and none
+        // allocates per datagram or per wait.
         private async Task RunAsync()
         {
-            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(2));
-            var bytes = new byte[65535];
-            EndPoint any = new IPEndPoint(
-                _socket.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any,
-                0
-            );
-            Task<SocketReceiveMessageFromResult>? receive = null;
-            Task<bool>? tick = null;
-            Task<bool>? output = null;
             var failures = new List<Exception>();
+            using var stopping = _stop.Token.UnsafeRegister(
+                static state => (state as Channel<bool>)?.Writer.TryComplete(),
+                _outputReady
+            );
 
             try
             {
-                receive = Receive();
-                tick = timer
-                    .WaitForNextTickAsync(_stop.Token)
-                    .AsTask();
-                output = _connections
-                    .WaitForOutputAsync(_stop.Token)
-                    .AsTask();
-
-                while (true)
-                {
-                    await Task
-                        .WhenAny(receive, tick, output)
-                        .ConfigureAwait(false);
-                    _connections.Accepting = Volatile.Read(ref _accepting) != 0;
-
-                    if (receive.IsCompleted)
-                    {
-                        try
-                        {
-                            var packet = await receive.ConfigureAwait(false);
-
-                            if ((packet.SocketFlags & SocketFlags.Truncated) == 0)
-                                _connections.Receive(
-                                    bytes.AsSpan(0, packet.ReceivedBytes),
-                                    (IPEndPoint)packet.RemoteEndPoint,
-                                    DestinationOf(packet.PacketInformation, _local)
-                                );
-                        }
-
-                        catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
-                        {
-                            Interlocked.Increment(ref _datagramPathErrors);
-                        }
-
-                        receive = Receive();
-                    }
-
-                    if (tick.IsCompleted)
-                    {
-                        if (!await tick.ConfigureAwait(false)) break;
-
-                        _connections.Tick();
-                        ReportRefusals();
-                        tick = timer
-                            .WaitForNextTickAsync(_stop.Token)
-                            .AsTask();
-                    }
-
-                    if (output.IsCompleted)
-                    {
-                        if (!await output.ConfigureAwait(false)) break;
-
-                        await _connections
-                            .SendOneAsync(SendAsync)
-                            .ConfigureAwait(false);
-                        output = _connections
-                            .WaitForOutputAsync(_stop.Token)
-                            .AsTask();
-                    }
-                }
-            }
-
-            catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
-
-            catch (SocketException error) when (IsStopAbort(error)) { }
-
-            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
-            {
-                failures.Add(error);
+                await Task
+                    .WhenAll(
+                        RunLoopAsync(ReceiveLoopAsync, failures),
+                        RunLoopAsync(SendLoopAsync, failures),
+                        RunLoopAsync(TickLoopAsync, failures)
+                    )
+                    .ConfigureAwait(false);
             }
 
             finally
             {
                 _stop.Cancel();
                 _accepted.Writer.TryComplete(failures.Count == 0 ? null : failures[0]);
-                await ObserveAsync(receive).ConfigureAwait(false);
-                await ObserveAsync(tick).ConfigureAwait(false);
-                await ObserveAsync(output).ConfigureAwait(false);
                 var cleanup = _connections
                     .DisposeAsync()
                     .AsTask();
@@ -400,76 +361,252 @@ namespace EmbedIO.Net.Internal.Http3
             }
 
             if (failures.Count != 0) throw new AggregateException("QUIC listener failed.", failures);
+        }
 
-            Task<SocketReceiveMessageFromResult> Receive() =>
-                _reportsDestinations
-                    ? _socket
-                        .ReceiveMessageFromAsync(bytes, SocketFlags.None, any, _stop.Token)
-                        .AsTask()
-                    : ReceiveWithoutDestinationAsync();
+        // A loop ends only when the listener stops or the loop fails; either way the
+        // other two stop with it.
+        private async Task RunLoopAsync(Func<Task> loop, List<Exception> failures)
+        {
+            await Task.Yield();
 
-            // The default packet information names no destination, so DestinationOf
-            // attributes the datagram to the bound address.
-            async Task<SocketReceiveMessageFromResult> ReceiveWithoutDestinationAsync()
+            try
             {
-                var received = await _socket
-                    .ReceiveFromAsync(bytes, SocketFlags.None, any, _stop.Token)
-                    .ConfigureAwait(false);
-
-                return new SocketReceiveMessageFromResult
-                {
-                    ReceivedBytes = received.ReceivedBytes,
-                    RemoteEndPoint = received.RemoteEndPoint
-                };
+                await loop().ConfigureAwait(false);
             }
 
-            async ValueTask SendAsync(OutboundDatagram datagram)
+            catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+
+            catch (SocketException error) when (IsStopAbort(error)) { }
+
+            catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
             {
+                lock (failures) failures.Add(error);
+            }
+
+            finally
+            {
+                _stop.Cancel();
+            }
+        }
+
+        // Every datagram already queued is read before the loop waits: a receive that
+        // finds one completes at once.
+        private async Task ReceiveLoopAsync()
+        {
+            var bytes = GC.AllocateUninitializedArray<byte>(65535, pinned: true);
+            var addressFamily = _socket.AddressFamily;
+
+            if (_destinations != null)
+            {
+                EndPoint any = new IPEndPoint(
+                    addressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any,
+                    0
+                );
+
+                while (true)
+                {
+                    SocketReceiveMessageFromResult packet;
+
+                    try
+                    {
+                        packet = await _socket
+                            .ReceiveMessageFromAsync(bytes, SocketFlags.None, any, _stop.Token)
+                            .ConfigureAwait(false);
+                    }
+
+                    catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
+                    {
+                        Interlocked.Increment(ref _datagramPathErrors);
+                        continue;
+                    }
+
+                    catch (SocketException error) when (error.SocketErrorCode == SocketError.MessageSize)
+                    {
+                        continue;
+                    }
+
+                    if ((packet.SocketFlags & SocketFlags.Truncated) != 0) continue;
+
+                    var destination = Destination(packet.PacketInformation.Address);
+
+                    lock (_owner)
+                    {
+                        _connections.Accepting = Volatile.Read(ref _accepting) != 0;
+                        _connections.Receive(
+                            bytes.AsSpan(0, packet.ReceivedBytes),
+                            (IPEndPoint)packet.RemoteEndPoint,
+                            destination
+                        );
+                    }
+                }
+            }
+
+            var address = new SocketAddress(addressFamily);
+            var peers = new Dictionary<SocketAddress, IPEndPoint>();
+            var template = new IPEndPoint(
+                addressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any,
+                0
+            );
+
+            while (true)
+            {
+                int count;
+
                 try
                 {
-                    var count = await _socket
-                        .SendToAsync(datagram.Bytes, SocketFlags.None, datagram.Peer, _stop.Token)
+                    count = await _socket
+                        .ReceiveFromAsync(bytes, SocketFlags.None, address, _stop.Token)
                         .ConfigureAwait(false);
-
-                    if (count != datagram.Bytes.Length)
-                        throw new InvalidOperationException("UDP send did not consume its datagram.");
                 }
 
                 catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
                 {
                     Interlocked.Increment(ref _datagramPathErrors);
+                    continue;
+                }
+
+                // A datagram longer than the buffer cannot be a QUIC packet this endpoint sent for.
+                catch (SocketException error) when (error.SocketErrorCode == SocketError.MessageSize)
+                {
+                    continue;
+                }
+
+                if (!peers.TryGetValue(address, out var peer))
+                {
+                    // Bounded: a flood from spoofed sources only empties the cache.
+                    if (peers.Count >= PeerCacheLimit) peers.Clear();
+
+                    var key = new SocketAddress(address.Family, address.Size);
+                    address.Buffer.Span[..address.Size].CopyTo(key.Buffer.Span);
+                    peer = (IPEndPoint)template.Create(key);
+                    peers.Add(key, peer);
+                }
+
+                lock (_owner)
+                {
+                    _connections.Accepting = Volatile.Read(ref _accepting) != 0;
+                    _connections.Receive(bytes.AsSpan(0, count), peer, _local);
                 }
             }
+        }
 
-            async Task ObserveAsync(Task? pending)
+        private const int PeerCacheLimit = 1024;
+
+        // Sends every queued datagram, in the dispatcher's order, then waits for the next.
+        private async Task SendLoopAsync()
+        {
+            var addresses = new Dictionary<IPEndPoint, SocketAddress>();
+            var dualMode = _socket.AddressFamily == AddressFamily.InterNetworkV6 && _socket.DualMode;
+
+            while (true)
             {
-                if (pending == null) return;
-
-                try
+                while (true)
                 {
-                    await pending.ConfigureAwait(false);
+                    IPEndPoint? peer;
+                    byte[]? bytes;
+
+                    lock (_owner)
+                        if (!_connections.TryTakeOutput(out peer, out bytes)) break;
+
+                    try
+                    {
+                        if (!addresses.TryGetValue(peer, out var address))
+                        {
+                            if (addresses.Count >= PeerCacheLimit) addresses.Clear();
+
+                            // A dual-mode socket sends to IPv4 peers at their mapped address.
+                            address = (dualMode && peer.AddressFamily == AddressFamily.InterNetwork
+                                ? new IPEndPoint(peer.Address.MapToIPv6(), peer.Port)
+                                : peer).Serialize();
+                            addresses.Add(peer, address);
+                        }
+
+                        var count = await _socket
+                            .SendToAsync(bytes, SocketFlags.None, address, _stop.Token)
+                            .ConfigureAwait(false);
+
+                        if (count != bytes.Length)
+                            throw new InvalidOperationException("UDP send did not consume its datagram.");
+                    }
+
+                    catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
+                    {
+                        Interlocked.Increment(ref _datagramPathErrors);
+                    }
+
+                    finally
+                    {
+                        _connections.FinishOutput();
+                    }
                 }
 
-                catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
+                if (
+                    !await _outputReady.Reader
+                        .WaitToReadAsync()
+                        .ConfigureAwait(false)
+                ) return;
 
-                catch (SocketException error) when (IsStopAbort(error)) { }
-
-                catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
-                {
-                    Interlocked.Increment(ref _datagramPathErrors);
-                }
-
-                catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
-                {
-                    failures.Add(error);
-                }
+                _outputReady.Reader.TryRead(out _);
             }
+        }
+
+        private async Task TickLoopAsync()
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(2));
+
+            while (
+                await timer
+                    .WaitForNextTickAsync(_stop.Token)
+                    .ConfigureAwait(false)
+            )
+                lock (_owner)
+                {
+                    _connections.Tick();
+                    ReportRefusals();
+                }
+        }
+
+        // A wildcard socket reports few distinct destinations; each keeps one endpoint.
+        private IPEndPoint Destination(IPAddress? address)
+        {
+            var destinations = _destinations ?? throw new InvalidOperationException("Destinations are not reported.");
+
+            if (address == null) return _local;
+
+            if (!destinations.TryGetValue(address, out var destination))
+            {
+                if (destinations.Count >= PeerCacheLimit) destinations.Clear();
+
+                destination = new IPEndPoint(address, _local.Port);
+                destinations.Add(address, destination);
+            }
+
+            return destination;
         }
 
         // Stopping cancels pending socket operations. One that .NET is still starting
         // completes at once with OperationAborted instead of as canceled.
         private bool IsStopAbort(SocketException error) =>
             error.SocketErrorCode == SocketError.OperationAborted && _stop.IsCancellationRequested;
+
+        // A default stands where the operating system refuses the size; Linux caps both at
+        // net.core.rmem_max and wmem_max without failing.
+        private static void SizeBuffers(Socket socket)
+        {
+            try
+            {
+                socket.ReceiveBufferSize = SocketBufferBytes;
+            }
+
+            catch (SocketException) { }
+
+            try
+            {
+                socket.SendBufferSize = SocketBufferBytes;
+            }
+
+            catch (SocketException) { }
+        }
 
         // .NET turns on destination reporting at the first ReceiveMessageFrom, and macOS
         // reports nothing for datagrams that arrived before then. Turn it on before

@@ -5,6 +5,7 @@
         internal static void Run()
         {
             Pacing();
+            Holes();
             Mutate([0, 0]);
             Mutate([224, 255]);
             var repeats = new List<(Delivery Delivery, bool Probe)>();
@@ -161,6 +162,84 @@
             Check(!recovery.CanSend(1200, 10000, false), "idle time cannot accumulate an unbounded burst");
             recovery.ChangePath(10001);
             Check(recovery.CanSend(1200, 10001, false), "new path starts with its own initial pacing budget");
+        }
+
+        // Recovery keeps each space's packets in number order and finds acknowledged ranges by
+        // search. Holes, late acknowledgments, overlapping or unordered ranges and a list
+        // compacted around a still outstanding packet must all find exactly the right packets.
+        private static void Holes()
+        {
+            var repeats = new List<Delivery>();
+            var recovery = new Recovery((delivery, _) => repeats.Add(delivery)) { HandshakeConfirmed = true };
+            var deliveries = new Delivery[300];
+
+            for (var number = 0; number < deliveries.Length; number++)
+            {
+                deliveries[number] = new Delivery(2, [1]);
+                recovery.SentPacket(2, (ulong)number, 10, number, deliveries[number], false);
+            }
+
+            // Every packet whose number is a multiple of three is missing, ranges largest first.
+            var ranges = new List<(ulong Low, ulong High)>();
+
+            for (var high = 299; high > 1; high -= 3) ranges.Add(((ulong)high - 1, (ulong)high));
+
+            recovery.Acknowledge(2, ranges, 0, 300);
+            Check(
+                recovery.LostPackets == 100
+                    && repeats.Count == 100
+                    && repeats.TrueForAll(static delivery => !delivery.Acknowledged)
+                    && recovery.BytesInFlight == 0
+                    && recovery.ActivePacketCount == 0
+                    && recovery.RetiredPacketCount == 100,
+                "holes between acknowledged ranges are lost"
+            );
+            recovery.Acknowledge(2, [(297UL, 299UL), (150UL, 160UL), (0UL, 3UL)], 0, 301);
+            Check(
+                deliveries[297].Acknowledged
+                    && deliveries[150].Acknowledged
+                    && deliveries[159].Acknowledged
+                    && deliveries[0].Acknowledged
+                    && deliveries[3].Acknowledged
+                    && !deliveries[162].Acknowledged
+                    && recovery.RetiredPacketCount == 93,
+                "late ranges acknowledge retired packets"
+            );
+            recovery.Acknowledge(2, [(6UL, 6UL), (6UL, 9UL), (3UL, 6UL)], 0, 302);
+            Check(
+                deliveries[6].Acknowledged && deliveries[9].Acknowledged && recovery.RetiredPacketCount == 91,
+                "unordered and overlapping ranges acknowledge each packet once"
+            );
+
+            // With its smallest range first, the ACK's largest acknowledged number is 1, so packet 0
+            // stays outstanding at the front while most packets after it are acknowledged.
+            recovery = new Recovery(static (_, _) => { }) { HandshakeConfirmed = true };
+            deliveries = new Delivery[200];
+
+            for (var number = 0; number < deliveries.Length; number++)
+            {
+                deliveries[number] = new Delivery(2, [1]);
+                recovery.SentPacket(2, (ulong)number, 10, 0, deliveries[number], false);
+            }
+
+            recovery.Acknowledge(2, [(1UL, 1UL), (100UL, 199UL)], 0, 0.5);
+            Check(
+                recovery.LostPackets == 0
+                    && recovery.ActivePacketCount == 99
+                    && recovery.BytesInFlight == 990
+                    && !deliveries[0].Acknowledged
+                    && deliveries[1].Acknowledged
+                    && !deliveries[99].Acknowledged
+                    && deliveries[100].Acknowledged,
+                "acknowledgments around an outstanding packet"
+            );
+            recovery.Acknowledge(2, [(0UL, 99UL)], 0, 0.6);
+            Check(
+                recovery.ActivePacketCount == 0
+                    && recovery.BytesInFlight == 0
+                    && Array.TrueForAll(deliveries, static delivery => delivery.Acknowledged),
+                "compacted list finds the remaining packets"
+            );
         }
 
         internal static bool Mutate(ReadOnlySpan<byte> input)

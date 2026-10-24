@@ -28,6 +28,9 @@ namespace EmbedIO.Quic
         private ulong _retentionLimit = MaximumOffset;
         private bool _disposed;
 
+        // Bytes the pages hold for delivery.
+        private int _buffered;
+
         internal ulong Delivered { get; private set; }
         internal ulong? FinalSize { get; private set; }
         internal bool Complete => FinalSize == Delivered;
@@ -95,6 +98,7 @@ namespace EmbedIO.Quic
                     {
                         buffer[mark] |= mask;
                         page.Count++;
+                        _buffered++;
                     }
 
                     buffer[index] = bytes[start + i];
@@ -102,6 +106,41 @@ namespace EmbedIO.Quic
 
                 start += take;
             }
+        }
+
+        // Add and Consume for a frame that arrives in order while nothing waits in the pages:
+        // the bytes past Delivered come back without being copied. Returns false, having
+        // changed nothing, when the frame must go through Add.
+        internal bool TryPass(ulong offset, ReadOnlySpan<byte> bytes, bool final, out ReadOnlySpan<byte> delivered)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            delivered = default;
+
+            if (_buffered != 0 || _retentionLimit != MaximumOffset || offset > Delivered) return false;
+
+            if ((ulong)bytes.Length > MaximumOffset - offset) throw new InvalidDataException("Invalid stream offset.");
+
+            var end = offset + (ulong)bytes.Length;
+
+            if (FinalSize.HasValue && (end > FinalSize.Value || final && end != FinalSize.Value))
+                throw new InvalidDataException("Conflicting final size.");
+
+            if (final && end < _extent) throw new InvalidDataException("Final size precedes received bytes.");
+
+            if (end > Delivered && end - Delivered > (ulong)_capacity)
+                throw new InvalidDataException("Stream receive window exceeded.");
+
+            if (final) FinalSize = end;
+
+            _extent = Math.Max(_extent, end);
+
+            if (end > Delivered)
+            {
+                delivered = bytes[(int)(Delivered - offset)..];
+                Delivered = end;
+            }
+
+            return true;
         }
 
         // Retire payload only. Delivered still counts bytes handed to the application;
@@ -137,6 +176,7 @@ namespace EmbedIO.Quic
 
                         buffer[mark] &= (byte)~mask;
                         page.Count--;
+                        _buffered--;
                     }
 
                     if (page.Count == 0)
@@ -207,6 +247,7 @@ namespace EmbedIO.Quic
                     .AsSpan(local, take)
                     .CopyTo(result.AsSpan(copied));
                 page.Count -= take;
+                _buffered -= take;
 
                 if (page.Count == 0)
                 {
@@ -245,6 +286,7 @@ namespace EmbedIO.Quic
                     if (page.Bytes != null) _pool.Return(page.Bytes, clearArray: true);
 
             _pages = null;
+            _buffered = 0;
         }
     }
 }

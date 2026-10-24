@@ -15,6 +15,7 @@ namespace EmbedIO.Quic
             WebTransportNegotiationTests.Run();
             TlsHelloTests.Run();
             ConnectionCoreTests.Run();
+            PacketSharingTests.Run();
 
             foreach (var number in new ulong[]
             {

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
@@ -244,9 +245,14 @@ namespace EmbedIO.Quic
         {
             DatagramAuthenticated = false;
 
+            // Packets are decrypted in place, in a copy the connection owns and clears.
+            var buffer = ArrayPool<byte>.Shared.Rent(datagram.Length);
+            var owned = buffer.AsSpan(0, datagram.Length);
+            datagram.CopyTo(owned);
+
             try
             {
-                return ReceiveCore(datagram, now);
+                return ReceiveCore(owned, now);
             }
 
             catch (TransportException error)
@@ -266,9 +272,15 @@ namespace EmbedIO.Quic
                 BeginClose(CloseLevel, Wire.Frame(0x1c, 0x0a, 0, 0));
                 return Drain();
             }
+
+            finally
+            {
+                owned.Clear();
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
 
-        private List<byte[]> ReceiveCore(ReadOnlySpan<byte> datagram, double now)
+        private List<byte[]> ReceiveCore(Span<byte> datagram, double now)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -319,14 +331,19 @@ namespace EmbedIO.Quic
 
                 if (_failedAuthentications != 0 && StopAtAuthenticationLimit(level, keys)) break;
 
-                byte[] plaintext;
+                Span<byte> plaintext;
                 ulong number;
 
                 try
                 {
-                    plaintext = level == 2
-                        ? UnprotectApplication(remaining[..length], numberOffset, out number)
-                        : keys.Unprotect(remaining[..length], numberOffset, _nextReceived[level], out number);
+                    if (level == 2) plaintext = UnprotectApplication(remaining[..length], numberOffset, out number);
+
+                    else
+                    {
+                        var packet = remaining[..length];
+                        var headerLength = keys.Unmask(packet, numberOffset, _nextReceived[level], out number);
+                        plaintext = keys.Open(packet, headerLength, number, false);
+                    }
                 }
 
                 catch (CryptographicException)
@@ -343,7 +360,11 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
+                var largestBefore = _received[level].Largest;
                 var fresh = _received[level].Add(number);
+
+                if (fresh && level == 2 && (largestBefore is not { } largest || number > largest))
+                    _largestReceivedAt = now;
 
                 if (_paths != null && _incomingEndpoints != null && _incomingPath == null)
                 {
@@ -424,7 +445,12 @@ namespace EmbedIO.Quic
                     if (level == 2 && _paths != null && _incomingPath != null)
                         _paths.Observe(_incomingPath, number, nonProbing, _now, _recovery.KeyRetention / 3);
 
-                    if (acknowledge && Phase == ConnectionPhase.Active) AcknowledgeReceived(level);
+                    if (acknowledge && Phase == ConnectionPhase.Active)
+                    {
+                        if (level == 2 && _limits.SharePackets) AcknowledgeLater(number, largestBefore);
+
+                        else AcknowledgeReceived(level);
+                    }
 
                     if (Phase != ConnectionPhase.Active) break;
 
@@ -479,7 +505,8 @@ namespace EmbedIO.Quic
                                 && _pending.Count + _urgent.Count + (count + 899) / 900 + 1 <= 480,
                             close: code => BeginClose(2, Wire.Frame(0x1d, code, 0)),
                             inboundBidirectionalStreams: _limits.InboundBidirectionalStreams,
-                            inboundUnidirectionalStreams: _limits.InboundUnidirectionalStreams
+                            inboundUnidirectionalStreams: _limits.InboundUnidirectionalStreams,
+                            deferCredit: _limits.SharePackets
                         );
                     }
                 }
@@ -511,16 +538,16 @@ namespace EmbedIO.Quic
             return true;
         }
 
-        private byte[] UnprotectApplication(ReadOnlySpan<byte> packet, int offset, out ulong number)
+        // Key updates keep the header protection key, so the current keys unmask every phase.
+        private Span<byte> UnprotectApplication(Span<byte> packet, int offset, out ulong number)
         {
             var current = _tls.ReadKeys[2] ?? throw new InvalidOperationException("Missing application keys.");
-            var decoded = current.Decode(packet, offset, _nextReceived[2]);
-            number = decoded.Number;
-            var phase = decoded.Phase;
+            var headerLength = current.Unmask(packet, offset, _nextReceived[2], out number);
+            var phase = (packet[0] & 4) != 0;
 
             if (phase == _keyUpdates.ReadPhase)
             {
-                var currentPayload = current.Unprotect(decoded, phase);
+                var currentPayload = current.Open(packet, headerLength, number, phase);
                 _keyUpdates.ReadCurrent(number);
                 return currentPayload;
             }
@@ -530,7 +557,7 @@ namespace EmbedIO.Quic
                 if (_previousRead == null || _now > _previousExpires)
                     throw new CryptographicException("Previous packet keys expired.");
 
-                var previous = _previousRead.Unprotect(decoded, phase);
+                var previous = _previousRead.Open(packet, headerLength, number, phase);
                 _keyUpdates.ReadPrevious(number);
                 return previous;
             }
@@ -538,7 +565,7 @@ namespace EmbedIO.Quic
             // Next keys are prepared when TLS installs the application keys and
             // after an authenticated transition, not on a forged phase change.
             var next = _nextRead ?? throw new CryptographicException("Next packet keys unavailable.");
-            var plaintext = next.Unprotect(decoded, phase);
+            var plaintext = next.Open(packet, headerLength, number, phase);
 
             if (!_recovery.HandshakeConfirmed || number < _nextReceived[2])
                 throw new KeyUpdateException("Invalid key update ordering.");
@@ -660,25 +687,51 @@ namespace EmbedIO.Quic
             _lifetime.Close(_now, _recovery.KeyRetention);
         }
 
+        // Initial and Handshake packets are acknowledged at once. When packets are shared, 1-RTT
+        // ones (RFC 9000 sections 13.2.1 and 13.2.2) wait for a second ack-eliciting packet, for
+        // a packet of ours to share, or for AcknowledgmentDelay; one out of order is acknowledged
+        // at once. The frame reports how long the largest packet waited, in units of 2^3
+        // microseconds (the default ack_delay_exponent).
         private void AcknowledgeReceived(int level)
         {
-            var ranges = _received[level].Descending();
+            var delay = 0UL;
 
-            using var frame = new MemoryStream();
-            Wire.Integer(frame, 2);
-            Wire.Integer(frame, ranges[0].High);
-            Wire.Integer(frame, 0);
-            Wire.Integer(frame, (ulong)ranges.Count - 1);
-            Wire.Integer(frame, ranges[0].High - ranges[0].Low);
-
-            for (var i = 1; i < ranges.Count; i++)
+            if (level == 2)
             {
-                Wire.Integer(frame, ranges[i - 1].Low - ranges[i].High - 2);
-                Wire.Integer(frame, ranges[i].High - ranges[i].Low);
+                _unacknowledged = 0;
+                _acknowledgeBy = double.PositiveInfinity;
+                delay = (ulong)Math.Max(0, (_now - _largestReceivedAt) * 1000) >> 3;
             }
 
-            Send(level, frame.ToArray(), false, false);
+            Send(level, _received[level].AckFrame(delay), false, false);
         }
+
+        private void AcknowledgeLater(ulong number, ulong? largestBefore)
+        {
+            if (number != (largestBefore is { } previous ? previous + 1 : 0) || ++_unacknowledged >= 2)
+            {
+                AcknowledgeReceived(2);
+                return;
+            }
+
+            if (double.IsPositiveInfinity(_acknowledgeBy)) _acknowledgeBy = _now + AcknowledgmentDelay;
+        }
+
+        // A due acknowledgment leaves with the owner's next timer tick (every 2 ms on the
+        // listener's dispatcher), well inside the 25 ms max_ack_delay peers assume of this
+        // endpoint, which does not advertise one.
+        private const double AcknowledgmentDelay = 1;
+
+        // Set by the owner for a turn that waited long for a worker. The tick that sends a
+        // waiting acknowledgment runs in a later turn, which could wait as long and take it
+        // past max_ack_delay, so this turn sends it instead.
+        internal bool AcknowledgeAtOnce { get; set; }
+
+        private int _unacknowledged;
+        private double _acknowledgeBy = double.PositiveInfinity;
+
+        // When the largest 1-RTT packet number so far arrived.
+        private double _largestReceivedAt;
 
         internal void QueueRepeat(Delivery delivery, bool probe)
         {
@@ -736,9 +789,64 @@ namespace EmbedIO.Quic
             }
         }
 
+        // The frames that share the packet Drain is building; empty between packets.
+        private readonly List<Delivery> _joined = [];
+
+        // Moves deliveries from the front of queue into the packet first leads while they fit
+        // and match it: same level, no path of their own and no padding. An ordinary eliciting
+        // frame also needs the congestion controller's room; the urgent queue's probes and
+        // acknowledgments do not, as they would not alone.
+        private void Join(
+            Queue<Delivery> queue,
+            ref int visits,
+            Delivery first,
+            bool urgent,
+            int headerLength,
+            int room,
+            ref int frameBytes,
+            ref bool eliciting,
+            List<Delivery> joined
+        )
+        {
+            while (visits != 0 && queue.Count != 0)
+            {
+                var next = queue.Peek();
+
+                if (!next.Queued || next.Acknowledged)
+                {
+                    queue.Dequeue();
+                    visits--;
+                    next.Queued = false;
+                    next.ProbePending = false;
+                    continue;
+                }
+
+                if (
+                    next.Level != first.Level
+                    || next.Path != null
+                    || next.PadToMinimum
+                    || next.PreferValidatedPath != first.PreferValidatedPath
+                    || frameBytes + next.Bytes.Length > room
+                    || (next.Eliciting
+                        && !urgent
+                        && !_recovery.CanSend(headerLength + 1 + frameBytes + next.Bytes.Length + 16, _now, false))
+                )
+                    return;
+
+                queue.Dequeue();
+                visits--;
+                next.Queued = false;
+                next.ProbePending = false;
+                frameBytes += next.Bytes.Length;
+                eliciting |= next.Eliciting;
+                joined.Add(next);
+            }
+        }
+
         private List<byte[]> Drain()
         {
             var output = new List<byte[]>();
+            Span<byte> header = stackalloc byte[MaximumHeader];
 
             if (_paths?.Tick(_now) == true && _handshakeDone && Phase == ConnectionPhase.Active)
                 AcknowledgeReceived(2);
@@ -840,6 +948,15 @@ namespace EmbedIO.Quic
             if (_paths != null)
                 foreach (var probe in _paths.Probes(_now)) QueueRepeat(probe, true);
 
+            // A waiting acknowledgment and freed stream credit go with anything else queued.
+            if (
+                _unacknowledged != 0
+                && (_pending.Count + _urgent.Count != 0 || _now >= _acknowledgeBy || AcknowledgeAtOnce)
+            )
+                AcknowledgeReceived(2);
+
+            _streams?.AdvertiseCredit(_pending.Count + _urgent.Count != 0);
+
             var urgentVisits = _urgent.Count;
             var pendingVisits = _pending.Count;
 
@@ -888,8 +1005,17 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
-                var (header, numberOffset, payload) = Prepare(delivery, path, destination);
-                var size = header.Length + payload.Length + 16;
+                var headerLength = Prepare(
+                    level,
+                    delivery.Bytes.Length,
+                    delivery.PadToMinimum,
+                    path,
+                    destination,
+                    header,
+                    out var numberOffset,
+                    out var payloadLength
+                );
+                var size = headerLength + payloadLength + 16;
                 var allowance = path?.Allowance ?? (_addressValidated ? long.MaxValue : ReceivedBytes * 3 - SentBytes);
 
                 if (size > allowance || (delivery.Eliciting && !_recovery.CanSend(size, _now, queue == _urgent)))
@@ -901,14 +1027,70 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
-                var keys = (level == 0 ? _initialWrite : _tls.WriteKeys[level])
-                    ?? throw new InvalidOperationException("Packet keys unavailable.");
-                var packet = keys.Protect(header, numberOffset, _sentNumbers[level], payload);
-                MarkDestination(sequence);
-
                 queue.Dequeue();
                 delivery.Queued = false;
                 delivery.ProbePending = false;
+                var joined = _joined;
+                var eliciting = delivery.Eliciting;
+
+                // Frames queued behind this one share its packet while they fit. A long header's
+                // length field may grow by one byte as the payload does.
+                if (_limits.SharePackets && delivery.Path == null && !delivery.PadToMinimum)
+                {
+                    var frameBytes = delivery.Bytes.Length;
+                    var room = (int)Math.Min(Recovery.MaximumPacket, allowance)
+                        - headerLength
+                        - (level < 2 ? 1 : 0)
+                        - 16;
+                    Join(
+                        _urgent,
+                        ref urgentVisits,
+                        delivery,
+                        true,
+                        headerLength,
+                        room,
+                        ref frameBytes,
+                        ref eliciting,
+                        joined
+                    );
+                    Join(
+                        _pending,
+                        ref pendingVisits,
+                        delivery,
+                        false,
+                        headerLength,
+                        room,
+                        ref frameBytes,
+                        ref eliciting,
+                        joined
+                    );
+
+                    if (joined.Count != 0)
+                    {
+                        if (eliciting && !delivery.Eliciting && !PrepareKeys(level, true))
+                        {
+                            joined.Clear();
+                            output.AddRange(Drain());
+                            return output;
+                        }
+
+                        headerLength = Prepare(
+                            level,
+                            frameBytes,
+                            false,
+                            path,
+                            destination,
+                            header,
+                            out numberOffset,
+                            out payloadLength
+                        );
+                    }
+                }
+
+                var keys = (level == 0 ? _initialWrite : _tls.WriteKeys[level])
+                    ?? throw new InvalidOperationException("Packet keys unavailable.");
+                var packet = Seal(keys, level, header[..headerLength], numberOffset, payloadLength, delivery, joined);
+                MarkDestination(sequence);
                 _recovery.SentPacket(
                     level,
                     _sentNumbers[level]++,
@@ -916,13 +1098,15 @@ namespace EmbedIO.Quic
                     _now,
                     delivery,
                     level == 0,
-                    _pending.Count == 0
+                    _pending.Count == 0,
+                    joined.Count == 0 ? null : [.. joined]
                 );
+                joined.Clear();
                 SentBytes += packet.Length;
 
                 if (path != null) QuicPathValidation.Sent(path, delivery, packet.Length, _now);
 
-                if (delivery.Eliciting) _lifetime.SentEliciting(_now);
+                if (eliciting) _lifetime.SentEliciting(_now);
 
                 output.Add(packet);
                 _outputPaths?.Add(path?.Route);
@@ -1044,7 +1228,7 @@ namespace EmbedIO.Quic
                     (_streams ?? throw new InvalidOperationException("Missing established stream owner.")).Receive(
                         id,
                         offset,
-                        bytes.ToArray(),
+                        bytes,
                         (type & 1) != 0
                     );
                 }
@@ -1428,65 +1612,115 @@ namespace EmbedIO.Quic
 
         private byte[] Protect(Delivery delivery, QuicPath? path = null, ReadOnlyMemory<byte>? destination = null)
         {
-            var (header, numberOffset, payload) = Prepare(delivery, path, destination);
+            Span<byte> header = stackalloc byte[MaximumHeader];
+            var length = Prepare(
+                delivery.Level,
+                delivery.Bytes.Length,
+                delivery.PadToMinimum,
+                path,
+                destination,
+                header,
+                out var numberOffset,
+                out var payloadLength
+            );
             var keys = (delivery.Level == 0 ? _initialWrite : _tls.WriteKeys[delivery.Level])
                 ?? throw new InvalidOperationException("Packet keys are unavailable.");
-            var packet = keys.Protect(header, numberOffset, _sentNumbers[delivery.Level], payload);
-            return packet;
+            return Seal(keys, delivery.Level, header[..length], numberOffset, payloadLength, delivery, null);
         }
 
-        private (byte[] Header, int NumberOffset, byte[] Payload) Prepare(
-            Delivery delivery,
-            QuicPath? path = null,
-            ReadOnlyMemory<byte>? destination = null
+        // A long header with two 20-byte IDs, an empty token and a four-byte length and
+        // packet number is 56 bytes.
+        private const int MaximumHeader = 64;
+
+        // Writes the header of a packet whose frames take frameBytes into header and returns
+        // its length. payloadLength is frameBytes plus the padding the packet needs.
+        private int Prepare(
+            int level,
+            int frameBytes,
+            bool padToMinimum,
+            QuicPath? path,
+            ReadOnlyMemory<byte>? destination,
+            Span<byte> header,
+            out int numberOffset,
+            out int payloadLength
         )
         {
             var target = destination ?? _destinationId;
-            var level = delivery.Level;
-            var payload = delivery.Bytes;
-
-            using var header = new MemoryStream();
+            var length = 0;
+            payloadLength = frameBytes;
 
             if (level < 2)
             {
-                header.WriteByte(level == 0 ? (byte)0xc3 : (byte)0xe3);
-                header.Write([0, 0, 0, 1]);
-                header.WriteByte((byte)target.Length);
-                header.Write(target.Span);
-                header.WriteByte((byte)_localIds.Current.Length);
-                header.Write(_localIds.Current);
+                header[length++] = level == 0 ? (byte)0xc3 : (byte)0xe3;
+                BinaryPrimitives.WriteUInt32BigEndian(header[length..], 1);
+                length += 4;
+                header[length++] = (byte)target.Length;
+                target.Span.CopyTo(header[length..]);
+                length += target.Length;
+                var source = _localIds.Current;
+                header[length++] = (byte)source.Length;
+                source.CopyTo(header[length..]);
+                length += source.Length;
 
                 if (level == 0)
                 {
-                    header.WriteByte(0);
+                    header[length++] = 0;
                     // Initial length always uses two bytes at the required 1200-byte size.
-                    Array.Resize(ref payload, Math.Max(payload.Length, 1200 - (int)header.Length - 2 - 4 - 16));
+                    payloadLength = Math.Max(payloadLength, 1200 - length - 2 - 4 - 16);
                 }
 
-                Wire.Integer(header, (ulong)(4 + payload.Length + 16));
+                length += Wire.Integer(header[length..], (ulong)(4 + payloadLength + 16));
             }
 
             else
             {
-                header.WriteByte(_keyUpdates.WritePhase ? (byte)0x47 : (byte)0x43);
-                header.Write(target.Span);
+                header[length++] = _keyUpdates.WritePhase ? (byte)0x47 : (byte)0x43;
+                target.Span.CopyTo(header[length..]);
+                length += target.Length;
             }
 
-            var numberOffset = (int)header.Length;
-            var number = _sentNumbers[level];
-            Span<byte> encoded = stackalloc byte[4];
-            BinaryPrimitives.WriteUInt32BigEndian(encoded, unchecked((uint)number));
-            header.Write(encoded);
+            numberOffset = length;
+            BinaryPrimitives.WriteUInt32BigEndian(header[length..], unchecked((uint)_sentNumbers[level]));
+            length += 4;
 
-            if (delivery.PadToMinimum)
+            if (padToMinimum)
             {
                 var minimum = path != null
                     ? (int)Math.Min(1200, path.Allowance)
                     : _addressValidated ? 1200 : (int)Math.Min(1200, Math.Max(0, ReceivedBytes * 3 - SentBytes));
-                Array.Resize(ref payload, Math.Max(payload.Length, minimum - (int)header.Length - 16));
+                payloadLength = Math.Max(payloadLength, minimum - length - 16);
             }
 
-            return (header.ToArray(), numberOffset, payload);
+            return length;
+        }
+
+        // The packet holds the header, first's frame and then the joined ones, zero PADDING up
+        // to payloadLength, and the tag; it is encrypted where it was assembled.
+        private byte[] Seal(
+            PacketKeys keys,
+            int level,
+            ReadOnlySpan<byte> header,
+            int numberOffset,
+            int payloadLength,
+            Delivery first,
+            List<Delivery>? joined
+        )
+        {
+            var packet = new byte[header.Length + payloadLength + 16];
+            header.CopyTo(packet);
+            var offset = header.Length;
+            first.Bytes.CopyTo(packet, offset);
+            offset += first.Bytes.Length;
+
+            if (joined != null)
+                foreach (var delivery in joined)
+                {
+                    delivery.Bytes.CopyTo(packet, offset);
+                    offset += delivery.Bytes.Length;
+                }
+
+            keys.Seal(packet, header.Length, numberOffset, _sentNumbers[level]);
+            return packet;
         }
 
         public void Dispose()

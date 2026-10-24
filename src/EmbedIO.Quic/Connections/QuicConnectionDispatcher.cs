@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -39,7 +40,8 @@ namespace EmbedIO.Quic
             string[] TokenIdentities
         );
 
-        private sealed record Output(
+        // A struct, so queueing a datagram allocates nothing beyond the datagram.
+        private readonly record struct Output(
             Entry? Entry,
             byte[] Bytes,
             IPEndPoint? Peer = null,
@@ -93,7 +95,8 @@ namespace EmbedIO.Quic
                     () => dispatcher.ConnectionClock(this),
                     output => dispatcher.Publish(this, output),
                     connectionIds: dispatcher._connectionIds,
-                    retry: retry
+                    retry: retry,
+                    completed: () => Interlocked.Increment(ref dispatcher._uncollected)
                 );
             }
 
@@ -143,7 +146,13 @@ namespace EmbedIO.Quic
         private readonly Channel<Output> _output;
         private readonly object _outputGate = new();
         private readonly HashSet<Entry> _entries = [];
+        private readonly List<Entry> _collected = [];
+
+        // Owners that are completing or have completed and are not yet collected. Each is
+        // counted before its Completion finishes, so Collect scans only while one may be found.
+        private int _uncollected;
         private readonly Dictionary<string, Entry> _issued = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Entry>.AlternateLookup<ReadOnlySpan<char>> _issuedLookup;
         private readonly Dictionary<(IPEndPoint Peer, IPEndPoint? Local, string Id), Entry> _initials = [];
         private readonly Dictionary<(IPEndPoint Peer, IPEndPoint? Local, string Token), Entry> _resets = [];
         private readonly Dictionary<(IPEndPoint Peer, IPEndPoint? Local), PeerGroup> _peerGroups = [];
@@ -162,6 +171,8 @@ namespace EmbedIO.Quic
         private Task? _shutdown;
         private TaskCompletionSource? _sendFinished;
         private bool _sending;
+        private Output? _taken;
+        private readonly Action? _outputReady;
         private volatile bool _closing;
         private int _pendingPackets;
         private int _pendingBytes;
@@ -180,11 +191,13 @@ namespace EmbedIO.Quic
             int? admissionAttemptsPerSecond = null,
             bool refuseConnections = false,
             double queueDelayBound = 0,
-            bool validateAddresses = false
+            bool validateAddresses = false,
+            Action? outputReady = null
         )
         {
             ArgumentNullException.ThrowIfNull(create);
             ArgumentNullException.ThrowIfNull(clock);
+            _outputReady = outputReady;
             ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
             ArgumentOutOfRangeException.ThrowIfGreaterThan(capacity, 65536);
             ArgumentOutOfRangeException.ThrowIfLessThan(outputPacketCapacity, 1);
@@ -200,6 +213,7 @@ namespace EmbedIO.Quic
 
             _create = create;
             _clock = clock;
+            _issuedLookup = _issued.GetAlternateLookup<ReadOnlySpan<char>>();
             _capacity = capacity;
             _attemptLimit = admissionAttemptsPerSecond ?? capacity;
             ArgumentOutOfRangeException.ThrowIfNegative(_attemptLimit);
@@ -290,9 +304,18 @@ namespace EmbedIO.Quic
             if (!PacketHeader.TryDestination(bytes, out var destination, out var initial))
                 return RouteReset(bytes, peer, local, now) || Reject();
 
-            var id = Convert.ToHexString(destination);
+            // An issued ID is found without a string; a connection still on its client's
+            // Initial ID needs one. IDs are at most 20 bytes.
+            Span<char> hex = stackalloc char[40];
+            Convert.TryToHexString(destination, hex, out var written);
+            hex = hex[..written];
+            string? id = null;
 
-            if (!_issued.TryGetValue(id, out var entry)) _initials.TryGetValue((peer, local, id), out entry);
+            if (!_issuedLookup.TryGetValue(hex, out var entry))
+            {
+                id = new string(hex);
+                _initials.TryGetValue((peer, local, id), out entry);
+            }
 
             QuicConnectionOwner? resetOwner = null;
 
@@ -319,6 +342,8 @@ namespace EmbedIO.Quic
 
             else
             {
+                id ??= new string(hex);
+
                 if (RouteReset(bytes, peer, local, now)) return true;
 
                 if (!initial) return SendReset(bytes, peer, now) || Reject();
@@ -471,8 +496,10 @@ namespace EmbedIO.Quic
                 _pendingPackets++;
                 _pendingBytes += reset.Length;
                 _pendingResets++;
-                return true;
             }
+
+            _outputReady?.Invoke();
+            return true;
         }
 
         // RFC 9000 5.2.2: a server that refuses a connection answers its Initial with
@@ -532,6 +559,8 @@ namespace EmbedIO.Quic
                 _pendingRefusals++;
                 Refused++;
             }
+
+            _outputReady?.Invoke();
         }
 
         // Refusals queue behind established connections' packets; an eighth of the output
@@ -591,6 +620,8 @@ namespace EmbedIO.Quic
                 _pendingRefusals++;
                 RetriesSent++;
             }
+
+            _outputReady?.Invoke();
         }
 
         private const int RetriesPerSecond = 4096;
@@ -624,6 +655,25 @@ namespace EmbedIO.Quic
         {
             ArgumentNullException.ThrowIfNull(send);
 
+            if (!TryTakeOutput(out var peer, out var bytes)) return false;
+
+            try
+            {
+                await send(new OutboundDatagram(peer, bytes)).ConfigureAwait(false);
+                return true;
+            }
+
+            finally
+            {
+                FinishOutput();
+            }
+        }
+
+        // Takes the next datagram to send, skipping output of retired connections and
+        // paths. It counts against the output limits until FinishOutput, which the socket
+        // owner calls once the send has completed or failed.
+        internal bool TryTakeOutput([NotNullWhen(true)] out IPEndPoint? peer, [NotNullWhen(true)] out byte[]? bytes)
+        {
             while (true)
             {
                 Output output;
@@ -634,7 +684,12 @@ namespace EmbedIO.Quic
 
                     if (_sending) throw new InvalidOperationException("QUIC output already has a sender.");
 
-                    if (!_output.Reader.TryRead(out var next)) return false;
+                    if (!_output.Reader.TryRead(out var next))
+                    {
+                        peer = null;
+                        bytes = null;
+                        return false;
+                    }
 
                     output = next;
                     _sending = true;
@@ -644,31 +699,58 @@ namespace EmbedIO.Quic
                 {
                     var entry = output.Entry;
 
-                    if (entry != null && (!_entries.Contains(entry) || !Synchronize(entry, ReadClock()))) continue;
-
                     if (
-                        entry != null && output.PathId.HasValue && entry.State?.Paths.Any(
-                            path => path.Id == output.PathId.Value
-                        )
-                        != true
-                    ) continue;
-
-                    var peer = output.Peer ?? entry?.Peer
-                        ?? throw new InvalidOperationException("QUIC output has no peer.");
-                    await send(new OutboundDatagram(peer, output.Bytes)).ConfigureAwait(false);
-                    return true;
-                }
-
-                finally
-                {
-                    lock (_outputGate)
+                        entry == null
+                        || (_entries.Contains(entry)
+                            && Synchronize(entry, ReadClock())
+                            && (!output.PathId.HasValue || HasPath(entry, output.PathId.Value)))
+                    )
                     {
-                        Release(output);
-                        _sending = false;
-                        _sendFinished?.TrySetResult();
+                        peer = output.Peer ?? entry?.Peer
+                            ?? throw new InvalidOperationException("QUIC output has no peer.");
+                        bytes = output.Bytes;
+                        _taken = output;
+                        return true;
                     }
                 }
+
+                catch
+                {
+                    Finish(output);
+                    throw;
+                }
+
+                Finish(output);
             }
+        }
+
+        internal void FinishOutput()
+        {
+            var output = _taken ?? throw new InvalidOperationException("No QUIC output is being sent.");
+            _taken = null;
+            Finish(output);
+        }
+
+        private void Finish(Output output)
+        {
+            lock (_outputGate)
+            {
+                Release(output);
+                _sending = false;
+                _sendFinished?.TrySetResult();
+            }
+        }
+
+        private static bool HasPath(Entry entry, ulong id)
+        {
+            var paths = entry.State?.Paths;
+
+            if (paths == null) return false;
+
+            for (var index = 0; index < paths.Count; index++)
+                if (paths[index].Id == id) return true;
+
+            return false;
         }
 
         private double ReadClock()
@@ -839,9 +921,17 @@ namespace EmbedIO.Quic
 
         private void Publish(Entry entry, QuicConnectionOutput output)
         {
+            if (Queue(entry, output)) _outputReady?.Invoke();
+        }
+
+        // Returns whether any datagram was queued.
+        private bool Queue(Entry entry, QuicConnectionOutput output)
+        {
+            var queued = false;
+
             lock (_outputGate)
             {
-                if (_closing) return;
+                if (_closing) return false;
 
                 var previous = entry.State;
                 var issuedIds = output.IssuedConnectionIds ?? previous?.IssuedIds ?? [output.ConnectionId];
@@ -883,7 +973,7 @@ namespace EmbedIO.Quic
                 if (expired)
                 {
                     entry.Owner.RequestClose();
-                    return;
+                    return false;
                 }
 
                 for (var index = 0; index < output.Datagrams.Count; index++)
@@ -913,8 +1003,11 @@ namespace EmbedIO.Quic
                     _pendingBytes += bytes.Length;
                     entry.Packets++;
                     entry.Bytes += bytes.Length;
+                    queued = true;
                 }
             }
+
+            return queued;
         }
 
         private void Release(Output output)
@@ -935,67 +1028,84 @@ namespace EmbedIO.Quic
 
         private void Collect()
         {
-            foreach (var entry in _entries.ToArray())
+            if (Volatile.Read(ref _uncollected) != 0) CollectCompleted();
+        }
+
+        private void CollectCompleted()
+        {
+            foreach (var entry in _entries)
+                if (entry.Owner.Completion.IsCompleted) _collected.Add(entry);
+
+            try
             {
-                if (!entry.Owner.Completion.IsCompleted) continue;
+                foreach (var entry in _collected) Retire(entry);
+            }
 
-                _entries.Remove(entry);
-                entry.FinishAdmission(this);
+            finally
+            {
+                _collected.Clear();
+            }
+        }
 
-                foreach (var key in entry.Groups)
-                    if (--_peerGroups[key].Count == 0) _peerGroups.Remove(key);
+        private void Retire(Entry entry)
+        {
+            _entries.Remove(entry);
+            Interlocked.Decrement(ref _uncollected);
+            entry.FinishAdmission(this);
 
-                entry.Groups.Clear();
+            foreach (var key in entry.Groups)
+                if (--_peerGroups[key].Count == 0) _peerGroups.Remove(key);
 
-                _initials.Remove((entry.Peer, entry.Local, entry.Original));
+            entry.Groups.Clear();
 
-                foreach (var key in entry.ResetBindings) _resets.Remove(key);
+            _initials.Remove((entry.Peer, entry.Local, entry.Original));
 
-                if (entry.Id != null)
-                {
-                    foreach (var alias in entry.Aliases) _issued.Remove(alias);
+            foreach (var key in entry.ResetBindings) _resets.Remove(key);
 
-                    Retired++;
-                }
+            if (entry.Id != null)
+            {
+                foreach (var alias in entry.Aliases) _issued.Remove(alias);
 
-                var failure = entry.Owner.Completion.Exception;
+                Retired++;
+            }
 
-                if (
-                    !entry.Expired
-                    && (Volatile.Read(ref entry.State)?.Expired == true || failure
-                        ?.Flatten()
-                        .InnerExceptions.Any(error => ReferenceEquals(error, entry.ExpiryFailure))
-                        == true)
-                )
-                {
-                    entry.Expired = true;
-                    ExpiredHandshakes++;
-                }
+            var failure = entry.Owner.Completion.Exception;
 
-                if (failure == null) continue;
+            if (
+                !entry.Expired
+                && (Volatile.Read(ref entry.State)?.Expired == true || failure
+                    ?.Flatten()
+                    .InnerExceptions.Any(error => ReferenceEquals(error, entry.ExpiryFailure))
+                    == true)
+            )
+            {
+                entry.Expired = true;
+                ExpiredHandshakes++;
+            }
 
-                if (
-                    entry.Owner.CleanupFailure == null
-                    && failure
-                        .Flatten()
-                        .InnerExceptions.All(
-                            error => error is CryptographicException
-                                or InvalidDataException
-                                || ReferenceEquals(error, entry.ExpiryFailure)
-                        )
-                )
-                {
-                    Rejected++;
-                    // Keep only the latest rejection; callers inspect this after
-                    // shutdown rather than logging on the packet-processing path.
-                    LastRejectedFailure = failure;
-                }
+            if (failure == null) return;
 
-                else
-                {
-                    FailedOwners++;
-                    LastOwnerFailure = failure;
-                }
+            if (
+                entry.Owner.CleanupFailure == null
+                && failure
+                    .Flatten()
+                    .InnerExceptions.All(
+                        error => error is CryptographicException
+                            or InvalidDataException
+                            || ReferenceEquals(error, entry.ExpiryFailure)
+                    )
+            )
+            {
+                Rejected++;
+                // Keep only the latest rejection; callers inspect this after
+                // shutdown rather than logging on the packet-processing path.
+                LastRejectedFailure = failure;
+            }
+
+            else
+            {
+                FailedOwners++;
+                LastOwnerFailure = failure;
             }
         }
 
@@ -1023,7 +1133,7 @@ namespace EmbedIO.Quic
                     .AsTask()));
             await owners.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             await sending.ConfigureAwait(false);
-            Collect();
+            CollectCompleted();
 
             var workers = _pool
                 .DisposeAsync()

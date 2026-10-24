@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 
 namespace EmbedIO.Quic
 {
@@ -53,6 +52,16 @@ namespace EmbedIO.Quic
             _repeat = repeat ?? throw new ArgumentNullException(nameof(repeat));
         }
 
+        // Where a sent packet's record is: outstanding (neither acknowledged nor declared lost),
+        // retired after its loss so that a late acknowledgment still finds it, or released.
+        private enum PacketState
+        {
+            Outstanding,
+            Retired,
+            Released
+        }
+
+        // Joined holds the frames that shared Delivery's packet; Eliciting covers them all.
         private sealed record Sent(
             int Level,
             ulong Number,
@@ -61,12 +70,167 @@ namespace EmbedIO.Quic
             Delivery Delivery,
             bool InFlight,
             bool ApplicationLimited,
-            ulong Epoch
-        );
+            ulong Epoch,
+            Delivery[]? Joined,
+            bool Eliciting
+        )
+        {
+            // Set by the list that holds the packet.
+            internal PacketState State;
 
-        private readonly Dictionary<(int Level, ulong Number), Sent> _sent = [];
-        private readonly Dictionary<(int Level, ulong Number), Sent> _retired = [];
-        private readonly Queue<(int Level, ulong Number)> _retiredOrder = new();
+            internal void Acknowledge()
+            {
+                Delivery.Acknowledged = true;
+
+                if (Joined == null) return;
+
+                foreach (var delivery in Joined) delivery.Acknowledged = true;
+            }
+        }
+
+        // One packet number space's packets in one state, in packet-number order, so the packets
+        // an ACK range names are found by a binary search instead of a pass over every packet.
+        // A packet that leaves the state keeps its place, skipped, until the front of the list
+        // passes it or such places are half of the list.
+        private sealed class PacketList(PacketState state)
+        {
+            private readonly List<Sent> _packets = [];
+            private int _head;
+            private int _stale;
+
+            // The packets in the state, and how many of them are ack-eliciting.
+            internal int Count { get; private set; }
+            internal int Eliciting { get; private set; }
+
+            // Indexes, from Start up to End, that may hold a packet in the state.
+            internal int Start => _head;
+            internal int End => _packets.Count;
+
+            internal Sent this[int index] => _packets[index];
+
+            internal bool Holds(Sent packet) => packet.State == state;
+
+            internal void Add(Sent packet)
+            {
+                var index = _packets.Count;
+
+                // Packet numbers rise within a space, so a packet nearly always goes last.
+                if (index > _head && _packets[index - 1].Number >= packet.Number)
+                {
+                    index = Find(packet.Number);
+
+                    if (index < _packets.Count && _packets[index].Number == packet.Number)
+                    {
+                        if (Holds(_packets[index]))
+                            throw new ArgumentException("The packet number is already recorded.", nameof(packet));
+
+                        _packets[index] = packet;
+                        _stale--;
+                        Hold(packet);
+                        return;
+                    }
+                }
+
+                _packets.Insert(index, packet);
+                Hold(packet);
+            }
+
+            private void Hold(Sent packet)
+            {
+                packet.State = state;
+                Count++;
+
+                if (packet.Eliciting) Eliciting++;
+            }
+
+            // Moves a packet the list holds to the next state. No pass over the list may be
+            // under way: the list can drop or move the places it skips.
+            internal void Remove(Sent packet, PacketState next)
+            {
+                packet.State = next;
+                Count--;
+
+                if (packet.Eliciting) Eliciting--;
+
+                _stale++;
+
+                while (_head < _packets.Count && !Holds(_packets[_head]))
+                {
+                    _head++;
+                    _stale--;
+                }
+
+                if (_head == _packets.Count)
+                {
+                    _packets.Clear();
+                    _head = 0;
+                }
+
+                else if (_stale >= 32 && _stale * 2 > _packets.Count - _head) Compact();
+
+                else if (_head >= 32 && _head * 2 >= _packets.Count)
+                {
+                    _packets.RemoveRange(0, _head);
+                    _head = 0;
+                }
+            }
+
+            private void Compact()
+            {
+                var kept = 0;
+
+                for (var index = _head; index < _packets.Count; index++)
+                    if (Holds(_packets[index])) _packets[kept++] = _packets[index];
+
+                _packets.RemoveRange(kept, _packets.Count - kept);
+                _head = 0;
+                _stale = 0;
+            }
+
+            internal void Clear(PacketState next)
+            {
+                for (var index = _head; index < _packets.Count; index++)
+                    if (Holds(_packets[index])) _packets[index].State = next;
+
+                _packets.Clear();
+                _head = 0;
+                _stale = 0;
+                Count = 0;
+                Eliciting = 0;
+            }
+
+            // The first index from Start whose packet number is at least number, or End.
+            internal int Find(ulong number)
+            {
+                var low = _head;
+                var high = _packets.Count;
+
+                while (low < high)
+                {
+                    var middle = low + (high - low) / 2;
+
+                    if (_packets[middle].Number < number) low = middle + 1;
+
+                    else high = middle;
+                }
+
+                return low;
+            }
+        }
+
+        private readonly PacketList[] _sent =
+        [
+            new(PacketState.Outstanding),
+            new(PacketState.Outstanding),
+            new(PacketState.Outstanding)
+        ];
+        private readonly PacketList[] _retired =
+        [
+            new(PacketState.Retired),
+            new(PacketState.Retired),
+            new(PacketState.Retired)
+        ];
+        private readonly Queue<Sent> _retiredOrder = new();
         private double _historyFloor = double.NegativeInfinity;
         private readonly ulong?[] _largestAcknowledged = new ulong?[3];
         private readonly bool[] _discarded = new bool[3];
@@ -105,8 +269,8 @@ namespace EmbedIO.Quic
             return value;
         }
 
-        internal int ActivePacketCount => _sent.Count;
-        internal int RetiredPacketCount => _retired.Count;
+        internal int ActivePacketCount => _sent[0].Count + _sent[1].Count + _sent[2].Count;
+        internal int RetiredPacketCount => _retired[0].Count + _retired[1].Count + _retired[2].Count;
         internal int AcknowledgmentCount => _acknowledgedTimes.Count;
         internal int LossHistoryCount => _lostHistory.Count;
 
@@ -133,6 +297,7 @@ namespace EmbedIO.Quic
             );
         }
 
+        // joined lists any further frames sent in the same packet as delivery.
         internal void SentPacket(
             int level,
             ulong number,
@@ -140,23 +305,34 @@ namespace EmbedIO.Quic
             double now,
             Delivery delivery,
             bool padded,
-            bool applicationLimited = false
+            bool applicationLimited = false,
+            Delivery[]? joined = null
         )
         {
-            if (delivery.Transmissions++ != 0 && delivery.Reliable) RetransmittedPackets++;
+            var retransmission = delivery.Transmissions++ != 0 && delivery.Reliable;
+            var eliciting = delivery.Eliciting;
 
-            var inFlight = delivery.Eliciting || padded;
+            if (joined != null)
+                foreach (var other in joined)
+                {
+                    retransmission |= other.Transmissions++ != 0 && other.Reliable;
+                    eliciting |= other.Eliciting;
+                }
 
-            if (_sent.Count >= MaximumActivePackets) throw new InvalidDataException("Recovery packet budget exceeded.");
+            if (retransmission) RetransmittedPackets++;
 
-            _sent.Add(
-                (level, number),
-                new Sent(level, number, now, size, delivery, inFlight, applicationLimited, _epoch)
+            var inFlight = eliciting || padded;
+
+            if (ActivePacketCount >= MaximumActivePackets)
+                throw new InvalidDataException("Recovery packet budget exceeded.");
+
+            _sent[level].Add(
+                new Sent(level, number, now, size, delivery, inFlight, applicationLimited, _epoch, joined, eliciting)
             );
 
             if (inFlight) BytesInFlight += size;
 
-            if (delivery.Eliciting) _lastEliciting[level] = now;
+            if (eliciting) _lastEliciting[level] = now;
 
             if (inFlight)
             {
@@ -169,29 +345,137 @@ namespace EmbedIO.Quic
         {
             RefillPacing(now);
             var largest = ranges[0].High;
-            var descending = ranges.Count > 4 && Descending(ranges);
-            bool Matches(Sent packet) => packet.Level == level && Contains(ranges, packet.Number, descending);
-            var late = _retired.Values
-                .Where(Matches)
-                .ToArray();
+            var matched = _matched;
+            var elicitingLate = false;
+            var retired = _retired[level];
 
-            foreach (var packet in late)
+            if (retired.Count != 0)
             {
-                packet.Delivery.Acknowledged = true;
+                Match(retired, ranges, matched);
 
-                if (packet.Epoch == _epoch) _acknowledgedTimes.Add(packet.Time);
+                foreach (var packet in matched)
+                {
+                    retired.Remove(packet, PacketState.Released);
+                    packet.Acknowledge();
 
-                _lostHistory.RemoveAll(p => p.Level == packet.Level && p.Number == packet.Number);
-                _retired.Remove((packet.Level, packet.Number));
+                    if (packet.Epoch == _epoch)
+                    {
+                        _acknowledgedTimes.Add(packet.Time);
+                        elicitingLate |= packet.Eliciting;
+                    }
+
+                    ForgetLoss(packet);
+                }
+
+                matched.Clear();
             }
 
-            var acknowledged = _sent.Values
-                .Where(Matches)
-                .ToArray();
-            _largestAcknowledged[level] = Math.Max(_largestAcknowledged[level] ?? 0, largest);
-            var sample = acknowledged.FirstOrDefault(p => p.Number == largest && p.Epoch == _epoch);
+            Match(_sent[level], ranges, matched);
 
-            if (sample != null && acknowledged.Any(p => p.Epoch == _epoch && p.Delivery.Eliciting))
+            try
+            {
+                Acknowledge(matched, level, largest, delay, now, elicitingLate);
+            }
+
+            finally
+            {
+                matched.Clear();
+            }
+        }
+
+        // Packets an ACK names, from Acknowledge.
+        private readonly List<Sent> _matched = [];
+
+        // Collects the packets of list that ranges name, in packet-number order.
+        private static void Match(PacketList list, IReadOnlyList<(ulong Low, ulong High)> ranges, List<Sent> matched)
+        {
+            var ordered = true;
+
+            // An ACK frame lists its ranges largest first, so taking them from the last keeps the
+            // packets in order. Ranges given in any other order are sorted afterwards.
+            for (
+                var range = ranges.Count - 1;
+                range >= 0;
+                range--
+            )
+            {
+                var (low, high) = ranges[range];
+
+                for (var index = list.Find(low); index < list.End; index++)
+                {
+                    var packet = list[index];
+
+                    if (packet.Number > high) break;
+
+                    if (!list.Holds(packet)) continue;
+
+                    if (matched.Count != 0 && matched[^1].Number >= packet.Number) ordered = false;
+
+                    matched.Add(packet);
+                }
+            }
+
+            if (ordered) return;
+
+            matched.Sort(static (left, right) => left.Number.CompareTo(right.Number));
+            var kept = 0;
+
+            // Overlapping ranges name some packets twice.
+            for (
+                var index = 0;
+                index < matched.Count;
+                index++
+            )
+                if (kept == 0 || matched[kept - 1].Number != matched[index].Number) matched[kept++] = matched[index];
+
+            matched.RemoveRange(kept, matched.Count - kept);
+        }
+
+        private void ForgetLoss(Sent packet)
+        {
+            for (var index = 0; index < _lostHistory.Count; index++)
+                if (_lostHistory[index].Level == packet.Level && _lostHistory[index].Number == packet.Number)
+                    _lostHistory.RemoveAt(index--);
+        }
+
+        // Drops the loss history of packets sent before time, or also at it when inclusive.
+        private void ForgetLosses(double time, bool inclusive)
+        {
+            var kept = 0;
+
+            for (var index = 0; index < _lostHistory.Count; index++)
+            {
+                var packet = _lostHistory[index];
+
+                if (inclusive ? packet.Time > time : packet.Time >= time) _lostHistory[kept++] = packet;
+            }
+
+            _lostHistory.RemoveRange(kept, _lostHistory.Count - kept);
+        }
+
+        private void Acknowledge(
+            List<Sent> acknowledged,
+            int level,
+            ulong largest,
+            double delay,
+            double now,
+            bool elicitingLate
+        )
+        {
+            _largestAcknowledged[level] = Math.Max(_largestAcknowledged[level] ?? 0, largest);
+            Sent? sample = null;
+            var eliciting = false;
+
+            foreach (var packet in acknowledged)
+            {
+                if (packet.Epoch != _epoch) continue;
+
+                if (sample == null && packet.Number == largest) sample = packet;
+
+                eliciting |= packet.Eliciting;
+            }
+
+            if (sample != null && eliciting)
             {
                 var elapsed = Math.Max(now - sample.Time, 0.001);
                 _latestRtt = elapsed;
@@ -214,17 +498,18 @@ namespace EmbedIO.Quic
                 }
             }
 
+            var sent = _sent[level];
+
             foreach (var packet in acknowledged)
             {
-                _sent.Remove((packet.Level, packet.Number));
+                sent.Remove(packet, PacketState.Released);
 
                 if (packet.InFlight && packet.Epoch == _epoch) BytesInFlight -= packet.Size;
 
-                packet.Delivery.Acknowledged = true;
+                packet.Acknowledge();
 
+                // An outstanding packet was never declared lost, so no loss history names it.
                 if (packet.Epoch == _epoch) _acknowledgedTimes.Add(packet.Time);
-
-                _lostHistory.RemoveAll(p => p.Level == packet.Level && p.Number == packet.Number);
 
                 if (
                     packet.Epoch == _epoch
@@ -237,10 +522,7 @@ namespace EmbedIO.Quic
                         : MaximumPacket * (double)packet.Size / CongestionWindow;
             }
 
-            if (
-                acknowledged.Any(p => p.Epoch == _epoch && p.Delivery.Eliciting)
-                || late.Any(p => p.Epoch == _epoch && p.Delivery.Eliciting)
-            )
+            if (eliciting || elicitingLate)
             {
                 _ptoCount = 0;
                 _lastTimeout = -1;
@@ -254,58 +536,10 @@ namespace EmbedIO.Quic
                 // crossing this time. Retire both sides of that known barrier.
                 _historyFloor = Math.Max(_historyFloor, _acknowledgedTimes[remove - 1]);
                 _acknowledgedTimes.RemoveRange(0, remove);
-                _lostHistory.RemoveAll(packet => packet.Time <= _historyFloor);
+                ForgetLosses(_historyFloor, true);
             }
 
             DetectLost(now);
-        }
-
-        private static bool Descending(IReadOnlyList<(ulong Low, ulong High)> ranges)
-        {
-            var previous = ranges[0].Low;
-
-            for (var index = 1; index < ranges.Count; index++)
-            {
-                var (low, high) = ranges[index];
-
-                if (high >= previous) return false;
-
-                previous = low;
-            }
-
-            return true;
-        }
-
-        private static bool Contains(IReadOnlyList<(ulong Low, ulong High)> ranges, ulong number, bool descending)
-        {
-            if (!descending)
-            {
-                for (var index = 0; index < ranges.Count; index++)
-                {
-                    var (low, high) = ranges[index];
-
-                    if (number >= low && number <= high) return true;
-                }
-
-                return false;
-            }
-
-            var first = 0;
-            var last = ranges.Count - 1;
-
-            while (first <= last)
-            {
-                var middle = first + (last - first) / 2;
-                var (low, high) = ranges[middle];
-
-                if (number > high) last = middle - 1;
-
-                else if (number < low) first = middle + 1;
-
-                else return true;
-            }
-
-            return false;
         }
 
         private double LossDelay => Math.Max(1, 1.125 * Math.Max(_latestRtt, _smoothedRtt));
@@ -320,67 +554,157 @@ namespace EmbedIO.Quic
 
             if (DetectLost(now)) return;
 
-            var candidates = _sent.Values
-                .Where(p => p.Delivery.Eliciting && !_discarded[p.Level] && (p.Level != 2 || HandshakeConfirmed))
-                .ToArray();
+            // The packet number space whose probe timeout comes first, among those with packets
+            // that can be probed; ties go to the earlier space, as in RFC 9002's
+            // GetPtoTimeAndSpace.
+            var level = -1;
+            var earliest = double.PositiveInfinity;
 
-            if (candidates.Length == 0) return;
+            for (var space = 0; space < 3; space++)
+            {
+                if (_sent[space].Eliciting == 0 || _discarded[space] || (space == 2 && !HandshakeConfirmed)) continue;
 
-            var earliest = candidates
-                .OrderBy(p => _lastEliciting[p.Level] + Pto(p.Level))
-                .First();
-            var deadline = Math.Max(_lastEliciting[earliest.Level], _lastTimeout) + Pto(earliest.Level);
+                var timeout = _lastEliciting[space] + Pto(space);
+
+                if (level < 0 || timeout < earliest)
+                {
+                    level = space;
+                    earliest = timeout;
+                }
+            }
+
+            if (level < 0) return;
+
+            var deadline = Math.Max(_lastEliciting[level], _lastTimeout) + Pto(level);
 
             if (now < deadline) return;
 
             _lastTimeout = now;
             _ptoCount++;
             ProbeTimeouts++;
-            var deliveries = candidates
-                .Where(p => p.Level == earliest.Level && p.Delivery.Reliable && !p.Delivery.Acknowledged)
-                .OrderBy(p => p.Time)
-                .Select(p => p.Delivery)
-                .Distinct()
-                .Take(2)
-                .ToArray();
+            // The probe repeats the oldest two unacknowledged reliable frames of the space.
+            Delivery? first = null;
+            Delivery? second = null;
+            var sent = _sent[level];
 
-            foreach (var delivery in deliveries) _repeat(delivery, true);
+            for (var index = sent.Start; index < sent.End && second == null; index++)
+            {
+                var packet = sent[index];
 
-            if (deliveries.Length == 0) _repeat(new Delivery(earliest.Level, Wire.Frame(1)), true);
+                if (!sent.Holds(packet) || !packet.Eliciting) continue;
+
+                Probe(packet.Delivery, ref first, ref second);
+
+                if (packet.Joined != null)
+                    foreach (var delivery in packet.Joined) Probe(delivery, ref first, ref second);
+            }
+
+            if (first == null)
+            {
+                _repeat(new Delivery(level, Wire.Frame(1)), true);
+                return;
+            }
+
+            _repeat(first, true);
+
+            if (second != null) _repeat(second, true);
         }
+
+        private static void Probe(Delivery delivery, ref Delivery? first, ref Delivery? second)
+        {
+            if (!delivery.Reliable || delivery.Acknowledged || second != null || ReferenceEquals(delivery, first))
+                return;
+
+            if (first == null) first = delivery;
+
+            else second = delivery;
+        }
+
+        private void Repeat(Delivery delivery)
+        {
+            if (delivery.Reliable && !delivery.Acknowledged) _repeat(delivery, false);
+        }
+
+        // Packets declared lost, from DetectLost.
+        private readonly List<Sent> _lost = [];
 
         private bool DetectLost(double now)
         {
-            var lost = _sent.Values
-                .Where(
-                    p => _largestAcknowledged[p.Level].HasValue
-                        && p.Number <= _largestAcknowledged[p.Level]
-                        && (p.Number + 3 <= _largestAcknowledged[p.Level] || p.Time + LossDelay <= now)
-                )
-                .ToArray();
+            var lost = _lost;
+            var lossDelay = LossDelay;
 
-            if (lost.Length == 0) return false;
+            // Only outstanding packets below the largest acknowledged one can be lost, and the
+            // acknowledged ones among them have left the list.
+            for (
+                var level = 0;
+                level < 3;
+                level++
+            )
+            {
+                if (_largestAcknowledged[level] is not { } largest) continue;
+
+                var sent = _sent[level];
+
+                for (var index = sent.Start; index < sent.End; index++)
+                {
+                    var packet = sent[index];
+
+                    if (packet.Number > largest) break;
+
+                    if (sent.Holds(packet) && (packet.Number + 3 <= largest || packet.Time + lossDelay <= now))
+                        lost.Add(packet);
+                }
+            }
+
+            if (lost.Count == 0) return false;
+
+            try
+            {
+                Lose(lost, now);
+            }
+
+            finally
+            {
+                lost.Clear();
+            }
+
+            return true;
+        }
+
+        private void Lose(List<Sent> lost, double now)
+        {
+            var reduce = false;
 
             foreach (var packet in lost)
             {
-                _sent.Remove((packet.Level, packet.Number));
+                _sent[packet.Level].Remove(packet, PacketState.Retired);
 
                 if (packet.InFlight && packet.Epoch == _epoch) BytesInFlight -= packet.Size;
 
                 LostPackets++;
+                _retired[packet.Level].Add(packet);
+                _retiredOrder.Enqueue(packet);
 
-                _retired.Add((packet.Level, packet.Number), packet);
-                _retiredOrder.Enqueue((packet.Level, packet.Number));
+                while (_retiredOrder.Count > _retiredLimit)
+                {
+                    var oldest = _retiredOrder.Dequeue();
 
-                while (_retiredOrder.Count > _retiredLimit) _retired.Remove(_retiredOrder.Dequeue());
+                    if (oldest.State == PacketState.Retired)
+                        _retired[oldest.Level].Remove(oldest, PacketState.Released);
+                }
 
-                if (packet.Epoch == _epoch && packet.Delivery.Eliciting && packet.Time > _historyFloor)
+                if (packet.Epoch == _epoch && packet.Eliciting && packet.Time > _historyFloor)
                     _lostHistory.Add(packet);
 
-                if (packet.Delivery.Reliable && !packet.Delivery.Acknowledged) _repeat(packet.Delivery, false);
+                Repeat(packet.Delivery);
+
+                if (packet.Joined != null)
+                    foreach (var delivery in packet.Joined) Repeat(delivery);
+
+                reduce |= packet.Epoch == _epoch && packet.InFlight && packet.Time > _recoveryStart;
             }
 
-            if (lost.Any(p => p.Epoch == _epoch && p.InFlight && p.Time > _recoveryStart))
+            if (reduce)
             {
                 _recoveryStart = now;
                 CongestionWindow = Math.Max(2 * MaximumPacket, CongestionWindow / 2);
@@ -390,38 +714,81 @@ namespace EmbedIO.Quic
 
             // Acknowledged packets break a persistent-congestion interval. Retain
             // bounded history across detection passes and packet number spaces.
-            _lostHistory.RemoveAll(p => p.Time < _firstSample);
+            ForgetLosses(_firstSample, false);
 
             if (_lostHistory.Count > 4096) _lostHistory.RemoveRange(0, _lostHistory.Count - 4096);
 
-            var acknowledgments = _acknowledgedTimes
-                .Order()
-                .ToArray();
+            DetectPersistentCongestion();
+        }
+
+        // Send times of the lost packets, from DetectPersistentCongestion.
+        private readonly List<double> _lossTimes = [];
+
+        private void DetectPersistentCongestion()
+        {
+            var duration = 3 * (_smoothedRtt + Math.Max(4 * _variation, 1) + MaximumAckDelay);
+            var earliest = double.PositiveInfinity;
+            var latest = double.NegativeInfinity;
+
+            foreach (var packet in _lostHistory)
+            {
+                earliest = Math.Min(earliest, packet.Time);
+                latest = Math.Max(latest, packet.Time);
+            }
+
+            // Without losses spanning the duration, no interval can qualify.
+            if (latest - earliest < duration) return;
+
+            // Sorting in place is safe: trimming sorts these times too, and nothing else depends
+            // on their order.
+            _acknowledgedTimes.Sort();
+            var times = _lossTimes;
+
+            foreach (var packet in _lostHistory) times.Add(packet.Time);
+
+            times.Sort();
             var cursor = 0;
             double? firstLost = null;
             var previous = double.NegativeInfinity;
 
-            foreach (var packet in _lostHistory.OrderBy(p => p.Time))
+            try
             {
-                while (cursor < acknowledgments.Length && acknowledgments[cursor] <= packet.Time)
+                foreach (var time in times)
                 {
-                    if (acknowledgments[cursor] >= previous) firstLost = null;
+                    while (cursor < _acknowledgedTimes.Count && _acknowledgedTimes[cursor] <= time)
+                    {
+                        if (_acknowledgedTimes[cursor] >= previous) firstLost = null;
 
-                    cursor++;
+                        cursor++;
+                    }
+
+                    firstLost ??= time;
+                    previous = time;
+                    var first = firstLost.Value;
+
+                    if (time - first >= duration && !Outstanding(first, time)) CongestionWindow = 2 * MaximumPacket;
                 }
-
-                firstLost ??= packet.Time;
-                previous = packet.Time;
-                var first = firstLost.Value;
-
-                if (
-                    packet.Time - first >= 3 * (_smoothedRtt + Math.Max(4 * _variation, 1) + MaximumAckDelay)
-                    && !_sent.Values.Any(p => p.Epoch == _epoch && p.Time >= first && p.Time <= packet.Time)
-                )
-                    CongestionWindow = 2 * MaximumPacket;
             }
 
-            return true;
+            finally
+            {
+                times.Clear();
+            }
+        }
+
+        // Whether a packet sent on the current path between from and to is still outstanding.
+        private bool Outstanding(double from, double to)
+        {
+            foreach (var sent in _sent)
+                for (var index = sent.Start; index < sent.End; index++)
+                {
+                    var packet = sent[index];
+
+                    if (sent.Holds(packet) && packet.Epoch == _epoch && packet.Time >= from && packet.Time <= to)
+                        return true;
+                }
+
+            return false;
         }
 
         internal void ChangePath(double now)
@@ -448,8 +815,10 @@ namespace EmbedIO.Quic
 
         internal void Abandon()
         {
-            _sent.Clear();
-            _retired.Clear();
+            foreach (var sent in _sent) sent.Clear(PacketState.Released);
+
+            foreach (var retired in _retired) retired.Clear(PacketState.Released);
+
             _retiredOrder.Clear();
             _lostHistory.Clear();
             _acknowledgedTimes.Clear();
@@ -459,22 +828,18 @@ namespace EmbedIO.Quic
         internal void Discard(int level)
         {
             _discarded[level] = true;
+            var sent = _sent[level];
 
-            foreach (var packet in _sent.Values
-                .Where(p => p.Level == level)
-                .ToArray())
+            for (var index = sent.Start; index < sent.End; index++)
             {
-                if (packet.InFlight && packet.Epoch == _epoch) BytesInFlight -= packet.Size;
+                var packet = sent[index];
 
-                _sent.Remove((level, packet.Number));
+                if (sent.Holds(packet) && packet.InFlight && packet.Epoch == _epoch) BytesInFlight -= packet.Size;
             }
 
-            foreach (var packet in _retired.Values
-                .Where(p => p.Level == level)
-                .ToArray())
-                _retired.Remove((packet.Level, packet.Number));
-
-            _lostHistory.RemoveAll(p => p.Level == level);
+            sent.Clear(PacketState.Released);
+            _retired[level].Clear(PacketState.Released);
+            _lostHistory.RemoveAll(packet => packet.Level == level);
             _ptoCount = 0;
             _lastTimeout = -1;
         }

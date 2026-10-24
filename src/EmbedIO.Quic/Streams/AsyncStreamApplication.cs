@@ -32,6 +32,7 @@ namespace EmbedIO.Quic
             ArgumentNullException.ThrowIfNull(operations);
             _operations = operations;
             _wake = wake;
+            _streamReady = StreamReady;
             _accepted = Channel.CreateBounded<AsyncQuicStream>(new BoundedChannelOptions(
                 operations.InboundStreamCapacity
             )
@@ -115,6 +116,16 @@ namespace EmbedIO.Quic
         private readonly object _gate = new();
         private readonly Dictionary<ulong, AsyncQuicStream> _streams = [];
         private readonly List<OpenRequest> _opening = [];
+
+        // Poll visits only the streams that reported work, and those whose writes still
+        // wait for connection credit. _queued is guarded by _queueGate; the other lists
+        // belong to the connection owner.
+        private readonly object _queueGate = new();
+        private readonly List<AsyncQuicStream> _queued = [];
+        private readonly List<AsyncQuicStream> _waiting = [];
+        private readonly List<AsyncQuicStream> _polling = [];
+        private readonly List<OpenRequest> _openingPass = [];
+        private readonly Action<AsyncQuicStream> _streamReady;
         private readonly Queue<byte[]> _datagrams = new();
         private readonly Channel<byte> _ready = Channel.CreateBounded<byte>(new BoundedChannelOptions(1)
         {
@@ -179,6 +190,18 @@ namespace EmbedIO.Quic
             _wake?.Invoke();
         }
 
+        private void StreamReady(AsyncQuicStream stream)
+        {
+            lock (_queueGate)
+                if (!stream.Queued)
+                {
+                    stream.Queued = true;
+                    _queued.Add(stream);
+                }
+
+            Notify();
+        }
+
         private void CheckOpen()
         {
             if (_failure != null) throw _failure;
@@ -212,7 +235,7 @@ namespace EmbedIO.Quic
             if (_streams.Count >= _operations.StreamCapacity)
                 throw new InvalidDataException("Async stream owner limit exceeded.");
 
-            stream = new AsyncQuicStream(id, Notify);
+            stream = new AsyncQuicStream(id, _streamReady);
             _streams.Add(id, stream);
 
             if ((id & 1) == 0 && !_accepted.Writer.TryWrite(stream))
@@ -224,6 +247,9 @@ namespace EmbedIO.Quic
         internal override void Open(ulong id) => _ = GetInboundStream(id);
 
         internal override void Stream(ulong id, byte[] bytes, bool fin) => GetInboundStream(id)?.Receive(bytes, fin);
+
+        internal override void Stream(ulong id, ReadOnlySpan<byte> bytes, bool fin) =>
+            GetInboundStream(id)?.Deliver(bytes, fin);
 
         internal override void Reset(ulong id, ulong error, ulong reliableSize) =>
             GetInboundStream(id)?.PeerReset(error, reliableSize);
@@ -400,31 +426,78 @@ namespace EmbedIO.Quic
             // cannot postpone processing the bounded work represented by it.
             _ready.Reader.TryRead(out _);
 
-            OpenRequest[] opening;
-            AsyncQuicStream[] streams;
+            var opening = _openingPass;
             ulong? close;
 
             lock (_gate)
             {
                 if (_failure != null) return;
 
-                opening = [.. _opening];
-                streams = [.. _streams.Values];
+                opening.AddRange(_opening);
                 close = _closeCode;
             }
 
-            if (close.HasValue)
+            try
             {
-                (_operations.Close ?? throw new InvalidOperationException("Missing close callback."))(close.Value);
-                FailAll(new QuicConnectionFailure(close.Value, true, false));
-                return;
+                if (close.HasValue)
+                {
+                    (_operations.Close ?? throw new InvalidOperationException("Missing close callback."))(close.Value);
+                    FailAll(new QuicConnectionFailure(close.Value, true, false));
+                    return;
+                }
+
+                foreach (var request in opening)
+                    if (request.TryOpen(_operations, GetStream))
+                        lock (_gate) _opening.Remove(request);
             }
 
-            foreach (var request in opening)
-                if (request.TryOpen(_operations, GetStream))
-                    lock (_gate) _opening.Remove(request);
+            finally
+            {
+                opening.Clear();
+            }
 
-            foreach (var stream in streams) stream.Process(_operations);
+            // Streams still waiting for credit go first, then those that reported work.
+            var streams = _polling;
+
+            foreach (var stream in _waiting)
+            {
+                stream.Polling = true;
+                streams.Add(stream);
+            }
+
+            _waiting.Clear();
+
+            lock (_queueGate)
+            {
+                foreach (var stream in _queued)
+                {
+                    stream.Queued = false;
+
+                    if (stream.Polling) continue;
+
+                    stream.Polling = true;
+                    streams.Add(stream);
+                }
+
+                _queued.Clear();
+            }
+
+            try
+            {
+                foreach (var stream in streams)
+                {
+                    stream.Polling = false;
+
+                    if (stream.Process(_operations)) _waiting.Add(stream);
+                }
+            }
+
+            finally
+            {
+                foreach (var stream in streams) stream.Polling = false;
+
+                streams.Clear();
+            }
 
             for (var index = 0; index < 8; index++)
             {
@@ -457,6 +530,13 @@ namespace EmbedIO.Quic
                 _streams.Clear();
                 _opening.Clear();
                 _datagrams.Clear();
+            }
+
+            lock (_queueGate)
+            {
+                foreach (var stream in _queued) stream.Queued = false;
+
+                _queued.Clear();
             }
 
             foreach (var stream in streams) stream.CloseConnection(error);

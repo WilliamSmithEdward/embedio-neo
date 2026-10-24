@@ -64,6 +64,10 @@ namespace EmbedIO.Net.Internal.Http3
 
         internal virtual void EnableApplicationBodyCancellation(CancellationToken requestCancellation) { }
 
+        // A request stream keeps its place against the peer's stream limit until its worker
+        // disposes it, so requests still in the application count against that limit.
+        internal virtual void RetainUntilDisposed() { }
+
         internal abstract ValueTask WriteAsync(
             ReadOnlyMemory<byte> buffer,
             bool completeWrites,

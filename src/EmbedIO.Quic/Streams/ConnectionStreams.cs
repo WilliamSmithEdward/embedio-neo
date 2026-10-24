@@ -35,7 +35,14 @@ namespace EmbedIO.Quic
             internal long? PendingReset;
             internal Delivery? FinalDelivery;
 
-            internal List<(Delivery Delivery, ulong End)> Deliveries { get; } = [];
+            internal Queue<(Delivery Delivery, ulong End)> Deliveries { get; } = new();
+
+            // Frames are acknowledged mostly in the order they were sent, so dropping the
+            // acknowledged ones at the front keeps the queue short without a pass over it.
+            internal void ForgetAcknowledged()
+            {
+                while (Deliveries.TryPeek(out var item) && item.Delivery.Acknowledged) Deliveries.Dequeue();
+            }
         }
 
         private sealed class Write(ulong id, byte[] bytes, bool fin)
@@ -57,6 +64,13 @@ namespace EmbedIO.Quic
         private readonly Dictionary<ulong, Incoming> _incoming = [];
         private readonly Dictionary<ulong, Outgoing> _outgoing = [];
         private readonly List<Write> _writes = [];
+
+        // Flush's streams without credit; reused because every drain flushes.
+        private readonly HashSet<ulong> _blocked = [];
+
+        // Stream data per frame. A 1-RTT packet with a 20-byte connection ID, the largest
+        // STREAM frame header and the AEAD tag stays within the 1,200 bytes every path carries.
+        private const int MaximumChunk = 1100;
         private readonly Func<byte[], bool, Delivery> _transmit;
         private readonly ulong _localBidiCredit;
         private readonly ulong _remoteBidiCredit;
@@ -101,9 +115,11 @@ namespace EmbedIO.Quic
             Func<int, bool>? canQueue = null,
             Action<ulong>? close = null,
             int inboundBidirectionalStreams = 16,
-            int inboundUnidirectionalStreams = 16
+            int inboundUnidirectionalStreams = 16,
+            bool deferCredit = false
         )
         {
+            _deferCredit = deferCredit;
             _incomingBidi = new StreamCountWindow(inboundBidirectionalStreams);
             _incomingUni = new StreamCountWindow(inboundUnidirectionalStreams);
             _transmit = transmit;
@@ -145,6 +161,15 @@ namespace EmbedIO.Quic
 
             var window = (id & 1) != 0 ? _localBidi : (id & 2) == 0 ? _incomingBidi : _incomingUni;
 
+            // With deferred credit the window can have room the peer was not granted yet. A
+            // stream past the grant is still a STREAM_LIMIT_ERROR (RFC 9000 section 4.6).
+            if (
+                _deferCredit
+                && (id & 1) == 0
+                && id / 4 >= Math.Max((id & 2) == 0 ? _grantedBidi : _grantedUni, (ulong)window.Capacity)
+            )
+                throw new TransportException(0x04, "Incoming stream count exceeded.");
+
             if (!window.Open(id / 4)) return null;
 
             if (!_incoming.TryGetValue(id, out var input))
@@ -165,7 +190,7 @@ namespace EmbedIO.Quic
             input.Extent = Math.Max(extent, input.Extent);
         }
 
-        internal void Receive(ulong id, ulong offset, byte[] bytes, bool fin)
+        internal void Receive(ulong id, ulong offset, ReadOnlySpan<byte> bytes, bool fin)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -183,8 +208,28 @@ namespace EmbedIO.Quic
             }
 
             Account(input, offset + (ulong)bytes.Length);
-            input.Buffer.Add(offset, bytes, fin);
-            Deliver(id, input);
+
+            // In-order data on a stream still being read goes to the application directly.
+            if (
+                !input.Terminal
+                && !input.ReadStopped
+                && !input.ResetError.HasValue
+                && input.Buffer.TryPass(offset, bytes, fin, out var delivered)
+            )
+            {
+                var complete = input.Buffer.Complete;
+
+                if (delivered.Length != 0 || complete) Protocol.Stream(id, delivered, complete);
+
+                input.Terminal = complete;
+            }
+
+            else
+            {
+                input.Buffer.Add(offset, bytes, fin);
+                Deliver(id, input);
+            }
+
             Prune();
         }
 
@@ -381,8 +426,73 @@ namespace EmbedIO.Quic
 
             if (_writes.Count >= 128 || bytes.Length > 262144 - _queuedBytes || !_canQueue(bytes.Length)) return false;
 
-            SendStream(id, bytes.ToArray(), fin);
+            var data = bytes.Span;
+            var sent = 0;
+
+            // With no earlier write of the stream waiting, frames are cut from the caller's bytes
+            // at once, and only what credit holds back is copied for Flush. Flush has already had
+            // its turn with the credit, as Prune runs it before the application's writes.
+            if (data.Length != 0 && StreamAllowed(id) && !HasQueuedWrite(id))
+            {
+                while (sent < data.Length)
+                {
+                    var count = (int)Math.Min(MaximumChunk, Math.Min((ulong)(data.Length - sent), Credit(output)));
+
+                    if (count == 0 || !_canQueue(count)) break;
+
+                    SendFrame(id, output, data[sent..], count, fin);
+                    sent += count;
+                }
+
+                if (sent == data.Length)
+                {
+                    output.Ended = fin;
+                    return true;
+                }
+            }
+
+            SendStream(id, data[sent..].ToArray(), fin);
             return true;
+        }
+
+        private bool HasQueuedWrite(ulong id)
+        {
+            foreach (var write in _writes)
+                if (write.Id == id) return true;
+
+            return false;
+        }
+
+        // Whether the peer's stream limit lets stream id carry data yet.
+        private bool StreamAllowed(ulong id) => (id & 1) == 0 || id / 4 < ((id & 2) != 0 ? _maxUni : _maxBidi);
+
+        // The bytes the stream and connection flow-control limits let the stream send now.
+        private ulong Credit(Outgoing output) =>
+            Math.Min(_peerData - _sentData, output.Credit - Math.Min(output.Credit, output.Offset));
+
+        // Sends the first count bytes of data as a STREAM frame at the stream's offset, with FIN
+        // when they end data and fin is set.
+        private void SendFrame(ulong id, Outgoing output, ReadOnlySpan<byte> data, int count, bool fin)
+        {
+            var end = count == data.Length && fin;
+            var frame = new byte[1
+                + Wire.IntegerLength(id)
+                + Wire.IntegerLength(output.Offset)
+                + Wire.IntegerLength((ulong)count)
+                + count];
+            frame[0] = end ? (byte)15 : (byte)14;
+            var length = 1 + Wire.Integer(frame.AsSpan(1), id);
+            length += Wire.Integer(frame.AsSpan(length), output.Offset);
+            length += Wire.Integer(frame.AsSpan(length), (ulong)count);
+            data[..count].CopyTo(frame.AsSpan(length));
+            output.ForgetAcknowledged();
+            var delivery = _transmit(frame, true);
+            output.Deliveries.Enqueue((delivery, output.Offset + (ulong)count));
+
+            if (end) output.FinalDelivery = delivery;
+
+            output.Offset += (ulong)count;
+            _sentData += (ulong)count;
         }
 
         private ulong? OpenLocal(bool unidirectional)
@@ -441,14 +551,17 @@ namespace EmbedIO.Quic
 
         private void Flush()
         {
-            var blocked = new HashSet<ulong>();
+            if (_writes.Count == 0) return;
+
+            var blocked = _blocked;
+            blocked.Clear();
 
             for (var i = 0; i < _writes.Count;)
             {
                 var write = _writes[i];
                 var output = _outgoing[write.Id];
 
-                if (blocked.Contains(write.Id))
+                if (blocked.Count != 0 && blocked.Contains(write.Id))
                 {
                     i++;
                     continue;
@@ -461,36 +574,22 @@ namespace EmbedIO.Quic
                     continue;
                 }
 
-                var streamAllowed = (write.Id & 1) == 0 || write.Id / 4 < ((write.Id & 2) != 0 ? _maxUni : _maxBidi);
-                var credit = Math.Min(_peerData - _sentData, output.Credit - Math.Min(output.Credit, output.Offset));
+                var credit = Credit(output);
                 var remaining = write.Bytes.Length - write.Position;
 
-                if (!streamAllowed || remaining != 0 && credit == 0)
+                if (!StreamAllowed(write.Id) || remaining != 0 && credit == 0)
                 {
                     blocked.Add(write.Id);
                     i++;
                     continue;
                 }
 
-                var count = (int)Math.Min(900, Math.Min((ulong)remaining, credit));
+                var count = (int)Math.Min(MaximumChunk, Math.Min((ulong)remaining, credit));
                 var end = write.Position + count == write.Bytes.Length;
 
                 if (!_canQueue(count)) return;
 
-                using var frame = new MemoryStream();
-                Wire.Integer(frame, end && write.Fin ? 15UL : 14UL);
-                Wire.Integer(frame, write.Id);
-                Wire.Integer(frame, output.Offset);
-                Wire.Integer(frame, (ulong)count);
-                frame.Write(write.Bytes, write.Position, count);
-                output.Deliveries.RemoveAll(item => item.Delivery.Acknowledged);
-                var delivery = _transmit(frame.ToArray(), true);
-                output.Deliveries.Add((delivery, output.Offset + (ulong)count));
-
-                if (end && write.Fin) output.FinalDelivery = delivery;
-
-                output.Offset += (ulong)count;
-                _sentData += (ulong)count;
+                SendFrame(write.Id, output, write.Bytes.AsSpan(write.Position), count, write.Fin);
                 _queuedBytes -= count;
                 write.Position += count;
 
@@ -612,36 +711,62 @@ namespace EmbedIO.Quic
             Flush();
             Protocol.Poll();
 
-            foreach (var pair in _outgoing.ToArray())
+            // Retiring removes streams from the dictionaries, so each pass works on a copy.
+            var outgoing = _pruning;
+            outgoing.AddRange(_outgoing);
+
+            try
             {
-                var output = pair.Value;
-                output.Deliveries.RemoveAll(item => item.Delivery.Acknowledged);
-
-                if (!output.Ended || output.FinalDelivery?.Acknowledged != true) continue;
-
-                if (!output.CompletionNotified)
+                foreach (var pair in outgoing)
                 {
-                    output.CompletionNotified = true;
-                    Protocol.WritesClosed(pair.Key);
-                }
+                    var output = pair.Value;
+                    output.ForgetAcknowledged();
 
-                if ((pair.Key & 3) == 3)
-                {
-                    _localUni.Retire(pair.Key / 4);
-                    _outgoing.Remove(pair.Key);
-                    Protocol.Retire(pair.Key);
-                    RetiredStreams++;
-                }
+                    if (!output.Ended || output.FinalDelivery?.Acknowledged != true) continue;
 
-                else if (_incoming.TryGetValue(pair.Key, out var input) && CanRetire(pair.Key, input))
-                    RetireIncoming(pair.Key, input);
+                    if (!output.CompletionNotified)
+                    {
+                        output.CompletionNotified = true;
+                        Protocol.WritesClosed(pair.Key);
+                    }
+
+                    if ((pair.Key & 3) == 3)
+                    {
+                        _localUni.Retire(pair.Key / 4);
+                        _outgoing.Remove(pair.Key);
+                        Protocol.Retire(pair.Key);
+                        RetiredStreams++;
+                    }
+
+                    else if (_incoming.TryGetValue(pair.Key, out var input) && CanRetire(pair.Key, input))
+                        RetireIncoming(pair.Key, input);
+                }
             }
 
-            foreach (var pair in _incoming
-                .Where(pair => (pair.Key & 2) != 0)
-                .ToArray())
-                if (CanRetire(pair.Key, pair.Value)) RetireIncoming(pair.Key, pair.Value);
+            finally
+            {
+                outgoing.Clear();
+            }
+
+            var incoming = _pruningIncoming;
+
+            foreach (var pair in _incoming)
+                if ((pair.Key & 2) != 0) incoming.Add(pair);
+
+            try
+            {
+                foreach (var pair in incoming)
+                    if (CanRetire(pair.Key, pair.Value)) RetireIncoming(pair.Key, pair.Value);
+            }
+
+            finally
+            {
+                incoming.Clear();
+            }
         }
+
+        private readonly List<KeyValuePair<ulong, Outgoing>> _pruning = [];
+        private readonly List<KeyValuePair<ulong, Incoming>> _pruningIncoming = [];
 
         private bool CanRetire(ulong id, Incoming input) =>
             input.Terminal && input.Released == input.Extent && Protocol.CanRetire(id);
@@ -663,9 +788,43 @@ namespace EmbedIO.Quic
             _outgoing.Remove(id);
             Protocol.Retire(id);
 
-            if ((id & 1) == 0) _transmit(Wire.Frame((id & 2) == 0 ? 0x12UL : 0x13UL, window.Maximum), true);
+            if ((id & 1) == 0 && !_deferCredit)
+                _transmit(Wire.Frame((id & 2) == 0 ? 0x12UL : 0x13UL, window.Maximum), true);
 
             RetiredStreams++;
+        }
+
+        private readonly bool _deferCredit;
+
+        // The stream counts last granted to the peer: its initial limits, then MAX_STREAMS.
+        private ulong _grantedBidi;
+        private ulong _grantedUni;
+
+        // With deferred credit, MAX_STREAMS (RFC 9000 section 19.11) for streams the peer has
+        // retired goes out with other frames, so it shares their packet, or on its own once the
+        // peer has fewer than half its streams left to open. One frame per direction carries
+        // every retirement. Otherwise each retirement sends its own frame at once.
+        internal void AdvertiseCredit(bool withOtherFrames)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (!_deferCredit) return;
+
+            Advertise(_incomingBidi, ref _grantedBidi, 0x12, withOtherFrames);
+            Advertise(_incomingUni, ref _grantedUni, 0x13, withOtherFrames);
+        }
+
+        private void Advertise(StreamCountWindow window, ref ulong granted, ulong type, bool withOtherFrames)
+        {
+            granted = Math.Max(granted, (ulong)window.Capacity);
+            var maximum = window.Maximum;
+
+            if (maximum <= granted) return;
+
+            if (!withOtherFrames && granted - Math.Min(granted, window.Opened) >= (ulong)window.Capacity / 2) return;
+
+            granted = maximum;
+            _transmit(Wire.Frame(type, maximum), true);
         }
 
         private int? DatagramLimit()

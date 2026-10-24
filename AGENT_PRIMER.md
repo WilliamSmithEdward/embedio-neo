@@ -1075,6 +1075,10 @@ warm small HTTP/3 request costs EmbedIO.Quic 2 to 6 times Kestrel's CPU. Source 
 2.17.0 (unreleased) reuses each certificate's TLS credential, which cut a second
 HTTP/3 connection from 7.4 to 6.1 ms on Windows and from 9.0 to 5.8 ms on Linux; see
 [per-certificate TLS credentials](docs/project/quic-development-and-testing.md#per-certificate-tls-credentials).
+The unreleased [socket loop and per-request cost](docs/project/quic-development-and-testing.md#socket-loop-and-per-request-cost)
+change cuts the per-datagram and per-request cost. Against main on Windows and Linux,
+small HTTP/3 requests ran at 3.6 to 7.3 times the rate with 13 to 26 percent of the
+server CPU per request, and 1 MiB transfers at 1.9 to 3.1 times the rate.
 
 ### Response-pipeline validation (2.3.0 source tree)
 

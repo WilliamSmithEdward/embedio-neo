@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Buffers;
+using System.Security.Cryptography;
 
 namespace EmbedIO.Quic
 {
@@ -12,6 +13,8 @@ namespace EmbedIO.Quic
             await MailboxOwnershipAsync().ConfigureAwait(false);
             await DeferredCleanupAsync().ConfigureAwait(false);
             await RejectedInitialAsync().ConfigureAwait(false);
+            await RentedBudgetAsync().ConfigureAwait(false);
+            await LateTurnAsync().ConfigureAwait(false);
             Mutate([0]);
             Mutate([1, 255, 6]);
             Mutate([6, 0, 1, 255]);
@@ -62,7 +65,7 @@ namespace EmbedIO.Quic
                     "execution-packet-identity"
                 ),
                 packetCapacity: 2,
-                byteCapacity: first.Length + second.Length
+                byteCapacity: Rented(first.Length) + Rented(second.Length)
             );
             QuicFuzzChecks.Require(owner.Receive(first) && owner.Receive(second), "execution-packet-admission");
             var finished = await Task
@@ -223,14 +226,14 @@ namespace EmbedIO.Quic
                     if (Interlocked.Increment(ref publications) == 2) completed.TrySetResult();
                 },
                 packetCapacity: 2,
-                byteCapacity: first.Length + second.Length
+                byteCapacity: Rented(first.Length) + Rented(second.Length)
             );
 
             try
             {
                 Check(owner.Receive(first) && tls.Entered.Wait(TimeSpan.FromSeconds(10)), "first packet executes");
                 Check(
-                    owner.PendingPackets == 1 && owner.PendingBytes == first.Length,
+                    owner.PendingPackets == 1 && owner.PendingBytes == Rented(first.Length),
                     "active packet counts toward memory budget"
                 );
                 Check(owner.Receive(second), "second packet admitted");
@@ -344,6 +347,126 @@ namespace EmbedIO.Quic
                 factories == 0 && pool.Active == 0 && owner.PendingBytes == 0,
                 "failed authentication releases admission without TLS"
             );
+        }
+
+        // The mailbox charges the array it rents for each copy, so datagrams just past a power
+        // of two cannot make it hold nearly twice its byte budget.
+        private static async Task RentedBudgetAsync()
+        {
+            await using var pool = new QuicExecutionPool(1, 1);
+            using var entered = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var tls = new BlockingTls(entered, release);
+            using var keys = PacketKeys.Initial(Original, false);
+            var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
+            var owner = new QuicConnectionOwner(
+                pool,
+                (packet, now) => new QuicConnection(
+                    packet,
+                    _ => tls,
+                    static (port, _) => new StreamEchoApplication(port),
+                    now
+                ),
+                static () => 0,
+                static _ => { }
+            );
+
+            try
+            {
+                Check(owner.Receive(first) && tls.Entered.Wait(TimeSpan.FromSeconds(10)), "budget turn holds");
+                var large = new byte[33 * 1024];
+                var admitted = 0;
+
+                while (owner.Receive(large)) admitted++;
+
+                Check(
+                    admitted == (262144 - Rented(first.Length)) / Rented(large.Length)
+                        && owner.PendingBytes <= 262144,
+                    "rented copies count against the byte budget"
+                );
+            }
+
+            finally
+            {
+                tls.Release.Set();
+                await owner
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+            }
+        }
+
+        private sealed class LateTurnConnection(byte[] first, TaskCompletionSource<bool> observed) : QuicConnection(
+            first,
+            static _ => new ConnectionCoreTests.ModelTls(true),
+            static (port, _) => new StreamEchoApplication(port)
+        )
+        {
+            internal override List<byte[]> Receive(ReadOnlySpan<byte> bytes, double now)
+            {
+                observed.TrySetResult(AcknowledgeAtOnce);
+                return base.Receive(bytes, now);
+            }
+        }
+
+        // A turn that waited behind a busy worker tells its connection to acknowledge at once.
+        private static async Task LateTurnAsync()
+        {
+            await using var pool = new QuicExecutionPool(1, 2);
+            using var started = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var blocker = pool.Register(
+                () =>
+                {
+                    started.Set();
+                    release.Wait(TimeSpan.FromSeconds(10));
+                },
+                static () => { }
+            );
+            using var keys = PacketKeys.Initial(Original, false);
+            var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
+            var observed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var owner = new QuicConnectionOwner(
+                pool,
+                (packet, _) => new LateTurnConnection(packet.ToArray(), observed),
+                static () => 0,
+                static _ => { }
+            );
+
+            try
+            {
+                Check(blocker.Wake() && started.Wait(TimeSpan.FromSeconds(10)), "worker busy");
+                Check(owner.Receive(first), "turn queued behind the busy worker");
+                await Task
+                    .Delay(TimeSpan.FromMilliseconds(QuicConnectionOwner.LateTurnMilliseconds * 4))
+                    .ConfigureAwait(false);
+                release.Set();
+                Check(
+                    await observed.Task
+                        .WaitAsync(TimeSpan.FromSeconds(10))
+                        .ConfigureAwait(false),
+                    "late turn acknowledges at once"
+                );
+            }
+
+            finally
+            {
+                release.Set();
+                await owner
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+                await blocker
+                    .DisposeAsync()
+                    .ConfigureAwait(false);
+            }
+        }
+
+        // The size of the array the mailbox rents for a datagram, which its byte budget counts.
+        private static int Rented(int length)
+        {
+            var array = ArrayPool<byte>.Shared.Rent(length);
+            var size = array.Length;
+            ArrayPool<byte>.Shared.Return(array);
+            return size;
         }
 
         private static void Check(bool value, string name)
