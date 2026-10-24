@@ -393,8 +393,10 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 - An HTTP/3 listener prepares each certificate's TLS credential once and reuses it
   for later handshakes that select the same `X509Certificate2` object (source after
   2.17.0, unreleased). `ServerCertificateSource.Publish` drops the prepared
-  credentials, disposing a certificate drops its own, and stopping the listener frees
-  them. Return the same instance from an SNI selector to get the reuse. See
+  credentials, disposing a certificate drops its own, a listener keeps at most 32, and
+  stopping the listener frees them. A credential whose issuer chain the stores cannot
+  complete serves only its own handshake. Return the same instance from an SNI
+  selector to get the reuse. See
   [certificate rotation](docs/guides/certificate-rotation.md#http3-transport-selection).
 
 The HTTP/3 listener serves opt-in WebTransport sessions:
@@ -1067,7 +1069,10 @@ protocol and optionally a ReadyToRun copy of the runner. The
 [HTTP/3 latency record](docs/project/quic-development-and-testing.md#startup-warm-and-tail-latency)
 has its results for the 2.17.0 code: JIT is most of a fresh process's first HTTP/3
 request, ReadyToRun cut it from 106 to 48 ms on Windows with no warm cost, and a
-warm small HTTP/3 request costs EmbedIO.Quic 2 to 6 times Kestrel's CPU.
+warm small HTTP/3 request costs EmbedIO.Quic 2 to 6 times Kestrel's CPU. Source after
+2.17.0 (unreleased) reuses each certificate's TLS credential, which cut a second
+HTTP/3 connection from 7.4 to 6.1 ms on Windows and from 9.0 to 5.8 ms on Linux; see
+[per-certificate TLS credentials](docs/project/quic-development-and-testing.md#per-certificate-tls-credentials).
 
 ### Response-pipeline validation (2.3.0 source tree)
 
@@ -1176,8 +1181,9 @@ recorded separately in the development guide. This work shipped in 2.17.0.
 The portable boundary's private ABI is now 3 (source after 2.17.0, unreleased; 2.17.0
 ships ABI 2). A native credential holds the key and leaf parsed once from the selected
 certificate's PKCS#12 export and the issuer chain; each connection installs it by
-reference, and the listener keeps one per selected certificate until the source
-publishes or the listener stops. Server credential preparation keeps
+reference, and the listener keeps one per selected certificate, up to 32, until the
+source publishes, the certificate is disposed or the listener stops. Server credential
+preparation keeps
 runtime-discovered intermediates in order, preserves partial issuers and omits the
 trust anchor; issuer installation transfers only public DER. Older native ABIs are
 rejected during preflight. Local Linux tests compare five chain profiles with a
