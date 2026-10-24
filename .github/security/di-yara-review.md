@@ -727,3 +727,18 @@ Written acceptance covers only `GODMODERULES_IDDQD_God_Mode_Rule` on:
 | `6aac6230` | `d5105bcddc965ee12a4f9760218d6f34384e004d84c560e186546ba86fdbd72b` | `e698b33d58a2824ca8583eda79576cda8f10f0770c81b917966b158fe95d123b`, `0x6ccc` | `c58e502fb954d9ac28780f7bdc1345e308a7613d78b92144513b120079a42ca8`, `0x75d7` |
 
 Local offsets differ from CI-built offsets because the local build paths differ. Paginated open/fixed/dismissed GitHub code-scanning alert queries on 2026-10-22 expose no YARA alert at all. William explicitly approved, choosing "Approve 2.17.0 paths" to move this acceptance to the two 2.17.0 paths with the same waiver for the alert GitHub does not expose. No dismissal is claimed. Local hashes identify reviewed precommit bytes, not CI or release builds; final exact-byte reviews, independent full scans and all CI gates remain required. Every other finding, scanner error and stale acceptance remains fatal. This approval is restricted to the two version-qualified 2.17.0 paths above. Evidence remains under ignored TestResults/release-2.17.0/logs/precommit-02.
+
+## 2.18.0 release revalidation
+
+Written acceptance covers only `GODMODERULES_IDDQD_God_Mode_Rule` on:
+
+- `dist/EmbedIO-Neo.DependencyInjection.2.18.0-unpacked/lib/net10.0/EmbedIO.DependencyInjection.dll`
+- `dist/EmbedIO-Neo.DependencyInjection.2.18.0-unpacked/lib/netstandard2.0/EmbedIO.DependencyInjection.dll`
+
+2.18.0 ships from main after #545. DI source is unchanged since `v2.17.0`, and scanner pins are unchanged. The pinned YARA-X 1.21.0 (`yara-x-cli 1.21.0`) and YARA Forge 20261018 full rules (archive SHA-256 `c6a860533194d8c1209bc066c6dc6df9ecb0a2f9b7fc4104a5d87d0d3a651b73`, as pinned in `.github/security/yara.json`) were run with printed strings in the pinned `mcr.microsoft.com/dotnet/sdk:10.0.402-noble@sha256:747cbade5bfd918a175ac32f8f1d931edec2c7d0d5397a3de72eaef1ac1f66d2` container without network access, on a local precommit package. Each assembly matches only `Injection.pdb` in compiler RSDS/CodeView metadata, once. No other rule matched either assembly.
+
+| Source | Package SHA-256 | net10.0 assembly SHA-256, match offset | netstandard2.0 assembly SHA-256, match offset |
+| --- | --- | --- | --- |
+| `8ae40f9d` | `35c99481134f15fbd06939058bebe85277fd4c9c36d6f94994df524fb6c0938e` | `436a312c135d71306b92e7e85602661569c74c937e40b717d480788b2a1f70b8`, `0x6cc7` | `399079f8d5bdcfd2901ca6cdf921769bd1f3d46c7b10b4a21b091a3b3072d26e`, `0x75d2` |
+
+Local offsets differ from CI-built offsets because the local build paths differ. Paginated open/fixed/dismissed GitHub code-scanning alert queries on 2026-10-24 expose no YARA alert at all. William explicitly approved, choosing "Approve 2.18.0 paths" on 2026-10-24, to move this acceptance to the two 2.18.0 paths with the same waiver for the alert GitHub does not expose. No dismissal is claimed. Local hashes identify reviewed precommit bytes, not CI or release builds; final exact-byte reviews, independent full scans and all CI gates remain required. Every other finding, scanner error and stale acceptance remains fatal. This approval is restricted to the two version-qualified 2.18.0 paths above. Evidence remains under ignored TestResults/release-2.18.0/logs/precommit-01.

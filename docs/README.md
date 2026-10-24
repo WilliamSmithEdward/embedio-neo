@@ -56,7 +56,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Trimming and Native AOT](guides/trimming-and-native-aot.md): AOT-safe JSON with source-generated metadata, Web API controllers through generated bindings and their build-time diagnostics, annotated reflection APIs and what a Native AOT host supports.
 - [OpenAPI documents](guides/openapi.md): new in Neo v2, OpenAPI 3.1 documents written from generated controller bindings, with operation attributes, security requirements from authentication modules, declared routes for other modules, routes the document cannot describe and its limits.
 - [HTTP/3 listener](guides/http3.md): new in Neo v2, on EmbedIO.Quic since 2.17.0, QUIC mode, certificates, usage and current limits.
-- [WebTransport over HTTP/3](guides/webtransport.md): 2.17.0+; opt-in sessions with streams and datagrams, draft-16 and the browsers' draft-02, authorization, bounds and validation.
+- [WebTransport over HTTP/3](guides/webtransport.md): 2.17.0+; opt-in sessions with streams and datagrams, draft-16, the draft-02 Chromium and Firefox use and, from 2.18.0, the draft-14 Safari uses, authorization, bounds and validation.
 - [HTTPS](guides/https.md): certificates, client trust, and desktop/MAUI validation limits.
 - [Rotating the server certificate](guides/certificate-rotation.md): new in Neo v2, `ServerCertificateSource`, replacing certificates while TCP and QUIC listeners run.
 - [TLS policy](guides/tls-policy.md): new in Neo v2, client certificates, protocol versions and SNI certificate selection, with per-listener support.

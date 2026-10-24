@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.18.0] - 2026-10-24
+
 ### Added
 
 - WebTransport also speaks draft-ietf-webtrans-http3-14, the dialect Safari 27 uses.

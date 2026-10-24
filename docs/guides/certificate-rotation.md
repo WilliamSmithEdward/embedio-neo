@@ -131,7 +131,7 @@ Existing established connections retain their original certificate selection.
 
 Each HTTP/3 listener prepares the TLS credential for a certificate once, the first
 time a handshake selects that certificate object, and later handshakes that select
-the same object reuse it (source after 2.17.0, unreleased). On Linux and macOS the
+the same object reuse it (2.18.0 and later). On Linux and macOS the
 exported PKCS#12 copy exists only while the native TLS runtime parses it. Publishing
 to the source drops the prepared credentials, and disposing a certificate drops its
 own at the next handshake; connections that already selected a replaced certificate
