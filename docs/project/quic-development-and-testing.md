@@ -3508,6 +3508,9 @@ from its own source. Medians, with the 90th percentile in brackets, in milliseco
   percentile 1.2 and 4.6 ms less. The gap to Kestrel falls from 3.35 to 2.06 ms on
   Windows and from 5.37 to 2.10 ms on Linux. Earlier runs on the previous commit measured
   6.12 against 7.39 ms on Windows and 5.76 against 8.63 ms on Linux.
+- Requests on a warm connection are unchanged. The second half of the first
+  connection's 32 requests has a median of 0.18 ms on Windows and 0.51 ms on Linux for
+  both, and its second request is within 0.1 ms.
 - The first request of a fresh Windows process is 2.3 ms slower, in both Windows runs.
   Timing only the first handshake of 20 fresh processes per side puts the difference
   there: 16.4 against 14.3 ms. The self-issued check accounts for 0.05 ms of that; the
