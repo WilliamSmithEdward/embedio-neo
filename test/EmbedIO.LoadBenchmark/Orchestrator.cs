@@ -464,7 +464,7 @@ internal static class Orchestrator
         return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(2));
     }
 
-    private static JsonObject DescribeEnvironment(CommandLine options, List<EngineTarget> targets, string? serverCpus, string? clientCpus,
+    internal static JsonObject DescribeEnvironment(CommandLine options, List<EngineTarget> targets, string? serverCpus, string? clientCpus,
         double warmup, double duration, double idle, int rounds, bool profile)
     {
         string Hash(string file) => File.Exists(file) ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))) : "missing";
