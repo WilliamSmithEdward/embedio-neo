@@ -156,7 +156,7 @@ internal static class ColdStart
             var ready = await server.ReadLineAsync(timeout).ConfigureAwait(false);
             sample["readyMilliseconds"] = launched.Elapsed.TotalMilliseconds;
             if (ready is null || !ready.StartsWith("READY ", StringComparison.Ordinal)) throw new InvalidOperationException("Server did not start: " + ready);
-            var serverReady = JsonNode.Parse(ready[6..])!.AsObject();
+            var serverReady = JsonNode.Parse(ready[6..]) as JsonObject ?? throw new InvalidOperationException("Server READY carried no JSON object: " + ready);
             sample["startMilliseconds"] = serverReady["startMilliseconds"]?.DeepClone();
             sample["uptimeAtListeningMilliseconds"] = serverReady["uptimeAtListeningMilliseconds"]?.DeepClone();
             sample["server"] = serverReady;
@@ -184,8 +184,10 @@ internal static class ColdStart
     private static string Describe(JsonObject sample) =>
         sample["error"] is { } error
             ? $"{sample["engine"]} {sample["transport"]} i{sample["iteration"]}: FAILED {error}"
-            : string.Create(CultureInfo.InvariantCulture,
-                $"{sample["engine"]} {sample["transport"]} i{sample["iteration"]}: ready {(double)sample["readyMilliseconds"]!:F1} ms, first {(double)sample["firstMilliseconds"]!:F2} ms, second {(double)sample["secondMilliseconds"]!:F2} ms, second connection {(double)sample["secondConnectionMilliseconds"]!:F2} ms");
+            : $"{sample["engine"]} {sample["transport"]} i{sample["iteration"]}: ready {Format(sample, "readyMilliseconds", "F1")} ms, first {Format(sample, "firstMilliseconds", "F2")} ms, second {Format(sample, "secondMilliseconds", "F2")} ms, second connection {Format(sample, "secondConnectionMilliseconds", "F2")} ms";
+
+    private static string Format(JsonObject sample, string name, string format) =>
+        sample[name] is JsonValue value ? value.GetValue<double>().ToString(format, CultureInfo.InvariantCulture) : "-";
 
     private static (JsonObject Json, string Markdown) Summarize(List<JsonObject> samples, List<EngineTarget> targets, List<Transport> transports)
     {
@@ -199,13 +201,13 @@ internal static class ColdStart
         {
             foreach (var target in targets)
             {
-                var measured = samples.Where(sample => sample["error"] is null && !(bool)sample["warmup"]!
+                var measured = samples.Where(sample => sample["error"] is null && sample["warmup"]?.GetValue<bool>() is false
                     && (string?)sample["engine"] == target.Name && (string?)sample["transport"] == transport.Name).ToList();
                 var group = new JsonObject { ["count"] = measured.Count };
                 var cells = new List<string>();
                 foreach (var metric in Metrics)
                 {
-                    var values = measured.Select(sample => sample[metric]).Where(value => value is not null).Select(value => (double)value!).Order().ToArray();
+                    var values = measured.Select(sample => sample[metric]).OfType<JsonValue>().Select(value => value.GetValue<double>()).Order().ToArray();
                     if (values.Length == 0)
                     {
                         group[metric] = null;
@@ -213,16 +215,16 @@ internal static class ColdStart
                         continue;
                     }
 
-                    var statistics = new JsonObject
+                    var median = Percentile(values, 0.5);
+                    var p90 = Percentile(values, 0.9);
+                    group[metric] = new JsonObject
                     {
-                        ["median"] = Percentile(values, 0.5),
-                        ["p90"] = Percentile(values, 0.9),
+                        ["median"] = median,
+                        ["p90"] = p90,
                         ["minimum"] = values[0],
                         ["maximum"] = values[^1],
                     };
-                    group[metric] = statistics;
-                    cells.Add(string.Create(CultureInfo.InvariantCulture,
-                        $"{(double)statistics["median"]!:F2} [{(double)statistics["p90"]!:F2}; {values[0]:F2}-{values[^1]:F2}]"));
+                    cells.Add(string.Create(CultureInfo.InvariantCulture, $"{median:F2} [{p90:F2}; {values[0]:F2}-{values[^1]:F2}]"));
                 }
 
                 json[$"{target.Name}/{transport.Name}"] = group;
