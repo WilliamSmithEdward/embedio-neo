@@ -15,6 +15,7 @@ from pathlib import Path
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("output", type=Path)
 parser.add_argument("--warmup-snapshots", type=int, default=2, help="quiesced snapshots excluded from the slope as warm-up")
+parser.add_argument("--series-label", help="quiesced snapshot label for the like-for-like series (default: the most frequent)")
 args = parser.parse_args()
 root = args.output.resolve()
 for marker in ("INVALID.txt", "ABORTED.txt"):
@@ -62,6 +63,40 @@ def slope(xs, ys):
     mx, my = statistics.fmean(xs), statistics.fmean(ys)
     denominator = sum((x - mx) ** 2 for x in xs)
     return None if denominator == 0 else sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denominator
+
+
+def nested(snapshot, *path):
+    """A value inside a snapshot, or None when the snapshot does not record it."""
+    for key in path:
+        if not isinstance(snapshot, dict) or snapshot.get(key) is None:
+            return None
+        snapshot = snapshot[key]
+    return snapshot
+
+
+def added(*values):
+    return None if any(value is None for value in values) else sum(values)
+
+
+def shown(value, scale, signed=False):
+    if value is None:
+        return "-"
+    sign = "+" if signed else ""
+    return f"{value:{sign},}" if scale == 1 else f"{value / scale:{sign},.1f}"
+
+
+# Native figures that quiesced snapshots record where the platform provides them: Linux
+# resident memory and glibc malloc totals, Windows heap totals and the handle census.
+NATIVE = [
+    ("Resident anonymous MiB", lambda s: nested(s, "linuxMemory", "status", "RssAnon"), 2**20),
+    ("Resident file-backed MiB", lambda s: nested(s, "linuxMemory", "status", "RssFile"), 2**20),
+    ("Private dirty MiB", lambda s: nested(s, "linuxMemory", "smapsRollup", "Private_Dirty"), 2**20),
+    ("malloc in use MiB", lambda s: added(nested(s, "linuxMemory", "malloc", "allocatedBytes"), nested(s, "linuxMemory", "malloc", "mmappedBytes")), 2**20),
+    ("malloc free MiB", lambda s: nested(s, "linuxMemory", "malloc", "freeBytes"), 2**20),
+    ("Win32 heaps allocated MiB", lambda s: nested(s, "nativeHeaps", "allocatedBytes"), 2**20),
+    ("Win32 heaps committed MiB", lambda s: nested(s, "nativeHeaps", "committedBytes"), 2**20),
+    ("Handles in census", lambda s: nested(s, "handleTypes", "handles"), 1),
+]
 
 
 out = []
@@ -148,6 +183,80 @@ if len(usable) >= 3:
         per_hour = slope(xs, ys)
         out.append(f"| {label} | {ys[0]:,.1f} | {min(ys):,.1f} | {max(ys):,.1f} | {ys[-1]:,.1f} | {ys[-1] - ys[0]:+,.1f} | {'-' if per_hour is None else f'{per_hour:+,.2f}'} |")
     out.append("")
+
+# Native memory and handles, where the snapshots record them
+native = [(label, read, scale) for label, read, scale in NATIVE if any(read(snapshot) is not None for _, snapshot, _ in points)]
+if native:
+    out.append("## Native memory and handles (quiesced snapshots)\n")
+    out.append("Linux figures come from /proc/self/status, smaps_rollup and glibc's mallinfo2; malloc in use includes "
+               "separately mapped blocks. Windows figures come from HeapSummary and a snapshot of the handle table.\n")
+    out.append("| Hour | After | " + " | ".join(label for label, _, _ in native) + " |")
+    out.append("| --- | --- | " + " | ".join("---" for _ in native) + " |")
+    for label, snapshot, _ in points:
+        out.append(f"| {hours(snapshot['utc']):.2f} | `{label}` | " + " | ".join(shown(read(snapshot), scale) for _, read, scale in native) + " |")
+    out.append("")
+    if len(usable) >= 3:
+        out.append(f"### Native retention trend (excluding the first {args.warmup_snapshots} quiesced snapshots as warm-up)\n")
+        out.append("| Metric | First | Min | Max | Last | Last - first | Least-squares slope per hour |")
+        out.append("| --- | --- | --- | --- | --- | --- | --- |")
+        for label, read, scale in native:
+            rows = [(hours(snapshot["utc"]), read(snapshot) / scale) for _, snapshot, _ in usable if read(snapshot) is not None]
+            if len(rows) < 2:
+                continue
+            ys = [y for _, y in rows]
+            per_hour = slope([x for x, _ in rows], ys)
+            out.append(f"| {label} | {ys[0]:,.1f} | {min(ys):,.1f} | {max(ys):,.1f} | {ys[-1]:,.1f} | {ys[-1] - ys[0]:+,.1f} | {'-' if per_hour is None else f'{per_hour:+,.2f}'} |")
+        out.append("")
+
+# Like-for-like series: the snapshots taken at the same point of every cycle, so each
+# change between neighbours is one cycle's net retention. By default the most frequent
+# label wins, ties going to the one taken last in a cycle.
+occurrences = {}
+for position, (label, _, _) in enumerate(usable):
+    count, _ = occurrences.get(label, (0, 0))
+    occurrences[label] = (count + 1, position)
+series_label = args.series_label or (max(occurrences, key=lambda name: occurrences[name]) if occurrences else None)
+series = [snapshot for label, snapshot, _ in usable if label == series_label]
+if len(series) >= 3:
+    out.append(f"## Like-for-like series: every `{series_label}` snapshot\n")
+    out.append("| Metric | Values | Change from the previous | Last - first |")
+    out.append("| --- | --- | --- | --- |")
+    for label, read, scale in [(label, lambda s, key=key: s.get(key), scale) for key, label, scale in metrics] + native:
+        values = [read(snapshot) for snapshot in series]
+        if any(value is None for value in values):
+            continue
+        changes = [later - earlier for earlier, later in zip(values, values[1:])]
+        out.append(f"| {label} | {', '.join(shown(value, scale) for value in values)} | "
+                   f"{', '.join(shown(change, scale, signed=True) for change in changes)} | {shown(values[-1] - values[0], scale, signed=True)} |")
+    out.append("")
+
+# Handles by type and default-heap block sizes: first against last snapshot of the
+# like-for-like series when it records them, otherwise of all usable snapshots.
+compared = series if len(series) >= 2 else [snapshot for _, snapshot, _ in usable]
+census = [snapshot for snapshot in compared if nested(snapshot, "handleTypes", "types")]
+if len(census) >= 2:
+    first, last = census[0]["handleTypes"]["types"], census[-1]["handleTypes"]["types"]
+    names = sorted(set(first) | set(last), key=lambda name: (-abs(last.get(name, 0) - first.get(name, 0)), name))
+    out.append(f"## Handles by type, {hours(census[0]['utc']):.2f} h to {hours(census[-1]['utc']):.2f} h\n")
+    out.append("| Type | First | Last | Change |")
+    out.append("| --- | --- | --- | --- |")
+    for name in names:
+        out.append(f"| {name} | {first.get(name, 0)} | {last.get(name, 0)} | {last.get(name, 0) - first.get(name, 0):+} |")
+    out.append("")
+heaps = [snapshot for snapshot in compared if nested(snapshot, "nativeHeaps", "defaultHeapBlocks")]
+if len(heaps) >= 2:
+    first = {size: count for size, count in heaps[0]["nativeHeaps"]["defaultHeapBlocks"]}
+    last = {size: count for size, count in heaps[-1]["nativeHeaps"]["defaultHeapBlocks"]}
+    grown = sorted(((size, first.get(size, 0), count) for size, count in last.items() if count > first.get(size, 0)),
+                   key=lambda row: (-row[0] * (row[2] - row[1]), row[0]))[:15]
+    if grown:
+        out.append(f"## Default-heap block sizes that grew, {hours(heaps[0]['utc']):.2f} h to {hours(heaps[-1]['utc']):.2f} h\n")
+        out.append("Each snapshot lists only the 80 sizes with the largest totals, so a size missing from the first reads as 0 there.\n")
+        out.append("| Block bytes | First | Last | Change | Change bytes |")
+        out.append("| --- | --- | --- | --- | --- |")
+        for size, before, after in grown:
+            out.append(f"| {size:,} | {before:,} | {after:,} | {after - before:+,} | {size * (after - before):+,} |")
+        out.append("")
 
 # Drain and restart
 drains = []
