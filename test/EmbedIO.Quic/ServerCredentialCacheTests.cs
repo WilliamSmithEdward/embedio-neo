@@ -18,9 +18,74 @@ namespace EmbedIO.Quic
             using var second = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
             Sharing(first, second);
             Publication(first, second);
+            Uncacheable(first);
+            DisposedCertificates(first);
             Capacity(first);
             Disposal(first);
             Concurrency(first, second);
+            CompleteChains(first);
+        }
+
+        // A credential prepared while the issuer chain was incomplete serves its own handshake.
+        private static void Uncacheable(X509Certificate2 certificate)
+        {
+            var source = new ServerCertificateSource(certificate);
+            var ledger = new Ledger();
+            using var cache = new ServerCredentialCache<Counted>(source, selected => ledger.Prepare(selected, false));
+            var version = source.Version;
+            var one = cache.Lease(certificate, version);
+            var two = cache.Lease(certificate, version);
+            Check(
+                !ReferenceEquals(one, two) && cache.Count == 0 && ledger.Prepared == 2,
+                "an uncacheable credential is prepared for each handshake"
+            );
+            one.Release();
+            two.Release();
+            Check(one.Frees == 1 && two.Frees == 1 && ledger.Live == 0, "an uncacheable credential ends with its handshake");
+        }
+
+        // A certificate the application disposed can no longer be selected; its entry goes at
+        // the next handshake and frees the credential.
+        private static void DisposedCertificates(X509Certificate2 certificate)
+        {
+            var source = new ServerCertificateSource(certificate);
+            var ledger = new Ledger();
+            using var cache = new ServerCredentialCache<Counted>(source, ledger.Prepare);
+            var version = source.Version;
+            var replaced = X509CertificateLoader.LoadCertificate(certificate.RawData);
+            var dropped = cache.Lease(replaced, version);
+            dropped.Release();
+            cache.Lease(certificate, version).Release();
+            Check(cache.Count == 2 && dropped.Frees == 0, "the cache holds both certificates");
+            replaced.Dispose();
+            cache.Lease(certificate, version).Release();
+            Check(
+                cache.Count == 1 && dropped.Frees == 1 && ledger.Live == 1,
+                "a disposed certificate's credential is freed at the next handshake"
+            );
+        }
+
+        private static void CompleteChains(X509Certificate2 selfSigned)
+        {
+            using var authorityKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            var authorityRequest = new CertificateRequest("CN=credential cache authority", authorityKey, HashAlgorithmName.SHA256);
+            authorityRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+            using var authority = authorityRequest.CreateSelfSigned(
+                DateTimeOffset.UtcNow.AddMinutes(-5),
+                DateTimeOffset.UtcNow.AddHours(1)
+            );
+            using var leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            using var issued = new CertificateRequest("CN=credential cache leaf", leafKey, HashAlgorithmName.SHA256).Create(
+                authority,
+                DateTimeOffset.UtcNow.AddMinutes(-1),
+                DateTimeOffset.UtcNow.AddMinutes(30),
+                RandomNumberGenerator.GetBytes(16)
+            );
+            Check(SharedCredential.HasCompleteChain(selfSigned), "a self-signed certificate has a complete chain");
+            Check(
+                !SharedCredential.HasCompleteChain(issued),
+                "a certificate whose issuer no store holds has an incomplete chain"
+            );
         }
 
         private static void Sharing(X509Certificate2 first, X509Certificate2 second)
@@ -240,15 +305,18 @@ namespace EmbedIO.Quic
             internal int Freed;
             internal int DoubleFrees;
 
-            internal Counted Prepare(X509Certificate2? certificate)
+            internal Counted Prepare(X509Certificate2? certificate) => Prepare(certificate, true);
+
+            internal Counted Prepare(X509Certificate2? certificate, bool cacheable)
             {
                 Interlocked.Increment(ref Prepared);
                 Interlocked.Increment(ref Live);
-                return new Counted(this, certificate);
+                return new Counted(this, certificate, cacheable);
             }
         }
 
-        private sealed class Counted(Ledger ledger, X509Certificate2? certificate) : SharedCredential
+        private sealed class Counted(Ledger ledger, X509Certificate2? certificate, bool cacheable)
+            : SharedCredential(cacheable)
         {
             internal int Frees;
             internal X509Certificate2? Certificate { get; } = certificate;

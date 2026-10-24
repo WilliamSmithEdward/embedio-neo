@@ -331,7 +331,8 @@ __attribute__((visibility("default"))) struct credential *embedio_quic_tls_crede
     }
     return credential;
 }
-/* Append public issuer certificates in managed chain order before the credential is shared. */
+/* Append public issuer certificates in managed chain order. Only before the credential is
+   shared: use_credential duplicates this stack without a lock. */
 __attribute__((visibility("default"))) int embedio_quic_tls_credential_add_chain(struct credential *credential,
         const unsigned char *data, size_t length)
 {

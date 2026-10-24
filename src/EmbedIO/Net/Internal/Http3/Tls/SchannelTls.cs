@@ -152,18 +152,14 @@ namespace EmbedIO.Quic
 
         // A Schannel server credential for one selected certificate, which the handshakes that
         // select it share. It owns a copy of the certificate; the source stays application-owned.
-        internal sealed class Credential : SharedCredential
+        // Schannel chooses the issuer chain the credential sends, so a certificate whose chain
+        // the stores cannot complete gets a credential per handshake, as before.
+        internal sealed class Credential(X509Certificate2 certificate, NativePair handle, bool cacheable)
+            : SharedCredential(cacheable)
         {
-            private readonly X509Certificate2 _certificate;
-            private NativePair _handle;
+            private NativePair _handle = handle;
 
-            private Credential(X509Certificate2 certificate, NativePair handle)
-            {
-                _certificate = certificate;
-                _handle = handle;
-            }
-
-            internal X509Certificate2 Certificate => _certificate;
+            internal X509Certificate2 Certificate => certificate;
             internal NativePair Handle => _handle;
 
             // The caller holds the only reference.
@@ -173,9 +169,10 @@ namespace EmbedIO.Quic
 
                 try
                 {
-                    var handle = AcquireHandle(copy, clientCertificates);
+                    var complete = HasCompleteChain(copy);
+                    var acquired = AcquireHandle(copy, clientCertificates);
                     Interlocked.Increment(ref _activeCredentials);
-                    return new Credential(copy, handle);
+                    return new Credential(copy, acquired, complete);
                 }
 
                 catch
@@ -187,8 +184,8 @@ namespace EmbedIO.Quic
 
             private static NativePair AcquireHandle(X509Certificate2 selected, bool clientCertificates)
             {
-                using var certificate = new NativeRegion(nint.Size);
-                Marshal.WriteIntPtr(certificate.Address, selected.Handle);
+                using var contexts = new NativeRegion(nint.Size);
+                Marshal.WriteIntPtr(contexts.Address, selected.Handle);
                 // Windows negotiates its supported AES-GCM TLS 1.3 suites. Do not
                 // advertise a future native ChaCha profile until its secret contract is supported.
                 using var chachaName = NativeRegion.Text("CHACHA20_POLY1305");
@@ -209,7 +206,7 @@ namespace EmbedIO.Quic
                 {
                     Version = 5,
                     CertificateCount = 1,
-                    Certificates = certificate.Address,
+                    Certificates = contexts.Address,
                     Flags = DisableReconnects | (clientCertificates ? NoWindowsAccountMapping : 0),
                     ParameterCount = 1,
                     Parameters = settings.Address
@@ -222,13 +219,13 @@ namespace EmbedIO.Quic
                     ref input,
                     0,
                     0,
-                    out var handle,
+                    out var acquired,
                     out _
                 );
 
                 if (status != 0) throw new InvalidOperationException($"TLS credential admission failed: {status:X8}");
 
-                return handle;
+                return acquired;
             }
 
             protected override int Free()
@@ -237,7 +234,7 @@ namespace EmbedIO.Quic
 
                 if (status == 0) Interlocked.Decrement(ref _activeCredentials);
 
-                _certificate.Dispose();
+                certificate.Dispose();
                 return status;
             }
         }

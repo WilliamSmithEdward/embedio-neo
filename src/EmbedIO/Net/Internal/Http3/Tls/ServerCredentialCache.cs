@@ -7,10 +7,48 @@ using System.Threading;
 namespace EmbedIO.Net.Internal.Http3
 {
     // A native TLS credential that handshakes share. Each holder releases its reference
-    // once; the last release frees the native resources.
-    internal abstract class SharedCredential
+    // once; the last release frees the native resources. A credential that is not cacheable
+    // serves only the handshake that prepared it.
+    internal abstract class SharedCredential(bool cacheable)
     {
         private int _references = 1;
+
+        internal bool Cacheable { get; } = cacheable;
+
+        // Whether the certificate stores complete the certificate's chain, without downloading
+        // issuers. A credential prepared while they cannot may hold a partial chain, so it is not
+        // cached: the next handshake prepares again, as every handshake did before.
+        internal static bool HasCompleteChain(X509Certificate2 certificate)
+        {
+            // A self-issued certificate has no issuer to find. Skipping the build also spares
+            // the process's first chain build, which costs more than ten milliseconds on Windows.
+            if (
+                certificate.SubjectName.RawData
+                    .AsSpan()
+                    .SequenceEqual(certificate.IssuerName.RawData)
+            )
+                return true;
+
+            using var chain = new X509Chain();
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            chain.ChainPolicy.DisableCertificateDownloads = true;
+
+            try
+            {
+                _ = chain.Build(certificate);
+
+                foreach (var status in chain.ChainStatus)
+                    if ((status.Status & X509ChainStatusFlags.PartialChain) != 0) return false;
+
+                return true;
+            }
+
+            finally
+            {
+                foreach (var element in chain.ChainElements)
+                    if (!ReferenceEquals(element.Certificate, certificate)) element.Certificate.Dispose();
+            }
+        }
 
         // Adds a reference for another holder. The caller must already hold one.
         internal void Retain()
@@ -46,9 +84,10 @@ namespace EmbedIO.Net.Internal.Http3
     // selected. A credential costs a Schannel credential handle on Windows and an exported,
     // parsed key and chain on Linux and macOS, so each certificate object pays for it once
     // and later handshakes that select the same object share it.
-    // Entries go when the certificate source publishes a replacement, when more than
-    // Capacity other certificates were selected since, and when the listener stops. A
-    // handshake keeps the credential it holds until it ends.
+    // Entries go when the certificate source publishes a replacement, when the application
+    // disposes the certificate, when more than Capacity other certificates were selected
+    // since, and when the listener stops. A connection keeps the credential its handshake
+    // took until the connection closes.
     internal sealed class ServerCredentialCache<TCredential> : IDisposable where TCredential : SharedCredential
     {
         internal const int Capacity = 32;
@@ -79,7 +118,8 @@ namespace EmbedIO.Net.Internal.Http3
         // The credential for the certificate a handshake selected, with a reference for the
         // caller to release. version is the source's version when the handshake started; one
         // that started before the latest publication gets a credential of its own, so a
-        // replaced certificate does not return to the cache.
+        // replaced certificate does not return to the cache. So does a handshake whose
+        // credential is not cacheable.
         internal TCredential Lease(X509Certificate2 certificate, long version)
         {
             ArgumentNullException.ThrowIfNull(certificate);
@@ -117,7 +157,7 @@ namespace EmbedIO.Net.Internal.Http3
 
                     ObjectDisposedException.ThrowIf(_disposed, this);
 
-                    if (version != _version) return prepared;
+                    if (version != _version || !prepared.Cacheable) return prepared;
 
                     var index = Find(certificate);
 
@@ -161,15 +201,32 @@ namespace EmbedIO.Net.Internal.Http3
             Release(released);
         }
 
-        // Drops every entry once the source has published since they were prepared.
+        // Drops every entry once the source has published since they were prepared, and the
+        // entry of a certificate the application has disposed since, which no handshake can
+        // select again.
         private List<TCredential>? Refresh()
         {
             var current = _source.Version;
 
-            if (current == _version) return null;
+            if (current != _version)
+            {
+                _version = current;
+                return Drain();
+            }
 
-            _version = current;
-            return Drain();
+            List<TCredential>? disposed = null;
+
+            for (var index = _entries.Count - 1; index >= 0; index--)
+            {
+                var (certificate, credential) = _entries[index];
+
+                if (certificate.Handle != IntPtr.Zero) continue;
+
+                (disposed ??= []).Add(credential);
+                _entries.RemoveAt(index);
+            }
+
+            return disposed;
         }
 
         private List<TCredential>? Drain()

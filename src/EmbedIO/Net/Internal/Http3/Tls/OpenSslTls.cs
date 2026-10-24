@@ -213,25 +213,22 @@ namespace EmbedIO.Quic
         // A server credential for one selected certificate, which the handshakes that select
         // it share: native code holds the parsed key, the certificate and the issuer chain the
         // connection sends, and each connection takes its own references when it installs them.
-        // The exported key bytes are cleared as soon as native code has parsed them.
-        internal sealed class Credential : SharedCredential
+        // The exported key bytes are cleared as soon as native code has parsed them. A credential
+        // whose chain the stores could not complete serves only its own handshake, as before.
+        internal sealed class Credential(CredentialHandle handle, bool cacheable) : SharedCredential(cacheable)
         {
-            private readonly CredentialHandle _handle;
-
-            private Credential(CredentialHandle handle) => _handle = handle;
-
-            internal CredentialHandle Handle => _handle;
+            internal CredentialHandle Handle => handle;
 
             // The caller holds the only reference.
             internal static Credential Create(X509Certificate2 certificate)
             {
-                CredentialHandle handle;
+                CredentialHandle created;
                 var exported = certificate.Export(X509ContentType.Pkcs12);
 
                 try
                 {
                     fixed (byte* input = exported)
-                        handle = new CredentialHandle(NativeMethods.CreateCredential(input, (nuint)exported.Length));
+                        created = new CredentialHandle(NativeMethods.CreateCredential(input, (nuint)exported.Length));
                 }
 
                 finally
@@ -241,26 +238,26 @@ namespace EmbedIO.Quic
 
                 try
                 {
-                    if (handle.IsInvalid) throw new InvalidDataException("Native TLS credential rejected.");
+                    if (created.IsInvalid) throw new InvalidDataException("Native TLS credential rejected.");
 
-                    AddServerChain(handle, certificate);
-                    return new Credential(handle);
+                    return new Credential(created, AddServerChain(created, certificate));
                 }
 
                 catch
                 {
-                    handle.Dispose();
+                    created.Dispose();
                     throw;
                 }
             }
 
             protected override int Free()
             {
-                _handle.Dispose();
+                handle.Dispose();
                 return 0;
             }
 
-            private static void AddServerChain(CredentialHandle handle, X509Certificate2 certificate)
+            // Whether the stores and issuer discovery completed the chain.
+            private static bool AddServerChain(CredentialHandle credential, X509Certificate2 certificate)
             {
                 using var chain = new X509Chain();
                 chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
@@ -284,7 +281,7 @@ namespace EmbedIO.Quic
                         try
                         {
                             fixed (byte* input = encoded)
-                                if (NativeMethods.AddCredentialChain(handle, input, (nuint)encoded.Length) != 1)
+                                if (NativeMethods.AddCredentialChain(credential, input, (nuint)encoded.Length) != 1)
                                 {
                                     var refused = new InvalidDataException("Native TLS issuer certificate rejected.");
                                     refused.Data[IssuerRefused] = true;
@@ -297,6 +294,8 @@ namespace EmbedIO.Quic
                             CryptographicOperations.ZeroMemory(encoded);
                         }
                     }
+
+                    return !incomplete;
                 }
 
                 finally
