@@ -215,9 +215,15 @@ namespace EmbedIO.Quic
         // connection sends, and each connection takes its own references when it installs them.
         // The exported key bytes are cleared as soon as native code has parsed them. A credential
         // whose chain the stores could not complete serves only its own handshake, as before.
-        internal sealed class Credential(CredentialHandle handle, bool cacheable) : SharedCredential(cacheable)
+        internal sealed class Credential : SharedCredential
         {
-            internal CredentialHandle Handle => handle;
+            private readonly CredentialHandle _handle;
+
+            // An explicit constructor: the pinned Semgrep cannot parse this class's primary
+            // constructor in this file and stops scanning it.
+            private Credential(CredentialHandle handle, bool cacheable) : base(cacheable) => _handle = handle;
+
+            internal CredentialHandle Handle => _handle;
 
             // The caller holds the only reference.
             internal static Credential Create(X509Certificate2 certificate)
@@ -252,7 +258,7 @@ namespace EmbedIO.Quic
 
             protected override int Free()
             {
-                handle.Dispose();
+                _handle.Dispose();
                 return 0;
             }
 

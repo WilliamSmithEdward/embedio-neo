@@ -154,15 +154,18 @@ namespace EmbedIO.Quic
         // select it share. It owns a copy of the certificate; the source stays application-owned.
         // Schannel chooses the issuer chain the credential sends, so a certificate whose chain
         // the stores cannot complete gets a credential per handshake, as before.
-        internal sealed class Credential(
-            X509Certificate2 certificate,
-            NativePair handle,
-            bool cacheable
-        ) : SharedCredential(cacheable)
+        internal sealed class Credential : SharedCredential
         {
-            private NativePair _handle = handle;
+            private readonly X509Certificate2 _certificate;
+            private NativePair _handle;
 
-            internal X509Certificate2 Certificate => certificate;
+            private Credential(X509Certificate2 certificate, NativePair handle, bool cacheable) : base(cacheable)
+            {
+                _certificate = certificate;
+                _handle = handle;
+            }
+
+            internal X509Certificate2 Certificate => _certificate;
             internal NativePair Handle => _handle;
 
             // The caller holds the only reference.
@@ -237,7 +240,7 @@ namespace EmbedIO.Quic
 
                 if (status == 0) Interlocked.Decrement(ref _activeCredentials);
 
-                certificate.Dispose();
+                _certificate.Dispose();
                 return status;
             }
         }
