@@ -1179,7 +1179,7 @@ Still open after the merge, each with its tracking issue:
    [#524](https://github.com/WilliamSmithEdward/embedio-neo/issues/524).
 6. Resolved: Safari 27, Chromium and Firefox on macOS pass
    ([macOS browsers and draft-14](#macos-browsers-and-draft-14)). Alt-Svc discovery is
-   in the source after 2.17.0 (unreleased): `EmbedIOCombined` advertises HTTP/3, and a
+   in 2.18.0: `EmbedIOCombined` advertises HTTP/3, and a
    .NET client moves to HTTP/3 after its first response
    ([Combined TCP and QUIC hosting](../guides/http3.md#alt-svc)).
    [#537](https://github.com/WilliamSmithEdward/embedio-neo/issues/537).

@@ -97,7 +97,7 @@ and the next ten used HTTP/3. An `Alt-Svc` value the application sets, such as
 `clear`, is sent unchanged. `WithoutHttp3Advertisement()`, or
 `AdvertiseHttp3 = false`, sends none. Behind a proxy or port mapping that exposes a
 different port, set the header yourself or turn the advertisement off. 2.17.0 and
-earlier send no Alt-Svc; this is in the source after 2.17.0 and not yet released.
+earlier send no Alt-Svc; 2.18.0 is the first release that does.
 
 Each transport has one accept pump feeding a shared queue of at most 256
 contexts. A pump can hold one additional context while waiting for queue space;
@@ -235,8 +235,8 @@ seconds, by reason, with the queue delay and the open connections. A connection
 gives its slot back once it can serve no more requests and none is still running:
 when it has closed, or when it has sent GOAWAY and its last accepted request has
 ended. Its QUIC connection then spends its closing or draining period, three probe
-timeouts (RFC 9000 section 10.2), as one of the endpoint's 768. This is
-unreleased. In 2.17.0 a full endpoint drops new connections' packets until the
+timeouts (RFC 9000 section 10.2), as one of the endpoint's 768. This is new
+in 2.18.0. In 2.17.0 a full endpoint drops new connections' packets until the
 clients' handshakes time out, a connection the listener has no room for completes
 its TLS handshake before it is closed with `H3_EXCESSIVE_LOAD`, and a closed
 connection keeps its slot until its closing or draining period ends.
@@ -322,7 +322,7 @@ Each new connection costs one more round trip. A token the server sealed that is
 expired or sent to the wrong connection ID closes the attempt with `INVALID_TOKEN`;
 a token it cannot open, such as another server's, gets a new Retry. It is off by
 default, and it needs `EmbedIOHttp3` or `EmbedIOCombined` mode; other modes refuse
-to start with it. This option is unreleased; 2.17.0 does not send Retry.
+to start with it. This option is new in 2.18.0; 2.17.0 does not send Retry.
 
 The rest of the TLS profile is deliberately narrow:
 

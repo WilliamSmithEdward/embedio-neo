@@ -252,7 +252,7 @@ limits, failure matrix, concurrency fuzzing and cross-target support.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current source version | 2.17.0, the v2 engine. 2.17.0 runs HTTP/3 on EmbedIO.Quic instead of `System.Net.Quic`; opt-in WebTransport requires 2.17.0+. 2.16.1 keeps the server running when one HTTP/1 request fails. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current source version | 2.18.0, the v2 engine. 2.18.0 cuts EmbedIO.Quic's HTTP/3 cost per datagram and per request, refuses new HTTP/3 connections before any TLS work under overload, advertises HTTP/3 with Alt-Svc in `EmbedIOCombined`, adds opt-in Retry address validation, reuses each certificate's TLS credential and speaks WebTransport draft-14 for Safari. 2.17.0 runs HTTP/3 on EmbedIO.Quic instead of `System.Net.Quic`; opt-in WebTransport requires 2.17.0+. 2.16.1 keeps the server running when one HTTP/1 request fails. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -375,7 +375,7 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 - `HttpListenerMode` value 1 (the old Microsoft listener) is removed and throws.
 - Unsupported HTTP/3 platforms throw `PlatformNotSupportedException` at startup.
 - `EmbedIOCombined` sends `Alt-Svc: h3=":port"; ma=86400` on every response
-  (source after 2.17.0, unreleased; 2.17.0 sends none), so browsers and .NET
+  (2.18.0 and later; 2.17.0 sends none), so browsers and .NET
   clients with `RequestVersionOrHigher` move to HTTP/3. An application-set
   `Alt-Svc` is kept; `WithoutHttp3Advertisement()` turns it off. `EmbedIOHttp3`
   advertises nothing; its clients must ask for HTTP/3. See the
@@ -383,18 +383,18 @@ Select with `options.WithMode(HttpListenerMode.X)`:
 - Under overload an HTTP/3 endpoint refuses new connections with
   `CONNECTION_REFUSED` before any TLS work: at 768 connections, while queued QUIC
   work waits more than 250 ms, or while established and handshaking connections fill
-  the listener's 256 slots (source after 2.17.0, unreleased). Clients see the failure
+  the listener's 256 slots (2.18.0 and later). Clients see the failure
   at once. A connection frees its slot once it has closed, or has sent GOAWAY and
   finished its accepted requests, not after its QUIC closing or draining period
-  (source after 2.17.0, unreleased). See [overload](docs/guides/http3.md#overload).
+  (2.18.0 and later). See [overload](docs/guides/http3.md#overload).
 - `WithHttp3AddressValidation()` makes every new HTTP/3 connection prove its address
-  with a Retry before the handshake (source after 2.17.0, unreleased); it costs one
+  with a Retry before the handshake (2.18.0 and later); it costs one
   round trip. There is no TLS session resumption or 0-RTT, and on Linux and macOS
   the certificate key must be exportable. See
   [address validation](docs/guides/http3.md#address-validation).
 - An HTTP/3 listener prepares each certificate's TLS credential once and reuses it
-  for later handshakes that select the same `X509Certificate2` object (source after
-  2.17.0, unreleased). `ServerCertificateSource.Publish` drops the prepared
+  for later handshakes that select the same `X509Certificate2` object (2.18.0 and
+  later). `ServerCertificateSource.Publish` drops the prepared
   credentials, disposing a certificate drops its own, a listener keeps at most 32, and
   stopping the listener frees them. A credential whose issuer chain the stores cannot
   complete serves only its own handshake. Return the same instance from an SNI
@@ -405,7 +405,7 @@ The HTTP/3 listener serves opt-in WebTransport sessions:
 `WithWebTransport` and `WebTransportOptions` enable them, and handlers accept a
 session through `IWebTransportContext` and use its `WebTransportSession` streams and
 datagrams. It speaks draft-ietf-webtrans-http3-16 and the draft-02 handshake
-Chromium uses, and requires 2.17.0 or later. Unreleased source also speaks draft-14,
+Chromium uses, and requires 2.17.0 or later. 2.18.0 and later also speak draft-14,
 which Safari 27 uses (`AcceptBrowserDraft14`, on by default), and EmbedIO.Quic offers
 and accepts `reset_stream_at` under both `0x1d` and the earlier `0x17f7586d2cb571`.
 Safari pages need `datagrams.createWritable()`, not `datagrams.writable`. See the
@@ -1071,14 +1071,15 @@ protocol and optionally a ReadyToRun copy of the runner. The
 [HTTP/3 latency record](docs/project/quic-development-and-testing.md#startup-warm-and-tail-latency)
 has its results for the 2.17.0 code: JIT is most of a fresh process's first HTTP/3
 request, ReadyToRun cut it from 106 to 48 ms on Windows with no warm cost, and a
-warm small HTTP/3 request costs EmbedIO.Quic 2 to 6 times Kestrel's CPU. Source after
-2.17.0 (unreleased) reuses each certificate's TLS credential, which cut a second
+warm small HTTP/3 request costs EmbedIO.Quic 2 to 6 times Kestrel's CPU. 2.18.0
+reuses each certificate's TLS credential, which cut a second
 HTTP/3 connection from 7.4 to 6.1 ms on Windows and from 9.0 to 5.8 ms on Linux; see
 [per-certificate TLS credentials](docs/project/quic-development-and-testing.md#per-certificate-tls-credentials).
-The unreleased [socket loop and per-request cost](docs/project/quic-development-and-testing.md#socket-loop-and-per-request-cost)
-change cuts the per-datagram and per-request cost. Against main on Windows and Linux,
-small HTTP/3 requests ran at 3.6 to 7.3 times the rate with 13 to 26 percent of the
-server CPU per request, and 1 MiB transfers at 1.9 to 3.1 times the rate.
+2.18.0's [socket loop and per-request cost](docs/project/quic-development-and-testing.md#socket-loop-and-per-request-cost)
+change cuts the per-datagram and per-request cost. Against the source before it, on
+Windows and Linux, small HTTP/3 requests ran at 3.6 to 7.3 times the rate with 13 to
+26 percent of the server CPU per request, and 1 MiB transfers at 1.9 to 3.1 times the
+rate.
 
 ### Response-pipeline validation (2.3.0 source tree)
 
@@ -1184,7 +1185,7 @@ wire cases and 3,072 wrapper-sanitizer ownership lifecycles. Those initial proof
 used the recorded development build; final restricted native-build validation is
 recorded separately in the development guide. This work shipped in 2.17.0.
 
-The portable boundary's private ABI is now 3 (source after 2.17.0, unreleased; 2.17.0
+The portable boundary's private ABI is now 3 (2.18.0 and later; 2.17.0
 ships ABI 2). A native credential holds the key and leaf parsed once from the selected
 certificate's PKCS#12 export and the issuer chain; each connection installs it by
 reference, and the listener keeps one per selected certificate, up to 32, until the
@@ -1400,8 +1401,8 @@ the required transport parameters; the server still advertises extended CONNECT.
 Model and independent-peer checks cover omitted and zero-valued client
 advertisements. Locally, the public session API passes all 15 quic-go peer modes,
 and a Chromium 152 browser completed a draft-02 session with datagram, stream and
-close checks. On macOS 27, Chromium 152 passed in draft-02 and, with the unreleased
-draft-14 support, Safari 27.0.1 and Playwright WebKit 27.2 passed in draft-14, and
+close checks. On macOS 27, Chromium 152 passed in draft-02 and, with the draft-14
+support 2.18.0 adds, Safari 27.0.1 and Playwright WebKit 27.2 passed in draft-14, and
 Firefox 158.0.1 passed in draft-02 (started through `open -n -a`; launched directly
 from a tool shell it fails with "Could not find profile folder"). The peer runs every
 mode in both dialects (`-dialect draft-14`).
