@@ -3836,8 +3836,8 @@ One fix the faster engine exposed:
   finished, even while its handler was still completing. With 32 streams per connection
   a client could then push a connection past its 128 outstanding application callbacks,
   and the server reset requests with H3_EXCESSIVE_LOAD (0x107). The first profiled run of
-  the change failed that way after 20,736 requests. Main has the same window, which its
-  lower throughput rarely reaches.
+  the change failed that way after 20,736 requests. Main has the same window: two of its
+  six Windows `inspect c8x32` rounds in the comparison below failed that way.
 
 ### Profiled results
 
@@ -3845,7 +3845,7 @@ One profiled round per engine on Windows: the machine above, server on CPUs 0-3 
 client on 4-11, 3 s warmup, 8 s measurement, `dotnet-trace` attached to the server, run
 under `scripts/guarded_load_benchmark.py`. The change is `86694f02`, before the formatter
 pass and before main's #542 and #543 were merged in; main is `19ccc261`. These locate the
-gains; they are not the role-alternated comparison, which is still to run.
+gains; the role-alternated comparison below measures them.
 
 | Scenario | Server | req/s | server CPU per request | allocated per request | p50 | p99 ms |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -3864,10 +3864,154 @@ Most of a small request's remaining 12 to 14 KB is the request context it shares
 HTTP/2. In the 1 MiB transfers, sending is now the largest single cost: one system call
 per datagram.
 
+### Role-alternated comparison
+
+The ordinary `run` mode on the change's final code, `a5e0ee3e`, against main `85e18b2a`,
+which includes #543 and #544: the eight `h3-` scenarios, three rounds with engine order
+alternating, in both role orders, once with the change orchestrating as the harness's
+candidate and once with main in that role. The machine, container and CPU sets are those
+of [Method](#method); the Linux runners were built in the container from the two commits,
+with main CI's TLS library (SHA-256 `f8b6b3ed...`). Medians of the six rounds per build,
+less those with more than 7 busy CPUs outside the server and client: 19 of 96 on Windows
+and 8 of 96 on Linux. On Linux that count is the Windows host's busy CPUs less the
+server's and client's, as before.
+
+Windows, server on CPUs 0-3:
+
+| Scenario | Server | req/s | server CPU per request | allocated per request | p50 | p95 | p99 | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| h3 small c64x1 | main | 25,624 | 135 us | 96 KB | 2.38 | 2.83 | 3.34 | 14.2 |
+| | change | 104,121 | 34 us | 13 KB | 0.54 | 0.93 | 1.22 | 8.4 |
+| h3 small c8x32 | main | 33,154 | 116 us | 105 KB | 6.86 | 14.75 | 18.43 | 27.0 |
+| | change | 241,338 | 15 us | 12 KB | 0.96 | 1.84 | 2.79 | 9.6 |
+| h3 inspect c64x1 | main | 25,202 | 139 us | 102 KB | 2.46 | 2.87 | 3.17 | 11.5 |
+| | change | 99,887 | 36 us | 18 KB | 0.55 | 1.02 | 1.36 | 6.9 |
+| h3 inspect c8x32 | main | 32,508 | 119 us | 112 KB | 7.01 | 14.95 | 18.33 | 25.2 |
+| | change | 208,805 | 18 us | 17 KB | 1.09 | 2.18 | 3.25 | 11.1 |
+| h3 large1m c4x4 | main | 79 | 40.8 ms | 9.8 MB | 155 | 551 | 675 | 760 |
+| | change | 151 | 19.7 ms | 3.0 MB | 101 | 161 | 216 | 272 |
+| h3 stream1m c4x4 | main | 74 | 44.2 ms | 10.3 MB | 165 | 590 | 708 | 839 |
+| | change | 159 | 21.2 ms | 3.2 MB | 101 | 118 | 126 | 141 |
+| h3 upload1m c4x4 | main | 167 | 22.0 ms | 11.8 MB | 89.3 | 152 | 213 | 387 |
+| | change | 423 | 7.7 ms | 0.87 MB | 37.9 | 40.6 | 46.5 | 50.2 |
+| h3 churn c16 | main | 1,677 | 1.11 ms | 847 KB | 8.29 | 18.8 | 23.8 | 29.1 |
+| | change | 1,669 | 0.94 ms | 186 KB | 8.09 | 19.9 | 25.2 | 31.1 |
+
+Linux, server on CPUs 0-3 of the container's eight:
+
+| Scenario | Server | req/s | server CPU per request | allocated per request | p50 | p95 | p99 | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| h3 small c64x1 | main | 16,037 | 198 us | 97 KB | 3.74 | 7.37 | 9.22 | 12.7 |
+| | change | 65,331 | 39 us | 13 KB | 0.83 | 2.18 | 3.48 | 5.6 |
+| h3 small c8x32 | main | 34,417 | 95 us | 93 KB | 6.66 | 14.85 | 20.28 | 27.4 |
+| | change | 174,787 | 18 us | 12 KB | 1.22 | 3.33 | 4.71 | 7.4 |
+| h3 inspect c64x1 | main | 15,017 | 204 us | 102 KB | 3.97 | 7.68 | 9.88 | 13.9 |
+| | change | 53,811 | 49 us | 18 KB | 0.97 | 2.55 | 4.25 | 6.8 |
+| h3 inspect c8x32 | main | 30,987 | 103 us | 98 KB | 7.37 | 16.38 | 22.53 | 30.7 |
+| | change | 150,206 | 21 us | 17 KB | 1.43 | 3.79 | 5.38 | 7.7 |
+| h3 large1m c4x4 | main | 47 | 70.2 ms | 7.1 MB | 249 | 904 | 1,167 | 1,382 |
+| | change | 87 | 37.3 ms | 3.0 MB | 182 | 236 | 262 | 282 |
+| h3 stream1m c4x4 | main | 42 | 80.1 ms | 10.2 MB | 288 | 1,035 | 1,252 | 1,527 |
+| | change | 84 | 39.7 ms | 3.2 MB | 190 | 233 | 247 | 270 |
+| h3 upload1m c4x4 | main | 71 | 49.9 ms | 11.3 MB | 213 | 370 | 531 | 668 |
+| | change | 218 | 15.0 ms | 0.79 MB | 72.1 | 102 | 121 | 149 |
+| h3 churn c16 | main | 1,682 | 1.35 ms | 608 KB | 9.16 | 15.9 | 19.1 | 24.1 |
+| | change | 1,839 | 1.01 ms | 90 KB | 8.45 | 14.1 | 16.9 | 21.5 |
+
+- Small requests: the change served 3.6 to 7.3 times main's requests per second, with
+  13 to 26 percent of its server CPU per request and 11 to 18 percent of its allocation.
+  p99 fell to 15 to 43 percent of main's and p99.9 to 25 to 60 percent. The 32-stream
+  scenarios gained most: on Windows 241,338 requests per second against 33,154.
+- 1 MiB transfers: 1.9 to 3.1 times the throughput, at 30 to 53 percent of the server CPU
+  per response and 7 to 43 percent of the allocation, with p99 at 18 to 32 percent of
+  main's. An upload allocates about 0.8 bytes per byte received, against about 11.
+- The change's 1 MiB p99 varied with load outside the benchmark. Of its six Windows
+  `large1m` rounds, the two with at most 1.1 busy CPUs outside the server and client had
+  p99 of 133 and 136 ms, three with 3.9 to 5.5 had 216 to 331 ms, and one with 8.0, set
+  aside, had 147 ms. The nine rounds of the flood check below, whose engine code differs
+  only in how header protection is set up, had 136 to 149 ms. Main's p99 was 668 to
+  786 ms in every round.
+- Connection churn on Linux: 1.09 times main's rate at 0.75 times its server CPU per
+  connection. On Windows the TLS handshake work that Schannel does in `lsass` counts
+  outside the server and client: in a separate churn round per build with per-process
+  counters, `lsass` used 4.4 CPUs for either build, most of the 5.6 to 6.0 CPUs outside
+  them. Windows churn rounds therefore come close to the ceiling with nothing else
+  running, and only one of the change's six stayed under it. Over all six rounds each the
+  change served 0.99 times main's connections per second at 0.74 times its server CPU per
+  connection. The server used 34 percent of its four CPUs for the change and 44 percent
+  for main, so its CPU does not bound the connection rate.
+- Main failed three Windows rounds and the change none: two `inspect c8x32` rounds
+  reset requests with H3_EXCESSIVE_LOAD during warmup, the window described under the
+  changes, and in one `upload1m` round, which ran its 15 seconds at the ordinary rate, a
+  client connection ended with QUIC_STATUS_ABORTED. That abort's cause was not
+  investigated. No Linux round failed.
+
+### Review findings
+
+An independent review of the change found no memory-safety or cross-connection exposure.
+It found three protocol and budget defects, fixed here, and raised one availability
+question:
+
+- With MAX_STREAMS deferred, the count granted to the peer could trail the window's room by
+  up to half its capacity, and a stream opened in between was accepted instead of failing
+  with STREAM_LIMIT_ERROR, as RFC 9000 section 4.6 requires. A peer-initiated stream is now
+  checked against the count granted.
+- A deferred acknowledgment waited for the owner's next tick, which runs as a turn of its
+  own. When turns wait long for a worker, that second wait could take the acknowledgment
+  past the 25 ms max_ack_delay peers assume of this endpoint; before the change it left in
+  the turn that received the packet. A turn that waited 5 ms or more since it was queued
+  now sends a waiting acknowledgment itself.
+- The connection owner's 256 KiB queue budget counted datagram lengths, but each copy is a
+  pooled array rounded up to a power of two, so datagrams just past one could hold nearly
+  twice the budget, about 384 MiB across 768 connections. It now counts the arrays.
+- The three loops share one lock, and .NET's `Monitor` does not hand a released lock to the
+  thread that waited longest. Under a sustained flood the receive loop, whose receives then
+  complete at once, could in principle take the lock back each time before the send or
+  timer loop got it.
+
+`PacketSharingTests` covers the stream limit on both sides and a late turn's
+acknowledgment, and `ConnectionOwnerTests` the late turn through the owner and the byte
+budget. Each new test fails with its fix removed.
+
+For the last question, the load benchmark's `run` mode gained `--udp-flood-cpus` and
+`--udp-flood-threads`, which run a `flood` process on its own CPUs during each HTTP/3
+sample. It sends 1-RTT datagrams with unknown connection IDs to the server's port; the
+receive loop reads each one, takes the lock to look it up, finds no connection and drops
+it. Windows, server on CPUs 0-3, client on 4-9, the flood on CPU 10 (one thread) or 10-11
+(two), three rounds of each, the change with these fixes (`bb77c121`) against main with #544
+(`c1251f6a`). Medians of the kept rounds: 5 of the 18 rounds without a flood were set
+aside for more than 7 busy CPUs outside the server and client, and none of the flooded
+ones.
+
+| Scenario | Server | Junk datagrams/s | req/s | p99 ms | req/s against none | p99 against none |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| h3 small c8x32 | main | none | 33,965 | 18.6 | | |
+| | | 184,177 | 30,275 | 23.4 | 0.89 | 1.25 |
+| | | 380,868 | 31,933 | 19.0 | 0.94 | 1.02 |
+| | change | none | 252,296 | 2.69 | | |
+| | | 174,997 | 220,803 | 3.10 | 0.88 | 1.15 |
+| | | 364,135 | 213,468 | 3.17 | 0.85 | 1.18 |
+| h3 small c64x1 | main | none | 25,880 | 3.06 | | |
+| | | 149,359 | 24,461 | 3.53 | 0.95 | 1.15 |
+| | change | none | 95,609 | 2.44 | | |
+| | | 143,248 | 91,862 | 1.66 | 0.96 | 0.68 |
+| h3 large1m c4x4 | main | none | 79 | 668 | | |
+| | | 157,775 | 73 | 721 | 0.93 | 1.08 |
+| | | 369,481 | 72 | 747 | 0.91 | 1.12 |
+| | change | none | 159 | 137 | | |
+| | | 151,376 | 154 | 141 | 0.97 | 1.03 |
+| | | 341,339 | 149 | 144 | 0.94 | 1.05 |
+
+Under up to 381,000 junk datagrams a second the change kept 85 to 97 percent of its
+throughput, and main 89 to 95 percent; p99 rose by up to 18 percent for the change and 25
+percent for main. The send and timer loops kept getting the lock: no scenario stalled, and
+with two flood threads the change's 32-stream connections still served 213,468 requests a
+second, six times main's rate without a flood. The later commits of the change set up
+header protection through a helper and bring in #544's credential cache, which runs per
+handshake; neither touches the receive loop.
+
 ### Left
 
-- The role-alternated `run` comparison of all eight `h3-` scenarios, three rounds, on
-  Windows and in the Linux container, between main and the change after both include #543.
 - Batched UDP sends (`UDP_SEGMENT` on Linux, `UDP_SEND_MSG_SIZE` on Windows), as MsQuic
   uses, for the per-datagram system call.
 - Sending STREAM data from a stream's send buffer when the packet is built, rather than
