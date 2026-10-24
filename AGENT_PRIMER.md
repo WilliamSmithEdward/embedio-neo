@@ -1052,6 +1052,15 @@ describe diagnostic binaries, not current production behavior. The requested
 listener display name is `EmbedIO-Neo HTTP Listener`. The measurement runner,
 wire regressions and evidence remain available for future investigations.
 
+The load benchmark's [`cold` mode](test/EmbedIO.LoadBenchmark/README.md#cold-start)
+starts a fresh server for every measurement and times listening, the first and
+second request on a new connection and a request on a second connection, for each
+protocol and optionally a ReadyToRun copy of the runner. The
+[HTTP/3 latency record](docs/project/quic-development-and-testing.md#startup-warm-and-tail-latency)
+has its results for the 2.17.0 code: JIT is most of a fresh process's first HTTP/3
+request, ReadyToRun cut it from 106 to 48 ms on Windows with no warm cost, and a
+warm small HTTP/3 request costs EmbedIO.Quic 2 to 6 times Kestrel's CPU.
+
 ### Response-pipeline validation (2.3.0 source tree)
 
 The test-only response state machines combine file ranges, conditional requests,
@@ -1119,7 +1128,7 @@ passing run. See [property testing](docs/guides/property-testing.md) and
 | First app | [Getting started](docs/guides/getting-started/README.md) |
 | Files | [Static files](docs/guides/getting-started/files.md), [streaming uploads](docs/guides/streaming-multipart.md), [resumable uploads](docs/guides/resumable-uploads.md) |
 | Authentication | [Bearer authentication, policies and optional JWT](docs/guides/bearer-authentication.md) |
-| Startup and latency | [First-endpoint measurements](docs/project/first-endpoint-latency.md), [Native AOT](docs/guides/trimming-and-native-aot.md) |
+| Startup and latency | [First-endpoint measurements](docs/project/first-endpoint-latency.md), [HTTP/3 startup, warm and tail latency](docs/project/quic-development-and-testing.md#startup-warm-and-tail-latency), [Native AOT](docs/guides/trimming-and-native-aot.md) |
 | Limits and deadlines | [Request limits](docs/guides/request-limits.md), [body limits](docs/guides/request-body-limits.md) |
 | HTTP/3 | [HTTP/3 listener](docs/guides/http3.md) |
 | OpenAPI | [OpenAPI documents](docs/guides/openapi.md) |
@@ -1202,7 +1211,9 @@ are local development aids, not distribution acceptance. CI runs all six RIDs, a
 the final-payload scans, browser sessions and 30-minute endurance runs passed. The
 consumers also run on glibc 2.27 and musl 1.2.3, .NET 10's floors, and as ad-hoc
 signed hardened-runtime macOS apps. Developer ID signing is not validated (the project
-has no Developer ID), and latency acceptance remains open. These native package changes shipped in 2.17.0.
+has no Developer ID). These native package changes shipped in 2.17.0; their HTTP/3
+startup, warm and tail latency on Windows and Linux are in the
+[development record](docs/project/quic-development-and-testing.md#startup-warm-and-tail-latency).
 
 
 The development connection now honors authenticated peer `NEW_CONNECTION_ID`
@@ -1211,7 +1222,8 @@ recovery owner. It retains at most two active peer IDs and four unacknowledged
 retirements, releases acknowledged records and uses the replacement ID before
 sending a close. These bounds remain constant over long-lived rotation. This
 handles peer destination IDs. Server-issued IDs and reset emission are described
-below; migration and Retry remain separate acceptance work.
+below; migration remains separate acceptance work, and Retry is an option
+([address validation](docs/guides/http3.md#address-validation)).
 
 CI run 39653100127 built all six native assets and assembled the combined package.
 Its complete package-consumer suites passed on Linux x64, Linux ARM64 and macOS
@@ -1227,8 +1239,7 @@ combined package and all six complete consumers, including Intel macOS and both
 musl architectures. Its Android emulator download failed before app startup;
 the unchanged failed-job retry passed on attempt two. This wheel remains test
 infrastructure, not a production dependency or an assertion of upstream Intel
-macOS support. See the development record for evidence and the remaining
-production, browser, endurance and latency work.
+macOS support. See the development record for evidence and the work that remains.
 
 
 The engine recognizes received stateless resets using tokens for
@@ -1350,7 +1361,7 @@ drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through t
 EmbedIO.Quic binding; the BCL client remains the independent test client.
 The [development record](docs/project/quic-development-and-testing.md) lists the
 platform, browser and endurance results, the open-issue audit and the work that
-remains, such as latency measurement.
+remains, such as endurance beyond 30 minutes and on macOS.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified
