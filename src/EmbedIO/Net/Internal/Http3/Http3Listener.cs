@@ -503,7 +503,9 @@ namespace EmbedIO.Net.Internal.Http3
             // H3_EXCESSIVE_LOAD, and the handshakes already running claim the free slots
             // first. Once established and handshaking connections, with those the binding has
             // admitted but this session has not accepted yet, fill the 256 slots, the binding
-            // refuses a new connection before its handshake instead. Read without the lock; a
+            // refuses a new connection before its handshake instead. An established connection
+            // holds its slot until it can serve no more requests and none still runs, not
+            // through its transport's closing or draining period. Read without the lock; a
             // stale count only moves the refusal by a connection or two.
             private bool Saturated(int queued) =>
                 Volatile.Read(ref _activeConnections) + Volatile.Read(ref _pendingHandshakes) + queued >= 256;
@@ -568,7 +570,8 @@ namespace EmbedIO.Net.Internal.Http3
                             _stop.Token,
                             _drain.Token,
                             _webTransport,
-                            _requestHeadersTimeout
+                            _requestHeadersTimeout,
+                            Release
                         )
                         .ConfigureAwait(false);
                 }
@@ -599,6 +602,20 @@ namespace EmbedIO.Net.Internal.Http3
 
                             _connections.Remove(id);
                         }
+                    }
+                }
+
+                // A connection that can serve no more requests gives its slot to a new one while
+                // its transport finishes closing or draining, which the endpoint still counts
+                // within its own 768 connections.
+                void Release()
+                {
+                    lock (_gate)
+                    {
+                        if (!active) return;
+
+                        active = false;
+                        _activeConnections--;
                     }
                 }
             }

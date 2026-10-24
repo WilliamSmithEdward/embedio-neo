@@ -1160,7 +1160,9 @@ Still open after the merge, each with its tracking issue:
    ([Retry and the supported TLS profile](#retry-and-the-supported-tls-profile)).
    [#520](https://github.com/WilliamSmithEdward/embedio-neo/issues/520).
 2. Resolved: past its bounds an HTTP/3 endpoint refuses new connections before any TLS
-   work ([Bounded TLS work under load](#bounded-tls-work-under-load)).
+   work, and a connection that can serve no more requests frees its listener slot
+   without waiting for its closing or draining period
+   ([Bounded TLS work under load](#bounded-tls-work-under-load)).
    [#521](https://github.com/WilliamSmithEdward/embedio-neo/issues/521).
 3. Startup, warm and tail-latency measurement. Windows embedded hosting leads, and a
    meaningful warm regression is not accepted for a cold-start gain.
@@ -3051,7 +3053,9 @@ of the phase and completed 512 and 458 connections in two rounds where main comp
 2,646 and 2,697. With the hand-off queue counted but not the uncreated connections, it
 still closed 2,701 attempts after their handshake in one Windows phase. The endpoint
 now counts a connection from its admission until a worker creates it, and passes that
-count and the hand-off queue's to the listener.
+count and the hand-off queue's to the listener. An established connection leaves the
+count once it can serve no more requests; see
+[Closing connections and their slots](#closing-connections-and-their-slots).
 
 ### Overload runs
 
@@ -3117,7 +3121,9 @@ once and frees its place under the cap.
 At 250 attempts per second every attempt completed on Windows. On Linux, two runs had
 about 300 attempts in flight at that rate, their closes taking 125 ms at the median and
 1.5 and 2.4 s at the 99th percentile, and the listener's 256 slots filled briefly: main
-closed 16 attempts after TLS in one and the change refused 32 in the other.
+closed 16 attempts after TLS in one and the change refused 32 in the other. Connections
+that had already closed held those slots;
+[Closing connections and their slots](#closing-connections-and-their-slots) measures it.
 
 With the cap at 512 the two servers face different numbers of attempts. With
 `--max-outstanding 8192` at 2,000 and 4,000 attempts per second the change took every
@@ -3162,6 +3168,152 @@ The server used 0.3 to 0.6 of its two CPUs on Windows and 1.0 to 1.7 on Linux, s
 Windows its CPUs did not limit how many connections it completed. Its one socket loop,
 which handles at most one received and one sent datagram per iteration, is the first
 suspect.
+
+### Closing connections and their slots
+
+A connection held its listener slot until the task that served it ended. When either
+side closed the connection, that task waited, at most five seconds, for the QUIC
+connection to finish its closing or draining period (RFC 9000 section 10.2): three probe
+timeouts, `3 * (smoothed RTT + max(4 * RTT variation, 1 ms) + 25 ms)` here. Only then
+did it wait for its stream workers and free the slot. A connection that sent GOAWAY,
+after a response that did not keep the connection alive, kept its slot until the peer
+closed it or its 30-second drain ended. 2.17.0 behaves the same.
+
+To see where a closing connection's time went, builds of main and of the change with a
+temporary patch that timestamps each established connection in the listener, the
+HTTP/3 connection and the QUIC connection ran the overload scenario once on each
+platform. The patch is not committed. Medians for main, in milliseconds per established
+connection:
+
+| Platform | Offered | Handshake | Until the response ended | Until the client's close arrived | Closing or draining | Stream workers and disposal |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Windows | 250/s | 3.3 | 0.3 | 0.3 | 149 | <0.1 |
+| Windows | 1,000/s | 27 | 24 | 5.5 | 334 | <0.1 |
+| Windows | 2,000/s | 24 | 16 | 6.6 | 310 | <0.1 |
+| Windows | 4,000/s | 24 | 16 | 8.9 | 320 | <0.1 |
+| Linux | 250/s | 5.9 | 0.5 | 0.4 | 97 | <0.1 |
+| Linux | 1,000/s | 39 | 43 | 9.6 | 412 | <0.1 |
+| Linux | 2,000/s | 31 | 13 | 5.5 | 395 | <0.1 |
+| Linux | 4,000/s | 36 | 26 | 7.4 | 445 | <0.1 |
+
+At the median the client's close arrived within 10 ms of its response, and the stream
+workers and disposal took under 0.1 ms; the scenario serves no WebTransport. The closing
+or draining period took the rest. It grows with the RTT the server measures, which load
+inflates: its 99th percentile was 0.4 s on Windows and 2.4 s on Linux at 250 attempts
+per second, and 1.1 to 2.5 s at the higher rates. In the Linux run main's slots filled
+at 250 per second, and it refused 138 attempts and closed 1 after TLS.
+
+A connection now gives its slot back as soon as it can serve no more requests and none
+is still running:
+
+- once it has closed, by sending or receiving `CONNECTION_CLOSE`, and every stream
+  worker has ended;
+- once it has sent GOAWAY and every request it accepted has ended, while it waits for
+  the peer to close it.
+
+The QUIC connection then finishes its closing or draining period as one of the
+endpoint's 768. `Http3TransportConnection.CloseAsync` only queues the close now, and the
+HTTP/3 connection waits for the period through `WaitClosedAsync`, after its stream
+workers rather than before them. A handler that outlives its response holds no slot, as
+before: its request's stream worker ends once the request completes or is cancelled.
+
+The instrumented runs, main against the change:
+
+| Platform | Offered | Server | Connections | Slot held p50 / p99 ms | Slot held after the close p50 / p99 ms | Closing or draining p50 / p99 ms | Slots held mean / peak |
+| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| Windows | 250/s | main | 3,750 | 153 / 535 | 149 / 435 | 149 / 439 | 42 / 106 |
+| Windows | 250/s | change | 3,750 | 4 / 11 | 0 / 0 | 148 / 179 | 1 / 8 |
+| Windows | 1,000/s | main | 7,284 | 466 / 1,319 | 334 / 1,052 | 336 / 1,051 | 114 / 257 |
+| Windows | 1,000/s | change | 8,107 | 156 / 588 | 0 / 9 | 411 / 1,263 | 49 / 257 |
+| Windows | 2,000/s | main | 6,743 | 399 / 1,555 | 310 / 1,235 | 308 / 1,239 | 221 / 257 |
+| Windows | 2,000/s | change | 6,807 | 182 / 731 | 0 / 40 | 471 / 1,975 | 34 / 257 |
+| Windows | 4,000/s | main | 6,572 | 416 / 2,481 | 319 / 2,113 | 320 / 2,120 | 216 / 257 |
+| Windows | 4,000/s | change | 6,466 | 162 / 1,025 | 0 / 24 | 486 / 2,251 | 78 / 257 |
+| Linux | 250/s | main | 3,611 | 107 / 3,254 | 97 / 2,412 | 96 / 2,414 | 79 / 257 |
+| Linux | 250/s | change | 3,750 | 6 / 169 | 0 / 8 | 88 / 366 | 5 / 54 |
+| Linux | 1,000/s | main | 5,138 | 587 / 2,746 | 412 / 2,173 | 399 / 2,164 | 93 / 257 |
+| Linux | 1,000/s | change | 4,770 | 185 / 1,589 | 0 / 64 | 521 / 2,846 | 39 / 257 |
+| Linux | 2,000/s | main | 4,715 | 541 / 2,453 | 395 / 2,017 | 378 / 2,019 | 179 / 257 |
+| Linux | 2,000/s | change | 4,644 | 107 / 2,186 | 0 / 14 | 446 / 4,028 | 68 / 253 |
+| Linux | 4,000/s | main | 4,521 | 606 / 3,089 | 445 / 2,457 | 437 / 2,457 | 149 / 257 |
+| Linux | 4,000/s | change | 4,434 | 141 / 1,696 | 0 / 28 | 551 / 3,152 | 48 / 257 |
+
+A slot counts here from the listener's accept loop taking the connection to its release.
+The peak can pass 256 by a connection or two, because the admission check reads the count
+without the lock. The change's closing periods are longer under load: it serves more
+connections at once, and the server measured higher RTTs, a median smoothed RTT of 28
+against 20 ms on Windows and 39 against 29 ms on Linux at 1,000 per second. Those periods
+no longer hold slots. In the change's instrumented Windows run a python process used
+about 6 CPUs at 2,000 and 4,000 per second; the server still had 0.4 of its two CPUs, as
+in the other runs.
+
+The development host's self-test runs the actual listener and HTTP/3 connection over an
+in-memory transport whose closing period the test ends
+(`ProductionListenerSlotTests`). A connection the peer closes frees its slot while its
+transport still drains, and only once; it keeps the slot while a stream worker still
+runs; a connection that sent GOAWAY keeps the slot while an accepted request runs,
+frees it when that request ends before the peer closes, and refuses new requests. Four
+mutations of the release points each fail exactly their matching case: no release after
+the workers, a release before them, no release after the drain, and a release when
+GOAWAY is sent.
+`Http3ListenerTest.ADrainedConnectionFreesItsSlotBeforeThePeerCloses` does the GOAWAY
+case on the wire with the .NET client, reading the GOAWAY from the server's control
+stream, and fails without the drain's release.
+
+The overload scenario then ran without the patch on the same hosts, as above: main
+`19ccc261` and the change built on it, the change's load benchmark the client for both,
+two rounds each in alternating order. Each cell is round 1 / round 2.
+
+Windows:
+
+| Offered | Server | Attempts | Completed | Refused before TLS | Closed after TLS | Timed out | Skipped at cap | Handshake p50 ms | Refusal median ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 250/s | main | 3,750 / 3,750 | 3,750 / 3,750 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 7 / 7 | - / - |
+| 250/s | change | 3,750 / 3,750 | 3,750 / 3,750 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 7 / 7 | - / - |
+| 1,000/s | main | 14,479 / 15,000 | 6,416 / 7,098 | 7,980 / 7,770 | 83 / 132 | 0 / 0 | 521 / 0 | 32 / 29 | 7 / 5 |
+| 1,000/s | change | 8,583 / 9,016 | 7,915 / 8,407 | 668 / 608 | 0 / 1 | 0 / 0 | 6,417 / 5,984 | 46 / 41 | 11 / 10 |
+| 2,000/s | main | 17,884 / 23,729 | 7,209 / 6,849 | 10,606 / 16,729 | 69 / 151 | 0 / 0 | 12,116 / 6,271 | 33 / 29 | 9 / 7 |
+| 2,000/s | change | 10,457 / 10,865 | 7,433 / 7,978 | 3,024 / 2,885 | 0 / 2 | 0 / 0 | 19,543 / 19,135 | 42 / 41 | 8 / 7 |
+| 4,000/s | main | 19,640 / 26,971 | 6,365 / 6,661 | 13,238 / 20,259 | 37 / 51 | 0 / 0 | 40,360 / 33,029 | 41 / 32 | 10 / 9 |
+| 4,000/s | change | 12,858 / 8,123 | 7,283 / 7,357 | 5,575 / 731 | 0 / 0 | 0 / 35 | 47,142 / 51,877 | 43 / 35 | 11 / 10 |
+
+Linux:
+
+| Offered | Server | Attempts | Completed | Refused before TLS | Closed after TLS | Timed out | Skipped at cap | Handshake p50 ms | Refusal median ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 250/s | main | 3,750 / 3,750 | 3,750 / 3,750 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 6 / 6 | - / - |
+| 250/s | change | 3,750 / 3,750 | 3,750 / 3,750 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 11 / 6 | - / - |
+| 1,000/s | main | 10,706 / 11,810 | 4,674 / 4,873 | 6,028 / 6,927 | 4 / 10 | 0 / 0 | 4,294 / 3,190 | 53 / 49 | 4 / 4 |
+| 1,000/s | change | 5,438 / 5,125 | 5,246 / 4,895 | 189 / 230 | 0 / 0 | 3 / 0 | 9,562 / 9,875 | 66 / 61 | 16 / 282 |
+| 2,000/s | main | 9,046 / 14,325 | 4,411 / 4,540 | 4,635 / 9,784 | 0 / 1 | 0 / 0 | 20,954 / 15,675 | 51 / 55 | 5 / 4 |
+| 2,000/s | change | 4,475 / 5,149 | 4,390 / 4,319 | 12 / 814 | 0 / 0 | 73 / 16 | 25,525 / 24,851 | 51 / 65 | 134 / 11 |
+| 4,000/s | main | 24,116 / 29,207 | 4,703 / 4,261 | 19,407 / 24,943 | 6 / 3 | 0 / 0 | 35,884 / 30,793 | 62 / 41 | 4 / 4 |
+| 4,000/s | change | 5,703 / 4,940 | 5,084 / 4,531 | 617 / 321 | 0 / 0 | 2 / 88 | 54,297 / 55,060 | 65 / 55 | 4 / 40 |
+
+On Windows the change completed 1.18 to 1.23 times as many connections as main's
+matching round at 1,000 attempts per second, 1.03 to 1.16 times at 2,000 and 1.10 to
+1.14 times at 4,000, and closed at most 2 attempts after their handshake where main
+closed 37 to 151. On Linux it completed 0.95 to 1.12 times as many and closed none after
+TLS, where main closed up to 10. The freed slots admit attempts that main refused, so the
+change refused far fewer; with more of its attempts still in progress, its client reached
+the 512 cap more often and started fewer.
+
+Both servers timed out some handshakes on Linux under overload. Across the overloaded
+phases of these runs, the instrumented runs and a third round of main, main timed out 0
+to 81 per phase, 164 in 12 phases, and the change 0 to 88, 223 in 9. On Windows main
+timed out none and the change 35, in one phase. At 2,000 per second on Linux the change's
+server used 1.0 to 1.2 of its two CPUs where main's used 1.3 to 1.5, for about as many
+completed connections; the single socket loop remains the first suspect.
+
+The machine was in use. Outside the server and client the Windows host was busy 1.6 to
+5.6 CPUs per phase; readable processes, builds by other sessions among them, accounted for
+at most 2.3, and the rest belongs to processes the tool cannot read, lsass among them,
+which was using 0.66 CPUs when sampled during a run. For Linux runs the host's busy CPUs
+above the VM's own were 0.1 to 3.8 per phase. Two runs of the change were set aside: a
+Windows round in which a node process used 11.7 CPUs at 2,000 per second and the server
+got 0.05 to 0.23 of its two CPUs, repeated afterwards, and a third Linux round with 5 to
+9 CPUs of outside load in every phase. The third round of main, with up to 4.6 CPUs of
+outside load, counts only in the timeouts above.
 
 ## Retry and the supported TLS profile
 

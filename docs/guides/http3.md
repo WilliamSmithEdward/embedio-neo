@@ -231,10 +231,15 @@ room for it: its established connections and those still in their handshake fill
 256 connection slots. The client receives an Initial packet with
 `CONNECTION_REFUSED` (RFC 9000 section 5.2.2) and fails at once. Established
 connections carry on. The server logs refusals as a warning at most every ten
-seconds, by reason, with the queue delay and the open connections. This is
+seconds, by reason, with the queue delay and the open connections. A connection
+gives its slot back once it can serve no more requests and none is still running:
+when it has closed, or when it has sent GOAWAY and its last accepted request has
+ended. Its QUIC connection then spends its closing or draining period, three probe
+timeouts (RFC 9000 section 10.2), as one of the endpoint's 768. This is
 unreleased. In 2.17.0 a full endpoint drops new connections' packets until the
-clients' handshakes time out, and a connection the listener has no room for
-completes its TLS handshake before it is closed with `H3_EXCESSIVE_LOAD`.
+clients' handshakes time out, a connection the listener has no room for completes
+its TLS handshake before it is closed with `H3_EXCESSIVE_LOAD`, and a closed
+connection keeps its slot until its closing or draining period ends.
 
 `Stop` and disposal cancel active requests, release pending accepts and close
 bindings. A directly used `IHttpListener` can restart after Stop; WebServer itself
