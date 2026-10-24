@@ -267,6 +267,10 @@ csharp_style_prefer_primary_constructors = false:warning
 # Owner-approved: preserve constructor syntax supported by the pinned scanner.
 csharp_style_prefer_primary_constructors = false:warning
 
+[src/EmbedIO/Net/Internal/Http3/Tls/OpenSslTls.cs]
+# Owner-approved: preserve constructor syntax supported by the pinned scanner.
+csharp_style_prefer_primary_constructors = false:warning
+
 [src/EmbedIO.Quic/Connections/LocalConnectionIds.cs]
 # Keep the state owner's validating constructor explicit.
 csharp_style_prefer_primary_constructors = false:warning

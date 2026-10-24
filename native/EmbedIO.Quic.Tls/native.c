@@ -36,7 +36,7 @@ struct connection {
 struct credential {
     EVP_PKEY *key;
     X509 *certificate;
-    STACK_OF(X509) *chain;
+    struct stack_st_X509 *chain; /* STACK_OF(X509), which the pinned Semgrep cannot parse here */
     int error;
 };
 

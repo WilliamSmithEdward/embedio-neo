@@ -3721,6 +3721,14 @@ On `4b77cda2`, which merges main with #543's slot release, `self-test`,
 `schannel-self-test`, the source-quality, formatting and both suppression gates, the
 AnalyzerGuard and test discovery (7,504 cases) passed.
 
+The Security report then failed on Semgrep parse errors, not findings. Semgrep 1.181.0
+could not parse the two `Credential` classes' primary constructors or `STACK_OF(X509)` in
+`native.c`'s credential struct, so those three files went unscanned. The classes now have
+explicit constructors, and the struct names `struct stack_st_X509`, which the macro
+expands to. The pinned image with CI's rule packs parses all three files without errors,
+and the build, source-quality, formatting and suppression gates and the AnalyzerGuard
+passed again.
+
 A private adversarial review of the cached key material, with an independent read-only
 pass, is kept outside the repository. It found no use-after-free, double free or
 wrong-certificate path. The partial-chain and disposed-certificate rules above came from
