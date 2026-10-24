@@ -73,10 +73,7 @@ namespace EmbedIO.Quic
                 {
                     _aead = new AesGcm(key, 16);
                     _aesHeader = Aes.Create();
-                    _aesHeader.Key = headerKey;
-                    _aesHeader.Mode = CipherMode.ECB;
-                    _aesHeader.Padding = PaddingMode.None;
-                    _headerTransform = _aesHeader.CreateEncryptor();
+                    _headerTransform = CreateHeaderTransform(_aesHeader, headerKey);
                 }
             }
 
@@ -96,6 +93,16 @@ namespace EmbedIO.Quic
                 CryptographicOperations.ZeroMemory(key);
                 CryptographicOperations.ZeroMemory(headerKey);
             }
+        }
+
+        // RFC 9001 section 5.4.3: each header-protection mask is one AES block, the 16-byte
+        // sample encrypted in ECB mode under the quic hp key.
+        private static ICryptoTransform CreateHeaderTransform(Aes aes, byte[] key)
+        {
+            aes.Key = key;
+            aes.Mode = CipherMode.ECB;
+            aes.Padding = PaddingMode.None;
+            return aes.CreateEncryptor();
         }
 
         internal static int SecretLength(QuicCipherSuite cipherSuite) => cipherSuite switch
