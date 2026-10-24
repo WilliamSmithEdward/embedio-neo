@@ -154,8 +154,11 @@ namespace EmbedIO.Quic
         // select it share. It owns a copy of the certificate; the source stays application-owned.
         // Schannel chooses the issuer chain the credential sends, so a certificate whose chain
         // the stores cannot complete gets a credential per handshake, as before.
-        internal sealed class Credential(X509Certificate2 certificate, NativePair handle, bool cacheable)
-            : SharedCredential(cacheable)
+        internal sealed class Credential(
+            X509Certificate2 certificate,
+            NativePair handle,
+            bool cacheable
+        ) : SharedCredential(cacheable)
         {
             private NativePair _handle = handle;
 
