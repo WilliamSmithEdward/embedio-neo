@@ -1164,8 +1164,10 @@ Still open after the merge, each with its tracking issue:
    without waiting for its closing or draining period
    ([Bounded TLS work under load](#bounded-tls-work-under-load)).
    [#521](https://github.com/WilliamSmithEdward/embedio-neo/issues/521).
-3. Startup, warm and tail-latency measurement. Windows embedded hosting leads, and a
-   meaningful warm regression is not accepted for a cold-start gain.
+3. Resolved: cold, warm and tail latency are measured on Windows and Linux beside
+   HTTP/2 over TLS and Kestrel, and ReadyToRun takes most of the JIT time out of the
+   first request with no warm cost
+   ([Startup, warm and tail latency](#startup-warm-and-tail-latency)).
    [#522](https://github.com/WilliamSmithEdward/embedio-neo/issues/522).
 4. Endurance longer than 30 minutes, and on macOS.
    [#523](https://github.com/WilliamSmithEdward/embedio-neo/issues/523).
@@ -3375,3 +3377,170 @@ and off, and CI runs them with it on Linux and macOS (`--address-validation`).
   certificate; a hardware- or store-held key never reaches it. A signing callback from
   native code into .NET on every handshake would lift this. Schannel uses the key in
   place, so Windows accepts non-exportable CNG keys.
+
+## Startup, warm and tail latency
+
+These are the first latency results for EmbedIO.Quic ([#522](https://github.com/WilliamSmithEdward/embedio-neo/issues/522)).
+[HTTP/3 request path performance](http3-performance.md) measured the earlier
+`System.Net.Quic` provider. Like that record, these are loopback development
+measurements that locate costs, not a public benchmark.
+
+### Method
+
+- Source `a99319de`, whose product code is 2.17.0's, plus this change's `cold` mode in
+  `test/EmbedIO.LoadBenchmark`, which touches only the harness.
+- Windows: AMD Ryzen 7 9800X3D (8 cores, 16 logical), 64 GB, Windows 10.0.26300 on
+  the Ultimate Performance power scheme, .NET 10.0.13. Server on logical CPUs 0-3,
+  client on 4-11.
+- Linux: the same machine, in a container on Docker Desktop's WSL 2 VM (kernel
+  6.18.33.2) from the SDK 10.0.402 image `sha256:747cbade...`, limited to 8 CPUs.
+  Server on 0-3, client on 4-7. MsQuic 2.6.2 serves the .NET client and Kestrel, and
+  EmbedIO.Quic uses main CI's TLS library (SHA-256 `dc116366...`). A VM's loopback
+  is slower than bare metal, so compare Linux figures with each other, not with
+  Windows.
+- Three servers: EmbedIO as the benchmark builds it (JIT), the same runner published
+  ReadyToRun (`-p:PublishReadyToRun=true`), and Kestrel 10.0.13 from the ASP.NET Core
+  shared framework, which ships precompiled. HTTP/1.1, HTTP/1.1 over TLS and HTTP/2
+  over TLS run beside HTTP/3.
+- Every run held the benchmark lock under `scripts/guarded_load_benchmark.py`, and
+  every response was validated.
+
+### Cold start
+
+`cold` starts a new server process for each measurement; one client process, warmed
+by an excluded first iteration, sends 32 requests on a new connection and one on a
+second connection. 30 measured iterations per engine and protocol, engine order
+alternating. No measurement failed (372 per platform). Medians in milliseconds, with
+the 90th percentile in brackets.
+
+| Platform | Server | Listening after process start | First HTTP/3 request | Second HTTP/3 connection | First HTTP/2 over TLS request |
+| --- | --- | --- | --- | --- | --- |
+| Windows | EmbedIO | 94.5 [105.0] | 106.4 [112.1] | 7.2 [7.9] | 65.5 [68.3] |
+| Windows | EmbedIO, ReadyToRun | 82.4 [86.8] | 47.8 [50.8] | 6.9 [7.6] | 35.3 [38.3] |
+| Windows | Kestrel | 112.1 [115.1] | 34.6 [36.8] | 3.8 [4.2] | 34.2 [39.5] |
+| Linux | EmbedIO | 84.5 [91.4] | 141.5 [148.8] | 9.2 [12.1] | 84.7 [92.6] |
+| Linux | EmbedIO, ReadyToRun | 71.5 [77.9] | 86.6 [93.8] | 9.0 [11.7] | 55.9 [60.5] |
+| Linux | Kestrel | 105.8 [118.3] | 80.6 [84.5] | 4.1 [9.1] | 30.4 [32.1] |
+
+"Listening" is the process's own uptime when its listener had started; the HTTP/3
+column's server. Linux gives a process's start time in 10 ms clock ticks, which adds
+up to 10 ms to each Linux listening figure. The full tables, with HTTP/1.1, the
+second request, warm medians and the machine's busy CPUs, are in the run
+directories' `summary.md`.
+
+- EmbedIO starts listening sooner than Kestrel in every case, by 18 to 34 ms on
+  HTTP/3 and up to 55 ms on TLS over TCP.
+- JIT compilation is most of EmbedIO's first request. ReadyToRun cuts the first
+  HTTP/3 request from 106 to 48 ms on Windows and from 142 to 87 ms on Linux, and the
+  first HTTP/1.1 request from 27 to 10 ms on both. Counted from process start,
+  listening plus the first HTTP/3 response, ReadyToRun EmbedIO answers sooner than
+  Kestrel: 130 against 147 ms on Windows and 158 against 186 ms on Linux.
+- The rest of the HTTP/3 gap is per connection. A second connection to a warm server
+  costs EmbedIO 6.9 to 7.2 ms on Windows and 9.0 to 9.2 ms on Linux, against 3.8 and
+  4.1 ms for Kestrel, with or without ReadyToRun; over TCP the two are within 0.3 ms.
+  EmbedIO.Quic sets up TLS state for each connection (see below).
+
+### Warm steady state and tail
+
+The ordinary `run` mode, three rounds with engine order alternating, eight HTTP/3
+and eight HTTP/2-over-TLS scenarios: 13-byte responses on 64 single-stream
+connections (`c64x1`) and on 8 connections with 32 concurrent streams each (`c8x32`),
+the same on a route that reads request properties (`inspect`), 1 MiB responses
+written at once (`large1m`) and flushed every 16 KiB (`stream1m`), 1 MiB uploads, and
+a new connection for every request (`churn`). Medians of the kept rounds. A round
+with more than 7 busy CPUs outside the server and client was set aside, 14 of 144 on
+Windows and 17 of 144 on Linux, while other work ran on the machine. The benchmark
+cannot see the host from inside the VM, so for Linux that count is the Windows host's
+busy CPUs, which include the VM's, less the server's and client's own CPU during each
+round's measurement. No measurement failed.
+
+Windows, server on CPUs 0-3:
+
+| Scenario | Server | req/s | server CPU per request | allocated per request | p50 | p95 | p99 | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| h3 small c64x1 | EmbedIO | 25,587 | 137 us | 96 KB | 2.41 | 2.82 | 3.17 | 11.1 |
+| | EmbedIO, ReadyToRun | 25,264 | 140 us | 96 KB | 2.43 | 2.84 | 3.25 | 11.2 |
+| | Kestrel | 116,137 | 69 us | 2.5 KB | 0.36 | 1.37 | 3.53 | 15.6 |
+| h3 small c8x32 | EmbedIO | 32,835 | 117 us | 105 KB | 6.86 | 14.95 | 18.64 | 27.9 |
+| | EmbedIO, ReadyToRun | 32,890 | 116 us | 106 KB | 6.86 | 14.95 | 18.23 | 28.7 |
+| | Kestrel | 316,826 | 20 us | 2.8 KB | 0.55 | 1.59 | 8.70 | 16.6 |
+| h3 large1m c4x4 | EmbedIO | 78 | 42 ms | 9.9 MB | 156 | 564 | 682 | 786 |
+| | Kestrel | 1,173 | 4.9 ms | 1.6 MB | 13.3 | 18.4 | 28.3 | 44.7 |
+| h3 upload1m c4x4 | EmbedIO | 169 | 21 ms | 11.6 MB | 88.5 | 149 | 192 | 301 |
+| | Kestrel | 1,377 | 3.5 ms | 17 KB | 10.4 | 17.6 | 19.6 | 23.2 |
+| h3 churn c16 | EmbedIO | 1,044 | 1.05 ms | 825 KB | 14.3 | 24.4 | 30.7 | 37.3 |
+| | Kestrel | 2,147 | 0.93 ms | 134 KB | 6.2 | 15.3 | 20.1 | 25.1 |
+| h2 TLS small c8x32 | EmbedIO | 475,193 | 8.0 us | 9.3 KB | 0.46 | 1.16 | 1.51 | 3.6 |
+| | Kestrel | 887,412 | 4.2 us | 39 B | 0.27 | 0.42 | 0.80 | 2.3 |
+| h2 TLS large1m c4x4 | EmbedIO | 2,504 | 1.6 ms | 47 KB | 6.35 | 9.01 | 10.9 | 14.5 |
+| | Kestrel | 3,510 | 1.1 ms | 9.8 KB | 4.51 | 5.84 | 7.48 | 16.8 |
+
+Linux, server on CPUs 0-3 of the container's eight:
+
+| Scenario | Server | req/s | server CPU per request | allocated per request | p50 | p95 | p99 | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| h3 small c64x1 | EmbedIO | 13,979 | 213 us | 97 KB | 4.20 | 8.40 | 10.55 | 13.7 |
+| | EmbedIO, ReadyToRun | 13,511 | 223 us | 97 KB | 4.35 | 8.55 | 11.67 | 22.2 |
+| | Kestrel | 60,535 | 66 us | 2.5 KB | 0.87 | 2.56 | 4.20 | 7.7 |
+| h3 small c8x32 | EmbedIO | 30,485 | 103 us | 93 KB | 7.42 | 17.10 | 23.55 | 31.1 |
+| | EmbedIO, ReadyToRun | 30,425 | 103 us | 93 KB | 7.42 | 17.41 | 24.78 | 35.6 |
+| | Kestrel | 159,784 | 21 us | 3.1 KB | 1.33 | 3.64 | 5.84 | 10.1 |
+| h3 large1m c4x4 | EmbedIO | 39 | 82 ms | 7.0 MB | 305 | 1,101 | 1,271 | 1,634 |
+| | Kestrel | 1,368 | 3.3 ms | 1.9 MB | 11.6 | 17.0 | 21.7 | 37.3 |
+| h3 upload1m c4x4 | EmbedIO | 89 | 40 ms | 11.0 MB | 158 | 334 | 541 | 947 |
+| | Kestrel | 2,275 | 1.7 ms | 9.8 KB | 6.25 | 13.5 | 21.1 | 26.6 |
+| h3 churn c16 | EmbedIO | 647 | 5.5 ms | 611 KB | 24.2 | 37.7 | 43.8 | 50.8 |
+| | Kestrel | 1,683 | 1.4 ms | 134 KB | 9.0 | 15.8 | 25.0 | 50.0 |
+| h2 TLS small c8x32 | EmbedIO | 347,765 | 9.7 us | 9.2 KB | 0.61 | 1.55 | 2.59 | 5.4 |
+| | Kestrel | 500,637 | 5.5 us | 41 B | 0.42 | 1.10 | 1.82 | 3.3 |
+| h2 TLS large1m c4x4 | EmbedIO | 3,172 | 1.2 ms | 45 KB | 4.69 | 8.45 | 11.8 | 22.0 |
+| | Kestrel | 3,285 | 1.1 ms | 13 KB | 4.69 | 7.48 | 9.83 | 14.0 |
+
+ReadyToRun rows for the other scenarios match the JIT build within the spread
+between rounds, except as noted below; the full tables are in the run directories.
+
+- ReadyToRun costs nothing warm on Windows. Its HTTP/3 and HTTP/2 throughput, CPU
+  and tails match the JIT build in every scenario, so its cold-start gain comes with
+  no warm regression. On Linux, where rounds vary more, it matched everywhere but
+  HTTP/2-over-TLS connection churn: its three kept rounds served 3,233 to 4,108
+  connections per second against the JIT build's 4,314 and 4,346. Its HTTP/3 churn
+  matched, and Windows showed no such gap; more rounds would tell whether it is real.
+- Kestrel's HTTP/3 server used up to twice the four CPUs it was given on Windows and
+  up to 1.2 times them on Linux: MsQuic's threads do not stay within the process's
+  CPU set. Its HTTP/3 requests per second are therefore not a same-CPU comparison;
+  its CPU per request is.
+- Small HTTP/3 requests cost EmbedIO.Quic 2 to 6 times Kestrel's CPU on Windows and
+  3 to 5 times on Linux, with about 100 KB of allocation each against 2.5 to 3.1 KB.
+  On 64 single-stream connections the Windows tails are close (p99 3.2 against
+  3.5 ms), since each client waits for its response; on Linux the p99 is 10.6 against
+  4.2 ms. With 32 streams per connection EmbedIO's Windows p50 is 6.9 ms against
+  0.55 ms.
+- 1 MiB HTTP/3 transfers are the widest gap: 6 to 10 times the CPU per response on
+  Windows and 24 to 33 times on Linux, with 7 to 11 bytes allocated per byte sent or
+  received.
+- New HTTP/3 connections run at half Kestrel's rate on Windows while the server uses
+  28% of its CPUs, so the per-connection cost below, not CPU, limits them. On Linux
+  they run at 38% of Kestrel's rate and each costs 5.5 ms of server CPU against
+  1.4 ms, most of it the TLS setup measured below, which runs in the server process.
+- HTTP/2 over TLS stays close to Kestrel: 1.1 to 1.9 times its CPU per request on
+  Windows and 0.8 to 1.8 times on Linux. Its largest gap is allocation, 9 KB per
+  small request against about 40 bytes.
+
+### Per-connection TLS setup
+
+EmbedIO.Quic prepares TLS for every connection from scratch, after it selects the
+connection's certificate. A probe timed those steps alone, with the benchmark's kind
+of certificate (self-signed, exportable key), 2,000 times each on one thread:
+
+| Platform | Step | Median | 90th percentile |
+| --- | --- | ---: | ---: |
+| Windows | Copy the certificate and acquire a Schannel credential (`AcquireCredentialsHandleW`) | 0.81 ms | 0.90 ms |
+| Linux | Export the certificate and key as PKCS#12 | 2.95 ms | 3.23 ms |
+| Linux | Create the OpenSSL state and load the PKCS#12 into it | 0.68 ms | 0.73 ms |
+| Linux | Build the outgoing chain (`X509Chain.Build`) | 0.15 ms | 0.21 ms |
+
+The times are elapsed time on the calling thread. They make up 0.8 ms of the 3.1 to
+3.4 ms per-connection gap to Kestrel on Windows and 3.8 ms of the 4.9 to 5.1 ms on
+Linux. MsQuic loads its credential once per listener configuration and reuses it.
+Caching the credential and the exported key per certificate would take these steps
+out of every handshake after the first; it is not part of this change.
