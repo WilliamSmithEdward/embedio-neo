@@ -3554,16 +3554,20 @@ eviction, caching handshakes older than a publication, and a factory that keeps 
 credentials. Each failed `self-test` or `schannel-self-test`. A factory that never
 disposes its cache does not compile (CA2213).
 
-Local results, on commit `04c82d03` (the last commit, which only changes the cache's
-entry type, passed both self-tests):
+Local results on commit `04c82d03`; the later commits change only the cache's entry type,
+formatting and documentation, and merge main:
 
 - NUnit HTTP/3, WebTransport and certificate-rotation subset, 856 cases: Windows 854
   passed and 2 platform skips; Linux, in the measurement image with the change's native
   library, 855 passed and 1 skip.
 - `scripts/run-quic-schannel.ps1`, the Windows CI script, passed in full, the six
   client-certificate cases with no session tickets, and `verify_tls_listener.py` passed.
-- The native build's binary audit for linux-x64, the 28 native unit tests (one platform
-  skip), and the source-quality, formatting and both suppression gates passed.
+- The native build's binary audit for linux-x64 and the 28 native unit tests (one
+  platform skip) passed.
+
+On `e893ede9`, after the merge with main, `self-test`, `schannel-self-test`, the
+source-quality, formatting and both suppression gates, the AnalyzerGuard and test
+discovery (7,503 cases) passed.
 
 A private adversarial review of the cached key material, with an independent read-only
 pass, is kept outside the repository. It found no use-after-free, double free or
