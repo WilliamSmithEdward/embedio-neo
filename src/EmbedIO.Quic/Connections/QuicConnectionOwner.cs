@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace EmbedIO.Quic
@@ -23,7 +24,8 @@ namespace EmbedIO.Quic
     {
         private readonly object _gate = new();
 
-        // Copies are rented and cleared before they are returned.
+        // Copies are rented and cleared before they are returned. The byte budget counts each
+        // rented array, which can be nearly twice its datagram.
         private readonly Queue<(
             byte[] Bytes,
             int Length,
@@ -115,13 +117,20 @@ namespace EmbedIO.Quic
 
                 if (bytes.Length is < 1 or > 65535) return false;
 
-                if (_pendingPackets >= _packetCapacity || bytes.Length > _byteCapacity - _pendingBytes) return false;
+                if (_pendingPackets >= _packetCapacity) return false;
 
                 var copy = ArrayPool<byte>.Shared.Rent(bytes.Length);
+
+                if (copy.Length > _byteCapacity - _pendingBytes)
+                {
+                    ArrayPool<byte>.Shared.Return(copy);
+                    return false;
+                }
+
                 bytes.CopyTo(copy);
                 _packets.Enqueue((copy, bytes.Length, resetOwner, endpoints));
                 _pendingPackets++;
-                _pendingBytes += bytes.Length;
+                _pendingBytes += copy.Length;
             }
 
             return _execution.Wake();
@@ -163,11 +172,16 @@ namespace EmbedIO.Quic
         // Queued datagrams one turn processes before other connections' turns run.
         private const int PacketsPerTurn = 16;
 
+        // A turn that waited this long for a worker acknowledges what it receives at once
+        // (QuicConnection.AcknowledgeAtOnce).
+        internal const double LateTurnMilliseconds = 5;
+
         private void Execute()
         {
+            var late = Stopwatch.GetElapsedTime(_execution.QueuedAt).TotalMilliseconds >= LateTurnMilliseconds;
             var processed = 0;
 
-            while (processed < PacketsPerTurn && Process(processed == 0)) processed++;
+            while (processed < PacketsPerTurn && Process(processed == 0, late)) processed++;
 
             bool pending;
 
@@ -179,7 +193,7 @@ namespace EmbedIO.Quic
         // Processes the next queued datagram. With none queued, only a turn's first call runs
         // the timer or application work instead. Returns whether it processed a datagram and
         // the connection is still open.
-        private bool Process(bool first)
+        private bool Process(bool first, bool late)
         {
             byte[]? packet;
             int length;
@@ -225,6 +239,7 @@ namespace EmbedIO.Quic
 
                 if (connection == null) return false;
 
+                connection.AcknowledgeAtOnce = late;
                 connection.BeginRouting(endpoints);
                 var output = packet == null
                     ? tick ? connection.Tick(ReadClock()) : connection.PumpApplications(ReadClock())
@@ -296,7 +311,7 @@ namespace EmbedIO.Quic
                 {
                     lock (_gate)
                     {
-                        _pendingBytes -= length;
+                        _pendingBytes -= packet.Length;
                         _pendingPackets--;
                     }
 

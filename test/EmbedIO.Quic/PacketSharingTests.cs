@@ -18,6 +18,9 @@
                 () => SharedEcho(true),
                 () => SharedEcho(false),
                 StreamCreditShared,
+                () => GrantedStreamLimit(false),
+                () => GrantedStreamLimit(true),
+                LateTurnAcknowledged,
                 SharedPacketRecovered
             ];
 
@@ -108,6 +111,7 @@
                         0x10 or 0x12 or 0x13 => new Frame(type, reader.Integer(), 0),
                         0x11 => new Frame(type, reader.Integer(), reader.Integer()),
                         0x18 => ReadConnectionId(ref reader),
+                        0x1c => ReadClose(ref reader),
                         _ => throw new QuicFuzzFailure("packet-sharing-unexpected-frame-" + type)
                     }
                 );
@@ -150,6 +154,15 @@
             reader.Take(reader.Byte());
             reader.Take(16);
             return new Frame(0x18, sequence, 0);
+        }
+
+        // CONNECTION_CLOSE as (error code, frame type).
+        private static Frame ReadClose(ref WireReader reader)
+        {
+            var code = reader.Integer();
+            var frameType = reader.Integer();
+            reader.Take((int)reader.Integer());
+            return new Frame(0x1c, code, frameType);
         }
 
         private static IEnumerable<Frame> All(List<List<Frame>> packets, ulong type) =>
@@ -226,21 +239,28 @@
             }
         }
 
+        // The largest packet number among the server's 1-RTT packets.
+        private static ulong Largest(List<byte[]> output)
+        {
+            ulong largest = 0;
+
+            foreach (var packet in output)
+            {
+                using var keys = new PacketKeys(new byte[32]);
+                keys.Unprotect(packet, 1 + Client.Length, 0, out var number);
+                largest = Math.Max(largest, number);
+            }
+
+            return largest;
+        }
+
         private static void StreamCreditShared()
         {
             var (connection, now) = Create(true);
 
             using (connection)
             {
-                var echo = connection.Receive(Packet(connection, Stream(0, "a"u8), 1), now + 1);
-                ulong largest = 0;
-
-                foreach (var packet in echo)
-                {
-                    using var keys = new PacketKeys(new byte[32]);
-                    keys.Unprotect(packet, 1 + Client.Length, 0, out var number);
-                    largest = Math.Max(largest, number);
-                }
+                var largest = Largest(connection.Receive(Packet(connection, Stream(0, "a"u8), 1), now + 1));
 
                 // The acknowledged echo retires stream 0. Fifteen of sixteen streams remain to
                 // the client, so the new limit waits for a packet to share.
@@ -252,6 +272,55 @@
                     shared[0].Any(static frame => frame.Type == 0x12 && frame.First == 17)
                         && shared[0].Any(static frame => frame.Type == 0x0f && frame.First == 4),
                     "MAX_STREAMS rides with the echo"
+                );
+            }
+        }
+
+        // Retiring stream 0 makes room for a 17th stream, but until MAX_STREAMS says so the
+        // client may still open only 16 (RFC 9000 section 4.6).
+        private static void GrantedStreamLimit(bool granted)
+        {
+            var (connection, now) = Create(true);
+
+            using (connection)
+            {
+                var largest = Largest(connection.Receive(Packet(connection, Stream(0, "a"u8), 1), now + 1));
+                connection.Receive(Packet(connection, Wire.Frame(2, largest, 0, 0, 0), 2), now + 2);
+
+                // The echo of stream 4 carries the limit of 17 streams.
+                if (granted) connection.Receive(Packet(connection, Stream(4, "b"u8), 3), now + 3);
+
+                var output = Read(connection.Receive(Packet(connection, Stream(64, "c"u8), 4), now + 4));
+
+                if (granted) Check(connection.Phase == ConnectionPhase.Active, "granted stream opens");
+
+                else
+                    Check(
+                        connection.Phase == ConnectionPhase.Closing
+                            && All(output, 0x1c).Any(static frame => frame.First == 4),
+                        "stream past the grant is a stream limit error"
+                    );
+            }
+        }
+
+        // A turn the owner marks late acknowledges at once, a new packet or one already waiting.
+        private static void LateTurnAcknowledged()
+        {
+            var (connection, now) = Create(true);
+
+            using (connection)
+            {
+                connection.AcknowledgeAtOnce = true;
+                var acknowledgments = All(Read(connection.Receive(Packet(connection, Wire.Frame(1), 1), now + 1)), 2)
+                    .ToArray();
+                Check(acknowledgments.Length == 1 && acknowledgments[0].First == 1, "late turn acknowledges at once");
+                connection.AcknowledgeAtOnce = false;
+                Check(connection.Receive(Packet(connection, Wire.Frame(1), 2), now + 2).Count == 0, "timely turn waits");
+                connection.AcknowledgeAtOnce = true;
+                acknowledgments = All(Read(connection.Tick(now + 2.5)), 2).ToArray();
+                Check(
+                    acknowledgments.Length == 1 && acknowledgments[0].First == 2,
+                    "late turn sends a waiting acknowledgment"
                 );
             }
         }

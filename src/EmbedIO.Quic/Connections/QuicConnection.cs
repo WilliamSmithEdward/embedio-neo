@@ -721,6 +721,12 @@ namespace EmbedIO.Quic
         // listener's dispatcher), well inside the 25 ms max_ack_delay peers assume of this
         // endpoint, which does not advertise one.
         private const double AcknowledgmentDelay = 1;
+
+        // Set by the owner for a turn that waited long for a worker. The tick that sends a
+        // waiting acknowledgment runs in a later turn, which could wait as long and take it
+        // past max_ack_delay, so this turn sends it instead.
+        internal bool AcknowledgeAtOnce { get; set; }
+
         private int _unacknowledged;
         private double _acknowledgeBy = double.PositiveInfinity;
 
@@ -943,7 +949,10 @@ namespace EmbedIO.Quic
                 foreach (var probe in _paths.Probes(_now)) QueueRepeat(probe, true);
 
             // A waiting acknowledgment and freed stream credit go with anything else queued.
-            if (_unacknowledged != 0 && (_pending.Count + _urgent.Count != 0 || _now >= _acknowledgeBy))
+            if (
+                _unacknowledged != 0
+                && (_pending.Count + _urgent.Count != 0 || _now >= _acknowledgeBy || AcknowledgeAtOnce)
+            )
                 AcknowledgeReceived(2);
 
             _streams?.AdvertiseCredit(_pending.Count + _urgent.Count != 0);

@@ -56,6 +56,13 @@ internal static class Orchestrator
         if ((serverCpus is not null || clientCpus is not null) && !OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
             throw new InvalidOperationException("--server-cpus/--client-cpus are supported only on Windows and Linux; this OS cannot pin processes. Omit them; environment.json then records cpuAffinity \"none\".");
         var profile = options.Has("--profile");
+        // An optional flood child, pinned like the others, sends junk datagrams at the server's
+        // port through every HTTP/3 measurement window.
+        var floodCpus = options.Optional("--udp-flood-cpus");
+        var floodThreads = options.Integer("--udp-flood-threads", 1);
+        if (floodCpus is not null && !OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+            throw new InvalidOperationException("--udp-flood-cpus is supported only on Windows and Linux, where the flood can be pinned.");
+        if (floodThreads is < 1 or > 16) throw new ArgumentException("--udp-flood-threads must be 1-16.");
         var modernBaseline = options.Has("--modern-baseline") || options.Has("--baseline-all-protocols");
         var selected = SelectScenarios(options.Text("--scenarios", "all"));
         // Diagnostic passes can use a smaller, identical workload for each engine.
@@ -97,6 +104,7 @@ internal static class Orchestrator
 
         var environment = DescribeEnvironment(options, targets, serverCpus, clientCpus, warmup, duration, idle, rounds, profile);
         environment["modernBaseline"] = modernBaseline;
+        environment["udpFlood"] = floodCpus is null ? null : new JsonObject { ["cpus"] = floodCpus, ["threads"] = floodThreads };
         await File.WriteAllTextAsync(Path.Combine(output, "environment.json"), environment.ToJsonString(Indented)).ConfigureAwait(false);
 
         var samples = new List<JsonObject>();
@@ -113,7 +121,8 @@ internal static class Orchestrator
                     {
                         var sample = await RunSampleAsync(new SampleContext(scenario, target, round, output, certificatePath, password, thumbprint,
                             warmup, duration, idle, serverCpus, clientCpus, profile, options.Optional("--reference-bytes"),
-                            options.Integer("--time-wait-limit", 4000), requestRate, census, exceptionCensus, options.Optional("--trace-tool") is { } tool ? Path.GetFullPath(tool) : null)).ConfigureAwait(false);
+                            options.Integer("--time-wait-limit", 4000), requestRate, census, exceptionCensus, options.Optional("--trace-tool") is { } tool ? Path.GetFullPath(tool) : null,
+                            floodCpus, floodThreads)).ConfigureAwait(false);
                         samples.Add(sample);
                         if (sample["error"] is not null) failures++;
                         Console.Out.WriteLine(Describe(sample));
@@ -155,7 +164,7 @@ internal static class Orchestrator
 
     private sealed record SampleContext(Scenario Scenario, EngineTarget Target, int Round, string Output, string CertificatePath, string Password,
         string Thumbprint, double Warmup, double Duration, double Idle, string? ServerCpus, string? ClientCpus, bool Profile, string? ReferenceBytes,
-        int TimeWaitLimit, double RequestRate, bool ConnectionCensus, bool ExceptionCensus, string? TraceTool);
+        int TimeWaitLimit, double RequestRate, bool ConnectionCensus, bool ExceptionCensus, string? TraceTool, string? FloodCpus, int FloodThreads);
 
     private static async Task<JsonObject> RunSampleAsync(SampleContext context)
     {
@@ -222,6 +231,7 @@ internal static class Orchestrator
 
         ChildProcess? server = null;
         ChildProcess? client = null;
+        ChildProcess? flood = null;
         Process? trace = null;
         try
         {
@@ -246,6 +256,14 @@ internal static class Orchestrator
             sample["exceptionsBeforeLoad"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
             if (context.ConnectionCensus) sample["exceptionSitesBeforeLoad"] = await server.RequestJsonAsync("exception-sites", timeout).ConfigureAwait(false);
             if (context.ConnectionCensus) sample["connectionsBeforeLoad"] = await server.RequestJsonAsync("connections", timeout).ConfigureAwait(false);
+            if (context.FloodCpus is not null && scenario.Protocol == Protocol.Http3)
+            {
+                flood = ChildProcess.Start(AppContext.BaseDirectory,
+                    ["flood", "--port", port.ToString(CultureInfo.InvariantCulture), "--threads", context.FloodThreads.ToString(CultureInfo.InvariantCulture)],
+                    context.FloodCpus, stem + ".flood.stderr.log");
+                var flooding = await flood.ReadLineAsync(timeout).ConfigureAwait(false);
+                if (flooding != "FLOODING") throw new InvalidOperationException("Flood did not start: " + flooding);
+            }
             var busyBefore = SystemCpu.BusyTime();
             var machineClock = Stopwatch.StartNew();
             trace = context.TraceTool is null ? null : StartTrace(context, sample, stem);
@@ -254,6 +272,11 @@ internal static class Orchestrator
             var window = await server.RequestJsonAsync("stop", timeout).ConfigureAwait(false);
             var busyAfter = SystemCpu.BusyTime();
             sample["machineMeasurementSeconds"] = machineClock.Elapsed.TotalSeconds;
+            if (flood is not null)
+            {
+                sample["flood"] = await flood.RequestJsonAsync("stop", timeout).ConfigureAwait(false);
+                sample["floodExitCode"] = await flood.WaitForExitAsync(timeout).ConfigureAwait(false);
+            }
             if (done != "DONE") throw new InvalidOperationException("Client measurement did not complete: " + done);
             sample["serverWindow"] = window;
             sample["exceptionsAfterLoad"] = await server.RequestJsonAsync("exceptions", timeout).ConfigureAwait(false);
@@ -294,10 +317,10 @@ internal static class Orchestrator
                 finally { trace.Dispose(); }
             }
 
-            foreach (var child in new[] { client, server })
+            foreach (var child in new[] { flood, client, server })
             {
                 if (child is null) continue;
-                sample[child == server ? "serverKilled" : "clientKilled"] = await child.DisposeAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                sample[child == server ? "serverKilled" : child == client ? "clientKilled" : "floodKilled"] = await child.DisposeAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
             }
         }
 
@@ -315,7 +338,8 @@ internal static class Orchestrator
             sample["tcpStatesAfterFailure"] = census;
         }
 
-        else if (sample["error"] is null && (sample["clientExitCode"]?.GetValue<int>() != 0 || sample["serverExitCode"]?.GetValue<int>() != 0))
+        else if (sample["error"] is null && (sample["clientExitCode"]?.GetValue<int>() != 0 || sample["serverExitCode"]?.GetValue<int>() != 0
+            || (sample["floodExitCode"] is { } floodExit && floodExit.GetValue<int>() != 0)))
             sample["error"] = "A child process exited unsuccessfully.";
         await File.WriteAllTextAsync(stem + ".json", sample.ToJsonString(Indented)).ConfigureAwait(false);
         return sample;
@@ -379,6 +403,8 @@ internal static class Orchestrator
         var clientCpu = client["clientCpuSeconds"]?.GetValue<double>() ?? 0;
         var serverProcessors = sample["server"]?["processorCount"]?.GetValue<int>() ?? Environment.ProcessorCount;
         var clientProcessors = client["clientProcessorCount"]?.GetValue<int>() ?? Environment.ProcessorCount;
+        // The flood's whole lifetime, which spans the measurement window and a moment either side.
+        var floodCpu = sample["flood"]?["cpuSeconds"]?.GetValue<double>() ?? 0;
         // Null when the platform does not report the metric (macOS private bytes).
         long? Delta(string name) => sample["serverAfter"]?[name]?.GetValue<long>() - sample["serverBefore"]?[name]?.GetValue<long>();
         sample["derived"] = new JsonObject
@@ -388,7 +414,9 @@ internal static class Orchestrator
             ["serverAllocatedBytesPerRequest"] = requests == 0 ? null : (window["allocatedBytes"]?.GetValue<long>() ?? 0) / (double)requests,
             ["serverCpuUtilization"] = seconds == 0 ? null : serverCpu / (seconds * serverProcessors),
             ["clientCpuUtilization"] = seconds == 0 ? null : clientCpu / (seconds * clientProcessors),
-            ["backgroundCpuSeconds"] = (sample["machineBusyCpuSeconds"]?.GetValue<double>() ?? 0) - serverCpu - clientCpu,
+            ["backgroundCpuSeconds"] = (sample["machineBusyCpuSeconds"]?.GetValue<double>() ?? 0) - serverCpu - clientCpu - floodCpu,
+            ["floodCpuSeconds"] = sample["flood"] is null ? null : floodCpu,
+            ["floodDatagramsPerSecond"] = sample["flood"]?["datagramsPerSecond"]?.GetValue<double>(),
             ["retainedManagedHeapBytes"] = Delta("managedHeapBytes"),
             ["retainedWorkingSetBytes"] = Delta("workingSetBytes"),
             ["retainedPrivateBytes"] = Delta("privateBytes"),

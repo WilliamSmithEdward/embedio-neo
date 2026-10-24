@@ -161,6 +161,15 @@ namespace EmbedIO.Quic
 
             var window = (id & 1) != 0 ? _localBidi : (id & 2) == 0 ? _incomingBidi : _incomingUni;
 
+            // With deferred credit the window can have room the peer was not granted yet. A
+            // stream past the grant is still a STREAM_LIMIT_ERROR (RFC 9000 section 4.6).
+            if (
+                _deferCredit
+                && (id & 1) == 0
+                && id / 4 >= Math.Max((id & 2) == 0 ? _grantedBidi : _grantedUni, (ulong)window.Capacity)
+            )
+                throw new TransportException(0x04, "Incoming stream count exceeded.");
+
             if (!window.Open(id / 4)) return null;
 
             if (!_incoming.TryGetValue(id, out var input))
