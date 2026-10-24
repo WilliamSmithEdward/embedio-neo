@@ -305,7 +305,8 @@ namespace EmbedIO.Quic
                 CancellationToken abort,
                 CancellationToken drain,
                 WebTransportOptions? webTransport = null,
-                TimeSpan? requestHeadersTimeout = null
+                TimeSpan? requestHeadersTimeout = null,
+                Action? released = null
             )
             {
                 using var registration = abort.Register(() =>

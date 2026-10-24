@@ -63,15 +63,15 @@ namespace EmbedIO.Net.Internal.Http3
             if (code < 0 || (ulong)code > StreamReassembly.MaximumOffset)
                 throw new ArgumentOutOfRangeException(nameof(code));
 
+            // Logical application closure precedes publishing the close packet.
             await _application
                 .CloseAsync((ulong)code, token)
                 .ConfigureAwait(false);
-            // Logical application closure precedes publishing the close packet.
-            // Keep the native owner alive through transport closing/draining.
-            await _owner.Completion
-                .WaitAsync(token)
-                .ConfigureAwait(false);
         }
+
+        // Keep the native owner alive through transport closing/draining; it completes when
+        // the owner retires the connection.
+        internal override Task WaitClosedAsync(CancellationToken token) => _owner.Completion.WaitAsync(token);
 
         public override ValueTask DisposeAsync() => _owner.DisposeAsync();
     }

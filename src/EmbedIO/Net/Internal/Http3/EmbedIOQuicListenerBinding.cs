@@ -547,7 +547,8 @@ namespace EmbedIO.Net.Internal.Http3
                 CancellationToken abort,
                 CancellationToken drain,
                 WebTransportOptions? webTransport = null,
-                TimeSpan? requestHeadersTimeout = null
+                TimeSpan? requestHeadersTimeout = null,
+                Action? released = null
             )
             {
                 var (application, features) = await _ready.Task
@@ -565,7 +566,8 @@ namespace EmbedIO.Net.Internal.Http3
                         drain,
                         TimeSpan.FromMilliseconds(uint.MaxValue - 1),
                         webTransport,
-                        requestHeadersTimeout
+                        requestHeadersTimeout,
+                        released
                     )
                     .ConfigureAwait(false);
             }
@@ -575,8 +577,12 @@ namespace EmbedIO.Net.Internal.Http3
                 if (_ready.Task.IsCompletedSuccessfully)
                 {
                     var (application, features) = await _ready.Task.ConfigureAwait(false);
-                    await new EmbedIOQuicTransportConnection(application, _owner, features)
+                    var transport = new EmbedIOQuicTransportConnection(application, _owner, features);
+                    await transport
                         .CloseAsync(0x107, token)
+                        .ConfigureAwait(false);
+                    await transport
+                        .WaitClosedAsync(token)
                         .ConfigureAwait(false);
                 }
 
