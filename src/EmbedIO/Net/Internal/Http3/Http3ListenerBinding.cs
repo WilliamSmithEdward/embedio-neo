@@ -35,12 +35,21 @@ namespace EmbedIO.Net.Internal.Http3
             ServerCertificateSource certificates,
             ServerTlsPolicy? policy,
             bool validateAddresses
-        ) =>
-            new EmbedIOQuicListenerBinding(
-                endpoint,
-                EmbedIOQuicTls.CreateFactory(certificates, policy),
-                validateAddresses
-            );
+        )
+        {
+            var tls = EmbedIOQuicTls.CreateFactory(certificates, policy);
+
+            try
+            {
+                return new EmbedIOQuicListenerBinding(endpoint, tls, validateAddresses);
+            }
+
+            catch
+            {
+                tls.Dispose();
+                throw;
+            }
+        }
     }
 
     internal abstract class Http3AcceptedConnection : IAsyncDisposable

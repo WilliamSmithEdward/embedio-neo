@@ -163,7 +163,7 @@ namespace EmbedIO.Quic
 
             if (_portableCertificate != null && (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()))
                 QuicFuzzChecks.Require(
-                    OpenSslTls.ActiveContexts == 0 && OpenSslTls.ActiveBlocks == 0,
+                    OpenSslTls.ActiveContexts == 0 && OpenSslTls.ActiveBlocks == 0 && OpenSslTls.ActiveCredentials == 0,
                     "portable-native-tls-owned-resources-released"
                 );
 

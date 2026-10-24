@@ -11,11 +11,13 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using EmbedIO.Internal;
+using EmbedIO.Net.Internal.Http3;
 
 namespace EmbedIO.Quic
 {
     // Original binding to the Windows SDK's public recordless SSPI interface.
-    // The connection owner serializes native calls and owns the credential/context lease.
+    // The connection owner serializes native calls and owns the context and its
+    // reference to the credential, which the listener's handshakes share.
     [SupportedOSPlatform("windows")]
     internal sealed partial class SchannelTls : TlsSession
     {
@@ -23,8 +25,8 @@ namespace EmbedIO.Quic
         private const uint DisableReconnects = 0x80;
         private const uint NoWindowsAccountMapping = 0x2;
         private const uint RequestClientCertificate = 0x2;
-        private X509Certificate2? _certificate;
         private Func<string?, X509Certificate2?>? _selector;
+        private readonly Func<X509Certificate2, Credential>? _credentials;
         private string? _serverName;
         private readonly string _protocol;
         private readonly bool _recordDiagnostics;
@@ -51,8 +53,8 @@ namespace EmbedIO.Quic
         private readonly NativeRegion _flags = new(8);
         private readonly NativeRegion _alpn;
         private readonly NativeRegion _parameters;
-        private NativePair _credential;
-        private bool _credentialOwned;
+        private Credential? _credential;
+        private NativePair _credentialHandle;
         private bool _contextOwned;
         private static int _activeCredentials;
         private static int _activeContexts;
@@ -71,7 +73,8 @@ namespace EmbedIO.Quic
         private readonly byte[]?[] _writeSecrets = [null, null, null];
 
         internal List<string> Diagnostics { get; } = [];
-        internal string? SelectedCertificateSha256 => _certificate?.GetCertHashString(HashAlgorithmName.SHA256);
+        internal string? SelectedCertificateSha256 =>
+            _credential?.Certificate.GetCertHashString(HashAlgorithmName.SHA256);
         internal bool NativeContextCreated => _contextOwned;
 
         internal SchannelTls(
@@ -93,17 +96,21 @@ namespace EmbedIO.Quic
             return _ => certificate;
         }
 
+        // credentials supplies the selected certificate's shared credential with a reference
+        // for this session. Without it the session acquires a credential of its own.
         internal SchannelTls(
             Func<string?, X509Certificate2?> selector,
             byte[] parameters,
             string protocol,
             bool recordDiagnostics = true,
-            Func<X509Certificate2?, X509Certificate2Collection, bool>? validateClientCertificate = null
+            Func<X509Certificate2?, X509Certificate2Collection, bool>? validateClientCertificate = null,
+            Func<X509Certificate2, Credential>? credentials = null
         )
         {
             _protocol = protocol;
             _recordDiagnostics = recordDiagnostics;
             _validateClientCertificate = validateClientCertificate;
+            _credentials = credentials;
 
             try
             {
@@ -143,52 +150,96 @@ namespace EmbedIO.Quic
             }
         }
 
-        private void AcquireCredential()
+        // A Schannel server credential for one selected certificate, which the handshakes that
+        // select it share. It owns a copy of the certificate; the source stays application-owned.
+        internal sealed class Credential : SharedCredential
         {
-            using var certificate = new NativeRegion(nint.Size);
-            var selected = _certificate ?? throw new InvalidOperationException("TLS credential has not been selected.");
-            Marshal.WriteIntPtr(certificate.Address, selected.Handle);
-            // Windows negotiates its supported AES-GCM TLS 1.3 suites. Do not
-            // advertise a future native ChaCha profile until its secret contract is supported.
-            using var chachaName = NativeRegion.Text("CHACHA20_POLY1305");
-            using var blocked = new NativeRegion(Marshal.SizeOf<AlgorithmRestriction>());
-            blocked.Structure(0, new AlgorithmRestriction
-            {
-                Usage = 2,
-                Algorithm = chachaName.UnicodeName
-            });
-            using var settings = new NativeRegion(Marshal.SizeOf<ProtocolRestriction>());
-            settings.Structure(0, new ProtocolRestriction
-            {
-                DisabledProtocols = ~0x3000U,
-                AlgorithmCount = 1,
-                Algorithms = blocked.Address
-            });
-            var input = new CredentialInput
-            {
-                Version = 5,
-                CertificateCount = 1,
-                Certificates = certificate.Address,
-                Flags = DisableReconnects | (_validateClientCertificate != null ? NoWindowsAccountMapping : 0),
-                ParameterCount = 1,
-                Parameters = settings.Address
-            };
-            var status = NativeMethods.Acquire(
-                0,
-                "Microsoft Unified Security Protocol Provider",
-                1,
-                0,
-                ref input,
-                0,
-                0,
-                out _credential,
-                out _
-            );
+            private readonly X509Certificate2 _certificate;
+            private NativePair _handle;
 
-            if (status != 0) throw new InvalidOperationException($"TLS credential admission failed: {status:X8}");
+            private Credential(X509Certificate2 certificate, NativePair handle)
+            {
+                _certificate = certificate;
+                _handle = handle;
+            }
 
-            _credentialOwned = true;
-            Interlocked.Increment(ref _activeCredentials);
+            internal X509Certificate2 Certificate => _certificate;
+            internal NativePair Handle => _handle;
+
+            // The caller holds the only reference.
+            internal static Credential Acquire(X509Certificate2 selected, bool clientCertificates)
+            {
+                var copy = new X509Certificate2(selected);
+
+                try
+                {
+                    var handle = AcquireHandle(copy, clientCertificates);
+                    Interlocked.Increment(ref _activeCredentials);
+                    return new Credential(copy, handle);
+                }
+
+                catch
+                {
+                    copy.Dispose();
+                    throw;
+                }
+            }
+
+            private static NativePair AcquireHandle(X509Certificate2 selected, bool clientCertificates)
+            {
+                using var certificate = new NativeRegion(nint.Size);
+                Marshal.WriteIntPtr(certificate.Address, selected.Handle);
+                // Windows negotiates its supported AES-GCM TLS 1.3 suites. Do not
+                // advertise a future native ChaCha profile until its secret contract is supported.
+                using var chachaName = NativeRegion.Text("CHACHA20_POLY1305");
+                using var blocked = new NativeRegion(Marshal.SizeOf<AlgorithmRestriction>());
+                blocked.Structure(0, new AlgorithmRestriction
+                {
+                    Usage = 2,
+                    Algorithm = chachaName.UnicodeName
+                });
+                using var settings = new NativeRegion(Marshal.SizeOf<ProtocolRestriction>());
+                settings.Structure(0, new ProtocolRestriction
+                {
+                    DisabledProtocols = ~0x3000U,
+                    AlgorithmCount = 1,
+                    Algorithms = blocked.Address
+                });
+                var input = new CredentialInput
+                {
+                    Version = 5,
+                    CertificateCount = 1,
+                    Certificates = certificate.Address,
+                    Flags = DisableReconnects | (clientCertificates ? NoWindowsAccountMapping : 0),
+                    ParameterCount = 1,
+                    Parameters = settings.Address
+                };
+                var status = NativeMethods.Acquire(
+                    0,
+                    "Microsoft Unified Security Protocol Provider",
+                    1,
+                    0,
+                    ref input,
+                    0,
+                    0,
+                    out var handle,
+                    out _
+                );
+
+                if (status != 0) throw new InvalidOperationException($"TLS credential admission failed: {status:X8}");
+
+                return handle;
+            }
+
+            protected override int Free()
+            {
+                var status = NativeMethods.Free(ref _handle);
+
+                if (status == 0) Interlocked.Decrement(ref _activeCredentials);
+
+                _certificate.Dispose();
+                return status;
+            }
         }
 
         internal override void Add(int level, ulong offset, ReadOnlySpan<byte> bytes)
@@ -228,7 +279,7 @@ namespace EmbedIO.Quic
                     var hello = TlsClientHello.Read(_pending.AsSpan(0, size + 4));
                     var parameters = hello.TransportParameters;
 
-                    if (_credentialOwned && !StringComparer.Ordinal.Equals(_serverName, hello.ServerName))
+                    if (_credential != null && !StringComparer.Ordinal.Equals(_serverName, hello.ServerName))
                         throw Failure(47, "TLS server name changed during retry.");
 
                     if (
@@ -241,7 +292,7 @@ namespace EmbedIO.Quic
 
                     PeerParameters ??= parameters;
 
-                    if (!_credentialOwned)
+                    if (_credential == null)
                     {
                         var selector = _selector ?? throw Failure(80, "Missing TLS certificate selector.");
                         _selector = null;
@@ -254,13 +305,14 @@ namespace EmbedIO.Quic
                             if (selected == null || !selected.HasPrivateKey)
                                 throw Failure(80, "Invalid selected TLS credential.");
 
-                            _certificate = new X509Certificate2(selected);
                             _serverName = hello.ServerName;
 
                             if (_recordDiagnostics && Diagnostics.Count < 64)
                                 Diagnostics.Add("server-name=" + (hello.ServerName ?? "(none)"));
 
-                            AcquireCredential();
+                            _credential = _credentials?.Invoke(selected)
+                                ?? Credential.Acquire(selected, _validateClientCertificate != null);
+                            _credentialHandle = _credential.Handle;
                         }
 
                         catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
@@ -328,7 +380,7 @@ namespace EmbedIO.Quic
             var outputDescriptor = outputs.Descriptor;
             var oldContext = ContextExists ? _context.Address : 0;
             var status = NativeMethods.Accept(
-                ref _credential,
+                ref _credentialHandle,
                 oldContext,
                 ref inputDescriptor,
                 0x18018U | (_validateClientCertificate != null ? RequestClientCertificate : 0),
@@ -631,17 +683,12 @@ namespace EmbedIO.Quic
                 Interlocked.Decrement(ref _activeContexts);
             }
 
-            var credentialStatus = _credentialOwned ? NativeMethods.Free(ref _credential) : 0;
-
-            if (_credentialOwned && credentialStatus == 0)
-            {
-                _credentialOwned = false;
-                Interlocked.Decrement(ref _activeCredentials);
-            }
-
+            // The credential outlives this session while the listener's cache or another
+            // handshake still holds it; the last holder frees it.
+            var credentialStatus = _credential?.Release() ?? 0;
+            _credential = null;
+            _credentialHandle = default;
             _selector = null;
-            _certificate?.Dispose();
-            _certificate = null;
             _clientCertificate?.Dispose();
             _clientCertificate = null;
             _context.Dispose();
@@ -681,7 +728,7 @@ namespace EmbedIO.Quic
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct NativePair
+        internal struct NativePair
         {
             internal nint First;
             internal nint Second;

@@ -34,6 +34,7 @@ namespace EmbedIO.Net.Internal.Http3
         });
         private readonly IPEndPoint _local;
         private readonly Task _loop;
+        private readonly EmbedIOQuicTlsFactory? _tls;
         private readonly object _lifetime = new();
         private Task? _shutdown;
         private Task? _acceptanceStopped;
@@ -54,15 +55,33 @@ namespace EmbedIO.Net.Internal.Http3
             : this(endpoint, createTls, false)
         { }
 
+        // Once constructed, the binding owns the factory and disposes it, with the credentials
+        // it cached, after the binding's connections.
+        internal EmbedIOQuicListenerBinding(IPEndPoint endpoint, EmbedIOQuicTlsFactory tls) : this(endpoint, tls, false)
+        { }
+
+        internal EmbedIOQuicListenerBinding(IPEndPoint endpoint, EmbedIOQuicTlsFactory tls, bool validateAddresses)
+            : this(endpoint, (tls ?? throw new ArgumentNullException(nameof(tls))).Create, validateAddresses, tls)
+        { }
+
         // With validateAddresses every new connection must first return a Retry's token.
         internal EmbedIOQuicListenerBinding(
             IPEndPoint endpoint,
             Func<byte[], TlsSession> createTls,
             bool validateAddresses
+        ) : this(endpoint, createTls, validateAddresses, null)
+        { }
+
+        private EmbedIOQuicListenerBinding(
+            IPEndPoint endpoint,
+            Func<byte[], TlsSession> createTls,
+            bool validateAddresses,
+            EmbedIOQuicTlsFactory? tls
         )
         {
             ArgumentNullException.ThrowIfNull(endpoint);
             ArgumentNullException.ThrowIfNull(createTls);
+            _tls = tls;
             _socket = new Socket(endpoint.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
 
             try
@@ -255,6 +274,9 @@ namespace EmbedIO.Net.Internal.Http3
             {
                 _socket.Dispose();
                 _stop.Dispose();
+                // The connections released their TLS sessions above; this frees the
+                // credentials those sessions shared.
+                _tls?.Dispose();
             }
 
             if (failures.Count != 0) throw new AggregateException("QUIC listener shutdown failed.", failures);

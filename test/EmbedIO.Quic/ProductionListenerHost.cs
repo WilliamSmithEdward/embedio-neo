@@ -119,10 +119,13 @@ namespace EmbedIO.Quic
                     ?? imported
                     ?? throw new InvalidOperationException("Missing development certificate.")
             );
-            var createTls = provider.NativeCertificate != null
-                ? EmbedIOQuicTls.CreateFactory(source, tlsPolicy)
-                : parameters => provider.Create(parameters, "h3");
-            await using var binding = new EmbedIOQuicListenerBinding(new IPEndPoint(IPAddress.Loopback, 0), createTls);
+            // The production factory belongs to its binding, which disposes it with the
+            // credentials it cached; development sessions own their credentials.
+            EmbedIOQuicListenerBinding Bind(IPEndPoint requested) =>
+                provider.NativeCertificate != null
+                    ? new EmbedIOQuicListenerBinding(requested, EmbedIOQuicTls.CreateFactory(source, tlsPolicy))
+                    : new EmbedIOQuicListenerBinding(requested, parameters => provider.Create(parameters, "h3"));
+            await using var binding = Bind(new IPEndPoint(IPAddress.Loopback, 0));
             var endpoint = binding.LocalEndPoint;
             var options = new WebServerOptions()
                 .WithMode(HttpListenerMode.EmbedIOHttp3)
@@ -258,8 +261,15 @@ namespace EmbedIO.Quic
             await binding
                 .DisposeAsync()
                 .ConfigureAwait(false);
+            if (provider.NativeCertificate != null)
+                QuicFuzzChecks.Require(
+                    OperatingSystem.IsWindows()
+                        ? SchannelTls.ActiveCredentials == 0
+                        : (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS()) && OpenSslTls.ActiveCredentials == 0,
+                    "production-listener-releases-credentials"
+                );
 
-            await using (var rebound = new EmbedIOQuicListenerBinding(endpoint, createTls))
+            await using (var rebound = Bind(endpoint))
                 QuicFuzzChecks.Require(rebound.LocalEndPoint.Equals(endpoint), "production-listener-rebind");
 
             var retained = state.Certificates.ToArray();

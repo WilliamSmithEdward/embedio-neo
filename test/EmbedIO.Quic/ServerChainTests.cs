@@ -199,7 +199,7 @@ namespace EmbedIO.Quic
 
                         connection ??= new QuicConnection(
                             buffer.AsSpan(0, length),
-                            tls,
+                            tls.Create,
                             (operations, _) => new StreamEchoApplication(operations),
                             clock.Elapsed.TotalMilliseconds
                         );
@@ -218,6 +218,7 @@ namespace EmbedIO.Quic
             finally
             {
                 connection?.Dispose();
+                tls.Dispose();
                 tcp.Stop();
                 deadline.Cancel();
                 await tcpTask.ConfigureAwait(false);
@@ -229,10 +230,16 @@ namespace EmbedIO.Quic
             {
                 echoes,
                 contexts = OpenSslTls.ActiveContexts,
-                blocks = OpenSslTls.ActiveBlocks
+                blocks = OpenSslTls.ActiveBlocks,
+                credentials = OpenSslTls.ActiveCredentials
             };
             Console.WriteLine(JsonSerializer.Serialize(report));
-            return echoes == 1 && OpenSslTls.ActiveContexts == 0 && OpenSslTls.ActiveBlocks == 0 ? 0 : 1;
+            return echoes == 1
+                && OpenSslTls.ActiveContexts == 0
+                && OpenSslTls.ActiveBlocks == 0
+                && OpenSslTls.ActiveCredentials == 0
+                ? 0
+                : 1;
         }
     }
 }
