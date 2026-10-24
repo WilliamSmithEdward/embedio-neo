@@ -77,6 +77,10 @@ namespace EmbedIO.Net.Internal.Http3
         // the connection, which is closed as excessive load.
         internal const int MaximumStreamWorkers = 256;
         private int _applicationCount;
+
+        // The listener's slot, given back once this connection can serve no more requests and
+        // none still runs: when it has closed, or when its GOAWAY drain has finished.
+        private Action? _released;
         private CancellationToken _drainToken;
         private static readonly TimeSpan ApplicationDrainTimeout = TimeSpan.FromSeconds(30);
         private TimeSpan _drainTimeout = ApplicationDrainTimeout;
@@ -127,7 +131,8 @@ namespace EmbedIO.Net.Internal.Http3
             CancellationToken drainToken,
             TimeSpan drainTimeout,
             WebTransportOptions? webTransport = null,
-            TimeSpan? requestHeadersTimeout = null
+            TimeSpan? requestHeadersTimeout = null,
+            Action? released = null
         )
         {
             ArgumentNullException.ThrowIfNull(connection);
@@ -142,6 +147,7 @@ namespace EmbedIO.Net.Internal.Http3
             await using (connection.ConfigureAwait(false))
             using (var session = new Http3QuicConnection(connection, dispatch, abortToken, true, webTransport))
             {
+                session._released = released;
                 session._drainToken = drainToken;
                 session._drainTimeout = drainTimeout;
 
@@ -304,6 +310,21 @@ namespace EmbedIO.Net.Internal.Http3
                     await Task
                         .WhenAll(workers.Concat(background))
                         .ConfigureAwait(false);
+                    // No request runs and none can start, so the slot is free while the transport
+                    // spends its closing or draining period (RFC 9000 section 10.2).
+                    Release();
+
+                    try
+                    {
+                        await _connection.Value
+                            .WaitClosedAsync(closeDeadline.Token)
+                            .ConfigureAwait(false);
+                    }
+
+                    catch (Exception error) when (
+                        Http3TransportFailure.IsTransport(error) || error is OperationCanceledException
+                    )
+                    { }
                 }
 
                 finally
@@ -452,6 +473,9 @@ namespace EmbedIO.Net.Internal.Http3
                     .WhenAll(accepted)
                     .WaitAsync(deadline.Token)
                     .ConfigureAwait(false);
+                // Every accepted request has ended and the drain refuses new ones, so the slot
+                // is free while the connection waits for the peer to close it.
+                Release();
                 // WriteAsync releases the send buffer; it does not confirm receipt.
                 // Keep critical streams alive for peer-driven closure, bounded by
                 // the drain deadline, rather than immediately overtaking GOAWAY.
@@ -1377,6 +1401,11 @@ namespace EmbedIO.Net.Internal.Http3
 
             public bool IsLocalReadAbort(Exception error) => Http3TransportFailure.IsLocalReadAbort(error);
         }
+
+        private void Release() =>
+            Interlocked
+                .Exchange(ref _released, null)
+                ?.Invoke();
 
         private void Fail(Exception error)
         {

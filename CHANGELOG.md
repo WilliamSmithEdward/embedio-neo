@@ -33,6 +33,13 @@
   it retransmitted until its handshake timed out, or completed the handshake only to
   be closed with `H3_EXCESSIVE_LOAD`. The server logs refusals as a warning at most
   every ten seconds. See [overload](docs/guides/http3.md#overload).
+- An HTTP/3 connection gives its listener slot back as soon as it can serve no more
+  requests and none is running: when it has closed, or when it has sent GOAWAY and its
+  last accepted request has ended. Before, a closed connection kept its slot through
+  its QUIC closing or draining period, three probe timeouts, so under load the
+  listener refused new connections while its slots held connections that could no
+  longer serve. The endpoint still counts a closing connection among its 768. See
+  [overload](docs/guides/http3.md#overload).
 
 ## [2.17.0] - 2026-10-22
 

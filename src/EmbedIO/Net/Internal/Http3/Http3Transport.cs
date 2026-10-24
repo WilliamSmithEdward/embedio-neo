@@ -38,7 +38,12 @@ namespace EmbedIO.Net.Internal.Http3
 
         internal abstract ValueTask<Http3TransportStream> AcceptInboundStreamAsync(CancellationToken token);
 
+        // Closes the connection with the code, and completes once the close is queued, or at
+        // once when the connection has already closed. The transport then spends its closing or
+        // draining period (RFC 9000 section 10.2), which WaitClosedAsync waits for.
         internal abstract ValueTask CloseAsync(long code, CancellationToken token);
+
+        internal abstract Task WaitClosedAsync(CancellationToken token);
 
         public abstract ValueTask DisposeAsync();
     }

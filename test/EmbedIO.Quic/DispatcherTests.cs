@@ -58,9 +58,14 @@ namespace EmbedIO.Quic
                 .ConfigureAwait(false);
 
             if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            {
                 await ProductionListenerFailureTests
                     .RunAsync()
                     .ConfigureAwait(false);
+                await ProductionListenerSlotTests
+                    .RunAsync()
+                    .ConfigureAwait(false);
+            }
 
             Mutate([0, 1, 2, 3, 4, 5, 6, 7]);
             Mutate([255, 17, 2, 1]);

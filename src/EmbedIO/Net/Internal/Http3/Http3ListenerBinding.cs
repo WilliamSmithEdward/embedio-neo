@@ -52,12 +52,15 @@ namespace EmbedIO.Net.Internal.Http3
 
         internal abstract ValueTask WaitReadyAsync(CancellationToken token);
 
+        // released runs at most once, when the connection can serve no more requests and none
+        // still runs, though its transport may still be closing or draining.
         internal abstract Task RunAsync(
             Func<Http3QuicExchange, IPEndPoint, IPEndPoint, Task> dispatch,
             CancellationToken abort,
             CancellationToken drain,
             WebTransportOptions? webTransport = null,
-            TimeSpan? requestHeadersTimeout = null
+            TimeSpan? requestHeadersTimeout = null,
+            Action? released = null
         );
 
         internal abstract ValueTask RejectAsync(CancellationToken token);
