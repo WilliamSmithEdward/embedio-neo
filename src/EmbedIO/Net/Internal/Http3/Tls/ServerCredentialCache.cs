@@ -96,7 +96,9 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly Func<X509Certificate2, TCredential> _prepare;
 
         // Most recently used first. A listener selects few certificates, so a scan is enough.
-        private readonly List<(X509Certificate2 Certificate, TCredential Credential)> _entries = [];
+        // Entries are objects so the list uses the runtime's shared, precompiled code rather
+        // than code compiled at the first handshake.
+        private readonly List<Entry> _entries = [];
         private long _version;
         private bool _disposed;
 
@@ -168,7 +170,7 @@ namespace EmbedIO.Net.Internal.Http3
                     }
 
                     prepared.Retain();
-                    _entries.Insert(0, (certificate, prepared));
+                    _entries.Insert(0, new Entry(certificate, prepared));
 
                     while (_entries.Count > Capacity)
                     {
@@ -218,11 +220,11 @@ namespace EmbedIO.Net.Internal.Http3
 
             for (var index = _entries.Count - 1; index >= 0; index--)
             {
-                var (certificate, credential) = _entries[index];
+                var entry = _entries[index];
 
-                if (certificate.Handle != IntPtr.Zero) continue;
+                if (entry.Certificate.Handle != IntPtr.Zero) continue;
 
-                (disposed ??= []).Add(credential);
+                (disposed ??= []).Add(entry.Credential);
                 _entries.RemoveAt(index);
             }
 
@@ -235,7 +237,7 @@ namespace EmbedIO.Net.Internal.Http3
 
             var drained = new List<TCredential>(_entries.Count);
 
-            foreach (var (_, credential) in _entries) drained.Add(credential);
+            foreach (var entry in _entries) drained.Add(entry.Credential);
 
             _entries.Clear();
             return drained;
@@ -269,6 +271,12 @@ namespace EmbedIO.Net.Internal.Http3
             if (credentials == null) return;
 
             foreach (var credential in credentials) credential.Release();
+        }
+
+        private sealed class Entry(X509Certificate2 certificate, TCredential credential)
+        {
+            internal X509Certificate2 Certificate { get; } = certificate;
+            internal TCredential Credential { get; } = credential;
         }
     }
 }
