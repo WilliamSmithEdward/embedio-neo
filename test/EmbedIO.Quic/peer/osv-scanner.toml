@@ -1,0 +1,7 @@
+# OSV-Scanner, and the OpenSSF Scorecard Vulnerabilities check that runs it, read this
+# file for the WebTransport test peer's go.mod.
+
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2027-01-24
+reason = "golang.org/x/crypto/openpgp is unmaintained and has no fixed release. The peer, a test-only WebTransport client and server that CI builds, links only x/crypto's chacha20, chacha20poly1305 and poly1305 packages, for quic-go, and never openpgp. Re-check if the peer or quic-go imports x/crypto/openpgp."

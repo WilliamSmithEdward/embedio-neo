@@ -1,0 +1,14 @@
+# OSV-Scanner, and the OpenSSF Scorecard Vulnerabilities check that runs it, read this
+# file for the Semgrep closure in requirements.txt. Semgrep 1.182.1, the latest release,
+# still pins both packages exactly, so neither can be updated on its own. Each entry is
+# the acceptance already reviewed for its Dependabot alert, and ends with it.
+
+[[IgnoredVulns]]
+id = "GHSA-84m7-p3x7-pcfv"
+ignoreUntil = 2027-01-24
+reason = "mcp 1.29.0 is pinned by Semgrep (mcp==1.29.0). The advisory needs a running MCP Streamable HTTP server, and the CI scan starts none. Reviewed in .github/security/semgrep-mcp-dependabot-16-review.md (Dependabot alert #16, dismissed as not used). Remove when Semgrep allows mcp 1.30.0 or later."
+
+[[IgnoredVulns]]
+id = "GHSA-xcq7-p3pf-p88h"
+ignoreUntil = 2027-01-24
+reason = "opentelemetry-api 1.37.0 is pinned by Semgrep (opentelemetry-api~=1.37.0). The advisory needs trace context read from an untrusted tracestate header, and the CI scan reads none. Reviewed in .github/security/semgrep-opentelemetry-dependabot-19-review.md (Dependabot alert #19, dismissed as not used). Remove when Semgrep allows opentelemetry-api 1.45.1 or later."
