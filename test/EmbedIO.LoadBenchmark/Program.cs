@@ -16,6 +16,7 @@ return args.FirstOrDefault() switch
     "endurance-verdict-check" => EnduranceVerdictCheck.Run(),
     "endurance-profile-check" => EnduranceProfileCheck.Run(),
     "native-heap-census-check" => NativeHeaps.CheckCounter(),
+    "native-census-check" => OperatingSystem.IsWindows() ? HandleCensus.CheckCounter() : LinuxMemory.CheckCounters(),
     "quic-churn" => await QuicChurn.RunAsync(options).ConfigureAwait(false),
     "burn" => await QuicChurn.BurnAsync(options).ConfigureAwait(false),
     "flood" => await UdpFlood.RunAsync(options).ConfigureAwait(false),
