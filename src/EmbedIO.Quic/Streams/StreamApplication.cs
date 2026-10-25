@@ -29,6 +29,17 @@ namespace EmbedIO.Quic
 
         internal abstract void Retire(ulong id);
 
+        // The connection retires a stream only when this returns true, and keeps it for a later
+        // prune otherwise. It has already asked CanRetire for a stream it receives on, and
+        // retires a local unidirectional stream once the peer acknowledges all of it. An
+        // application whose streams other threads also change overrides this to check and
+        // retire in one step, because its answer to CanRetire can change in between.
+        internal virtual bool TryRetire(ulong id)
+        {
+            Retire(id);
+            return true;
+        }
+
         public abstract void Dispose();
     }
 

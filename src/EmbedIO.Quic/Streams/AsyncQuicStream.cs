@@ -758,14 +758,17 @@ namespace EmbedIO.Quic
             }
         }
 
-        internal void Retire()
+        // Retires the stream unless it cannot retire yet, in one step under the stream's lock,
+        // because its owner may change it on another thread at any time.
+        internal bool TryRetire()
         {
             lock (_gate)
             {
-                if (!CanRetire) throw new InvalidOperationException("Async stream retired before completion.");
+                if (!CanRetire) return false;
 
                 _retired = true;
                 ReleaseBuffer();
+                return true;
             }
         }
 

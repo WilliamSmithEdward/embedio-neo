@@ -1386,8 +1386,10 @@ drove the HTTP/3 layer over a server-side BCL QUIC listener now accept through t
 EmbedIO.Quic binding; the BCL client remains the independent test client.
 The [development record](docs/project/quic-development-and-testing.md) lists the
 platform, browser and endurance results, the open-issue audit and the work that
-remains, such as a rare QUIC stream-retirement failure the eight-hour Windows run
-found.
+remains. In 2.18.0 an HTTP/3 connection can, rarely, close when a client cancels a
+request just as the server starts it
+([#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555)); the fix is
+on main and not yet released.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified

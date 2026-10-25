@@ -732,9 +732,11 @@ namespace EmbedIO.Quic
 
                     if ((pair.Key & 3) == 3)
                     {
+                        // A stream its owner still holds stays for a later prune.
+                        if (!Protocol.TryRetire(pair.Key)) continue;
+
                         _localUni.Retire(pair.Key / 4);
                         _outgoing.Remove(pair.Key);
-                        Protocol.Retire(pair.Key);
                         RetiredStreams++;
                     }
 
@@ -773,6 +775,10 @@ namespace EmbedIO.Quic
 
         private void RetireIncoming(ulong id, Incoming input)
         {
+            // The application's own check can change after CanRetire, when the stream's owner
+            // takes it on another thread, so the application decides before anything retires.
+            if (!Protocol.TryRetire(id)) return;
+
             var window = (id & 1) != 0 ? _localBidi : (id & 2) == 0 ? _incomingBidi : _incomingUni;
 
             if (!window.Retire(id / 4)) throw new InvalidOperationException("Stream already retired.");
@@ -786,7 +792,6 @@ namespace EmbedIO.Quic
             _incoming.Remove(id);
             input.Buffer.Dispose();
             _outgoing.Remove(id);
-            Protocol.Retire(id);
 
             if ((id & 1) == 0 && !_deferCredit)
                 _transmit(Wire.Frame((id & 2) == 0 ? 0x12UL : 0x13UL, window.Maximum), true);

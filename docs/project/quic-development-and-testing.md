@@ -1174,8 +1174,9 @@ Still open after the merge, each with its tracking issue:
    the memory glibc keeps after the server frees it and the handles on Windows grew
    early and slowed to a fraction of that rate
    ([#552](https://github.com/WilliamSmithEdward/embedio-neo/issues/552)). The runs'
-   one client error, from a QUIC stream retirement, is tracked in
-   [#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555).
+   one client error came from a race in QUIC stream retirement, since fixed
+   ([Stream retirement race](#stream-retirement-race),
+   [#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555)).
    [#523](https://github.com/WilliamSmithEdward/embedio-neo/issues/523).
 5. Resolved: ad-hoc signed hardened apps, AOT and JIT, run in CI
    ([Hardened-runtime macOS apps](#hardened-runtime-macos-apps)), as do the oldest
@@ -3108,7 +3109,7 @@ Windows' two failed steps are one event, and the only client error in any of the
 endurance runs. In the ninth cycle a QUIC stream retirement threw inside a
 connection's stream bookkeeping and aborted that connection under the HTTP/3
 cancellation workload, and the next drain reported the failure when the listener shut
-down. [#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555) tracks it.
+down. [Stream retirement race](#stream-retirement-race) has the cause and the fix.
 
 On Windows, handles rose 22 over the first nine cycles and 1 over the last nine. The
 census puts the early growth on Event handles, which stayed between 232 and 236 for
@@ -3125,6 +3126,52 @@ cycles, resident anonymous memory still rises about 0.4 MiB a cycle, and Windows
 handles about 0.4 a cycle, both well inside the runs' cycle-to-cycle swings of up to
 3.5 MiB and 3 handles. VmData, the private memory .NET reports on Linux, rose 54 MiB,
 about 3 MiB a cycle, most of it with no matching resident change.
+
+### Stream retirement race
+
+The eight-hour Windows run's client error was a race over one stream between its
+connection and a request's worker
+([#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555)). The
+connection retires a request stream once the client is done with it and every frame
+about it is acknowledged, which gives the stream back to the client's stream limit.
+Since 2.18.0 the HTTP/3 server's worker also holds its stream until it disposes it, so
+the stream counts against that limit while the request runs. The connection checked
+whether the stream could retire, did its own bookkeeping, then retired it, taking the
+stream's lock for the check and again for the retirement. A client that resets a
+request and stops its response before the worker starts makes the check pass, and a
+worker that took the stream in between made the retirement throw
+`Async stream retired before completion`, which closed the connection. Streams the
+server opens in one direction retired with no check at all.
+
+The application now decides first: one call checks and retires the stream under its
+lock, and a stream its owner still holds stays until the owner disposes it, on both
+paths. Two self-tests take them: one takes a cancelled request stream between the
+check and the retirement, the other holds a server-opened unidirectional stream after
+its writes are acknowledged. On the unchanged source both throw that exception; with
+the fix both streams stay, then retire once disposed.
+
+The race needs the worker to start in the short span between the connection's check
+and its retirement, and load alone rarely lands there. A 30-minute run of the HTTP/3
+cancellation workload alone, at 100 times its endurance rate, on Windows with the
+endurance runs' CPU split, did not reproduce it on the unchanged source (fc6d4dfc):
+349,052 cancellations at 194 a second and no client error. On the fix (7d9b9102) the
+same run made 361,337 cancellations at 201 a second, also without a client error, and
+the drain and restart after it left nothing in flight. The self-tests, not the load,
+show the fix.
+
+The fix then ran the three-hour plan on both platforms. Linux finished all 31 steps
+without a client error: 43,588,549 validated requests, 4,285,996 of them over HTTP/3.
+Windows made 30,425,837, 4,404,123 over HTTP/3, without an HTTP/3 error, but two
+steps of its first cycle failed. In them three client TCP sockets, on HTTP/1.1 and
+HTTP/2 workloads, failed with `NoBufferSpaceAvailable` or `AddressAlreadyInUse`,
+Windows' errors for running out of socket resources. The machine carried more outside
+load than in the earlier runs: processors busy outside the server, the client's four
+included, exceeded 12 of the 16 in 11.0 percent of the five-second samples, against 0.8
+percent in the three-hour run on 5bc8899e. HTTP/1.1 and HTTP/2 do not use EmbedIO.Quic.
+Neither run hit the retirement failure, and every drain and restart left nothing in
+flight. The server's CPU and allocation per request matched the three-hour runs on
+5bc8899e. Small-request p99 on Linux stayed within the range of the earlier Linux runs;
+on Windows it ran higher than in them on every protocol, the TCP ones included.
 
 ## Open-issue audit
 
