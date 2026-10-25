@@ -1169,10 +1169,13 @@ Still open after the merge, each with its tracking issue:
    first request with no warm cost
    ([Startup, warm and tail latency](#startup-warm-and-tail-latency)).
    [#522](https://github.com/WilliamSmithEdward/embedio-neo/issues/522).
-4. Resolved: runs of three hours on Windows and Linux and of 30 minutes on macOS
-   finished without a client error ([Endurance](#endurance)). Linux native memory and
-   Windows handles rose slowly over the three hours; whether they level off is tracked
-   in [#552](https://github.com/WilliamSmithEdward/embedio-neo/issues/552).
+4. Resolved: runs of eight hours on Windows and Linux, three hours before them, and 30
+   minutes on macOS ([Endurance](#endurance)). Live native memory on Linux held flat;
+   the memory glibc keeps after the server frees it and the handles on Windows grew
+   early and slowed to a fraction of that rate
+   ([#552](https://github.com/WilliamSmithEdward/embedio-neo/issues/552)). The runs'
+   one client error, from a QUIC stream retirement, is tracked in
+   [#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555).
    [#523](https://github.com/WilliamSmithEdward/embedio-neo/issues/523).
 5. Resolved: ad-hoc signed hardened apps, AOT and JIT, run in CI
    ([Hardened-runtime macOS apps](#hardened-runtime-macos-apps)), as do the oldest
@@ -3069,9 +3072,59 @@ requests, so a fixed cost per request or per cycle would add about the same each
 these increments shrank, which fits an allocator approaching its high-water mark. On
 Windows, memory held flat but handles rose, mostly in the first hour as threads went
 from 18 to 21, and then, with 21 threads, from 587 after the second cycle to 601 at
-the end. Three hours cannot show that either series stops;
-[#552](https://github.com/WilliamSmithEdward/embedio-neo/issues/552) tracks both, with
-an 8-hour plan and finer instruments.
+the end. Three hours cannot show that either series stops; the eight-hour runs below
+follow both with finer instruments.
+
+### Eight-hour runs
+
+For [#552](https://github.com/WilliamSmithEdward/embedio-neo/issues/552), both
+platforms then repeated the three-hour runs' cycle 19 times, 8.0 hours, on `fc6d4dfc`,
+whose library source is what 2.18.0 ships;
+[#554](https://github.com/WilliamSmithEdward/embedio-neo/pull/554) added only the
+instruments these runs read. Each quiesced snapshot also records, on Linux, the
+resident set split into anonymous and file-backed pages and glibc's `mallinfo2`
+totals, and on Windows the open handles by object type. Before its run, each platform
+passed `native-census-check`, which proves its census sees a known change. The setup
+otherwise matches the three-hour runs.
+
+| | Windows | Linux |
+| --- | --- | --- |
+| Steps passed | 81 of 83 | 83 of 83 |
+| Client errors | 1 | 0 |
+| Validated requests | 87,178,259 | 128,328,216 |
+| Of them over HTTP/3 | 12,553,342 | 12,462,202 |
+| Handles after the first and last cycles | 573 and 596 | 134 and 134 |
+| Event handles in the census, same points | 215 and 235 | - |
+| Win32 heaps allocated, same points | 7.7 and 8.3 MiB | - |
+| malloc in use, same points | - | 10.2 and 10.6 MiB |
+| malloc free, same points | - | 38.0 and 49.9 MiB |
+| Resident anonymous memory, same points | - | 60.1 and 72.8 MiB |
+
+All 57 drains and restarts on each platform left nothing in flight, and no replaced
+server instance served a request. Small-request p99 held: on every protocol, the
+medians of the run's first and last quarters differ by at most 0.36 ms.
+
+Windows' two failed steps are one event, and the only client error in any of these
+endurance runs. In the ninth cycle a QUIC stream retirement threw inside a
+connection's stream bookkeeping and aborted that connection under the HTTP/3
+cancellation workload, and the next drain reported the failure when the listener shut
+down. [#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555) tracks it.
+
+On Windows, handles rose 22 over the first nine cycles and 1 over the last nine. The
+census puts the early growth on Event handles, which stayed between 232 and 236 for
+the last eight cycles. The heaps' allocated total stopped growing after the tenth
+cycle. Inside it, the default heap's 24-, 32- and 56-byte blocks grew in bursts, most
+of it during the second to sixth and the tenth to twelfth cycles, and by tens of
+blocks a cycle at the end, about 2 KB.
+
+On Linux, malloc's in-use bytes held at 10.1 to 10.6 MiB through all 19 cycles, so
+live native state did not grow. Its free bytes rose 11.0 MiB over the first nine
+cycles and 0.9 MiB over the last nine, and resident anonymous memory followed them:
+the growth is memory glibc keeps after the server frees it. Fitted over the last ten
+cycles, resident anonymous memory still rises about 0.4 MiB a cycle, and Windows
+handles about 0.4 a cycle, both well inside the runs' cycle-to-cycle swings of up to
+3.5 MiB and 3 handles. VmData, the private memory .NET reports on Linux, rose 54 MiB,
+about 3 MiB a cycle, most of it with no matching resident change.
 
 ## Open-issue audit
 
