@@ -3164,13 +3164,14 @@ without a client error: 43,588,549 validated requests, 4,285,996 of them over HT
 Windows made 30,425,837, 4,404,123 over HTTP/3, without an HTTP/3 error, but two
 steps of its first cycle failed. In them three client TCP sockets, on HTTP/1.1 and
 HTTP/2 workloads, failed with `NoBufferSpaceAvailable` or `AddressAlreadyInUse`,
-Windows' errors for running out of socket resources. A session in another repository
-was running on the machine then, and at times all 16 logical processors were busy;
-HTTP/1.1 and HTTP/2 do not use EmbedIO.Quic. Neither run hit the retirement failure,
-and every drain and restart left nothing in flight. The server's CPU and allocation
-per request matched the three-hour runs on 5bc8899e. Small-request p99 on Linux stayed
-within the range of the earlier Linux runs; on Windows it ran higher than in them on
-every protocol, the TCP ones included.
+Windows' errors for running out of socket resources. The machine carried more outside
+load than in the earlier runs: processors busy outside the server, the client's four
+included, exceeded 12 of the 16 in 11.0 percent of the five-second samples, against 0.8
+percent in the three-hour run on 5bc8899e. HTTP/1.1 and HTTP/2 do not use EmbedIO.Quic.
+Neither run hit the retirement failure, and every drain and restart left nothing in
+flight. The server's CPU and allocation per request matched the three-hour runs on
+5bc8899e. Small-request p99 on Linux stayed within the range of the earlier Linux runs;
+on Windows it ran higher than in them on every protocol, the TCP ones included.
 
 ## Open-issue audit
 
