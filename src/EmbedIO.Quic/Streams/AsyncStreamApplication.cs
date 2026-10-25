@@ -276,13 +276,25 @@ namespace EmbedIO.Quic
 
         internal override void Retire(ulong id)
         {
+            if (!TryRetire(id)) throw new InvalidOperationException("Async stream retired before completion.");
+        }
+
+        // A stream's owner changes it from other threads, so the stream checks and retires in
+        // one step under its own lock, and a stream its owner took after the connection's
+        // check stays until it can retire.
+        internal override bool TryRetire(ulong id)
+        {
             AsyncQuicStream? stream;
 
-            lock (_gate) _streams.Remove(id, out stream);
+            lock (_gate) _streams.TryGetValue(id, out stream);
 
-            stream?.Retire();
+            if (stream?.TryRetire() == false) return false;
+
+            lock (_gate) _streams.Remove(id);
+
             RetiredStreams++;
             Notify();
+            return true;
         }
 
         internal async ValueTask<AsyncQuicStream> AcceptInboundStreamAsync(CancellationToken token = default)

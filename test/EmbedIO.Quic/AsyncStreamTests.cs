@@ -9,7 +9,9 @@
 
             internal List<Delivery> Sent { get; } = [];
             internal ConnectionStreams Streams { get; }
-            internal AsyncStreamApplication Application => (AsyncStreamApplication)Streams.Protocol;
+
+            internal AsyncStreamApplication Application =>
+                Streams.Protocol as AsyncStreamApplication ?? ((ForwardingApplication)Streams.Protocol).Inner;
 
             internal Peer(
                 ulong uni = 32,
@@ -17,7 +19,8 @@
                 ulong datagram = 1200,
                 ulong data = 1UL << 32,
                 int inboundBidi = 16,
-                int inboundUni = 16
+                int inboundUni = 16,
+                Func<StreamOperations, StreamApplication>? protocol = null
             ) =>
                 Streams = new ConnectionStreams(
                     (bytes, reliable) =>
@@ -34,7 +37,7 @@
                     bidi,
                     datagram,
                     true,
-                    operations => new AsyncStreamApplication(operations),
+                    protocol ?? (operations => new AsyncStreamApplication(operations)),
                     _ => CanQueue,
                     code => ClosedCode = code,
                     inboundBidi,
@@ -54,6 +57,62 @@
             public void Dispose() => Streams.Dispose();
         }
 
+        // Forwards to an AsyncStreamApplication, and runs Between once, the first time the
+        // connection learns a stream can retire or asks to retire it, before the retirement:
+        // what the stream's owner does on another thread between the connection's check and
+        // the retirement.
+        internal sealed class ForwardingApplication(AsyncStreamApplication inner) : StreamApplication
+        {
+            internal Action<ulong>? Between;
+
+            internal AsyncStreamApplication Inner { get; } = inner;
+
+            internal override void Open(ulong id) => Inner.Open(id);
+
+            internal override void Poll() => Inner.Poll();
+
+            internal override void WritesClosed(ulong id) => Inner.WritesClosed(id);
+
+            internal override void ConnectionClosed(ulong error, bool application) =>
+                Inner.ConnectionClosed(error, application);
+
+            internal override void Stream(ulong id, byte[] bytes, bool fin) => Inner.Stream(id, bytes, fin);
+
+            internal override void Stream(ulong id, ReadOnlySpan<byte> bytes, bool fin) => Inner.Stream(id, bytes, fin);
+
+            internal override void Reset(ulong id, ulong error, ulong reliableSize) => Inner.Reset(id, error, reliableSize);
+
+            internal override void Stop(ulong id, ulong error) => Inner.Stop(id, error);
+
+            internal override void ReceiveDatagram(byte[] bytes) => Inner.ReceiveDatagram(bytes);
+
+            internal override bool CanRetire(ulong id)
+            {
+                var retirable = Inner.CanRetire(id);
+
+                if (retirable) RunBetween(id);
+
+                return retirable;
+            }
+
+            internal override void Retire(ulong id) => Inner.Retire(id);
+
+            internal override bool TryRetire(ulong id)
+            {
+                RunBetween(id);
+                return Inner.TryRetire(id);
+            }
+
+            public override void Dispose() => Inner.Dispose();
+
+            private void RunBetween(ulong id)
+            {
+                var between = Between;
+                Between = null;
+                between?.Invoke(id);
+            }
+        }
+
         internal static void Run()
         {
             ConfiguredCapacity(128, 16, true);
@@ -61,6 +120,8 @@
             ConfiguredCapacity(1, 1, false);
             ReadWrite();
             RetainUntilDisposed();
+            RetirementRacesOwner();
+            RetainedLocalStreamWaitsForDisposal();
             RingGrowth();
             ResetCredit();
             ResetDiscard();
@@ -433,6 +494,73 @@
                 "retained-stream-retires-when-disposed"
             );
             Check(!peer.Sent.Any(item => item.Bytes[0] is 4 or 5 or 0x24), "retained-stream-disposal-does-not-abort");
+        }
+
+        // The client resets a request and stops its response before the server's worker
+        // starts, so once the reset is acknowledged the connection finds the stream retirable.
+        // The worker's first act holds the stream until it is disposed, and here it does so
+        // between the connection's check and the retirement. The stream must stay until the
+        // worker disposes it, and the retirement must not fail the connection (#555).
+        private static void RetirementRacesOwner()
+        {
+            using var peer = new Peer(
+                protocol: operations => new ForwardingApplication(new AsyncStreamApplication(operations))
+            );
+            var forwarding = (ForwardingApplication)peer.Streams.Protocol;
+            peer.Streams.Receive(0, 0, [1], false);
+            var stream = Await(
+                peer.Application
+                    .AcceptInboundStreamAsync()
+                    .AsTask()
+            );
+            peer.Streams.Reset(0, 0x10c, 1, 0, false);
+            peer.Streams.Stop(0, 0x10c);
+            peer.Pump();
+            forwarding.Between = id =>
+            {
+                if (id == 0) stream.RetainUntilDisposed();
+            };
+            peer.Ack();
+            Check(
+                peer.Streams.RetiredStreams == 0 && peer.Application.Retained == 1,
+                "stream-held-after-retirement-check-stays"
+            );
+            stream.Dispose();
+            peer.Pump();
+            Check(
+                peer.Streams.RetiredStreams == 1 && peer.Application.Retained == 0,
+                "stream-held-after-retirement-check-retires-when-disposed"
+            );
+        }
+
+        // A unidirectional stream this side opened, and its owner still holds, is not retired
+        // when its writes are acknowledged; it retires once the owner disposes it (#555).
+        private static void RetainedLocalStreamWaitsForDisposal()
+        {
+            using var peer = new Peer();
+            var opening = peer.Application
+                .OpenOutboundStreamAsync(true)
+                .AsTask();
+            peer.Pump();
+            var stream = Await(opening);
+            stream.RetainUntilDisposed();
+            var write = stream
+                .WriteOwnedAsync(new byte[] { 1 }, true, default)
+                .AsTask();
+            peer.Pump();
+            Await(write);
+            peer.Ack();
+            Await(stream.WritesClosed);
+            Check(
+                peer.Streams.RetiredStreams == 0 && peer.Application.Retained == 1,
+                "retained-local-stream-stays-after-its-writes-end"
+            );
+            stream.Dispose();
+            peer.Pump();
+            Check(
+                peer.Streams.RetiredStreams == 1 && peer.Application.Retained == 0,
+                "retained-local-stream-retires-when-disposed"
+            );
         }
 
         private static void ResetCredit()
