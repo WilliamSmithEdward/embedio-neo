@@ -1174,8 +1174,9 @@ Still open after the merge, each with its tracking issue:
    the memory glibc keeps after the server frees it and the handles on Windows grew
    early and slowed to a fraction of that rate
    ([#552](https://github.com/WilliamSmithEdward/embedio-neo/issues/552)). The runs'
-   one client error, from a QUIC stream retirement, is tracked in
-   [#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555).
+   one client error came from a race in QUIC stream retirement, since fixed
+   ([Stream retirement race](#stream-retirement-race),
+   [#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555)).
    [#523](https://github.com/WilliamSmithEdward/embedio-neo/issues/523).
 5. Resolved: ad-hoc signed hardened apps, AOT and JIT, run in CI
    ([Hardened-runtime macOS apps](#hardened-runtime-macos-apps)), as do the oldest
@@ -3108,7 +3109,7 @@ Windows' two failed steps are one event, and the only client error in any of the
 endurance runs. In the ninth cycle a QUIC stream retirement threw inside a
 connection's stream bookkeeping and aborted that connection under the HTTP/3
 cancellation workload, and the next drain reported the failure when the listener shut
-down. [#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555) tracks it.
+down. [Stream retirement race](#stream-retirement-race) has the cause and the fix.
 
 On Windows, handles rose 22 over the first nine cycles and 1 over the last nine. The
 census puts the early growth on Event handles, which stayed between 232 and 236 for
@@ -3125,6 +3126,29 @@ cycles, resident anonymous memory still rises about 0.4 MiB a cycle, and Windows
 handles about 0.4 a cycle, both well inside the runs' cycle-to-cycle swings of up to
 3.5 MiB and 3 handles. VmData, the private memory .NET reports on Linux, rose 54 MiB,
 about 3 MiB a cycle, most of it with no matching resident change.
+
+### Stream retirement race
+
+The eight-hour Windows run's client error was a race over one stream between its
+connection and a request's worker
+([#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555)). The
+connection retires a request stream once the client is done with it and every frame
+about it is acknowledged, which gives the stream back to the client's stream limit.
+Since 2.18.0 the HTTP/3 server's worker also holds its stream until it disposes it, so
+the stream counts against that limit while the request runs. The connection checked
+whether the stream could retire, did its own bookkeeping, then retired it, taking the
+stream's lock for the check and again for the retirement. A client that resets a
+request and stops its response before the worker starts makes the check pass, and a
+worker that took the stream in between made the retirement throw
+`Async stream retired before completion`, which closed the connection. Streams the
+server opens in one direction retired with no check at all.
+
+The application now decides first: one call checks and retires the stream under its
+lock, and a stream its owner still holds stays until the owner disposes it, on both
+paths. Two self-tests take them: one takes a cancelled request stream between the
+check and the retirement, the other holds a server-opened unidirectional stream after
+its writes are acknowledged. On the unchanged source both throw that exception; with
+the fix both streams stay, then retire once disposed.
 
 ## Open-issue audit
 

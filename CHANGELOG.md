@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- An HTTP/3 connection no longer closes when a client cancels a request just as the
+  server starts it. Since 2.18.0 a request's stream counts against the client's limit
+  until its request has ended, and EmbedIO.Quic could retire the stream after the
+  request's worker had taken it, which threw `Async stream retired before completion`
+  and closed the connection. The stream now stays until the worker disposes it. An
+  eight-hour endurance run on Windows hit it once (#555).
+
 ## [2.18.0] - 2026-10-24
 
 ### Added
