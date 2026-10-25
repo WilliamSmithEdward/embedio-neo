@@ -3150,6 +3150,28 @@ check and the retirement, the other holds a server-opened unidirectional stream 
 its writes are acknowledged. On the unchanged source both throw that exception; with
 the fix both streams stay, then retire once disposed.
 
+The race needs the worker to start in the short span between the connection's check
+and its retirement, and load alone rarely lands there. A 30-minute run of the HTTP/3
+cancellation workload alone, at 100 times its endurance rate, on Windows with the
+endurance runs' CPU split, did not reproduce it on the unchanged source (fc6d4dfc):
+349,052 cancellations at 194 a second and no client error. On the fix (7d9b9102) the
+same run made 361,337 cancellations at 201 a second, also without a client error, and
+the drain and restart after it left nothing in flight. The self-tests, not the load,
+show the fix.
+
+The fix then ran the three-hour plan on both platforms. Linux finished all 31 steps
+without a client error: 43,588,549 validated requests, 4,285,996 of them over HTTP/3.
+Windows made 30,425,837, 4,404,123 over HTTP/3, without an HTTP/3 error, but two
+steps of its first cycle failed. In them three client TCP sockets, on HTTP/1.1 and
+HTTP/2 workloads, failed with `NoBufferSpaceAvailable` or `AddressAlreadyInUse`,
+Windows' errors for running out of socket resources. A session in another repository
+was running on the machine then, and at times all 16 logical processors were busy;
+HTTP/1.1 and HTTP/2 do not use EmbedIO.Quic. Neither run hit the retirement failure,
+and every drain and restart left nothing in flight. The server's CPU and allocation
+per request matched the three-hour runs on 5bc8899e. Small-request p99 on Linux stayed
+within the range of the earlier Linux runs; on Windows it ran higher than in them on
+every protocol, the TCP ones included.
+
 ## Open-issue audit
 
 On 2026-10-22, after the provider removal and the public WebTransport sessions,
