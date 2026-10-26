@@ -180,6 +180,7 @@ def validate(args):
                      ("verify_path_controls.py", "path-controls", []),
                      ("verify_path_validation.py", "path-validation", []),
                      ("verify_sni.py", "sni", []), ("verify_tls_listener.py", "publication", []),
+                     ("verify_session_tickets.py", "session-tickets", []),
                      ("verify_client_certificate.py", "certificate-policies", ["--profile", "full"]),
                      ("fuzz_client_certificate.py", "auth-fuzz", ["--cases", "256", "--seed", "1729"]))
             for script, name, extra in cases:
@@ -194,7 +195,7 @@ def validate(args):
               "consumersOnly": args.consumers_only,
               "scope": ("Actual-RID package-only portable/RID/AOT consumers, generated controllers/auth/limits/abort. "
                         "The development host suites did not run." if args.consumers_only else
-                        "Actual-RID package-only portable/RID/AOT consumers, generated controllers/auth/limits/abort, full wire/cipher/SNI/publication/policy/mutation/issuer suites. Not oldest-OS, browser, vendor-instrumented or endurance acceptance.")}
+                        "Actual-RID package-only portable/RID/AOT consumers, generated controllers/auth/limits/abort, full wire/cipher/SNI/publication/session-ticket/policy/mutation/issuer suites. Not oldest-OS, browser, vendor-instrumented or endurance acceptance.")}
     (args.output / "receipt.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps({"passed": True, "rid": args.rid, "steps": len(steps)}), flush=True)
 

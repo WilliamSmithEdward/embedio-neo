@@ -23,12 +23,22 @@ namespace EmbedIO.Quic
         // Marks a refused issuer, which fails the handshake with internal_error, as it did
         // when each handshake installed its own issuers.
         private const string IssuerRefused = "EmbedIO.Quic.IssuerRefused";
+
+        // A ClientHello is a few kilobytes of this bound, so its buffer grows as CRYPTO
+        // reassembly does.
+        private const int HelloLimit = 65536;
         private Func<string?, X509Certificate2?>? _selector;
         private readonly Func<X509Certificate2, Credential>? _credentials;
         private readonly Func<X509Certificate2?, X509Certificate2Collection, bool>? _validateClientCertificate;
         private X509Certificate2? _clientCertificate;
         private readonly NativeHandle _owner;
         private Reassembly?[] _input = [null, null, null];
+
+        // ClientHello bytes not yet given to native TLS.
+        private byte[] _hello = [];
+        private int _helloCount;
+        private string? _serverName;
+        private byte[]? _helloParameters;
         private bool _disposed;
         private readonly List<string>? _diagnostics;
         private QuicCipherSuite? _cipher;
@@ -88,7 +98,7 @@ namespace EmbedIO.Quic
         internal static void EnsureAvailable()
         {
             if (
-                NativeMethods.Abi() != 3
+                NativeMethods.Abi() != 4
                 || Marshal.PtrToStringUTF8(NativeMethods.Version()) != "OpenSSL 3.5.9 29 Sep 2026"
             )
                 throw new InvalidOperationException("Unexpected native TLS ABI or version.");
@@ -110,8 +120,12 @@ namespace EmbedIO.Quic
         internal override void Pump()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            ReadClientHellos();
 
-            for (var level = 0; level < 3; level++)
+            // Native TLS starts with the first complete ClientHello, once its credential is in.
+            if (_helloParameters == null) return;
+
+            for (var level = 1; level < 3; level++)
             {
                 var bytes = _input[level]?.Consume() ?? [];
 
@@ -130,81 +144,156 @@ namespace EmbedIO.Quic
                 }
             }
 
-            Span<byte> name = stackalloc byte[255];
+            var result = NativeMethods.Step(_owner);
+            var alert = NativeMethods.Alert(_owner);
 
-            for (var attempt = 0; attempt < 2; attempt++)
+            if (alert != 0) AlertCode = checked((byte)alert);
+
+            ReadEvents();
+
+            if (result < 0) throw new InvalidDataException("Native TLS handshake failed.");
+
+            if (result != 1 || Established) return;
+
+            if (ReadKeys[2] == null || WriteKeys[2] == null || PeerParameters == null)
+                throw Failure(80, "Incomplete native TLS handshake state.");
+
+            ValidateClientCertificate();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            Established = true;
+        }
+
+        // The client's Initial CRYPTO data is its ClientHello, and after a HelloRetryRequest a
+        // second one, and each goes to native TLS whole. The first selects the certificate from
+        // its server name and installs the credential and its ticket keys before OpenSSL reads
+        // it, as Schannel does on Windows, so a ticket the client presents opens only under the
+        // certificate that name selects now.
+        private void ReadClientHellos()
+        {
+            var bytes = _input[0]?.Consume() ?? [];
+
+            try
             {
-                var result = NativeMethods.Step(_owner);
-                var alert = NativeMethods.Alert(_owner);
+                if (bytes.Length > HelloLimit - _helloCount) throw Failure(50, "Oversized ClientHello.");
 
-                if (alert != 0) AlertCode = checked((byte)alert);
-
-                ReadEvents();
-
-                if (result < 0) throw new InvalidDataException("Native TLS handshake failed.");
-
-                if (result != 2)
+                if (bytes.Length > _hello.Length - _helloCount)
                 {
-                    if (result == 1 && !Established)
-                    {
-                        if (ReadKeys[2] == null || WriteKeys[2] == null || PeerParameters == null)
-                            throw Failure(80, "Incomplete native TLS handshake state.");
-
-                        ValidateClientCertificate();
-                        ObjectDisposedException.ThrowIf(_disposed, this);
-                        Established = true;
-                    }
-
-                    return;
+                    var needed = _helloCount + bytes.Length;
+                    var grown = new byte[Math.Min(HelloLimit, Math.Max(needed, Math.Max(1024, 2 * _hello.Length)))];
+                    _hello
+                        .AsSpan(0, _helloCount)
+                        .CopyTo(grown);
+                    CryptographicOperations.ZeroMemory(_hello);
+                    _hello = grown;
                 }
 
-                int length;
-
-                fixed (byte* data = name)
-                    length = NativeMethods.ServerName(_owner, data, (nuint)name.Length);
-
-                if (length < 0 || length > name.Length) throw Failure(47, "Invalid native server name.");
-
-                foreach (var character in name[..length])
-                    if (character == 0 || character > 127) throw Failure(47, "Invalid native server name.");
-
-                var selector = _selector ?? throw Failure(80, "Native TLS requested a second certificate.");
-                _selector = null;
-                var serverName = length == 0 ? null : Encoding.ASCII.GetString(name[..length]);
-                _diagnostics?.Add("server-name=" + (serverName ?? "(none)"));
-                var certificate = selector(serverName);
-                ObjectDisposedException.ThrowIf(_disposed, this);
-
-                if (certificate == null || !certificate.HasPrivateKey)
-                    throw Failure(80, "The selected TLS certificate has no private key.");
-
-                Credential credential;
-
-                try
-                {
-                    credential = _credentials?.Invoke(certificate) ?? Credential.Create(certificate);
-                }
-
-                catch (InvalidDataException error) when (error.Data.Contains(IssuerRefused))
-                {
-                    AlertCode ??= 80;
-                    throw;
-                }
-
-                try
-                {
-                    if (NativeMethods.UseCredential(_owner, credential.Handle) != 1)
-                        throw new InvalidDataException("Native TLS credential rejected.");
-                }
-
-                finally
-                {
-                    // The connection's TLS state holds its own references to the key and chain.
-                    credential.Release();
-                }
+                bytes.CopyTo(_hello, _helloCount);
+                _helloCount += bytes.Length;
             }
 
-            throw new InvalidDataException("Native TLS requested more than one credential.");
+            finally
+            {
+                CryptographicOperations.ZeroMemory(bytes);
+            }
+
+            while (_helloCount >= 4)
+            {
+                var size = (_hello[1] << 16) | (_hello[2] << 8) | _hello[3];
+
+                if (size > HelloLimit - 4) throw Failure(50, "Oversized ClientHello.");
+
+                if (_helloCount < size + 4) return;
+
+                var hello = TlsClientHello.Read(_hello.AsSpan(0, size + 4));
+
+                if (_helloParameters == null) Select(hello);
+
+                else if (!StringComparer.Ordinal.Equals(_serverName, hello.ServerName))
+                    throw Failure(47, "TLS server name changed during retry.");
+
+                else if (
+                    !hello.TransportParameters
+                        .AsSpan()
+                        .SequenceEqual(_helloParameters)
+                )
+                    throw Failure(47, "Client transport parameters changed during retry.");
+
+                fixed (byte* input = _hello)
+                    if (NativeMethods.Add(_owner, 0, input, (nuint)(size + 4)) != 1)
+                        throw new InvalidDataException("Native TLS input exceeds its limits.");
+
+                var count = _helloCount;
+                _helloCount -= size + 4;
+                _hello
+                    .AsSpan(size + 4, _helloCount)
+                    .CopyTo(_hello);
+                _hello
+                    .AsSpan(_helloCount, count - _helloCount)
+                    .Clear();
+            }
+        }
+
+        private void Select(TlsClientHelloInfo hello)
+        {
+            var selector = _selector ?? throw Failure(80, "Native TLS requested a second certificate.");
+            _selector = null;
+            _diagnostics?.Add("server-name=" + (hello.ServerName ?? "(none)"));
+            var certificate = selector(hello.ServerName);
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (certificate == null || !certificate.HasPrivateKey)
+                throw Failure(80, "The selected TLS certificate has no private key.");
+
+            Credential credential;
+
+            try
+            {
+                credential = _credentials?.Invoke(certificate) ?? Credential.Create(certificate);
+            }
+
+            catch (InvalidDataException error) when (error.Data.Contains(IssuerRefused))
+            {
+                AlertCode ??= 80;
+                throw;
+            }
+
+            try
+            {
+                if (NativeMethods.UseCredential(_owner, credential.Handle) != 1)
+                    throw new InvalidDataException("Native TLS credential rejected.");
+
+                if (credential.TicketKeys is { } keys) InstallTicketKeys(keys);
+            }
+
+            finally
+            {
+                // The connection's TLS state holds its own references to the key and chain, and
+                // its own copy of the ticket keys.
+                credential.Release();
+            }
+
+            _serverName = hello.ServerName;
+            _helloParameters = hello.TransportParameters;
+        }
+
+        private void InstallTicketKeys(SessionTicketKeys keys)
+        {
+            var copy = keys.Copy(out _);
+
+            try
+            {
+                fixed (byte* input = copy)
+                    if (
+                        NativeMethods.SetTicketKeys(_owner, input, (nuint)copy.Length, (uint)keys.Lifetime.TotalSeconds)
+                        != 1
+                    )
+                        throw new InvalidDataException("Native TLS ticket keys rejected.");
+            }
+
+            finally
+            {
+                CryptographicOperations.ZeroMemory(copy);
+            }
         }
 
         internal override X509Certificate2? CopyClientCertificate() =>
@@ -215,43 +304,49 @@ namespace EmbedIO.Quic
         // connection sends, and each connection takes its own references when it installs them.
         // The exported key bytes are cleared as soon as native code has parsed them. A credential
         // whose chain the stores could not complete serves only its own handshake, as before.
+        // Each connection that installs it copies its ticket keys, if it has any.
         internal sealed class Credential : SharedCredential
         {
             private readonly CredentialHandle _handle;
 
             // An explicit constructor: the pinned Semgrep cannot parse this class's primary
             // constructor in this file and stops scanning it.
-            private Credential(CredentialHandle handle, bool cacheable) : base(cacheable) => _handle = handle;
+            private Credential(CredentialHandle handle, bool cacheable, SessionTicketKeys? ticketKeys)
+                : base(cacheable, ticketKeys) => _handle = handle;
 
             internal CredentialHandle Handle => _handle;
 
-            // The caller holds the only reference.
-            internal static Credential Create(X509Certificate2 certificate)
+            // The caller holds the only reference, and the credential owns ticketKeys.
+            internal static Credential Create(X509Certificate2 certificate, SessionTicketKeys? ticketKeys = null)
             {
-                CredentialHandle created;
-                var exported = certificate.Export(X509ContentType.Pkcs12);
+                CredentialHandle? created = null;
 
                 try
                 {
-                    fixed (byte* input = exported)
-                        created = new CredentialHandle(NativeMethods.CreateCredential(input, (nuint)exported.Length));
-                }
+                    var exported = certificate.Export(X509ContentType.Pkcs12);
 
-                finally
-                {
-                    CryptographicOperations.ZeroMemory(exported);
-                }
+                    try
+                    {
+                        fixed (byte* input = exported)
+                            created = new CredentialHandle(
+                                NativeMethods.CreateCredential(input, (nuint)exported.Length)
+                            );
+                    }
 
-                try
-                {
+                    finally
+                    {
+                        CryptographicOperations.ZeroMemory(exported);
+                    }
+
                     if (created.IsInvalid) throw new InvalidDataException("Native TLS credential rejected.");
 
-                    return new Credential(created, AddServerChain(created, certificate));
+                    return new Credential(created, AddServerChain(created, certificate), ticketKeys);
                 }
 
                 catch
                 {
-                    created.Dispose();
+                    created?.Dispose();
+                    ticketKeys?.Dispose();
                     throw;
                 }
             }
@@ -488,6 +583,9 @@ namespace EmbedIO.Quic
             _clientCertificate?.Dispose();
             _clientCertificate = null;
             _input = [];
+            CryptographicOperations.ZeroMemory(_hello);
+            _hello = [];
+            _helloCount = 0;
             ReleaseKeys();
         }
 
@@ -570,8 +668,8 @@ namespace EmbedIO.Quic
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
-            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_server_name")]
-            internal static partial int ServerName(NativeHandle owner, byte* bytes, nuint capacity);
+            [LibraryImport(Library, EntryPoint = "embedio_quic_tls_set_ticket_keys")]
+            internal static partial int SetTicketKeys(NativeHandle owner, byte* keys, nuint length, uint lifetime);
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.AssemblyDirectory | DllImportSearchPath.SafeDirectories)]
             [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

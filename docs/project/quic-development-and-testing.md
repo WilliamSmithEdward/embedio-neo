@@ -1155,10 +1155,12 @@ Validated before the merge, each recorded in its own section:
 Still open after the merge, each with its tracking issue:
 
 1. Resolved: Retry is an option, checked against the .NET client and the quic-go peer;
-   resumption, 0-RTT and other post-handshake TLS messages stay outside the supported
-   profile, and Unix TLS keeps needing an exportable key
+   0-RTT and other post-handshake TLS messages stay outside the supported profile, and
+   Unix TLS keeps needing an exportable key
    ([Retry and the supported TLS profile](#retry-and-the-supported-tls-profile)).
-   [#520](https://github.com/WilliamSmithEdward/embedio-neo/issues/520).
+   [#520](https://github.com/WilliamSmithEdward/embedio-neo/issues/520). Session
+   resumption came later ([TLS session resumption](#tls-session-resumption),
+   [#550](https://github.com/WilliamSmithEdward/embedio-neo/issues/550)).
 2. Resolved: past its bounds an HTTP/3 endpoint refuses new connections before any TLS
    work, and a connection that can serve no more requests frees its listener slot
    without waiting for its closing or draining period
@@ -3545,19 +3547,158 @@ and off, and CI runs them with it on Linux and macOS (`--address-validation`).
 
 ### Left out
 
-- Session resumption. Every connection runs a full handshake and the server sends no
-  tickets. Resumption needs a ticket-encryption key that the server creates, rotates
-  and protects, on both the Schannel and the OpenSSL path. It would save one
-  certificate signature and the chain per reconnection; no measurement here calls for
-  it.
+- Session resumption, at the time: every connection ran a full handshake and the
+  server sent no tickets. [#550](https://github.com/WilliamSmithEdward/embedio-neo/issues/550)
+  added it later ([TLS session resumption](#tls-session-resumption)).
 - 0-RTT. It depends on resumption, and early data can be replayed (RFC 9001 section
   9.2), so it would need an application policy for which requests may be replayed and
-  425 Too Early (RFC 8470) for the rest.
+  425 Too Early (RFC 8470) for the rest. See [0-RTT](#0-rtt).
 - Keys that cannot be exported, on Linux and macOS. The TLS runtime there is the
   OpenSSL inside `EmbedIO-Neo.Quic.Native`, which receives the key exported from the
   certificate; a hardware- or store-held key never reaches it. A signing callback from
   native code into .NET on every handshake would lift this. Schannel uses the key in
   place, so Windows accepts non-exportable CNG keys.
+
+## TLS session resumption
+
+[#550](https://github.com/WilliamSmithEdward/embedio-neo/issues/550) asked for TLS
+session resumption on both TLS paths, measured first, and for 0-RTT either as an
+opt-in with replay protection or left out with the measured reason. The server now
+issues a session ticket with every handshake on Windows, Linux and macOS. This is
+unreleased.
+
+### Tickets and keys
+
+- Each listener credential, one per selected certificate object, owns its ticket keys:
+  up to four 80-byte keys, each a 16-byte name and 64 bytes of secret from the system's
+  random number generator, kept only in memory. The newest key seals new tickets until
+  it is an hour old, and every key opens tickets until it is three hours old, the hour
+  plus the two-hour ticket lifetime. Handshakes copy the keys under a lock, and the
+  credential's last release zeroes them.
+- The keys belong to the credential, so a ticket resumes only under the certificate
+  object that issued it. A publication drops the credentials and their keys, and so
+  does disposing or evicting a certificate. A certificate whose issuer chain is
+  incomplete gets a credential, and keys, for each handshake, so its tickets never
+  resume.
+- A listener whose `ClientCertificateMode` is `Allow` or `Require` issues no tickets,
+  since a resumed session would keep the first connection's client certificate
+  without running the policy again.
+- On Linux and macOS each connection receives the keys and the lifetime through
+  `embedio_quic_tls_set_ticket_keys` (private ABI 4) before its first step, and OpenSSL
+  seals with AES-256-CBC and HMAC-SHA-256 under the newest key. OpenSSL resumes a TLS
+  1.3 ticket of any age, so the native callback refuses one older than the lifetime. It
+  issues a new ticket on every resumption, so a client need not use a ticket twice
+  (RFC 8446 appendix C.4).
+- On Windows the credential gives Schannel its key list with
+  `SetCredentialsAttributesW(SECPKG_ATTR_SESSION_TICKET_KEYS)` whenever the keys change,
+  accepts with `ASC_REQ_SESSION_TICKET` and no longer sets
+  `SCH_CRED_DISABLE_RECONNECTS`. Schannel announces a ten-hour lifetime and ignores
+  `dwSessionLifespan`, so a ticket resumes until its key retires, two to three hours
+  after it was issued.
+- The OpenSSL path now selects the certificate before OpenSSL reads the ClientHello,
+  with the managed ClientHello reader the Schannel path already used. The adapter
+  installs the credential and its keys and only then hands over the message, so OpenSSL
+  opens a ticket only with the keys of the certificate already chosen. As on Windows, a
+  ClientHello after a HelloRetryRequest must keep the server name and transport
+  parameters. ABI 4 drops `embedio_quic_tls_server_name` and the step result that
+  paused the handshake for selection.
+
+### Measurement
+
+The development host's production listener (`serve-webserver`) served sequential
+connections from aioquic 1.6.1, each a handshake, one GET and a close. Each of 12 host
+sessions ran 15 warm-up pairs and measured two seconds of idle CPU, then one block of
+40 full handshakes and one of 40 resumed ones, in alternating order. On Windows the
+server CPU is the process's cycle time, read from the system process list and counted
+at the time-stamp counter's rate, plus that of LSASS, where Schannel runs the handshake
+and CNG signs with the non-exportable key. On Linux it is the server threads' run time
+from `schedstat`. Process times advance in 15.6 ms steps on Windows and 10 ms on Linux,
+too coarse for these blocks. The idle CPU is subtracted from each block. Tiered
+compilation was off in the host: each session is a new process, and with it on the
+first block of every session carried about 22 ms of JIT work per connection.
+
+AMD Ryzen 7 9800X3D (8 cores, 16 threads), .NET 10.0.13, loopback. Windows 11 build
+26300 with the fixtures' non-exportable CNG keys, RSA-1024 and ECDSA P-256; Linux in
+Docker under WSL2 with four CPUs, the ABI 4 library and an exportable RSA-2048 key.
+Medians of the 12 blocks of each kind:
+
+| Platform, key | Handshake | Server CPU per connection | LSASS | Server bytes before the response | Client time to the response |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Windows, RSA-1024 | Full | 3.44 ms | 0.48 ms | 3,109 | 4.97 ms |
+| Windows, RSA-1024 | Resumed | 3.47 ms | 0.50 ms | 2,404 | 4.51 ms |
+| Windows, ECDSA P-256 | Full | 3.57 ms | 0.63 ms | 2,855 | 5.18 ms |
+| Windows, ECDSA P-256 | Resumed | 3.44 ms | 0.57 ms | 2,404 | 4.57 ms |
+| Linux, RSA-2048 | Full | 8.13 ms | | 3,650 | 6.68 ms |
+| Linux, RSA-2048 | Resumed | 7.18 ms | | 2,141 | 3.58 ms |
+
+- On Linux a resumed connection cost the server 0.95 ms less, 12 percent, and the
+  client had its response 3.1 ms sooner.
+- On Windows neither the server's nor LSASS's CPU changed measurably; LSASS's own
+  background work spread its blocks from 0 to 2.8 ms per connection. On one thread
+  .NET's CNG signs in 57 us with RSA-1024 and 119 us with ECDSA P-256 on this machine,
+  1.5 to 3 percent of a connection, so these keys leave little to save. A resumed
+  handshake skips 290 us with RSA-2048, 917 us with RSA-3072 and 2.07 ms with
+  RSA-4096. The response came 0.46 ms sooner with RSA-1024 and 0.61 ms with ECDSA.
+- A resumed handshake sends no certificate, so the server sent 450 to 1,509 fewer bytes
+  before the response.
+- The client is aioquic in Python, and its own certificate checks are part of its times.
+
+### Validation
+
+- `verify_session_tickets.py` runs the actual HTTP/3 listener with the SNI fixture and
+  keys that rotate every two seconds for tickets that live six. Its 12 cases: a full
+  handshake; a resumed one; that ticket presented under the other certificate, refused;
+  the other certificate's own full and resumed handshakes; its ticket presented for the
+  first server name, refused; a full handshake that rotates the keys; a ticket from the
+  previous key, resumed; a ticket past its lifetime, refused on Linux and macOS and
+  resumed on Windows; a ticket from a retired key, refused; and a ticket from before a
+  publication, refused after it. Every handshake must yield a ticket that allows no
+  early data, and the listener must abort nothing, release its credentials and rebind.
+  It passed on Windows and in the Linux image. CI runs it in the Windows Schannel script
+  and through the package consumers on all six runtime identifiers.
+- `verify_tls_listener.py` now requires one ticket per connection, five in all;
+  `verify_client_certificate.py` still requires none.
+- `SessionTicketKeyTests` in `self-test` checks rotation and retirement on a manual
+  clock, the constructor's bounds, disposal with the credential's last release and
+  concurrent copies while the keys rotate. Three deliberate defects each failed it:
+  retiring a key at the lifetime instead of the period plus the lifetime, never
+  rotating, and keys that outlive their credential.
+- The native ownership test adds the ticket-key rules (a null owner or key list, an
+  empty, partial or five-key list, a lifetime of zero or past seven days, a second call
+  and a call after the first step) and passed under ASan, UBSan and LeakSanitizer.
+  The 28 native unit tests passed with one platform skip, the audit requiring the ABI 4
+  symbol version and export inventory.
+- The NUnit HTTP/3, QUIC, WebTransport, certificate and TLS subset, 915 cases: Windows
+  912 passed and 3 platform skips; Linux, with the ABI 4 library, 914 passed and 1
+  skip. `self-test` and `verify_tls_listener.py`, `verify_sni.py` and
+  `verify_client_certificate.py` passed on both.
+
+### 0-RTT
+
+0-RTT is left out, and the tickets allow no early data, which the verifier checks. The
+measurements above show what resumption alone brings: the certificate's bytes, the
+signature and, on Linux, 12 percent of the server's CPU per connection. 0-RTT would add
+only the round trip a resumed client waits before its first request, and only where it
+can run:
+
+- Schannel's QUIC interface defines no early-data traffic secret, and MsQuic's Schannel
+  layer marks 0-RTT unsupported (`src/platform/tls_schannel.c`), so Windows, the lead
+  platform, could not offer it.
+- On Linux and macOS it would need early data through OpenSSL's QUIC TLS interface,
+  0-RTT packet protection in EmbedIO.Quic, the transport parameters remembered in each
+  ticket and never reduced (RFC 9000 section 7.4.1), and protection against replayed
+  tickets across the listener (RFC 8446 section 8).
+- Early data can be replayed (RFC 9001 section 9.2), so each application would have to
+  say which requests may be replayed and answer the rest with 425 Too Early (RFC 8470).
+  That needs a new public option, which this change does not add.
+
+### Left out
+
+- Ticket keys live in one process. After a restart, or at another instance behind a
+  load balancer, a ticket does not open and the client runs a full handshake. No API
+  sets or shares the keys.
+- TCP listeners use `SslStream`, which handles its own resumption; this change does not
+  touch them.
 
 ## Startup, warm and tail latency
 

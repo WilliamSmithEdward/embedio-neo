@@ -4,15 +4,25 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <openssl/crypto.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <openssl/pkcs12.h>
+#include <openssl/rand.h>
 #include <openssl/core_dispatch.h>
+#include <openssl/core_names.h>
+#include <openssl/params.h>
 
 #define CHUNK_LIMIT 65536u
 #define QUEUE_LIMIT 262144u
 #define EVENT_LIMIT 64u
+/* A session-ticket key: a 16-byte name, then the AES-256 and HMAC-SHA256 keys. */
+#define TICKET_NAME_LENGTH 16u
+#define TICKET_KEY_LENGTH 80u
+#define TICKET_KEY_LIMIT 4u
+#define TICKET_LIFETIME_LIMIT 604800u
 
 struct block {
     struct block *next;
@@ -25,9 +35,14 @@ struct connection {
     SSL *tls;
     struct block *input[3], *tail[3], *held, *events, *last_event;
     size_t input_bytes, input_count, event_bytes, event_count;
-    int read_level, write_level, credential_set, error, alert;
+    int read_level, write_level, credential_set, error, alert, started;
     unsigned char alpn[255], parameters[4096];
     size_t alpn_length, parameters_length;
+    /* The managed owner's ticket keys for this handshake, newest first. The first encrypts
+       new tickets; every one opens tickets. Without keys the connection issues none. */
+    unsigned char ticket_keys[TICKET_KEY_LIMIT * TICKET_KEY_LENGTH];
+    size_t ticket_key_count;
+    time_t ticket_lifetime;
 };
 /* A selected certificate's key, leaf and issuer chain, parsed once and shared by the
    connections that install it. Each connection takes its own OpenSSL references. The
@@ -161,11 +176,61 @@ static int select_protocol(SSL *tls, const unsigned char **output, unsigned char
     }
     return SSL_TLSEXT_ERR_ALERT_FATAL;
 }
+/* The managed owner installs the credential before the first ClientHello, after selecting
+   it from that ClientHello's server name. */
 static int need_credential(SSL *tls, void *argument)
 {
     struct connection *owner = argument;
     (void)tls;
-    return owner->credential_set ? 1 : -1;
+    return owner->credential_set ? 1 : 0;
+}
+/* Seals and opens session tickets with this connection's keys, in the layout OpenSSL builds:
+   key name, IV, AES-256-CBC session and HMAC-SHA256 tag. An unknown name opens nothing, so
+   the client gets a full handshake. */
+static int ticket_key(SSL *tls, unsigned char name[TICKET_NAME_LENGTH], unsigned char *iv,
+                      EVP_CIPHER_CTX *cipher, EVP_MAC_CTX *mac, int encrypt)
+{
+    struct connection *owner = SSL_get_app_data(tls);
+    const unsigned char *key = NULL;
+    size_t index = 0;
+    OSSL_PARAM parameters[3];
+    if (owner == NULL || owner->ticket_key_count == 0) return -1;
+    if (encrypt) {
+        key = owner->ticket_keys;
+        if (RAND_bytes(iv, 16) != 1) return -1;
+        memcpy(name, key, TICKET_NAME_LENGTH);
+    } else {
+        for (; index < owner->ticket_key_count; index++) {
+            if (CRYPTO_memcmp(name, owner->ticket_keys + index * TICKET_KEY_LENGTH, TICKET_NAME_LENGTH) == 0) {
+                key = owner->ticket_keys + index * TICKET_KEY_LENGTH;
+                break;
+            }
+        }
+        if (key == NULL) return 0;
+    }
+    parameters[0] = OSSL_PARAM_construct_octet_string(OSSL_MAC_PARAM_KEY, (void *)(key + 48), 32);
+    parameters[1] = OSSL_PARAM_construct_utf8_string(OSSL_MAC_PARAM_DIGEST, (char *)"SHA256", 0);
+    parameters[2] = OSSL_PARAM_construct_end();
+    if (EVP_CipherInit_ex(cipher, EVP_aes_256_cbc(), NULL, key + TICKET_NAME_LENGTH, iv, encrypt) != 1
+            || EVP_MAC_CTX_set_params(mac, parameters) != 1) return -1;
+    return 1;
+}
+/* OpenSSL resumes any TLS 1.3 ticket it can open, whatever its age. Refuse one older than
+   the lifetime it announced. Every connection gets a fresh ticket, resumed or not, so a
+   client need not present one twice (RFC 8446 appendix C.4). */
+static SSL_TICKET_RETURN accept_ticket(SSL *tls, SSL_SESSION *session, const unsigned char *name,
+                                       size_t name_length, SSL_TICKET_STATUS status, void *argument)
+{
+    struct connection *owner = argument;
+    time_t now, issued;
+    (void)tls; (void)name; (void)name_length;
+    if ((status != SSL_TICKET_SUCCESS && status != SSL_TICKET_SUCCESS_RENEW) || session == NULL)
+        return SSL_TICKET_RETURN_IGNORE_RENEW;
+    now = time(NULL);
+    issued = SSL_SESSION_get_time_ex(session);
+    if (now == (time_t)-1 || issued <= 0 || now < issued || now - issued >= owner->ticket_lifetime)
+        return SSL_TICKET_RETURN_IGNORE_RENEW;
+    return SSL_TICKET_RETURN_USE_RENEW;
 }
 static int defer_client_validation(X509_STORE_CTX *chain, void *argument)
 {
@@ -194,7 +259,7 @@ static const OSSL_DISPATCH dispatch[] = {
 __attribute__((visibility("default"))) uint64_t embedio_quic_tls_connections(void) { return atomic_load_explicit(&live_connections, memory_order_relaxed); }
 __attribute__((visibility("default"))) uint64_t embedio_quic_tls_blocks(void) { return atomic_load_explicit(&live_blocks, memory_order_relaxed); }
 __attribute__((visibility("default"))) uint64_t embedio_quic_tls_credentials(void) { return atomic_load_explicit(&live_credentials, memory_order_relaxed); }
-__attribute__((visibility("default"))) unsigned int embedio_quic_tls_abi(void) { return 3; }
+__attribute__((visibility("default"))) unsigned int embedio_quic_tls_abi(void) { return 4; }
 __attribute__((visibility("default"))) const char *embedio_quic_tls_version(void) { return OpenSSL_version(OPENSSL_VERSION); }
 __attribute__((visibility("default"))) void embedio_quic_tls_free(struct connection *owner)
 {
@@ -242,7 +307,7 @@ __attribute__((visibility("default"))) struct connection *embedio_quic_tls_new(c
     SSL_CTX_set_verify(owner->configuration, client_certificate ? SSL_VERIFY_PEER : SSL_VERIFY_NONE, NULL);
     SSL_CTX_set_cert_verify_callback(owner->configuration, defer_client_validation, NULL);
     owner->tls = SSL_new(owner->configuration);
-    if (owner->tls == NULL) goto failure;
+    if (owner->tls == NULL || !SSL_set_app_data(owner->tls, owner)) goto failure;
     SSL_set_accept_state(owner->tls);
     if (!SSL_set_quic_tls_cbs(owner->tls, dispatch, owner)
             || !SSL_set_quic_tls_transport_params(owner->tls, owner->parameters, parameters_length)) goto failure;
@@ -264,10 +329,29 @@ __attribute__((visibility("default"))) int embedio_quic_tls_add(struct connectio
     owner->tail[level] = value; owner->input_bytes += length; owner->input_count++;
     return 1;
 }
+/* Install this handshake's ticket keys, TICKET_KEY_LENGTH bytes each and newest first,
+   before its first step reads a ClientHello that may present a ticket. Tickets announce and
+   live for lifetime seconds. Without keys the connection issues and resumes no tickets. */
+__attribute__((visibility("default"))) int embedio_quic_tls_set_ticket_keys(struct connection *owner,
+        const unsigned char *keys, size_t length, uint32_t lifetime)
+{
+    if (owner == NULL || owner->error || owner->started || owner->ticket_key_count != 0
+            || keys == NULL || length == 0 || length % TICKET_KEY_LENGTH != 0
+            || length > sizeof(owner->ticket_keys) || lifetime == 0 || lifetime > TICKET_LIFETIME_LIMIT) return 0;
+    memcpy(owner->ticket_keys, keys, length);
+    owner->ticket_key_count = length / TICKET_KEY_LENGTH;
+    owner->ticket_lifetime = (time_t)lifetime;
+    if (SSL_CTX_set_tlsext_ticket_key_evp_cb(owner->configuration, ticket_key) != 1
+            || SSL_CTX_set_session_ticket_cb(owner->configuration, NULL, accept_ticket, owner) != 1
+            || SSL_set_num_tickets(owner->tls, 1) != 1) return fail(owner);
+    SSL_CTX_set_timeout(owner->configuration, (long)lifetime);
+    return 1;
+}
 __attribute__((visibility("default"))) int embedio_quic_tls_step(struct connection *owner)
 {
     int result, error;
     if (owner == NULL || owner->error) return -1;
+    owner->started = 1;
     ERR_clear_error();
     if (SSL_is_init_finished(owner->tls)) {
         unsigned char unexpected;
@@ -280,22 +364,9 @@ __attribute__((visibility("default"))) int embedio_quic_tls_step(struct connecti
     }
     error = SSL_get_error(owner->tls, result);
     if (owner->error) return -1;
-    if (error == SSL_ERROR_WANT_X509_LOOKUP) return 2;
     if (error == SSL_ERROR_WANT_READ) return SSL_is_init_finished(owner->tls) ? 1 : 0;
     fail(owner);
     return -1;
-}
-__attribute__((visibility("default"))) int embedio_quic_tls_server_name(struct connection *owner, unsigned char *output, size_t capacity)
-{
-    const char *name;
-    size_t length;
-    if (owner == NULL) return -1;
-    name = SSL_get_servername(owner->tls, TLSEXT_NAMETYPE_host_name);
-    if (name == NULL) return 0;
-    length = strlen(name);
-    if (length > 255 || length > capacity || output == NULL) return -1;
-    memcpy(output, name, length);
-    return (int)length;
 }
 __attribute__((visibility("default"))) void embedio_quic_tls_credential_free(struct credential *credential)
 {

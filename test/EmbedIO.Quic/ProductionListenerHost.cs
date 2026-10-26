@@ -22,7 +22,8 @@ namespace EmbedIO.Quic
             string key,
             bool certificatePolicy = false,
             string? clientCertificatePolicy = null,
-            int lifetimeSeconds = 30
+            int lifetimeSeconds = 30,
+            bool shortTickets = false
         )
         {
             if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
@@ -32,7 +33,8 @@ namespace EmbedIO.Quic
                     key,
                     certificatePolicy,
                     clientCertificatePolicy,
-                    lifetimeSeconds
+                    lifetimeSeconds,
+                    shortTickets
                 );
 
             throw new PlatformNotSupportedException("HTTP/3 validation requires a desktop platform.");
@@ -47,11 +49,15 @@ namespace EmbedIO.Quic
             string key,
             bool certificatePolicy,
             string? clientCertificatePolicy,
-            int lifetimeSeconds
+            int lifetimeSeconds,
+            bool shortTickets
         )
         {
             if (lifetimeSeconds is < 30 or > 1800 || (lifetimeSeconds != 30 && clientCertificatePolicy == null))
                 throw new ArgumentOutOfRangeException(nameof(lifetimeSeconds));
+
+            if (shortTickets && !certificatePolicy)
+                throw new NotSupportedException("Short session tickets require the certificate-policy listener.");
 
             if (
                 certificatePolicy
@@ -123,7 +129,16 @@ namespace EmbedIO.Quic
             // credentials it cached; development sessions own their credentials.
             EmbedIOQuicListenerBinding Bind(IPEndPoint requested) =>
                 provider.NativeCertificate != null
-                    ? new EmbedIOQuicListenerBinding(requested, EmbedIOQuicTls.CreateFactory(source, tlsPolicy))
+                    ? new EmbedIOQuicListenerBinding(
+                        requested,
+                        EmbedIOQuicTls.CreateFactoryWithTicketKeys(
+                            source,
+                            tlsPolicy,
+                            shortTickets
+                                ? () => new SessionTicketKeys(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(6))
+                                : null
+                        )
+                    )
                     : new EmbedIOQuicListenerBinding(requested, parameters => provider.Create(parameters, "h3"));
             await using var binding = Bind(new IPEndPoint(IPAddress.Loopback, 0));
             var endpoint = binding.LocalEndPoint;
@@ -218,7 +233,7 @@ namespace EmbedIO.Quic
                     .ReadLineAsync(stop.Token)
                     .ConfigureAwait(false);
 
-                if (command == "stop" && clientCertificatePolicy != null)
+                if (command == "stop" && (clientCertificatePolicy != null || shortTickets))
                 {
                     await server
                         .DrainAsync(TimeSpan.FromSeconds(5), stop.Token)

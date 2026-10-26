@@ -101,6 +101,8 @@ def main():
                 "--output", str(report / profile)])
         run("schannel-certificate-policy", [sys.executable, "test/EmbedIO.Quic/verify_tls_listener.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "certificate-policy")])
+        run("schannel-session-tickets", [sys.executable, "test/EmbedIO.Quic/verify_session_tickets.py", "--dotnet", args.dotnet,
+            "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "session-tickets")])
         run("schannel-client-certificate-policy", [sys.executable, "test/EmbedIO.Quic/verify_client_certificate.py", "--dotnet", args.dotnet,
             "--assembly", str(harness / "EmbedIO.Quic.Development.dll"), "--output", str(report / "client-certificate-policy")])
     if args.schannel:

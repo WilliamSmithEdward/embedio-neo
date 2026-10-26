@@ -19,6 +19,7 @@ extern struct credential *embedio_quic_tls_credential_new(const unsigned char *,
 extern int embedio_quic_tls_credential_add_chain(struct credential *, const unsigned char *, size_t);
 extern void embedio_quic_tls_credential_free(struct credential *);
 extern int embedio_quic_tls_use_credential(struct connection *, const struct credential *);
+extern int embedio_quic_tls_set_ticket_keys(struct connection *, const unsigned char *, size_t, uint32_t);
 static int released(void)
 {
     return embedio_quic_tls_connections() == 0 && embedio_quic_tls_blocks() == 0
@@ -41,12 +42,35 @@ static unsigned char *read_fixture(const char *path, size_t *length)
 int main(int argc, char **argv)
 {
     const unsigned char protocol[] = {'h', '3'}, parameters[] = {1, 0}, invalid[] = {1, 2, 3};
+    unsigned char keys[5 * 80] = {0};
     size_t credential_length, certificate_length;
     unsigned char *credential, *certificate;
     assert(argc == 3);
     credential = read_fixture(argv[1], &credential_length);
     certificate = read_fixture(argv[2], &certificate_length);
-    assert(embedio_quic_tls_abi() == 3);
+    assert(embedio_quic_tls_abi() == 4);
+    assert(released());
+    /* Ticket keys: whole 80-byte keys, at most four, a lifetime of one second to seven days,
+       once per connection and before its first step. */
+    assert(embedio_quic_tls_set_ticket_keys(NULL, keys, 80, 7200) == 0);
+    {
+        struct connection *owner = embedio_quic_tls_new(protocol, 2, parameters, 2, 0);
+        assert(owner != NULL);
+        assert(embedio_quic_tls_set_ticket_keys(owner, NULL, 80, 7200) == 0);
+        assert(embedio_quic_tls_set_ticket_keys(owner, keys, 0, 7200) == 0);
+        assert(embedio_quic_tls_set_ticket_keys(owner, keys, 79, 7200) == 0);
+        assert(embedio_quic_tls_set_ticket_keys(owner, keys, 5 * 80, 7200) == 0);
+        assert(embedio_quic_tls_set_ticket_keys(owner, keys, 80, 0) == 0);
+        assert(embedio_quic_tls_set_ticket_keys(owner, keys, 80, 604801) == 0);
+        assert(embedio_quic_tls_set_ticket_keys(owner, keys, 4 * 80, 604800) == 1);
+        assert(embedio_quic_tls_set_ticket_keys(owner, keys, 80, 7200) == 0);
+        assert(embedio_quic_tls_step(owner) == 0);
+        embedio_quic_tls_free(owner);
+        owner = embedio_quic_tls_new(protocol, 2, parameters, 2, 0);
+        assert(owner != NULL && embedio_quic_tls_step(owner) == 0);
+        assert(embedio_quic_tls_set_ticket_keys(owner, keys, 80, 7200) == 0);
+        embedio_quic_tls_free(owner);
+    }
     assert(released());
     assert(embedio_quic_tls_new(NULL, 2, parameters, 2, 0) == NULL);
     assert(embedio_quic_tls_new(protocol, 256, parameters, 2, 0) == NULL);
