@@ -89,12 +89,32 @@ ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 TestResults/quic-owned-fixtures/owne
 This instruments the boundary/test code and checks allocator leaks; the ordinary
 vendor archives and assembler are not compiler-instrumented by this command.
 
+## Session tickets
+
+Private ABI 4 adds TLS 1.3 session tickets. Before a connection's first step,
+`embedio_quic_tls_set_ticket_keys` gives it up to four 80-byte keys, newest first,
+and the ticket lifetime in seconds, from one second to seven days. A key is a 16-byte
+name, a 32-byte AES-256-CBC key and a 32-byte HMAC-SHA-256 key, the layout OpenSSL's
+ticket callback uses. The newest key seals the one ticket the connection issues; any
+of them opens a ticket the client presents. A name no key matches opens nothing.
+OpenSSL resumes a TLS 1.3 ticket of any age, so the connection refuses one older than
+the lifetime itself, and it issues a new ticket on every resumption, so a client need
+not present a ticket twice (RFC 8446 appendix C.4). A connection given no keys issues
+and accepts no tickets. The tickets allow no early data.
+
+The managed adapter now selects the certificate from the ClientHello before OpenSSL
+reads it, and installs the credential and its ticket keys first, so OpenSSL opens a
+ticket only with the keys of the certificate already chosen. ABI 3 paused the handshake
+for selection and read the server name through `embedio_quic_tls_server_name`, which
+ABI 4 removes. The ownership test checks the keys' length, count, lifetime and timing
+rules, and the connection struct, keys included, is cleared when it is freed.
+
 ## Runtime asset preparation
 
 `build.py --rid <rid>` requests a distribution identity. The build runs `audit.py`
 without loading the native code and records the result and tool/source hashes in
 `binary-audit.json` and `build-receipt.json`. Linux checks the actual ELF64
-architecture, exact ABI-3 symbol versions, system-only dependencies, SONAME,
+architecture, exact ABI-4 symbol versions, system-only dependencies, SONAME,
 non-executable stack, RELRO and immediate binding. Requested glibc RIDs reject
 symbol requirements newer than 2.27. A development build without `--rid` records
 its actual glibc requirement and must not be treated as a distribution artifact.

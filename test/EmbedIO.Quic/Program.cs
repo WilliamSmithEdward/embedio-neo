@@ -31,6 +31,13 @@ namespace EmbedIO.Quic
                         .RunAsync(hostLibrary, hostCertificate, hostKey, arguments[0] == "serve-webserver-policy")
                         .ConfigureAwait(false);
 
+                // The certificate-policy listener with session-ticket keys that rotate every two
+                // seconds and tickets that live six.
+                if (arguments is ["serve-webserver-tickets", var ticketLibrary, var ticketCertificate, var ticketKey])
+                    return await ProductionListenerHost
+                        .RunAsync(ticketLibrary, ticketCertificate, ticketKey, true, shortTickets: true)
+                        .ConfigureAwait(false);
+
                 if (
                     arguments is [
                         "serve-webserver-client-certificate",

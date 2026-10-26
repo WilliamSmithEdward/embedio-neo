@@ -137,6 +137,11 @@ online while building their chain; a failure shows up as a chain error.
 request on the connection, over HTTP/1.1, HTTP/2 and HTTP/3. It holds no private key.
 Do not dispose it: requests on the same connection share it.
 
+With `ClientCertificateMode` set to `Allow` or `Require`, an HTTP/3 listener issues no
+TLS session tickets, so every connection runs the full handshake and its
+client-certificate check. With `None`, HTTP/3 clients can resume (unreleased); see
+[session resumption](http3.md#session-resumption).
+
 ## Protocol versions
 
 `EnabledProtocols` limits the TLS versions of TCP listeners. Its default,

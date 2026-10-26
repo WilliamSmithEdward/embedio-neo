@@ -324,16 +324,34 @@ a token it cannot open, such as another server's, gets a new Retry. It is off by
 default, and it needs `EmbedIOHttp3` or `EmbedIOCombined` mode; other modes refuse
 to start with it. This option is new in 2.18.0; 2.17.0 does not send Retry.
 
+<a id="session-resumption"></a>
+The server issues a TLS 1.3 session ticket with every handshake, so a client that
+reconnects can resume the session and skip the certificate and its signature (RFC 8446
+section 2.2). This is unreleased; 2.18.0 and earlier issue no tickets.
+
+- The keys that protect the tickets are random, live only in the server's memory and
+  belong to one certificate object, so a ticket resumes only under the certificate it
+  was issued with. A new key starts every hour, and a key opens tickets for two hours
+  after it stops issuing them.
+- On Linux and macOS the server refuses a ticket two hours after issuing it. Schannel
+  announces a lifetime of its own, ten hours, and does not check EmbedIO's, so on
+  Windows a ticket resumes until its key retires, two to three hours after it was
+  issued.
+- Publishing to the `ServerCertificateSource`, disposing the certificate or stopping
+  the listener discards the keys, and older tickets get a full handshake.
+- A listener whose `ClientCertificateMode` is `Allow` or `Require` issues no tickets,
+  since a resumed session would skip the client-certificate check.
+- A certificate whose issuer chain the server cannot complete gets a new credential
+  for every handshake (see [certificate rotation](certificate-rotation.md#http3-transport-selection)),
+  so its tickets never resume.
+
 The rest of the TLS profile is deliberately narrow:
 
-- No session resumption. Every connection runs a full TLS 1.3 handshake, and the
-  server sends no session tickets. Resumption needs a ticket-encryption key the
-  server must create, rotate and protect, on both the Schannel and the OpenSSL
-  paths; it would save one certificate signature and the chain per reconnection.
-- No 0-RTT. It depends on resumption, and its early data can be replayed (RFC 9001
-  section 9.2), so an application would have to choose which requests are safe to
-  replay and answer the others with 425 Too Early (RFC 8470). Clients send their
-  first request after the handshake.
+- No 0-RTT. The tickets do not allow early data, so clients send their first request
+  after the handshake. Early data can be replayed (RFC 9001 section 9.2), so an
+  application would have to choose which requests are safe to replay and answer the
+  others with 425 Too Early (RFC 8470), and Schannel's QUIC interface offers no
+  early-data keys.
 - On Linux and macOS the certificate's private key must be exportable. The TLS
   runtime there is its own OpenSSL, inside `EmbedIO-Neo.Quic.Native`, and it receives
   the key exported from the certificate; a hardware- or store-held key that cannot be

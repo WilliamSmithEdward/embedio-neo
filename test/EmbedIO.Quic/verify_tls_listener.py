@@ -41,8 +41,8 @@ async def exercise(args, process, port):
     replacement = args.output / 'certificate.pem.replacement.pem'
     observations = []
     rejected = []
-    # Handshakes share the listener's credential for a certificate; the server still issues
-    # no session tickets, so no connection can resume another's session.
+    # Handshakes share the listener's credential for a certificate, and the server issues each
+    # completed connection one session ticket. verify_session_tickets.py covers resumption.
     tickets = []
 
     def open_peer(certificate, name):
@@ -104,7 +104,7 @@ async def exercise(args, process, port):
         await process.stdin.drain()
         fields, body = await asyncio.wait_for(pending, 8)
         assert dict(fields)[b':status'] == b'200' and body == b'd' * 131072
-    assert not tickets, f'The server issued {len(tickets)} session tickets'
+    assert len(tickets) == 5, f'The server issued {len(tickets)} session tickets to five connections'
     return observations, rejected
 
 
