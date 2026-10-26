@@ -66,9 +66,9 @@ namespace EmbedIO.Net.Internal.Http3
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 var now = _clock();
 
-                while (_keys.Count != 0 && now - _keys[^1].Created >= _period + _lifetime) Retire(_keys.Count - 1);
+                while (_keys.Count != 0 && now - _keys[^1].Drawn >= _period + _lifetime) Retire(_keys.Count - 1);
 
-                if (_keys.Count == 0 || now - _keys[0].Created >= _period)
+                if (_keys.Count == 0 || now - _keys[0].Drawn >= _period)
                 {
                     _keys.Insert(0, new Key(RandomNumberGenerator.GetBytes(KeyLength), now));
                     _version++;
@@ -107,10 +107,10 @@ namespace EmbedIO.Net.Internal.Http3
             _version++;
         }
 
-        private sealed class Key(byte[] bytes, long created)
+        private sealed class Key(byte[] bytes, long drawn)
         {
             internal byte[] Bytes { get; } = bytes;
-            internal long Created { get; } = created;
+            internal long Drawn { get; } = drawn;
         }
     }
 }

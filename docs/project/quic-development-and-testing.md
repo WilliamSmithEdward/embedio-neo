@@ -3656,8 +3656,9 @@ Medians of the 12 blocks of each kind:
   early data, and the listener must abort nothing, release its credentials and rebind.
   It passed on Windows and in the Linux image. CI runs it in the Windows Schannel script
   and through the package consumers on all six runtime identifiers.
-- `verify_tls_listener.py` now requires one ticket per connection, five in all;
-  `verify_client_certificate.py` still requires none.
+- `verify_tls_listener.py` now requires one ticket per connection, five in all.
+  `verify_client_certificate.py` requires one ticket in its two cases where the server
+  asks for no client certificate and none in the rest.
 - `SessionTicketKeyTests` in `self-test` checks rotation and retirement on a manual
   clock, the constructor's bounds, disposal with the credential's last release and
   concurrent copies while the keys rotate. Three deliberate defects each failed it:
@@ -3670,8 +3671,13 @@ Medians of the 12 blocks of each kind:
   symbol version and export inventory.
 - The NUnit HTTP/3, QUIC, WebTransport, certificate and TLS subset, 915 cases: Windows
   912 passed and 3 platform skips; Linux, with the ABI 4 library, 914 passed and 1
-  skip. `self-test` and `verify_tls_listener.py`, `verify_sni.py` and
-  `verify_client_certificate.py` passed on both.
+  skip. `self-test`, `verify_tls_listener.py` and `verify_sni.py` passed on both.
+- `verify_client_certificate.py` with its full profile passed 23 cases on Windows and 24
+  on Linux, the latter with CI's linux-x64 build of the library, along with the
+  256-case `fuzz_client_certificate.py` run and `verify_server_chain.py`. The first CI
+  run stopped in it: the verifier still required that no case receive a ticket, and the
+  earlier local runs had used only its `ci` profile, which has no case without a
+  client-certificate request.
 
 ### 0-RTT
 

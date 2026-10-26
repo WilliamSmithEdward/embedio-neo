@@ -99,8 +99,9 @@ async def case(args, mode, client, allowed):
     ready = {}
     failure = None
     peers = []
-    # The listener's handshakes share one credential per certificate; the server issues no
-    # session tickets, so no connection resumes with another's client identity.
+    # The listener's handshakes share one credential per certificate. The server issues a
+    # session ticket only when it asks for no client certificate, so no connection resumes
+    # with another's client identity.
     tickets = []
     rejection = None
     async def request(peer, path, expected, body=None, **kwargs):
@@ -228,7 +229,8 @@ async def case(args, mode, client, allowed):
               and report.get('secureRequests') == (1 if allowed else 0)
               and report.get('drainCompleted') == (allowed or sibling)
               and report.get('healthRequests') == int(sibling)
-              and (allowed or rejection is not None) and observations_ok and revocation_ok and not tickets
+              and (allowed or rejection is not None) and observations_ok and revocation_ok
+              and len(tickets) == (1 if mode == 'none' else 0)
               and report.get('retainedCertificates') == (2 if allowed and client != 'missing' and mode != 'none' else 0), 'failure': failure, 'rejection': rejection, 'healthySibling': sibling, 'crlRequests': requests,
               'sessionTickets': len(tickets), 'server': report, 'exit': process.returncode}
     (output / 'receipt.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
