@@ -38,6 +38,13 @@
   connection churn showed no regression beyond the rounds' spread. Where the socket
   cannot segment, and on macOS, each datagram is still one call. See
   [segmented UDP sends](docs/project/quic-development-and-testing.md#segmented-udp-sends).
+- An HTTP/3 handshake allocates 8 KB less. The ClientHello reader, which Windows has
+  used since 2.17.0, allocated an 8 KB table of the extensions it had seen for every
+  ClientHello and now keeps it on the stack. A Windows connection in the `h3 churn`
+  benchmark allocated 176 KB instead of 184 KB. On Linux the reader came with session
+  resumption, above, and a connection stays at 101 KB, near 2.18.0's 100 KB, instead of
+  109 KB. See
+  [ClientHello reader allocation](docs/project/quic-development-and-testing.md#clienthello-reader-allocation).
 
 ### Fixed
 

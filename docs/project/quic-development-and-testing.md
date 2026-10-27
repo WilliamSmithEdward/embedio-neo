@@ -4556,9 +4556,10 @@ since 2.18.0.
 - Connection churn: on Linux 1.00 times 2.18.0's connection rate at 0.98 times its server
   CPU per connection, and 0.98 and 1.00 against main. Allocation per connection rose 9
   percent against 2.18.0, from 100 to 109 KB, and main allocated the same 109 KB, so the
-  rise came with main's changes since 2.18.0. On Windows only three rounds of 2.18.0 and
-  two of the change stayed under the 7-CPU limit, since Schannel's handshakes run in
-  LSASS, outside the server and client (see
+  rise came with main's changes since 2.18.0 (see
+  [ClientHello reader allocation](#clienthello-reader-allocation)). On Windows only three
+  rounds of 2.18.0 and two of the change stayed under the 7-CPU limit, since Schannel's
+  handshakes run in LSASS, outside the server and client (see
   [Role-alternated comparison](#role-alternated-comparison)): 1.11 times 2.18.0's rate
   at 1.01 times its CPU per connection. Against main, with four and three rounds kept,
   0.99 times the rate at 1.00 times the CPU.
@@ -4573,3 +4574,61 @@ since 2.18.0.
 - Receiving still reads one datagram per call; neither `UDP_GRO` on Linux nor
   `UDP_RECV_MAX_COALESCED_SIZE` on Windows is used.
 - What sets the Linux upload mode.
+
+## ClientHello reader allocation
+
+The churn comparison in [Segmented UDP sends](#segmented-udp-sends) found Linux
+connections allocating 9 percent more on main than on 2.18.0, 109 KB against 100 KB, at
+the same server CPU. [TLS session resumption](#tls-session-resumption) moved the OpenSSL
+path onto the managed ClientHello reader, `TlsClientHello.Read`, which the Schannel path
+has used since 2.17.0. To refuse a repeated extension the reader allocated an 8 KB table,
+one bit per extension type, for every ClientHello. It now keeps the table on the stack.
+This is unreleased.
+
+### Cause
+
+- `h3 churn c16` on Linux, measured as in [Segmented UDP sends](#segmented-udp-sends),
+  with session resumption's merge (`71ae5271`) against main just before it (`8dcf7150`),
+  three rounds of each in both role orders: medians of 111 KB allocated per connection
+  against 100 KB, at 1.01 against 0.98 ms of server CPU per connection.
+- A profiled run of two rounds each sampled 10.7 KB more of byte arrays per connection
+  with session resumption and 1.0 KB more of strings. Each ClientHello allocated one
+  8,216-byte array, the 8,192-byte table and its header. The rest was not traced further;
+  session resumption also gives the OpenSSL path a buffer for each ClientHello, starting at
+  1 KB, and a copy of the ticket keys for each handshake.
+
+### Change
+
+- `TlsClientHello.Read` keeps the table in an 8,192-byte `stackalloc` span, cleared before
+  use. The duplicate check is unchanged.
+
+### Validation
+
+- The hello cases of `self-test` read a ClientHello twice and require the second read to
+  allocate less than 1 KB on its thread. That check failed on the unchanged reader and
+  passes with the change, as does the rest of `self-test`.
+- The NUnit HTTP/3, QUIC, WebTransport, certificate and TLS subset on Windows, 916 cases:
+  913 passed and 3 were skipped, two that run only on other platforms and one for want of
+  an aioquic peer.
+
+### Measurement
+
+`h3 churn c16`, the change (`396ea46d`) against main (`5c9d1340`), three rounds of each
+in both role orders, by the method of [Segmented UDP sends](#segmented-udp-sends). One
+Windows round of main failed in its warmup when the client's QUIC connection setup
+returned WSAENOBUFS (0x80072747), as in that section. Medians of the kept rounds:
+
+| Platform | Server | connections/s | server CPU per connection | allocated per connection | p99 ms |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Windows | main | 2,065 | 0.84 ms | 184 KB | 19.0 |
+| | change | 2,075 | 0.82 ms | 176 KB | 19.7 |
+| Linux | main | 1,941 | 1.00 ms | 109 KB | 16.3 |
+| | change | 1,916 | 1.01 ms | 101 KB | 16.7 |
+
+- Allocation per connection fell by 8 KB on both platforms, on Linux back to within 1 KB of
+  2.18.0's 100 KB. Connection rate, server CPU and p99 stayed within the spread of the
+  rounds.
+- Two of the change's six Linux rounds allocated 76 and 92 KB per connection, and two of
+  session resumption's six 77 and 79 KB. Single rounds of 2.18.0 (78 KB), main (98 KB) and
+  the [segmented sends](#segmented-udp-sends) change (87 KB) showed the same lower level;
+  none of the six rounds before session resumption did. What sets it was not traced.
