@@ -4,9 +4,9 @@
     "net10.0": {
       "FsCheck": {
         "type": "Direct",
-        "requested": "[3.4.0, )",
-        "resolved": "3.4.0",
-        "contentHash": "wkWR1DORrKd46W6MEhmS4muo/0kgrtUV/AGW1ohMWemy7WukcRH8T3JjkDpn/daOHk0yVqf0CBvScU17Ab//PA==",
+        "requested": "[3.5.0, )",
+        "resolved": "3.5.0",
+        "contentHash": "olekPbZ9M09t1qRK6yXfzvyA/eiLFXK2obJ0BAkk7reEoohbO/6ac8ISbCD3murRnQbwT04TUZKT3boFDUe4kw==",
         "dependencies": {
           "FSharp.Core": "5.0.2"
         }
@@ -60,14 +60,14 @@
       "EmbedIO-Neo": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo.Quic.Native": "[2.16.0, )",
+          "EmbedIO-Neo.Quic.Native": "[2.18.0, )",
           "System.Threading.RateLimiting": "[10.0.13, )"
         }
       },
       "EmbedIO-Neo.Jwt": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.16.0, )",
+          "EmbedIO-Neo": "[2.18.0, )",
           "Microsoft.IdentityModel.JsonWebTokens": "[8.23.0, )"
         }
       },
@@ -77,13 +77,13 @@
       "EmbedIO-Neo.Testing": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.16.0, )"
+          "EmbedIO-Neo": "[2.18.0, )"
         }
       },
       "EmbedIO.Quic.Development": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.16.0, )"
+          "EmbedIO-Neo": "[2.18.0, )"
         }
       },
       "Microsoft.IdentityModel.JsonWebTokens": {
