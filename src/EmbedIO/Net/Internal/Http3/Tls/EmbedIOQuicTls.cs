@@ -53,6 +53,14 @@ namespace EmbedIO.Net.Internal.Http3
         internal static EmbedIOQuicTlsFactory CreateFactory(
             ServerCertificateSource certificates,
             ServerTlsPolicy? policy
+        ) => CreateFactoryWithTicketKeys(certificates, policy, null);
+
+        // ticketKeys replaces the session-ticket keys' default rotation; tests use it to rotate
+        // keys in seconds.
+        internal static EmbedIOQuicTlsFactory CreateFactoryWithTicketKeys(
+            ServerCertificateSource certificates,
+            ServerTlsPolicy? policy,
+            Func<SessionTicketKeys>? ticketKeys
         )
         {
             ArgumentNullException.ThrowIfNull(certificates);
@@ -60,7 +68,7 @@ namespace EmbedIO.Net.Internal.Http3
 
             EnsureSupported();
             policy?.Lock();
-            return new EmbedIOQuicTlsFactory(certificates, policy);
+            return new EmbedIOQuicTlsFactory(certificates, policy, ticketKeys);
         }
 
         internal static bool ValidateClientCertificate(

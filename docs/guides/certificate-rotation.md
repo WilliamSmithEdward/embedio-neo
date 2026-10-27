@@ -143,6 +143,11 @@ A certificate whose issuer chain the server's certificate stores cannot complete
 prepared for each handshake, as before, so an issuer installed later is sent without
 publishing again.
 
+A prepared credential also holds the keys for the TLS session tickets it issues
+(unreleased), so a dropped credential takes them along: after a publication, or once
+a certificate is disposed or evicted, clients holding its tickets get a full
+handshake. See [session resumption](http3.md#session-resumption).
+
 The following native-configuration behavior concerns the earlier MsQuic provider
 in packages through 2.16.1; 2.17.0 and later no longer contain it.
 The native MsQuic binding loads a certificate into an MsQuic configuration once,

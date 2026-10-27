@@ -389,9 +389,15 @@ Select with `options.WithMode(HttpListenerMode.X)`:
   (2.18.0 and later). See [overload](docs/guides/http3.md#overload).
 - `WithHttp3AddressValidation()` makes every new HTTP/3 connection prove its address
   with a Retry before the handshake (2.18.0 and later); it costs one
-  round trip. There is no TLS session resumption or 0-RTT, and on Linux and macOS
-  the certificate key must be exportable. See
-  [address validation](docs/guides/http3.md#address-validation).
+  round trip. There is no 0-RTT, and on Linux and macOS the certificate key must be
+  exportable. See [address validation](docs/guides/http3.md#address-validation).
+- HTTP/3 issues a TLS 1.3 session ticket with every handshake, so reconnecting clients
+  resume without the certificate and its signature (unreleased; 2.18.0 issues none).
+  Ticket keys are random, in memory and per certificate object; a new one starts every
+  hour and tickets resume for two hours (two to three on Windows, where Schannel does
+  not check the lifetime). A publication, disposal or listener stop discards them. A
+  `ClientCertificateMode` of `Allow` or `Require` turns tickets off. The tickets allow
+  no early data. See [session resumption](docs/guides/http3.md#session-resumption).
 - An HTTP/3 listener prepares each certificate's TLS credential once and reuses it
   for later handshakes that select the same `X509Certificate2` object (2.18.0 and
   later). `ServerCertificateSource.Publish` drops the prepared
@@ -428,8 +434,8 @@ there is no custom TLS or AEAD implementation. The QUIC-specific ChaCha header
 mask is an original single-block implementation with vector and independent-peer
 coverage. All three
 packet cipher profiles retain their hash and header key across key updates, with
-connection-wide authentication-failure limits. Resumption and supported-platform
-TLS/certificate parity remain pending. The standalone
+connection-wide authentication-failure limits. Non-exportable keys on Linux and
+macOS remain pending. The standalone
 core and development host remain nonpackable. .NET Standard compilation remains
 unchanged. Ordinary .NET 10 HTTP/3 and combined listeners
 select EmbedIO.Quic and its runtime packages carry the owned Unix TLS library.

@@ -12,7 +12,7 @@ import subprocess
 EXPORTS = {"embedio_quic_tls_" + suffix for suffix in (
     "abi", "add", "alert", "blocks", "certificate", "certificate_count", "connections",
     "credential_add_chain", "credential_free", "credential_new", "credentials", "free", "new",
-    "next", "server_name", "step", "use_credential", "version")}
+    "next", "set_ticket_keys", "step", "use_credential", "version")}
 RIDS = ("linux-x64", "linux-arm64", "linux-musl-x64", "linux-musl-arm64", "osx-x64", "osx-arm64")
 
 
@@ -30,11 +30,11 @@ def exports_match(text, darwin=False):
             continue
         require(len(fields) == 3, "Unexpected native export record")
         _, kind, symbol = fields
-        if not darwin and kind == "A" and symbol == "EMBEDIO_QUIC_TLS_3":
+        if not darwin and kind == "A" and symbol == "EMBEDIO_QUIC_TLS_4":
             require(not version_definition, "Duplicate native ABI version definition")
             version_definition = True
             continue
-        require(darwin or symbol.endswith("@@EMBEDIO_QUIC_TLS_3"), "Unexpected native ABI symbol version")
+        require(darwin or symbol.endswith("@@EMBEDIO_QUIC_TLS_4"), "Unexpected native ABI symbol version")
         symbol = symbol.removeprefix("_") if darwin else symbol.split("@", 1)[0]
         require(kind == "T" and symbol not in actual, "Unexpected native export kind or duplicate")
         actual.add(symbol)

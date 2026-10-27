@@ -8,6 +8,9 @@ namespace EmbedIO.Net.Internal.Http3
 {
     // Creates the TLS session of each new connection on one HTTP/3 listener, and owns the
     // credentials those sessions share. The listener disposes it after its connections.
+    // Each credential gets its own session-ticket keys, so a client can resume a session with
+    // the certificate it was issued under. A listener that requests client certificates issues
+    // no tickets, since a resumed session would skip its client-certificate policy.
     internal sealed class EmbedIOQuicTlsFactory : IDisposable
     {
         private readonly ServerCertificateSource _certificates;
@@ -16,18 +19,24 @@ namespace EmbedIO.Net.Internal.Http3
         private readonly ServerCredentialCache<SchannelTls.Credential>? _schannel;
         private readonly ServerCredentialCache<OpenSslTls.Credential>? _openSsl;
 
-        internal EmbedIOQuicTlsFactory(ServerCertificateSource certificates, ServerTlsPolicy? policy)
+        // ticketKeys creates a credential's keys; tests pass a shorter rotation and lifetime.
+        internal EmbedIOQuicTlsFactory(
+            ServerCertificateSource certificates,
+            ServerTlsPolicy? policy,
+            Func<SessionTicketKeys>? ticketKeys = null
+        )
         {
             _certificates = certificates;
             _policy = policy;
             _validate = policy?.RequestsClientCertificate == true
                 ? (certificate, additional) => EmbedIOQuicTls.ValidateClientCertificate(policy, certificate, additional)
                 : null;
+            var tickets = _validate == null ? ticketKeys ?? (static () => new SessionTicketKeys()) : null;
 
-            if (OperatingSystem.IsWindows()) _schannel = SchannelCredentials(certificates, _validate != null);
+            if (OperatingSystem.IsWindows()) _schannel = SchannelCredentials(certificates, _validate != null, tickets);
 
             else if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-                _openSsl = new(certificates, OpenSslTls.Credential.Create);
+                _openSsl = OpenSslCredentials(certificates, tickets);
         }
 
         // How many certificates have a cached credential.
@@ -71,8 +80,20 @@ namespace EmbedIO.Net.Internal.Http3
         [SupportedOSPlatform("windows")]
         private static ServerCredentialCache<SchannelTls.Credential> SchannelCredentials(
             ServerCertificateSource certificates,
-            bool clientCertificates
-        ) => new(certificates, certificate => SchannelTls.Credential.Acquire(certificate, clientCertificates));
+            bool clientCertificates,
+            Func<SessionTicketKeys>? ticketKeys
+        ) =>
+            new(
+                certificates,
+                certificate => SchannelTls.Credential.Acquire(certificate, clientCertificates, ticketKeys?.Invoke())
+            );
+
+        [SupportedOSPlatform("linux")]
+        [SupportedOSPlatform("macos")]
+        private static ServerCredentialCache<OpenSslTls.Credential> OpenSslCredentials(
+            ServerCertificateSource certificates,
+            Func<SessionTicketKeys>? ticketKeys
+        ) => new(certificates, certificate => OpenSslTls.Credential.Create(certificate, ticketKeys?.Invoke()));
 
         [SupportedOSPlatform("windows")]
         private SchannelTls CreateSchannel(

@@ -25,6 +25,8 @@ namespace EmbedIO.Quic
         private const uint DisableReconnects = 0x80;
         private const uint NoWindowsAccountMapping = 0x2;
         private const uint RequestClientCertificate = 0x2;
+        private const uint RequestSessionTickets = 0x40;
+        private const uint TicketKeysAttribute = 0x73;
         private Func<string?, X509Certificate2?>? _selector;
         private readonly Func<X509Certificate2, Credential>? _credentials;
         private string? _serverName;
@@ -153,13 +155,22 @@ namespace EmbedIO.Quic
         // A Schannel server credential for one selected certificate, which the handshakes that
         // select it share. It owns a copy of the certificate; the source stays application-owned.
         // Schannel chooses the issuer chain the credential sends, so a certificate whose chain
-        // the stores cannot complete gets a credential per handshake, as before.
+        // the stores cannot complete gets a credential per handshake, as before. With ticket keys
+        // Schannel issues session tickets that only this credential can open; without them it
+        // issues none and resumes nothing.
         internal sealed class Credential : SharedCredential
         {
             private readonly X509Certificate2 _certificate;
+            private readonly object _ticketGate = new();
             private NativePair _handle;
+            private long _ticketVersion;
 
-            private Credential(X509Certificate2 certificate, NativePair handle, bool cacheable) : base(cacheable)
+            private Credential(
+                X509Certificate2 certificate,
+                NativePair handle,
+                bool cacheable,
+                SessionTicketKeys? ticketKeys
+            ) : base(cacheable, ticketKeys)
             {
                 _certificate = certificate;
                 _handle = handle;
@@ -168,27 +179,114 @@ namespace EmbedIO.Quic
             internal X509Certificate2 Certificate => _certificate;
             internal NativePair Handle => _handle;
 
-            // The caller holds the only reference.
-            internal static Credential Acquire(X509Certificate2 selected, bool clientCertificates)
+            // The caller holds the only reference, and the credential owns ticketKeys, which a
+            // credential that requests client certificates must not have: a resumed session
+            // would skip the client-certificate policy.
+            internal static Credential Acquire(
+                X509Certificate2 selected,
+                bool clientCertificates,
+                SessionTicketKeys? ticketKeys = null
+            )
             {
+                if (clientCertificates && ticketKeys != null)
+                {
+                    ticketKeys.Dispose();
+                    throw new ArgumentException("Session tickets cannot resume client-certificate handshakes.");
+                }
+
+                Credential? credential = null;
                 var copy = new X509Certificate2(selected);
 
                 try
                 {
                     var complete = HasCompleteChain(copy);
-                    var acquired = AcquireHandle(copy, clientCertificates);
+                    var acquired = AcquireHandle(copy, clientCertificates, ticketKeys?.Lifetime);
                     Interlocked.Increment(ref _activeCredentials);
-                    return new Credential(copy, acquired, complete);
+                    credential = new Credential(copy, acquired, complete, ticketKeys);
+                    credential.UpdateTicketKeys();
+                    return credential;
                 }
 
                 catch
                 {
-                    copy.Dispose();
+                    if (credential != null) credential.Release();
+
+                    else
+                    {
+                        copy.Dispose();
+                        ticketKeys?.Dispose();
+                    }
+
                     throw;
                 }
             }
 
-            private static NativePair AcquireHandle(X509Certificate2 selected, bool clientCertificates)
+            // Gives Schannel the keys a handshake should use, when they changed since the last
+            // handshake that used this credential: the first key encrypts new tickets and all of
+            // them open tickets from earlier connections.
+            internal void UpdateTicketKeys()
+            {
+                var keys = TicketKeys;
+
+                if (keys == null) return;
+
+                lock (_ticketGate)
+                {
+                    var copy = keys.Copy(out var version);
+
+                    try
+                    {
+                        if (version == _ticketVersion) return;
+
+                        SetTicketKeys(copy);
+                        _ticketVersion = version;
+                    }
+
+                    finally
+                    {
+                        CryptographicOperations.ZeroMemory(copy);
+                    }
+                }
+            }
+
+            private void SetTicketKeys(ReadOnlySpan<byte> keys)
+            {
+                const int Entry = 88;
+                var count = keys.Length / SessionTicketKeys.KeyLength;
+                var length = count * Entry;
+                using var entries = new NativeRegion(length);
+                using var list = new NativeRegion(2 * nint.Size);
+
+                for (var index = 0; index < count; index++)
+                {
+                    var key = keys.Slice(index * SessionTicketKeys.KeyLength, SessionTicketKeys.KeyLength);
+                    var offset = index * Entry;
+                    var entry = entries.Bytes.Slice(offset, Entry);
+                    // SecPkgCred_SessionTicketKey: SESSION_TICKET_INFO_V0, the key ID, the keying
+                    // material and its size.
+                    BinaryPrimitives.WriteUInt32LittleEndian(entry, 0);
+                    key.CopyTo(entry[4..]);
+                    entry[84] = (byte)(SessionTicketKeys.KeyLength - SessionTicketKeys.NameLength);
+                }
+
+                BinaryPrimitives.WriteUInt32LittleEndian(list.Bytes, (uint)count);
+                Marshal.WriteIntPtr(list.Address, nint.Size, entries.Address);
+                var status = NativeMethods.SetAttributes(
+                    ref _handle,
+                    TicketKeysAttribute,
+                    list.Address,
+                    (uint)list.Length
+                );
+
+                if (status != 0)
+                    throw new InvalidOperationException($"TLS session-ticket keys were refused: {status:X8}");
+            }
+
+            private static NativePair AcquireHandle(
+                X509Certificate2 selected,
+                bool clientCertificates,
+                TimeSpan? ticketLifetime
+            )
             {
                 using var contexts = new NativeRegion(nint.Size);
                 Marshal.WriteIntPtr(contexts.Address, selected.Handle);
@@ -213,7 +311,11 @@ namespace EmbedIO.Quic
                     Version = 5,
                     CertificateCount = 1,
                     Certificates = contexts.Address,
-                    Flags = DisableReconnects | (clientCertificates ? NoWindowsAccountMapping : 0),
+                    // Schannel's TLS 1.3 tickets announce ten hours whatever this says; a ticket
+                    // resumes until its key retires.
+                    SessionLifetime = ticketLifetime is { } lifetime ? (uint)lifetime.TotalMilliseconds : 0,
+                    Flags = (ticketLifetime == null ? DisableReconnects : 0)
+                        | (clientCertificates ? NoWindowsAccountMapping : 0),
                     ParameterCount = 1,
                     Parameters = settings.Address
                 };
@@ -316,6 +418,7 @@ namespace EmbedIO.Quic
                             _credential = _credentials?.Invoke(selected)
                                 ?? Credential.Acquire(selected, _validateClientCertificate != null);
                             _credentialHandle = _credential.Handle;
+                            _credential.UpdateTicketKeys();
                         }
 
                         catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
@@ -386,7 +489,9 @@ namespace EmbedIO.Quic
                 ref _credentialHandle,
                 oldContext,
                 ref inputDescriptor,
-                0x18018U | (_validateClientCertificate != null ? RequestClientCertificate : 0),
+                0x18018U
+                    | (_validateClientCertificate != null ? RequestClientCertificate : 0)
+                    | (_credential?.TicketKeys != null ? RequestSessionTickets : 0),
                 0,
                 _context.Address,
                 ref outputDescriptor,
@@ -906,6 +1011,15 @@ namespace EmbedIO.Quic
             [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
             [LibraryImport("secur32.dll", EntryPoint = "FreeCredentialsHandle")]
             internal static partial int Free(ref NativePair credential);
+
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [LibraryImport("secur32.dll", EntryPoint = "SetCredentialsAttributesW")]
+            internal static partial int SetAttributes(
+                ref NativePair credential,
+                uint attribute,
+                nint input,
+                uint length
+            );
 
             [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
             [LibraryImport("secur32.dll", EntryPoint = "AcceptSecurityContext")]

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- HTTP/3 clients can resume TLS sessions. The server issues a TLS 1.3 session ticket
+  with every handshake, so a client that reconnects skips the certificate and the
+  server's signature (RFC 8446 section 2.2). On loopback a resumed connection had its
+  first response 3.1 ms sooner on Linux and about 0.5 ms sooner on Windows, and the
+  server sent 0.45 to 1.5 KB less before it; server CPU per connection fell 12 percent
+  on Linux and did not change measurably on Windows. The ticket keys are random, held
+  in memory and belong to one certificate object. A new key starts every hour and a
+  ticket resumes for two hours, two to three on Windows, where Schannel does not check
+  the lifetime. Publishing a certificate, disposing it or stopping the listener
+  discards its keys. A `ClientCertificateMode` of `Allow` or `Require` issues no
+  tickets, and no ticket allows early data. The TLS runtime in
+  `EmbedIO-Neo.Quic.Native` moves to private ABI 4. See
+  [session resumption](docs/guides/http3.md#session-resumption).
+
 ### Changed
 
 - A response keeps the fields the engine writes, the content type and length,

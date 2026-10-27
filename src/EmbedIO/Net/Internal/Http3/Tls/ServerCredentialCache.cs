@@ -8,12 +8,14 @@ namespace EmbedIO.Net.Internal.Http3
 {
     // A native TLS credential that handshakes share. Each holder releases its reference
     // once; the last release frees the native resources. A credential that is not cacheable
-    // serves only the handshake that prepared it.
-    internal abstract class SharedCredential(bool cacheable)
+    // serves only the handshake that prepared it. ticketKeys protects the session tickets of
+    // handshakes that use the credential; without them the server issues none.
+    internal abstract class SharedCredential(bool cacheable, SessionTicketKeys? ticketKeys = null)
     {
         private int _references = 1;
 
         internal bool Cacheable { get; } = cacheable;
+        internal SessionTicketKeys? TicketKeys { get; } = ticketKeys;
 
         // Whether the certificate stores complete the certificate's chain, without downloading
         // issuers. A credential prepared while they cannot may hold a partial chain, so it is not
@@ -74,7 +76,10 @@ namespace EmbedIO.Net.Internal.Http3
 
             if (remaining < 0) throw new InvalidOperationException("The TLS credential was released twice.");
 
-            return remaining == 0 ? Free() : 0;
+            if (remaining != 0) return 0;
+
+            TicketKeys?.Dispose();
+            return Free();
         }
 
         protected abstract int Free();
