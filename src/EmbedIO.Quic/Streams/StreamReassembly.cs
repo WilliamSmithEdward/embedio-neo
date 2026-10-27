@@ -41,17 +41,17 @@ namespace EmbedIO.Quic
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             if (offset > MaximumOffset || (ulong)bytes.Length > MaximumOffset - offset)
-                throw new InvalidDataException("Invalid stream offset.");
+                throw new TransportException(0x03, "Invalid stream offset.");
 
             var end = offset + (ulong)bytes.Length;
 
             if (FinalSize.HasValue && (end > FinalSize.Value || final && end != FinalSize.Value))
-                throw new InvalidDataException("Conflicting final size.");
+                throw new TransportException(0x06, "Conflicting final size.");
 
-            if (final && end < _extent) throw new InvalidDataException("Final size precedes received bytes.");
+            if (final && end < _extent) throw new TransportException(0x06, "Final size precedes received bytes.");
 
             if (end > Delivered && end - Delivered > (ulong)_capacity)
-                throw new InvalidDataException("Stream receive window exceeded.");
+                throw new TransportException(0x03, "Stream receive window exceeded.");
 
             if (final) FinalSize = end;
 
@@ -118,17 +118,18 @@ namespace EmbedIO.Quic
 
             if (_buffered != 0 || _retentionLimit != MaximumOffset || offset > Delivered) return false;
 
-            if ((ulong)bytes.Length > MaximumOffset - offset) throw new InvalidDataException("Invalid stream offset.");
+            if ((ulong)bytes.Length > MaximumOffset - offset)
+                throw new TransportException(0x03, "Invalid stream offset.");
 
             var end = offset + (ulong)bytes.Length;
 
             if (FinalSize.HasValue && (end > FinalSize.Value || final && end != FinalSize.Value))
-                throw new InvalidDataException("Conflicting final size.");
+                throw new TransportException(0x06, "Conflicting final size.");
 
-            if (final && end < _extent) throw new InvalidDataException("Final size precedes received bytes.");
+            if (final && end < _extent) throw new TransportException(0x06, "Final size precedes received bytes.");
 
             if (end > Delivered && end - Delivered > (ulong)_capacity)
-                throw new InvalidDataException("Stream receive window exceeded.");
+                throw new TransportException(0x03, "Stream receive window exceeded.");
 
             if (final) FinalSize = end;
 

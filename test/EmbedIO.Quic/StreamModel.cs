@@ -94,9 +94,13 @@
                         .ToArray();
                     var end = offset + (ulong)bytes.Length;
                     var fin = (data[cursor + 3] & 7) == 0;
-                    var invalid = end > delivered + 32
-                        || (final.HasValue && (end > final || fin && end != final))
+
+                    // The buffer checks the final size, then its window, then overlapping bytes,
+                    // and refuses with FINAL_SIZE_ERROR, FLOW_CONTROL_ERROR or a protocol violation.
+                    var finalSizeError = (final.HasValue && (end > final || fin && end != final))
                         || fin && end < extent;
+                    var windowError = end > delivered + 32;
+                    var invalid = finalSizeError || windowError;
 
                     for (var index = 0; index < bytes.Length; index++)
                         if (
@@ -110,9 +114,14 @@
                         buffer.Add(offset, bytes, fin);
                     }
 
-                    catch (InvalidDataException)
+                    catch (Exception error) when (error is TransportException or InvalidDataException)
                     {
                         QuicFuzzChecks.Require(invalid, "stream-unexpected-rejection");
+                        QuicFuzzChecks.Require(
+                            (error as TransportException)?.ErrorCode
+                                == (finalSizeError ? 0x06UL : windowError ? 0x03UL : (ulong?)null),
+                            "stream-rejection-code"
+                        );
                         // A rejected frame closes its connection; never reuse partial failed state.
                         buffer.Dispose();
                         buffer = new StreamReassembly(32);

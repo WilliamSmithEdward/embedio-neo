@@ -31,14 +31,14 @@
 
             window.Add(32000, [], true);
             Check(window.Complete && window.Delivered == 32000, "final size survives wrap");
-            Reject(() => window.Add(31999, [], true), "conflicting final size after retirement");
-            Reject(() => window.Add(32000, [1]), "data past final size");
+            Reject(() => window.Add(31999, [], true), "conflicting final size after retirement", 0x06);
+            Reject(() => window.Add(32000, [1]), "data past final size", 0x06);
             using var sparseWindow = new StreamReassembly(16);
             sparseWindow.Add(8, [1, 2]);
             Reject(() => sparseWindow.Add(8, [2]), "buffered overlap must agree");
-            Reject(() => sparseWindow.Add(8, [], true), "final size before sparse data");
-            Reject(() => sparseWindow.Add(16, [1]), "bounded sparse window");
-            Reject(() => sparseWindow.Add(StreamReassembly.MaximumOffset, [1]), "offset overflow");
+            Reject(() => sparseWindow.Add(8, [], true), "final size before sparse data", 0x06);
+            Reject(() => sparseWindow.Add(16, [1]), "bounded sparse window", 0x03);
+            Reject(() => sparseWindow.Add(StreamReassembly.MaximumOffset, [1]), "offset overflow", 0x03);
             sparseWindow.Add(0, new byte[8]);
             Check(sparseWindow.Consume(4).Length == 4 && sparseWindow.Delivered == 4, "reliable prefix boundary");
             Check(
@@ -67,14 +67,19 @@
             if (!success) throw new InvalidOperationException("Stream window regression: " + name);
         }
 
-        private static void Reject(Action action, string name)
+        private static void Reject(Action action, string name, ulong? code = null)
         {
             try
             {
                 action();
             }
 
-            catch (InvalidDataException)
+            catch (TransportException error) when (error.ErrorCode == code)
+            {
+                return;
+            }
+
+            catch (InvalidDataException) when (!code.HasValue)
             {
                 return;
             }

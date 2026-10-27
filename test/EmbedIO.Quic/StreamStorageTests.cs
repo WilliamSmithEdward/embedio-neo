@@ -102,8 +102,8 @@ namespace EmbedIO.Quic
                 buffer.Add(0, [1, 2, 3, 4, 5]);
                 buffer.DiscardFrom(3);
                 pool.CheckCleared(3, 2);
-                Reject(() => buffer.Add(4, [], true));
-                Reject(() => buffer.Add(1025, []));
+                Reject(() => buffer.Add(4, [], true), 0x06);
+                Reject(() => buffer.Add(1025, []), 0x03);
                 buffer.Add(5, [], true);
                 buffer.DiscardFrom(4);
                 Check(
@@ -151,7 +151,7 @@ namespace EmbedIO.Quic
                 var rents = pool.Rents;
                 buffer.Add(start, bytes, true);
                 Check(pool.Rents == rents && buffer.Consume().Length == 0, "wrapped late data stays discarded");
-                Reject(() => buffer.Add(start + (ulong)capacity, [1]));
+                Reject(() => buffer.Add(start + (ulong)capacity, [1]), 0x06);
             }
 
             using (var empty = new StreamReassembly(0, pool))
@@ -200,19 +200,26 @@ namespace EmbedIO.Quic
             }
         }
 
-        private static void Reject(Action action)
+        // Final-size and window violations carry their QUIC error code; conflicting overlap is
+        // the protocol violation RFC 9000 section 2.2 allows.
+        private static void Reject(Action action, ulong? code = null)
         {
             try
             {
                 action();
             }
 
-            catch (InvalidDataException)
+            catch (TransportException error) when (error.ErrorCode == code)
             {
                 return;
             }
 
-            throw new InvalidOperationException("Expected conflicting overlap rejection.");
+            catch (InvalidDataException) when (!code.HasValue)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("Expected stream storage rejection.");
         }
 
         private static void CheckDisposed(Action action)

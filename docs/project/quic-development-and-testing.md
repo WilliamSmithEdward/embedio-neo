@@ -4375,21 +4375,44 @@ from wording it changes three rules:
   it is the stream header. draft-ietf-webtrans-http3-16 requires a Reliable Size of at
   least the header whenever a WebTransport data stream is reset.
 
-Checking the receiving side against section 5.2, the same in every revision from 07 to
-11, found two departures, both now fixed:
+Checking the receiving side against section 5.2 found two departures, both now fixed.
+The two rules involved read the same in every revision from 07 to 11.
 
 - A `RESET_STREAM_AT` with a larger Reliable Size than an earlier reset of the stream
   closed the connection with PROTOCOL_VIOLATION ("Reliable size increased after reset").
   Such a frame is an earlier one arriving late, or retransmitted after the sender lowered
   the size, and the draft says to ignore the increase. The smallest size now stands.
 - A later reset that changed the stream's Application Error Code was accepted, and the
-  first code kept. Where reliable reset was negotiated it now closes the connection with
-  STREAM_STATE_ERROR, as the draft requires. Without the extension RFC 9000 sets no such
-  rule, and nothing changes.
+  first code kept. Where the peer offered `reset_stream_at` it now closes the connection
+  with STREAM_STATE_ERROR, as the draft requires. Without the extension RFC 9000 sets no
+  such rule, and nothing changes.
 
-A reset that changes a stream's final size still closes the connection with
-PROTOCOL_VIOLATION while the stream is open. The draft and RFC 9000 section 4.5 name
-FINAL_SIZE_ERROR, which EmbedIO.Quic sends only for a stream it has already closed.
+A second check, against sections 3 and 4 and the final-size rule of section 5.2, found
+four more departures, also fixed:
+
+- A peer that had not offered `reset_stream_at` could not send `RESET_STREAM_AT`: the
+  frame closed the connection with PROTOCOL_VIOLATION. The parameter announces what an
+  endpoint can receive, and EmbedIO.Quic offers it on every connection, so section 3
+  lets any peer send the frame. It is now accepted from any peer. Sending one still
+  waits for the peer's offer.
+- A Reliable Size larger than the Final Size closed the connection with
+  PROTOCOL_VIOLATION. Section 4 requires FRAME_ENCODING_ERROR in every revision from 07,
+  and it is now sent.
+- A final size past the stream's or the connection's flow-control limit closed the
+  connection with PROTOCOL_VIOLATION. Section 4 requires FLOW_CONTROL_ERROR from
+  revision 08 on, as RFC 9000 section 4.1 does for any frame, and STREAM, `RESET_STREAM`
+  and `RESET_STREAM_AT` frames past either limit now get it. So does data past the
+  largest stream offset, 2^62 - 1, which RFC 9000 section 19.8 lets an endpoint answer
+  with FLOW_CONTROL_ERROR or FRAME_ENCODING_ERROR.
+- A reset or FIN that changed the final size of an open stream, or data past its final
+  size, closed the connection with PROTOCOL_VIOLATION. Section 5.2 requires
+  FINAL_SIZE_ERROR from revision 08 on, and RFC 9000 section 4.5 recommends it for any
+  frame; revision 07 named STREAM_STATE_ERROR in section 5.2 and FINAL_SIZE_ERROR in
+  section 5. EmbedIO.Quic now sends FINAL_SIZE_ERROR whether the stream is open or
+  already closed.
+
+Conflicting bytes at an offset already received still close the connection with
+PROTOCOL_VIOLATION, which RFC 9000 section 2.2 allows.
 
 ### Validation
 
@@ -4400,7 +4423,24 @@ FINAL_SIZE_ERROR, which EmbedIO.Quic sends only for a stream it has already clos
   "Stream discard regression: RESET_STREAM_AT error code". With the change `self-test`
   passed.
 - The NUnit HTTP/3, WebTransport and QUIC subset on Windows, 821 cases: 819 passed and 2
-  were skipped for want of an aioquic peer.
+  were skipped, one for want of an aioquic peer and one that runs only on Linux.
+
+For the second check:
+
+- `ConnectionCoreTests` in `self-test` sends each case to a whole connection and reads
+  back the CONNECTION_CLOSE frame: a `RESET_STREAM_AT` from a peer that did not offer
+  `reset_stream_at`, STREAM data past the stream's credit and past the largest offset, a
+  reset past the stream's credit, a changed final size, and a Reliable Size above the
+  Final Size. The same six cases on the unchanged engine each closed the connection with
+  PROTOCOL_VIOLATION (0x0a). With the change the first leaves the connection open and
+  the others close it with 0x03, 0x03, 0x03, 0x06 and 0x07.
+- `StreamDiscardTests`, `BridgeTests`, `StreamWindowTests` and `StreamStorageTests` name
+  the code each refusal must carry, and the stream model fuzzer checks the code of every
+  refusal it predicts.
+- `self-test` passed, as did the QUIC development campaign for seeds 1729, 106458 and
+  211187, each with 100,000 property cases, 100,000 mutation cases and the recovery and
+  lifecycle state machines.
+- The NUnit subset again: 821 cases, 819 passed and the same 2 skipped.
 
 ## Segmented UDP sends
 
@@ -4556,9 +4596,10 @@ since 2.18.0.
 - Connection churn: on Linux 1.00 times 2.18.0's connection rate at 0.98 times its server
   CPU per connection, and 0.98 and 1.00 against main. Allocation per connection rose 9
   percent against 2.18.0, from 100 to 109 KB, and main allocated the same 109 KB, so the
-  rise came with main's changes since 2.18.0. On Windows only three rounds of 2.18.0 and
-  two of the change stayed under the 7-CPU limit, since Schannel's handshakes run in
-  LSASS, outside the server and client (see
+  rise came with main's changes since 2.18.0 (see
+  [ClientHello reader allocation](#clienthello-reader-allocation)). On Windows only three
+  rounds of 2.18.0 and two of the change stayed under the 7-CPU limit, since Schannel's
+  handshakes run in LSASS, outside the server and client (see
   [Role-alternated comparison](#role-alternated-comparison)): 1.11 times 2.18.0's rate
   at 1.01 times its CPU per connection. Against main, with four and three rounds kept,
   0.99 times the rate at 1.00 times the CPU.
@@ -4574,6 +4615,64 @@ since 2.18.0.
   `UDP_RECV_MAX_COALESCED_SIZE` on Windows is used.
 - What sets the Linux upload mode. [Linux upload modes](#linux-upload-modes) narrows
   it down.
+
+## ClientHello reader allocation
+
+The churn comparison in [Segmented UDP sends](#segmented-udp-sends) found Linux
+connections allocating 9 percent more on main than on 2.18.0, 109 KB against 100 KB, at
+the same server CPU. [TLS session resumption](#tls-session-resumption) moved the OpenSSL
+path onto the managed ClientHello reader, `TlsClientHello.Read`, which the Schannel path
+has used since 2.17.0. To refuse a repeated extension the reader allocated an 8 KB table,
+one bit per extension type, for every ClientHello. It now keeps the table on the stack.
+This is unreleased.
+
+### Cause
+
+- `h3 churn c16` on Linux, measured as in [Segmented UDP sends](#segmented-udp-sends),
+  with session resumption's merge (`71ae5271`) against main just before it (`8dcf7150`),
+  three rounds of each in both role orders: medians of 111 KB allocated per connection
+  against 100 KB, at 1.01 against 0.98 ms of server CPU per connection.
+- A profiled run of two rounds each sampled 10.7 KB more of byte arrays per connection
+  with session resumption and 1.0 KB more of strings. Each ClientHello allocated one
+  8,216-byte array, the 8,192-byte table and its header. The rest was not traced further;
+  session resumption also gives the OpenSSL path a buffer for each ClientHello, starting at
+  1 KB, and a copy of the ticket keys for each handshake.
+
+### Change
+
+- `TlsClientHello.Read` keeps the table in an 8,192-byte `stackalloc` span, cleared before
+  use. The duplicate check is unchanged.
+
+### Validation
+
+- The hello cases of `self-test` read a ClientHello twice and require the second read to
+  allocate less than 1 KB on its thread. That check failed on the unchanged reader and
+  passes with the change, as does the rest of `self-test`.
+- The NUnit HTTP/3, QUIC, WebTransport, certificate and TLS subset on Windows, 916 cases:
+  913 passed and 3 were skipped, two that run only on other platforms and one for want of
+  an aioquic peer.
+
+### Measurement
+
+`h3 churn c16`, the change (`396ea46d`) against main (`5c9d1340`), three rounds of each
+in both role orders, by the method of [Segmented UDP sends](#segmented-udp-sends). One
+Windows round of main failed in its warmup when the client's QUIC connection setup
+returned WSAENOBUFS (0x80072747), as in that section. Medians of the kept rounds:
+
+| Platform | Server | connections/s | server CPU per connection | allocated per connection | p99 ms |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Windows | main | 2,065 | 0.84 ms | 184 KB | 19.0 |
+| | change | 2,075 | 0.82 ms | 176 KB | 19.7 |
+| Linux | main | 1,941 | 1.00 ms | 109 KB | 16.3 |
+| | change | 1,916 | 1.01 ms | 101 KB | 16.7 |
+
+- Allocation per connection fell by 8 KB on both platforms, on Linux back to within 1 KB of
+  2.18.0's 100 KB. Connection rate, server CPU and p99 stayed within the spread of the
+  rounds.
+- Two of the change's six Linux rounds allocated 76 and 92 KB per connection, and two of
+  session resumption's six 77 and 79 KB. Single rounds of 2.18.0 (78 KB), main (98 KB) and
+  the [segmented sends](#segmented-udp-sends) change (87 KB) showed the same lower level;
+  none of the six rounds before session resumption did. What sets it was not traced.
 
 ## Linux upload modes
 
