@@ -453,7 +453,11 @@ permanent duplicate-rejection floor. Retired send records and acknowledgement
 history also compact within fixed bounds. Incoming ACK frames accept range counts
 that fit the datagram and sent-packet bounds; ordered ranges use indexed recovery
 lookup. Malformed ranges use FRAME_ENCODING_ERROR, while acknowledgements for
-unsent packets use PROTOCOL_VIOLATION. Per-key encryption budgets (conservatively capped at the AES-GCM limit for
+unsent packets use PROTOCOL_VIOLATION. Unreleased: unknown and truncated frames also
+close the connection with FRAME_ENCODING_ERROR, CRYPTO data past the 64 KiB handshake
+buffer with CRYPTO_BUFFER_EXCEEDED and a packet without frames with PROTOCOL_VIOLATION,
+and DATAGRAM frames up to the advertised 1,200 bytes are accepted.
+Per-key encryption budgets (conservatively capped at the AES-GCM limit for
 all profiles) and ACK-confirmed local/peer key generations replace the cumulative send-packet quota.
 Recovery loss bursts now defer retransmission deliveries beyond the 512-entry ready
 window within a separate bounded backlog, while ACK-only work and PTO probes retain

@@ -143,7 +143,7 @@ namespace EmbedIO.Quic
                 ],
                 [
                     .. source,
-                    .. Wire.Frame(3, 4, 65528)
+                    .. Wire.Frame(10, 1, 21)
                 ]
             })
             {
@@ -302,7 +302,7 @@ namespace EmbedIO.Quic
             );
         }
 
-        private static byte[] UnprotectInitial(byte[] packet, byte[] original)
+        internal static byte[] UnprotectInitial(byte[] packet, byte[] original)
         {
             var header = new WireReader(packet);
             QuicFuzzChecks.Require((header.Byte() & 240) == 192, "initial-response-level");
