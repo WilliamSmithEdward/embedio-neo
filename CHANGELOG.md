@@ -47,6 +47,13 @@
   request's worker had taken it, which threw `Async stream retired before completion`
   and closed the connection. The stream now stays until the worker disposes it. An
   eight-hour endurance run on Windows hit it once (#555).
+- An HTTP/3 connection no longer closes when a peer's `RESET_STREAM_AT` for a stream
+  carries a larger Reliable Size than an earlier reset of it, as a late or
+  retransmitted frame can. draft-ietf-quic-reliable-stream-reset tells the receiver to
+  ignore the increase, and the smallest size now stands. When reliable reset was
+  negotiated, a later reset that changes the stream's error code now closes the
+  connection with `STREAM_STATE_ERROR`, as the draft requires; the change used to be
+  ignored (#551).
 
 ## [2.18.0] - 2026-10-24
 
