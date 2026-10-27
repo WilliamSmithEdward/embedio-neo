@@ -43,7 +43,11 @@ namespace EmbedIO.Quic
 
             byte[]? parameters = null;
             string? serverName = null;
-            var seen = new byte[8192];
+
+            // One bit per extension type, on the stack so that a handshake does not allocate
+            // 8 KB for it.
+            Span<byte> seen = stackalloc byte[8192];
+            seen.Clear();
 
             while (!extensions.IsEmpty)
             {

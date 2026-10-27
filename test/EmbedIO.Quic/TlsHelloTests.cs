@@ -47,7 +47,20 @@ namespace EmbedIO.Quic
             var trailing = Create(parameters, (0x1234, new byte[65482]));
             Reject(trailing, 50);
             CheckServerNames(parameters);
+            CheckAllocation(parameters);
             Mutate([0, 1, 2, 3]);
+        }
+
+        // A ClientHello costs its transport parameters and server name, not a per-hello
+        // bitmap of extension types, which allocated 8 KB on every handshake.
+        private static void CheckAllocation(byte[] parameters)
+        {
+            var hello = Create(parameters, (0, ServerName(Encoding.ASCII.GetBytes("localhost"))), (0x1234, [1]));
+            TlsClientHello.Read(hello);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var info = TlsClientHello.Read(hello);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Require(info.ServerName == "localhost" && allocated < 1024, "allocation");
         }
 
         private static void CheckServerNames(byte[] parameters)
