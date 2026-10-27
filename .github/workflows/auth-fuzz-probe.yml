@@ -1,0 +1,56 @@
+name: Auth-fuzz probe
+
+# Throwaway diagnosis for the macOS auth-fuzz no-reply flake. Never merged.
+on:
+  push:
+    branches: [codex/auth-fuzz-probe]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  collision:
+    name: Dual-stack port collision (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14.6'
+      - name: List the runner's UDP sockets
+        shell: bash
+        run: |
+          mkdir -p probe-output
+          if [ "$RUNNER_OS" = macOS ]; then
+            sudo -n lsof -nP -iUDP > probe-output/udp-sockets.txt 2>&1 || true
+            sysctl net.inet.ip.portrange.first net.inet.ip.portrange.last net.inet.udp.randomize_ports \
+              > probe-output/port-range.txt 2>&1 || true
+          else
+            sudo -n ss -uanp > probe-output/udp-sockets.txt 2>&1 || true
+            cat /proc/sys/net/ipv4/ip_local_port_range > probe-output/port-range.txt
+          fi
+          cat probe-output/port-range.txt
+          grep -c UDP probe-output/udp-sockets.txt || true
+      - name: Bind dual-stack sockets beside IPv4 ones
+        shell: bash
+        run: |
+          for round in 1 2 3; do
+            python3 probe/port_collision.py --output "probe-output/collision-$round.json"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: port-collision-${{ matrix.os }}
+          path: probe-output/
+          if-no-files-found: error
