@@ -4361,6 +4361,13 @@ on 2026-10-27:
 | draft-ietf-webtrans-overview | 13 | 6 July 2026 | Defines no wire format |
 | draft-ietf-quic-reliable-stream-reset | 11 | 6 September 2026 | `reset_stream_at` as `0x1d` and as revision 07's `0x17f7586d2cb571`, frame `0x24` |
 
+The reliable-reset draft is now in the RFC Editor queue. On 28 September 2026
+[IANA](https://www.iana.org/assignments/quic/quic.xhtml) made its codepoints permanent,
+citing the RFC to be: `reset_stream_at` is `0x1d` among the transport parameters and
+`RESET_STREAM_AT` is `0x24` among the frame types. These are the codepoints EmbedIO.Quic
+already uses. Revision 07's `0x17f7586d2cb571`, which EmbedIO.Quic also sends and
+accepts, is not registered. Neither WebTransport draft has reached IESG review.
+
 Revision 11 of draft-ietf-quic-reliable-stream-reset keeps revision 10's codepoints: the
 `reset_stream_at` transport parameter `0x1d` and the `RESET_STREAM_AT` frame `0x24`. Apart
 from wording it changes three rules:
