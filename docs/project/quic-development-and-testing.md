@@ -4831,3 +4831,60 @@ is unreleased.
 - RFC 9000 section 12.4 allows, but does not require, refusing a frame type encoded in
   more bytes than it needs. EmbedIO.Quic reads such a type as the type it encodes.
 - The error codes RFC 9001 sets for the TLS handshake were not part of this check.
+
+## macOS auth-fuzz client ports
+
+The osx-arm64 Portable TLS job's `auth-fuzz` step failed now and then, on main (runs
+39896006269 and 40016524876) and on pull requests, about 4 runs in 60. One case's client
+sent five Initials over three seconds, received no datagram and idled out, while the
+server served every other case. The client's socket was the cause, not the server. Only
+the test scripts changed.
+
+### Cause
+
+- aioquic's `connect()` binds every client to an IPv6 dual-stack socket on port 0, and
+  macOS chooses that port without checking IPv4 sockets. On a `macos-26` runner (macOS
+  26.6.2, arm64, run 40591664723), 8,000 such binds beside 256 IPv4 sockets took one of
+  their ports 119, 137 and 135 times in three rounds, close to the 125 expected if the
+  IPv4 sockets were not considered at all. Each time, a datagram sent to `127.0.0.1` at
+  that port reached the IPv4 socket, whether it was bound to `127.0.0.1` or `0.0.0.0`, and
+  never the client. Ubuntu 24.04 gave no such port in 24,000 binds. On both, an IPv4 bind
+  to a port a dual-stack socket holds fails with `EADDRINUSE`, so only this direction goes
+  unchecked.
+- During `auth-fuzz` the IPv4 sockets in macOS's ephemeral range, 49152 to 65535, are the
+  host's own listener and a few daemons'. With about 257 client sockets a run, a few such
+  ports put a collision in a few percent of runs.
+- The four saved failures fit both kinds, though they recorded no ports. Two counted 8
+  and 9 datagrams rejected because a first Initial failed authentication, which is what
+  the listener's own Initials do if they come back to it as new connections: their keys
+  come from the wrong connection ID. That happens when the client holds the listener's
+  port. One of the two also counted an expired handshake. The other two failures counted
+  no rejections, as when the replies go to some other socket.
+
+### Change
+
+- The peer scripts connect through `test/EmbedIO.Quic/quic_client.py`, which follows
+  aioquic 1.6.1's `connect()` but binds an IPv4 socket, on `127.0.0.1` for a loopback
+  server, when the server's address is IPv4. macOS does not give an IPv4 socket a port
+  another IPv4 socket holds. An IPv6 server keeps aioquic's socket.
+- `test_client_socket_peer.py`, which `validate.py` runs with the other peer regressions
+  on every RID, holds 256 IPv4 ports and requires 2,048 client sockets from the helper to
+  avoid them. It also requires that no peer script import aioquic's `connect()`, and
+  completes one handshake through the helper.
+- `auth-fuzz` failure files record the client's port and the listener's.
+
+### Validation
+
+- On `macos-26` (run 40593929541), `auth-fuzz` ran against a development host built from
+  the package feed of #569's head, the same tree as main `9c50b418`. While 4,096 IPv4
+  ports were held, all 3 runs through aioquic's dual-stack client failed and all 3 through
+  the helper passed their 256 cases. In two of the failures the stuck client's port was
+  one of the held ports, and its qlog shows five Initials sent and nothing received in 5
+  seconds, as in the CI failures. In the third, the healthy sibling connection never
+  connected. Without held ports, 28 runs through aioquic's client and 12 through the
+  helper all passed.
+- The peer regressions passed on that runner, except the import check, which named the
+  probe's dual-stack copy of the harness, as it should.
+- On Windows, against the Schannel host, the 12 peer suites that
+  `scripts/run-quic-development.py --schannel` runs passed, the 256-case `auth-fuzz` among
+  them, and so did the 16 peer regressions.

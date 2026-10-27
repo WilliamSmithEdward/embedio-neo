@@ -531,6 +531,9 @@ and native RSA/ECDSA mutations. It also runs the client-certificate wire matrix 
 full-handshake certificate/key mutations through `verify_client_certificate.py` and
 `fuzz_client_certificate.py`. These include a continuing healthy connection and retained
 input/fixture replay. Complete credential and configuration parity remains pending.
+The peer scripts connect through `test/EmbedIO.Quic/quic_client.py`. aioquic's own
+`connect()` binds a dual-stack socket, which macOS can give a port an IPv4 socket holds,
+and that client then never hears from the server.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
