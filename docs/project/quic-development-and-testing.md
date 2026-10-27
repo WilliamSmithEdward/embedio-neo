@@ -4374,21 +4374,44 @@ from wording it changes three rules:
   it is the stream header. draft-ietf-webtrans-http3-16 requires a Reliable Size of at
   least the header whenever a WebTransport data stream is reset.
 
-Checking the receiving side against section 5.2, the same in every revision from 07 to
-11, found two departures, both now fixed:
+Checking the receiving side against section 5.2 found two departures, both now fixed.
+The two rules involved read the same in every revision from 07 to 11.
 
 - A `RESET_STREAM_AT` with a larger Reliable Size than an earlier reset of the stream
   closed the connection with PROTOCOL_VIOLATION ("Reliable size increased after reset").
   Such a frame is an earlier one arriving late, or retransmitted after the sender lowered
   the size, and the draft says to ignore the increase. The smallest size now stands.
 - A later reset that changed the stream's Application Error Code was accepted, and the
-  first code kept. Where reliable reset was negotiated it now closes the connection with
-  STREAM_STATE_ERROR, as the draft requires. Without the extension RFC 9000 sets no such
-  rule, and nothing changes.
+  first code kept. Where the peer offered `reset_stream_at` it now closes the connection
+  with STREAM_STATE_ERROR, as the draft requires. Without the extension RFC 9000 sets no
+  such rule, and nothing changes.
 
-A reset that changes a stream's final size still closes the connection with
-PROTOCOL_VIOLATION while the stream is open. The draft and RFC 9000 section 4.5 name
-FINAL_SIZE_ERROR, which EmbedIO.Quic sends only for a stream it has already closed.
+A second check, against sections 3 and 4 and the final-size rule of section 5.2, found
+four more departures, also fixed:
+
+- A peer that had not offered `reset_stream_at` could not send `RESET_STREAM_AT`: the
+  frame closed the connection with PROTOCOL_VIOLATION. The parameter announces what an
+  endpoint can receive, and EmbedIO.Quic offers it on every connection, so section 3
+  lets any peer send the frame. It is now accepted from any peer. Sending one still
+  waits for the peer's offer.
+- A Reliable Size larger than the Final Size closed the connection with
+  PROTOCOL_VIOLATION. Section 4 requires FRAME_ENCODING_ERROR in every revision from 07,
+  and it is now sent.
+- A final size past the stream's or the connection's flow-control limit closed the
+  connection with PROTOCOL_VIOLATION. Section 4 requires FLOW_CONTROL_ERROR from
+  revision 08 on, as RFC 9000 section 4.1 does for any frame, and STREAM, `RESET_STREAM`
+  and `RESET_STREAM_AT` frames past either limit now get it. So does data past the
+  largest stream offset, 2^62 - 1, which RFC 9000 section 19.8 lets an endpoint answer
+  with FLOW_CONTROL_ERROR or FRAME_ENCODING_ERROR.
+- A reset or FIN that changed the final size of an open stream, or data past its final
+  size, closed the connection with PROTOCOL_VIOLATION. Section 5.2 requires
+  FINAL_SIZE_ERROR from revision 08 on, and RFC 9000 section 4.5 recommends it for any
+  frame; revision 07 named STREAM_STATE_ERROR in section 5.2 and FINAL_SIZE_ERROR in
+  section 5. EmbedIO.Quic now sends FINAL_SIZE_ERROR whether the stream is open or
+  already closed.
+
+Conflicting bytes at an offset already received still close the connection with
+PROTOCOL_VIOLATION, which RFC 9000 section 2.2 allows.
 
 ### Validation
 
@@ -4399,4 +4422,21 @@ FINAL_SIZE_ERROR, which EmbedIO.Quic sends only for a stream it has already clos
   "Stream discard regression: RESET_STREAM_AT error code". With the change `self-test`
   passed.
 - The NUnit HTTP/3, WebTransport and QUIC subset on Windows, 821 cases: 819 passed and 2
-  were skipped for want of an aioquic peer.
+  were skipped, one for want of an aioquic peer and one that runs only on Linux.
+
+For the second check:
+
+- `ConnectionCoreTests` in `self-test` sends each case to a whole connection and reads
+  back the CONNECTION_CLOSE frame: a `RESET_STREAM_AT` from a peer that did not offer
+  `reset_stream_at`, STREAM data past the stream's credit and past the largest offset, a
+  reset past the stream's credit, a changed final size, and a Reliable Size above the
+  Final Size. The same six cases on the unchanged engine each closed the connection with
+  PROTOCOL_VIOLATION (0x0a). With the change the first leaves the connection open and
+  the others close it with 0x03, 0x03, 0x03, 0x06 and 0x07.
+- `StreamDiscardTests`, `BridgeTests`, `StreamWindowTests` and `StreamStorageTests` name
+  the code each refusal must carry, and the stream model fuzzer checks the code of every
+  refusal it predicts.
+- `self-test` passed, as did the QUIC development campaign for seeds 1729, 106458 and
+  211187, each with 100,000 property cases, 100,000 mutation cases and the recovery and
+  lifecycle state machines.
+- The NUnit subset again: 821 cases, 819 passed and the same 2 skipped.
