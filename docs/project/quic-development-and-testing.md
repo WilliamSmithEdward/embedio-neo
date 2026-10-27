@@ -4613,7 +4613,8 @@ since 2.18.0.
 - macOS still sends one datagram per system call.
 - Receiving still reads one datagram per call; neither `UDP_GRO` on Linux nor
   `UDP_RECV_MAX_COALESCED_SIZE` on Windows is used.
-- What sets the Linux upload mode.
+- What sets the Linux upload mode. [Linux upload modes](#linux-upload-modes) narrows
+  it down.
 
 ## ClientHello reader allocation
 
@@ -4672,6 +4673,80 @@ returned WSAENOBUFS (0x80072747), as in that section. Medians of the kept rounds
   session resumption's six 77 and 79 KB. Single rounds of 2.18.0 (78 KB), main (98 KB) and
   the [segmented sends](#segmented-udp-sends) change (87 KB) showed the same lower level;
   none of the six rounds before session resumption did. What sets it was not traced.
+
+## Linux upload modes
+
+[Segmented UDP sends](#segmented-udp-sends) left open why its 1 MiB uploads on Linux ran
+in two modes. Every run here measured `h3 upload1m c4x4` alone, one round per server
+process, in the measurement container of [Method](#method), with the server on CPUs 0-3
+and the client on 4-7 unless stated. The builds were the change at `fc6301c2`, and for
+some rounds a copy with counters that wrote datagram and receive statistics to the
+server's stderr once a second, never committed. Around each round the container read the
+kernel's UDP counters and every UDP socket's queue and drop count, and for eight rounds
+the scheduling statistics of every server and client thread.
+
+### What the modes are
+
+- 63 rounds fell into three bands: 39 served 216 to 272 uploads a second at 11.2 to
+  13.3 ms of server CPU each, 8 served 340 to 363 at 8.7 to 9.0 ms, and 16 served 412 to
+  479 at 7.5 to 8.1 ms. Main served 217 to 221 at 14.9 to 15.1 ms in its four rounds.
+- A round keeps its band for the whole 15-second measurement. Every warmup ran at the same
+  rate, and the band shows once the measured connections open.
+- The four connections of a round share its band. In every round each carried 22 to 31
+  percent of the datagrams, so the band belongs to the round, not to single connections.
+- Each upload carried the same traffic in every band. The server received 780 to 851
+  datagrams averaging 1,414 to 1,444 bytes, about 97 percent of them 1,401 to 1,452 bytes
+  long, and sent 386 to 400 datagrams in 193 to 246 calls, 57 to 82 of them segmented.
+- What changes is what that traffic costs, in both processes. In the eight rounds with
+  thread statistics, a fast round's server ran about 950 timeslices per upload with about
+  820 involuntary context switches, a slow round's 1,300 to 1,550 with 1,150 to 1,400. The
+  client spent 4.3 ms of CPU per upload against 5.1 to 5.2 ms, and blocked 47 to 48 times
+  per upload against 85 to 90.
+
+### What does not set it
+
+- Socket loss: in 16 rounds the kernel counted no receive-buffer errors and no socket
+  drops, and the server's receive queue peaked at 770 KB of its 8 MB.
+- Thread-pool size: rounds of every band started with 12 to 24 thread-pool threads.
+- Hyperthreads: the guest pairs its CPUs as siblings (0-1, 2-3 and so on), so the server's
+  four CPUs are two cores. With the server on 0, 2, 4 and 6 and the client on 8, 10, 12
+  and 14, one CPU per core, four of eight rounds still ran at 243 to 246 and four at 429
+  to 444.
+- The GC's dynamic heap count: with `DOTNET_GCDynamicAdaptationMode=0` the three bands
+  remained, three rounds at 257 to 272, two at 354 to 363 and three at 444 to 479.
+- The receive loop: 97 to 98 percent of its reads completed synchronously in every band,
+  with 19 to 24 waits for the socket per upload.
+- Host clocks: Windows reported the busy processors at 114.5 to 114.8 percent of nominal
+  performance in every round.
+
+What sets the band is still open. It is shared by a round's connections, settles when they
+open and changes what the same datagrams cost in both processes. The client is .NET's
+`HttpClient` on MsQuic, whose congestion and pacing state these runs could not see.
+Windows showed no bands: in [Segmented UDP sends](#segmented-udp-sends) the change's
+uploads cost 6.0 to 6.4 ms of server CPU in every round kept there.
+
+### Datagrams the engine drops
+
+- A connection's owner queues at most 64 datagrams, or 256 KiB, for its next turn (see
+  [Scheduled connection ownership](#scheduled-connection-ownership)). The dispatcher
+  counts the rest as `rejected` and drops them, and the client resends their data. In
+  every upload round of every band it dropped 4.2 to 8.5 percent of the datagrams that
+  arrived, 33 to 71 per upload. At 52,000 to 90,000 datagrams a second per connection, 64
+  arrive within 0.7 to 1.2 ms, so a turn that waits that long for a CPU overflows the
+  queue.
+- A copy with room for 256 datagrams and 512 KiB per connection dropped none and received
+  about 40 fewer datagrams per upload, but was slower. Run alternately with the
+  64-datagram copy, four of its five rounds served 184 to 203 uploads a second at 13.8 to
+  14.9 ms of server CPU and the fifth 322 at 9.3 ms, against 262 to 437 at 7.7 to 11.4 ms.
+  The datagrams it no longer dropped waited in the queue instead, and in these runs the
+  drops were the cheaper outcome.
+- The Windows rounds were not instrumented to count these drops.
+
+### Left
+
+- What sets the band. Reading the client's congestion and pacing state in each round is
+  the next step.
+- A way to bound a connection's queued input other than dropping its newest datagrams.
 
 ## Received frame error codes
 
