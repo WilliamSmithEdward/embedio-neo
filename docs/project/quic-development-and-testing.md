@@ -4341,7 +4341,8 @@ handshake; neither touches the receive loop.
 ### Left
 
 - Batched UDP sends (`UDP_SEGMENT` on Linux, `UDP_SEND_MSG_SIZE` on Windows), as MsQuic
-  uses, for the per-datagram system call.
+  uses, for the per-datagram system call: added in
+  [Segmented UDP sends](#segmented-udp-sends).
 - Sending STREAM data from a stream's send buffer when the packet is built, rather than
   as frames held for retransmission, and pooling packet buffers: a 1 MiB response still
   allocates about 3 bytes per byte.
@@ -4400,3 +4401,175 @@ FINAL_SIZE_ERROR, which EmbedIO.Quic sends only for a stream it has already clos
   passed.
 - The NUnit HTTP/3, WebTransport and QUIC subset on Windows, 821 cases: 819 passed and 2
   were skipped for want of an aioquic peer.
+
+## Segmented UDP sends
+
+[#548](https://github.com/WilliamSmithEdward/embedio-neo/issues/548) asked for the
+batched sends left above, on Windows and Linux with the fallback tested, and for a
+comparison of the eight `h3-` scenarios against 2.18.0 that records the 1 MiB costs on
+both platforms with no regression in the small-request or churn scenarios. The HTTP/3
+listener now sends consecutive datagrams for one peer in one system call where its
+socket can segment them. This is unreleased.
+
+### Sends
+
+- After binding, the listener asks its socket whether it can segment sends:
+  `UDP_SEND_MSG_SIZE` on Windows, from Windows 10 version 2004, and `UDP_SEGMENT` on
+  Linux, from kernel 4.18, each read with `Socket.GetRawSocketOption`. A socket that can
+  is made non-blocking. macOS has neither option, and its sends are unchanged.
+- The send loop gathers consecutive datagrams for one peer into a run, each the length
+  of the first except the last, which may be shorter and ends the run. A run holds at
+  most 64 datagrams, the most Linux sends in one call, and 65,000 bytes, below the
+  65,507 bytes one IPv4 UDP send can carry. The dispatcher hands out one datagram at a
+  time and counts it against its output limits until the send loop is done with it, so
+  each datagram is copied into the run's pinned 65,000-byte buffer as it is taken and
+  released at once.
+- A run leaves when it is full, when the next datagram cannot join it, and when nothing
+  more is queued, so no datagram waits for a later one. A run of two or more leaves in
+  one `WSASendMsg` carrying a `UDP_SEND_MSG_SIZE` control message, or one `sendmsg`
+  carrying `UDP_SEGMENT`, with the segment length; the operating system, or the network
+  adapter where it offloads the work, divides it into the datagrams. A run of one leaves
+  through `SendToAsync`, as every datagram did before. Only consecutive datagrams for one
+  peer gather, so output that alternates between connections leaves one datagram per
+  call.
+- A segmented send that fails loses nothing: its datagrams then leave one at a time
+  through `SendToAsync`. That covers a full send buffer (`WSAEWOULDBLOCK`, `EAGAIN`), no
+  buffer space, a message-size or argument error, and a datagram path error pending from
+  an earlier send, which is counted once, as for a single datagram. A socket that
+  answers that it cannot segment at all (`EOPNOTSUPP`, `ENOPROTOOPT`, or `EIO`, which
+  Linux returns when the outgoing path cannot segment) is not asked again.
+- The binding's diagnostics, which the development host reports, count the segmented
+  sends, the datagrams they carried and the fallbacks.
+
+### Validation
+
+- `SegmentedUdpSendTest`, 17 cases: one segmented send from an IPv4 socket, an IPv6
+  socket, and a dual-mode socket sending to an IPv4 peer at its mapped address reaches
+  a plain receiver as separate datagrams with the sent bytes; a run takes and refuses
+  datagrams by peer, length and both limits; and the 13 Linux errno values the listener
+  acts on map to their `SocketError`.
+- `Http3ListenerTest`, 4 cases on the actual listener with an HTTP/3 client: two 1 MiB
+  responses arrive intact through segmented sends with no fallback; with segmentation
+  removed, responses arrive with no segmented send; when the first five segmented sends
+  fail with `WouldBlock`, `NoBufferSpaceAvailable`, `MessageSize`, `InvalidArgument`
+  and `ConnectionReset`, the responses arrive intact, five fallbacks and one path error
+  are counted, and later sends segment; and a socket that answers
+  `OperationNotSupported` is asked once.
+- All 21 passed on Windows 11 build 26300 and in an Ubuntu 24.04 container (glibc 2.39,
+  WSL 2 kernel 6.18), segmenting on both. The 17 socket and run cases passed on Alpine
+  3.24.2 with musl 1.2.6, where `LibraryImport("libc")` resolves to musl's own library;
+  the listener cases were not run there.
+- The full Windows suite, 7,536 cases: 7,531 passed, 4 skipped for the platform and 1
+  failed. `ListenerBoundaryRegressionTest.AcceptBurstsAndResetsAllowShutdownAndRestart(True,True)`
+  could not open an HTTP/1.1 client connection (`NoBufferSpaceAvailable`, WSAENOBUFS),
+  as in the run recorded for #549 in
+  [response header allocation](response-field-allocation.md); its class's 62 cases then
+  passed three runs in a row. After the formatter pass, of the 212 HTTP/3 listener and
+  segmented send cases 211 passed and 1 was skipped for the platform, and the
+  development host's `self-test` passed.
+
+### Measurement
+
+The ordinary `run` mode on the change as measured, `3827f30b` on main `92a4dfe9` and
+before the formatter pass, against 2.18.0 (`168d4752`): the eight `h3-` scenarios in
+four runs of two scenarios each, three rounds per run with engine order alternating,
+in both role orders, 5 s warmup and 15 s measurement. The machine and CPU sets are
+those of [Method](#method): on Windows the server on CPUs 0-3 and the client on 4-11;
+on Linux, the Docker container's eight CPUs under WSL 2, server on 0-3 and client on
+4-7. Linux ran the same managed runners as Windows, 2.18.0 with its own TLS library
+(private ABI 3) and the change and main with main's (ABI 4), which this change does not
+touch. Medians of the six rounds per build, less those with more than 7 busy CPUs
+outside the server and client: 14 of 96 on Windows and 7 of 96 on Linux, counted on
+Linux from the Windows host as before. One more Windows round failed (see below).
+
+Windows, server on CPUs 0-3:
+
+| Scenario | Server | req/s | server CPU per request | allocated per request | p50 | p95 | p99 | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| h3 small c64x1 | 2.18.0 | 108,090 | 34 us | 14 KB | 0.53 | 0.91 | 1.20 | 9.0 |
+| | change | 108,552 | 34 us | 12 KB | 0.54 | 0.92 | 1.15 | 6.1 |
+| h3 small c8x32 | 2.18.0 | 263,538 | 14 us | 12 KB | 0.88 | 1.66 | 2.27 | 11.2 |
+| | change | 286,825 | 13 us | 10 KB | 0.81 | 1.51 | 2.05 | 11.8 |
+| h3 inspect c64x1 | 2.18.0 | 96,637 | 36 us | 18 KB | 0.55 | 1.08 | 1.63 | 7.0 |
+| | change | 101,012 | 36 us | 16 KB | 0.56 | 0.99 | 1.28 | 6.9 |
+| h3 inspect c8x32 | 2.18.0 | 210,696 | 18 us | 17 KB | 1.06 | 2.12 | 2.97 | 13.0 |
+| | change | 225,467 | 17 us | 15 KB | 1.00 | 1.97 | 3.06 | 13.4 |
+| h3 large1m c4x4 | 2.18.0 | 151 | 20.7 ms | 3.05 MB | 103 | 129 | 143 | 159 |
+| | change | 222 | 15.2 ms | 3.04 MB | 71.3 | 90.1 | 99.9 | 123 |
+| h3 stream1m c4x4 | 2.18.0 | 157 | 21.9 ms | 3.21 MB | 102 | 118 | 128 | 145 |
+| | change | 219 | 15.4 ms | 3.19 MB | 72.9 | 86.0 | 93.4 | 116 |
+| h3 upload1m c4x4 | 2.18.0 | 421 | 7.9 ms | 885 KB | 38.1 | 40.6 | 45.9 | 49.6 |
+| | change | 534 | 6.2 ms | 753 KB | 29.7 | 33.8 | 39.9 | 51.4 |
+| h3 churn c16 | 2.18.0 | 1,818 | 0.84 ms | 186 KB | 7.58 | 17.4 | 22.7 | 29.1 |
+| | change | 2,024 | 0.85 ms | 184 KB | 6.91 | 15.4 | 20.0 | 27.2 |
+
+Linux, server on CPUs 0-3 of the container's eight:
+
+| Scenario | Server | req/s | server CPU per request | allocated per request | p50 | p95 | p99 | p99.9 ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| h3 small c64x1 | 2.18.0 | 63,653 | 41 us | 13 KB | 0.84 | 2.23 | 3.61 | 6.2 |
+| | change | 62,153 | 41 us | 11 KB | 0.85 | 2.32 | 3.79 | 6.3 |
+| h3 small c8x32 | 2.18.0 | 155,253 | 19 us | 12 KB | 1.32 | 3.76 | 5.71 | 8.3 |
+| | change | 160,378 | 18 us | 10 KB | 1.27 | 3.84 | 5.53 | 8.2 |
+| h3 inspect c64x1 | 2.18.0 | 63,590 | 43 us | 18 KB | 0.87 | 2.16 | 3.40 | 6.2 |
+| | change | 64,503 | 42 us | 16 KB | 0.86 | 2.12 | 3.43 | 5.8 |
+| h3 inspect c8x32 | 2.18.0 | 143,439 | 21 us | 17 KB | 1.48 | 4.10 | 5.71 | 8.2 |
+| | change | 149,041 | 20 us | 15 KB | 1.40 | 3.97 | 5.63 | 8.0 |
+| h3 large1m c4x4 | 2.18.0 | 80 | 40.9 ms | 3.03 MB | 197 | 256 | 285 | 321 |
+| | change | 176 | 18.7 ms | 3.05 MB | 90.5 | 121 | 136 | 152 |
+| h3 stream1m c4x4 | 2.18.0 | 88 | 37.7 ms | 3.19 MB | 180 | 226 | 254 | 282 |
+| | change | 190 | 17.4 ms | 3.16 MB | 83.6 | 106 | 120 | 134 |
+| h3 upload1m c4x4 | 2.18.0 | 212 | 15.3 ms | 791 KB | 72.1 | 106 | 127 | 152 |
+| | change | 403 | 8.2 ms | 781 KB | 38.1 | 63.9 | 80.3 | 94.2 |
+| h3 churn c16 | 2.18.0 | 1,835 | 1.03 ms | 100 KB | 8.50 | 14.1 | 17.0 | 20.7 |
+| | change | 1,836 | 1.01 ms | 109 KB | 8.45 | 14.2 | 17.2 | 21.8 |
+
+The change also ran against main `92a4dfe9` the same way, without the inspect scenarios
+on Windows and without `inspect c8x32` on Linux, to separate it from main's own changes
+since 2.18.0.
+
+- 1 MiB responses: 1.40 to 1.48 times 2.18.0's throughput on Windows at 71 to 73 percent
+  of its server CPU per response, and 2.16 to 2.20 times on Linux at 46 percent. p99 fell
+  to 70 to 73 percent of 2.18.0's on Windows and to 47 to 48 percent on Linux. Main
+  without the change was within 6 percent of 2.18.0 on these, and against main the change
+  had 1.41 to 1.42 times the throughput at 71 to 72 percent of the CPU on Windows and
+  2.10 to 2.15 times at 46 to 47 percent on Linux. Allocation per response did not
+  change.
+- 1 MiB uploads on Windows: 1.27 times 2.18.0's throughput at 79 percent of its server
+  CPU and 85 percent of its allocation per upload, and against main 1.29 times at 81
+  and 82 percent. The allocation drop was not traced.
+- 1 MiB uploads on Linux ran in two modes with the change. Of its nine kept rounds
+  across both comparisons, four served 346 to 408 uploads per second at 8.0 to 9.0 ms of
+  server CPU each and five served 213 to 246 at 11.3 to 13.3 ms. 2.18.0 and main served
+  189 to 248 at 13.5 to 16.5 ms in all twelve of theirs. The table's median falls in the
+  faster mode, and against main, with three slower rounds of four, it is 1.06 times the
+  throughput at 79 percent of the CPU. What sets the mode was not investigated.
+- Small requests: against 2.18.0 the 32-stream scenarios had 1.03 to 1.09 times the
+  throughput at 92 to 95 percent of the server CPU on both platforms. The single-stream
+  scenarios were at most 2.4 percent below 2.18.0's throughput and 2.0 percent above its
+  server CPU, with p99 at most 5 percent above. Against main, measured on Linux, they
+  were at most 2.5 percent below its throughput and above its CPU, with p99 at most 7
+  percent above. The kept single-stream rounds of each build on Linux differed by 7 to
+  38 percent in throughput and 5 to 24 percent in server CPU, so these differences are
+  not resolved. The 11 to 17 percent less allocation per small request is main's, from
+  #549.
+- Connection churn: on Linux 1.00 times 2.18.0's connection rate at 0.98 times its server
+  CPU per connection, and 0.98 and 1.00 against main. Allocation per connection rose 9
+  percent against 2.18.0, from 100 to 109 KB, and main allocated the same 109 KB, so the
+  rise came with main's changes since 2.18.0. On Windows only three rounds of 2.18.0 and
+  two of the change stayed under the 7-CPU limit, since Schannel's handshakes run in
+  LSASS, outside the server and client (see
+  [Role-alternated comparison](#role-alternated-comparison)): 1.11 times 2.18.0's rate
+  at 1.01 times its CPU per connection. Against main, with four and three rounds kept,
+  0.99 times the rate at 1.00 times the CPU.
+- One Windows churn round of the change failed: the client's QUIC connection setup
+  returned WSAENOBUFS (0x80072747). The client is .NET's `HttpClient` on MsQuic in its own
+  process, and main's clients have met the same error under load on this machine (see
+  [Overload runs](#overload-runs)). No Linux round failed.
+
+### Left
+
+- macOS still sends one datagram per system call.
+- Receiving still reads one datagram per call; neither `UDP_GRO` on Linux nor
+  `UDP_RECV_MAX_COALESCED_SIZE` on Windows is used.
+- What sets the Linux upload mode.

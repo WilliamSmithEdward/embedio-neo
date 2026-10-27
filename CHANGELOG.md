@@ -29,6 +29,15 @@
   request (#549). Reading or writing `Headers`, or a helper that sets other fields,
   builds the collection as before. See
   [response header allocation](docs/project/response-field-allocation.md).
+- On Windows 10 version 2004 and later and on Linux 4.18 and later, the HTTP/3
+  listener sends consecutive datagrams for one client in one system call, which the
+  operating system or the network adapter divides (`UDP_SEND_MSG_SIZE`,
+  `UDP_SEGMENT`). Against 2.18.0 a 1 MiB response costs 27 to 29 percent less server
+  CPU on Windows and 54 percent less on Linux, at 1.4 to 1.5 and 2.2 times the
+  throughput, and a 1 MiB upload 21 percent less on Windows (#548). Small requests and
+  connection churn showed no regression beyond the rounds' spread. Where the socket
+  cannot segment, and on macOS, each datagram is still one call. See
+  [segmented UDP sends](docs/project/quic-development-and-testing.md#segmented-udp-sends).
 
 ### Fixed
 

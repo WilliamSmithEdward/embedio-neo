@@ -671,7 +671,8 @@ namespace EmbedIO.Quic
 
         // Takes the next datagram to send, skipping output of retired connections and
         // paths. It counts against the output limits until FinishOutput, which the socket
-        // owner calls once the send has completed or failed.
+        // owner calls once the send has completed or failed, or once it has copied the
+        // datagram to send later.
         internal bool TryTakeOutput([NotNullWhen(true)] out IPEndPoint? peer, [NotNullWhen(true)] out byte[]? bytes)
         {
             while (true)
