@@ -4347,3 +4347,56 @@ handshake; neither touches the receive loop.
   allocates about 3 bytes per byte.
 - Fewer thread-pool hops per request, and ticks only for connections with a timer due:
   every connection is woken every 2 ms.
+
+## Draft revisions
+
+[#551](https://github.com/WilliamSmithEdward/embedio-neo/issues/551) follows the drafts
+under WebTransport over HTTP/3 until they are published as RFCs. The IETF datatracker
+on 2026-10-27:
+
+| Draft | Latest revision | Dated | What EmbedIO speaks |
+| --- | --- | --- | --- |
+| draft-ietf-webtrans-http3 | 16 | 6 July 2026 | 16, and 14 and 02 for browsers |
+| draft-ietf-webtrans-overview | 13 | 6 July 2026 | Defines no wire format |
+| draft-ietf-quic-reliable-stream-reset | 11 | 6 September 2026 | `reset_stream_at` as `0x1d` and as revision 07's `0x17f7586d2cb571`, frame `0x24` |
+
+Revision 11 of draft-ietf-quic-reliable-stream-reset keeps revision 10's codepoints: the
+`reset_stream_at` transport parameter `0x1d` and the `RESET_STREAM_AT` frame `0x24`. Apart
+from wording it changes three rules:
+
+- A sender must not send `RESET_STREAM_AT` unless the peer offered `reset_stream_at`.
+  EmbedIO.Quic sends `RESET_STREAM` otherwise.
+- A receiver ignores an increase in the Reliable Size and keeps the smallest it received.
+  Revisions 07 to 10 said to ignore any frame that increases it, with the same outcome.
+- An endpoint that answers STOP_SENDING with `RESET_STREAM_AT` should set the Reliable
+  Size to zero. EmbedIO.Quic answers through the same reset as any other, whose Reliable
+  Size is the stream's reliable prefix: zero, except on a WebTransport data stream, where
+  it is the stream header. draft-ietf-webtrans-http3-16 requires a Reliable Size of at
+  least the header whenever a WebTransport data stream is reset.
+
+Checking the receiving side against section 5.2, the same in every revision from 07 to
+11, found two departures, both now fixed:
+
+- A `RESET_STREAM_AT` with a larger Reliable Size than an earlier reset of the stream
+  closed the connection with PROTOCOL_VIOLATION ("Reliable size increased after reset").
+  Such a frame is an earlier one arriving late, or retransmitted after the sender lowered
+  the size, and the draft says to ignore the increase. The smallest size now stands.
+- A later reset that changed the stream's Application Error Code was accepted, and the
+  first code kept. Where reliable reset was negotiated it now closes the connection with
+  STREAM_STATE_ERROR, as the draft requires. Without the extension RFC 9000 sets no such
+  rule, and nothing changes.
+
+A reset that changes a stream's final size still closes the connection with
+PROTOCOL_VIOLATION while the stream is open. The draft and RFC 9000 section 4.5 name
+FINAL_SIZE_ERROR, which EmbedIO.Quic sends only for a stream it has already closed.
+
+### Validation
+
+- `StreamDiscardTests` in `self-test` adds a late larger Reliable Size, before and after
+  a `RESET_STREAM` that lowers it to zero, and a changed error code in `RESET_STREAM_AT`
+  and in `RESET_STREAM`. On the unchanged engine the Reliable Size cases stopped at
+  "Reliable size increased after reset", and the error-code cases, run first, failed with
+  "Stream discard regression: RESET_STREAM_AT error code". With the change `self-test`
+  passed.
+- The NUnit HTTP/3, WebTransport and QUIC subset on Windows, 821 cases: 819 passed and 2
+  were skipped for want of an aioquic peer.
