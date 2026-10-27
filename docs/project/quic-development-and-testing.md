@@ -488,8 +488,8 @@ source changes; a new handshake invokes the selector again.
 
 Malformed transport parameters use QUIC error `0x08`; closure protection follows
 authenticated handshake progress. The server's first-flight parameter rejection is
-readable under Initial protection. The UDP payload-size parameter is bounded to the
-protocol's 1200-65527 range.
+readable under Initial protection. The UDP payload-size parameter must be at least 1200,
+the only bound RFC 9000 sets (see [Received frame error codes](#received-frame-error-codes)).
 Native imports resolve through the Windows system directory. Independent-peer
 receipts record provider identity and hashes of the corresponding system modules.
 
@@ -4747,3 +4747,87 @@ uploads cost 6.0 to 6.4 ms of server CPU in every round kept there.
 - What sets the band. Reading the client's congestion and pacing state in each round is
   the next step.
 - A way to bound a connection's queued input other than dropping its newest datagrams.
+
+## Received frame error codes
+
+[Draft revisions](#draft-revisions) brought the stream rules of RFC 9000 and
+draft-ietf-quic-reliable-stream-reset into line under
+[#551](https://github.com/WilliamSmithEdward/embedio-neo/issues/551). This change does
+the same for the rest of the frame loop, `QuicConnection.Frames`: each refusal there was
+compared with the code RFC 9000 names for it, and with RFC 9221 for DATAGRAM frames. This
+is unreleased.
+
+### What changed
+
+| Input from the client | Rule | Before | Now |
+| --- | --- | --- | --- |
+| A frame of unknown type, at any packet level | RFC 9000 12.4 | `PROTOCOL_VIOLATION` | `FRAME_ENCODING_ERROR` |
+| A frame cut short, or a length past its packet | RFC 9000 12.4, 20.1 | `PROTOCOL_VIOLATION` | `FRAME_ENCODING_ERROR` |
+| `MAX_STREAMS` above 2^60 | RFC 9000 19.11 | `PROTOCOL_VIOLATION` | `FRAME_ENCODING_ERROR` |
+| `STREAMS_BLOCKED` above 2^60 | RFC 9000 19.14 | accepted | `FRAME_ENCODING_ERROR` |
+| `STREAM_DATA_BLOCKED` for a send-only or unopened local stream | RFC 9000 19.13 | accepted | `STREAM_STATE_ERROR` |
+| `STREAM_DATA_BLOCKED` past the stream limit | RFC 9000 4.6 | accepted | `STREAM_LIMIT_ERROR` |
+| CRYPTO data past the 64 KiB buffer, or past 2^62-1 | RFC 9000 7.5, 19.6 | `PROTOCOL_VIOLATION` | `CRYPTO_BUFFER_EXCEEDED` |
+| A packet with no frames | RFC 9000 12.4 | accepted | `PROTOCOL_VIOLATION` |
+| A DATAGRAM frame of at most 1,200 bytes with more than 1,100 bytes of payload | RFC 9221 3 | `PROTOCOL_VIOLATION` | accepted |
+| `max_udp_payload_size` above 65,527 | RFC 9000 18.2 | `TRANSPORT_PARAMETER_ERROR` | accepted |
+
+- A `STOP_SENDING` for a stream past the client's limit closed the connection with
+  `STREAM_LIMIT_ERROR` before and after, but the application heard of the stream first.
+  The limit is now checked before it does.
+- Unchanged, and now covered by a test: `NEW_TOKEN` and `HANDSHAKE_DONE` from a client
+  close with `PROTOCOL_VIOLATION` (RFC 9000 sections 19.7 and 19.20), as do a frame that
+  Initial packets cannot carry (12.4) and a DATAGRAM frame above 1,200 bytes (RFC 9221).
+
+### Change
+
+- The frame loop reads its packet with a `WireReader` given `FRAME_ENCODING_ERROR`, so a
+  field cut short or a length past its limit raises that code. Other readers, such as the
+  one for transport parameters, still throw `InvalidDataException`, which their callers
+  turn into their own codes. The connection-ID and path frames had each caught that
+  exception to raise `FRAME_ENCODING_ERROR`, and no longer need to.
+- A frame type other than RFC 9000's 0x00 to 0x1e, `RESET_STREAM_AT` (0x24) and DATAGRAM
+  (0x30 and 0x31) is refused before the check for frames that Initial and Handshake
+  packets cannot carry.
+- CRYPTO reassembly raises `CRYPTO_BUFFER_EXCEEDED` for data past its 64 KiB bound, which
+  counts from offset 0 and so also covers data past 2^62-1.
+- `STREAM_DATA_BLOCKED` checks its stream the way a STREAM frame does but opens nothing;
+  the stream still opens with its first data.
+- A DATAGRAM frame is measured, with its type and length fields, against the 1,200 bytes
+  the server advertises. The stream owner's own 1,100-byte check on received payloads is
+  gone. Frames the server sends stay within 1,100 bytes.
+
+### Validation
+
+- `ConnectionCoreTests` in `self-test` sends 33 cases to an established connection, each
+  in one 1-RTT packet, and reads the CONNECTION_CLOSE code, or checks that the connection
+  stays active and what reached the application. On the unchanged engine (`5327364d`), 25
+  gave another outcome: the unknown types, the truncated frames, both `MAX_STREAMS` cases
+  and both CRYPTO cases closed with `PROTOCOL_VIOLATION`; the empty packet, both
+  `STREAMS_BLOCKED` cases and the three `STREAM_DATA_BLOCKED` refusals were accepted; the
+  three DATAGRAM frames with 1,150 to 1,199 bytes of payload closed the connection; and
+  the `STOP_SENDING` past the limit reached the application before the connection closed.
+  All 33 pass with the change.
+- Two Initial-level cases: an unknown frame type closed with `PROTOCOL_VIOLATION` on the
+  unchanged engine and closes with `FRAME_ENCODING_ERROR` now; `MAX_DATA`, which Initial
+  packets cannot carry, closes with `PROTOCOL_VIOLATION` in both.
+- `max_udp_payload_size`: 1,199 is refused and 1,200 and 65,527 are accepted by both;
+  65,535 and 2^62-1 were refused and are accepted.
+- The native fuzz case that used a `max_udp_payload_size` of 65,528 as an invalid
+  parameter now uses an `ack_delay_exponent` of 21, which RFC 9000 section 18.2 rules out.
+- The rest of `self-test` passes. `run-quic-development.py --rounds 3 --coverage-seconds 0`
+  passed all 15 runs for seeds 1729, 106458 and 211187. The native Schannel fuzz passed
+  2,000 cases for each of the RSA and ECDSA profiles at seed 1729, and the aioquic 1.6.1
+  peers for connection IDs, stateless reset, local connection IDs, path controls and path
+  validation passed.
+- The NUnit HTTP/3, QUIC and WebTransport subset on Windows, 825 cases: 822 passed and 2
+  were skipped, one for want of an aioquic peer and one that runs only on Linux.
+  `CombinedListenerDispatchesEveryProtocol(96)` failed when HttpClient's TCP connect to
+  localhost returned WSAENOBUFS; it passed three times alone. With the aioquic peer
+  configured, the skipped datagram test passed, echoing its seven sizes up to 1,000 bytes.
+
+### Left
+
+- RFC 9000 section 12.4 allows, but does not require, refusing a frame type encoded in
+  more bytes than it needs. EmbedIO.Quic reads such a type as the type it encodes.
+- The error codes RFC 9001 sets for the TLS handshake were not part of this check.

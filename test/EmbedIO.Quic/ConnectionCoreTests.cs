@@ -25,6 +25,9 @@ namespace EmbedIO.Quic
             AuthenticationLimits();
             ReliableResetParameters();
             StreamErrorCodes();
+            FrameErrorCodes();
+            InitialFrameErrorCodes();
+            UdpPayloadParameter();
 
             foreach (var input in new byte[][]
             {
@@ -433,6 +436,182 @@ namespace EmbedIO.Quic
                 var close = new WireReader(applicationKeys.Unprotect(output[0], 1 + Client.Length, 0, out _));
                 Require(close.Integer() == 0x1c && close.Integer() == expected, "stream-error-code-" + name);
             }
+        }
+
+        // A frame the server cannot accept closes the connection with the code RFC 9000 names
+        // for it: FRAME_ENCODING_ERROR for an unknown or badly formatted frame (sections 12.4
+        // and 19), PROTOCOL_VIOLATION for a frame a server must not receive and for a packet with
+        // no frames (12.4), CRYPTO_BUFFER_EXCEEDED past the CRYPTO buffer (7.5 and 19.6), and
+        // STREAM_STATE_ERROR or STREAM_LIMIT_ERROR for a stream a frame cannot name (4.6 and
+        // 19.13). DATAGRAM frames up to the 1,200 bytes the server advertises are accepted and
+        // larger ones refused (RFC 9221, section 3). Every case runs before any is checked.
+        private static void FrameErrorCodes()
+        {
+            var failures = new List<string>();
+
+            foreach (var (name, payload, expected) in new (string, byte[], string)[]
+            {
+                ("unknown-type", Wire.Frame(0x21), "0x7"),
+                ("unknown-type-after-ping", Wire.Frame(0x01, 0x1f), "0x7"),
+                ("unknown-extension-type", Wire.Frame(0xaf, 0, 0, 0, 0), "0x7"),
+                ("new-token", Wire.Frame(0x07, 1, 5), "0xa"),
+                ("handshake-done", Wire.Frame(0x1e), "0xa"),
+                ("empty-packet", [], "0xa"),
+                ("padding-only", [0, 0, 0], "active"),
+                ("truncated-type", [0x40], "0x7"),
+                ("truncated-stream", [0x0a, 0, 5, 0x61, 0x62], "0x7"),
+                ("truncated-reset-stream", Wire.Frame(0x04, 0, 1), "0x7"),
+                ("truncated-stop-sending", Wire.Frame(0x05, 0), "0x7"),
+                ("truncated-max-data", Wire.Frame(0x10), "0x7"),
+                ("truncated-crypto", [0x06, 0, 5, 1], "0x7"),
+                ("truncated-connection-close", Wire.Frame(0x1c, 0), "0x7"),
+                ("truncated-datagram", [0x31, 5, 1], "0x7"),
+                ("max-streams-at-limit", Wire.Frame(0x12, 1UL << 60), "active"),
+                ("max-streams-above-limit", Wire.Frame(0x12, (1UL << 60) + 1), "0x7"),
+                ("max-uni-streams-above-limit", Wire.Frame(0x13, (1UL << 60) + 1), "0x7"),
+                ("streams-blocked-at-limit", Wire.Frame(0x16, 1UL << 60), "active"),
+                ("streams-blocked-above-limit", Wire.Frame(0x16, (1UL << 60) + 1), "0x7"),
+                ("uni-streams-blocked-above-limit", Wire.Frame(0x17, (1UL << 60) + 1), "0x7"),
+                ("stream-data-blocked-open", Wire.Frame(0x15, 0, 0), "active"),
+                ("stream-data-blocked-send-only", Wire.Frame(0x15, 3, 0), "0x5"),
+                ("stream-data-blocked-unopened-local", Wire.Frame(0x15, 1, 0), "0x5"),
+                ("stream-data-blocked-past-limit", Wire.Frame(0x15, 4 * 4096, 0), "0x4"),
+                ("stop-sending-past-limit", Wire.Frame(0x05, 4 * 4096, 0), "0x4"),
+                (
+                    "crypto-past-buffer",
+                    [
+                        .. Wire.Frame(0x06, 65535, 2),
+                        1,
+                        2
+                    ],
+                    "0xd"
+                ),
+                (
+                    "crypto-past-largest-offset",
+                    [
+                        .. Wire.Frame(0x06, (1UL << 62) - 1, 1),
+                        1
+                    ],
+                    "0xd"
+                ),
+                ("datagram-within-limit", Datagram(0x31, 1150), "active datagram-1150"),
+                ("datagram-at-limit", Datagram(0x31, 1197), "active datagram-1197"),
+                ("datagram-past-limit", Datagram(0x31, 1198), "0xa"),
+                ("datagram-to-end-at-limit", Datagram(0x30, 1199), "active datagram-1199"),
+                ("datagram-to-end-past-limit", Datagram(0x30, 1200), "0xa")
+            })
+            {
+                var outcome = FrameOutcome(payload);
+
+                if (outcome != expected) failures.Add(name + " gave " + outcome);
+            }
+
+            Require(failures.Count == 0, "frame-error-codes: " + string.Join("; ", failures));
+        }
+
+        private static byte[] Datagram(byte type, int length)
+        {
+            using var frame = new MemoryStream();
+            Wire.Integer(frame, type);
+
+            if (type == 0x31) Wire.Integer(frame, (ulong)length);
+
+            frame.Write(new byte[length]);
+            return frame.ToArray();
+        }
+
+        // Sends one 1-RTT packet to an established connection. The outcome is "active" or the
+        // CONNECTION_CLOSE error code the connection answered with, followed by any calls that
+        // reached the application.
+        private static string FrameOutcome(byte[] payload)
+        {
+            using var keys = PacketKeys.Initial(Original, false);
+            var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
+            var application = new RecordingApplication();
+            using var connection = new QuicConnection(first, _ => new ModelTls(true), (_, _) => application);
+            connection.Receive(first, 0);
+            var output = connection.Receive(ApplicationPacket(connection.ServerId, payload), 1);
+            var calls = application.Calls.Count == 0 ? "" : " " + string.Join(",", application.Calls);
+
+            if (connection.Phase == ConnectionPhase.Active) return "active" + calls;
+
+            if (connection.Phase != ConnectionPhase.Closing || output.Count != 1) return connection.Phase + calls;
+
+            using var applicationKeys = new PacketKeys(new byte[32]);
+            var close = new WireReader(applicationKeys.Unprotect(output[0], 1 + Client.Length, 0, out _));
+
+            return close.Integer() == 0x1c ? "0x" + close.Integer().ToString("x") + calls : "no-close" + calls;
+        }
+
+        // An unknown frame type is a FRAME_ENCODING_ERROR in an Initial packet too, while a known
+        // frame that Initial packets cannot carry stays a PROTOCOL_VIOLATION (section 12.4).
+        private static void InitialFrameErrorCodes()
+        {
+            foreach (var (name, payload, expected) in new (string, byte[], ulong)[]
+            {
+                ("initial-unknown-type", Wire.Frame(0x21), 0x07),
+                ("initial-max-data", Wire.Frame(0x10, 1), 0x0a)
+            })
+            {
+                using var keys = PacketKeys.Initial(Original, false);
+                var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
+                using var connection = new QuicConnection(
+                    first,
+                    _ => new ModelTls(false),
+                    static (port, _) => new AsyncStreamApplication(port)
+                );
+                connection.Receive(first, 0);
+                var replies = connection.Receive(NativeFuzz.Initial(keys, Original, Client, 1, payload), 1);
+                Require(connection.Phase == ConnectionPhase.Closing && replies.Count == 1, "closes-" + name);
+                var close = new WireReader(NativeFuzz.UnprotectInitial(replies[0], Original));
+                Require(close.Integer() == 0x1c && close.Integer() == expected, "code-" + name);
+            }
+        }
+
+        // max_udp_payload_size values below 1,200 are invalid; RFC 9000 section 18.2 sets no upper
+        // bound, so a value above the largest UDP payload is accepted.
+        private static void UdpPayloadParameter()
+        {
+            foreach (var (value, accepted) in new (ulong, bool)[]
+            {
+                (1199, false),
+                (1200, true),
+                (65527, true),
+                (65535, true),
+                ((1UL << 62) - 1, true)
+            })
+            {
+                using var parameters = new MemoryStream();
+                Wire.Parameter(parameters, 3, value);
+                var (connection, _) = Connect(parameters.ToArray(), null);
+
+                using (connection)
+                    Require(
+                        (connection.Phase == ConnectionPhase.Active) == accepted,
+                        "udp-payload-parameter-" + value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    );
+            }
+        }
+
+        private sealed class RecordingApplication : StreamApplication
+        {
+            internal List<string> Calls { get; } = [];
+
+            internal override void Open(ulong id) => Calls.Add("open-" + id);
+
+            internal override void Stream(ulong id, byte[] bytes, bool fin) => Calls.Add("stream-" + id);
+
+            internal override void Reset(ulong id, ulong error, ulong reliableSize) => Calls.Add("reset-" + id);
+
+            internal override void Stop(ulong id, ulong error) => Calls.Add("stop-" + id);
+
+            internal override void ReceiveDatagram(byte[] bytes) => Calls.Add("datagram-" + bytes.Length);
+
+            internal override bool CanRetire(ulong id) => true;
+
+            internal override void Retire(ulong id) { }
+
+            public override void Dispose() { }
         }
 
         private static void ConfiguredStreamLimit()

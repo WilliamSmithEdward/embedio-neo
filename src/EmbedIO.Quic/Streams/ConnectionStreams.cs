@@ -155,7 +155,23 @@ namespace EmbedIO.Quic
         private Incoming? GetIncoming(ulong id)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            var window = IncomingWindow(id);
 
+            if (!window.Open(id / 4)) return null;
+
+            if (!_incoming.TryGetValue(id, out var input))
+            {
+                _incoming.Add(id, input = new Incoming());
+                Protocol.Open(id);
+            }
+
+            return input;
+        }
+
+        // The window of a stream the peer sends on. A send-only or unopened local stream is a
+        // STREAM_STATE_ERROR (RFC 9000 sections 19.8 and 19.13).
+        private StreamCountWindow IncomingWindow(ulong id)
+        {
             if ((id & 3) == 3 || (id & 3) == 1 && id / 4 >= _localBidi.Opened)
                 throw new TransportException(0x05, "Data on a send-only or unopened local stream.");
 
@@ -170,15 +186,23 @@ namespace EmbedIO.Quic
             )
                 throw new TransportException(0x04, "Incoming stream count exceeded.");
 
-            if (!window.Open(id / 4)) return null;
+            return window;
+        }
 
-            if (!_incoming.TryGetValue(id, out var input))
-            {
-                _incoming.Add(id, input = new Incoming());
-                Protocol.Open(id);
-            }
+        // Refuses a frame that names, but does not open, a stream the peer cannot send on or one
+        // past its stream limit, as a STREAM frame naming it would be (RFC 9000 section 4.6).
+        private void ValidateIncomingReference(ulong id)
+        {
+            if (id / 4 >= IncomingWindow(id).Maximum)
+                throw new TransportException(0x04, "Incoming stream count exceeded.");
+        }
 
-            return input;
+        // STREAM_DATA_BLOCKED only reports the peer's view of its credit, so it opens nothing
+        // (RFC 9000 section 19.13).
+        internal void DataBlocked(ulong id)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ValidateIncomingReference(id);
         }
 
         private void Account(Incoming input, ulong extent)
@@ -366,7 +390,8 @@ namespace EmbedIO.Quic
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if (value > 1UL << 60) throw new InvalidDataException("Invalid stream count.");
+            // RFC 9000 section 19.11: a count above 2^60 cannot be encoded as a stream ID.
+            if (value > StreamCountWindow.MaximumCount) throw new TransportException(0x07, "Stream count above 2^60.");
 
             if (uni) _maxUni = Math.Max(_maxUni, value);
 
@@ -616,6 +641,10 @@ namespace EmbedIO.Quic
             if (IsRetired(id)) return;
 
             if (_outgoing.TryGetValue(id, out var output) && output.FinalDelivery?.Acknowledged == true) return;
+
+            // The reset below opens a peer's stream; one past the peer's limit is refused before
+            // the application hears of it.
+            if ((id & 3) == 0) ValidateIncomingReference(id);
 
             Protocol.Stop(id, error);
             ResetSend(id, (long)error);
@@ -869,12 +898,10 @@ namespace EmbedIO.Quic
             _transmit(frame, false);
         }
 
+        // The connection refuses a DATAGRAM frame above the size it advertised.
         internal void Datagram(byte[] bytes)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-
-            if (bytes.Length > 1100) throw new InvalidDataException("Datagram receive limit exceeded.");
-
             Protocol.ReceiveDatagram(bytes);
         }
 

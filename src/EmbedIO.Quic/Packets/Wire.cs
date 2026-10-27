@@ -4,10 +4,13 @@ using System.IO;
 
 namespace EmbedIO.Quic
 {
-    // RFC 9000 section 16. All cursor operations reject truncated peer input.
-    internal ref struct WireReader(ReadOnlySpan<byte> bytes)
+    // RFC 9000 section 16. All cursor operations reject truncated peer input, and a length above
+    // the caller's limit, with an InvalidDataException, or with a TransportException carrying the
+    // error code the reader was given: frames are read with FRAME_ENCODING_ERROR (section 20.1).
+    internal ref struct WireReader(ReadOnlySpan<byte> bytes, ulong? errorCode = null)
     {
         private ReadOnlySpan<byte> _remaining = bytes;
+        private readonly ulong? _errorCode = errorCode;
 
         internal readonly int Remaining => _remaining.Length;
 
@@ -15,7 +18,7 @@ namespace EmbedIO.Quic
 
         internal ReadOnlySpan<byte> Take(int count)
         {
-            if (count < 0 || count > _remaining.Length) throw new InvalidDataException("Truncated QUIC input.");
+            if (count < 0 || count > _remaining.Length) throw Malformed("Truncated QUIC input.");
 
             var result = _remaining[..count];
             _remaining = _remaining[count..];
@@ -37,10 +40,13 @@ namespace EmbedIO.Quic
         {
             var value = Integer();
 
-            if (value > (ulong)maximum) throw new InvalidDataException("QUIC length exceeds the configured limit.");
+            if (value > (ulong)maximum) throw Malformed("QUIC length exceeds the configured limit.");
 
             return (int)value;
         }
+
+        private readonly Exception Malformed(string message) =>
+            _errorCode is { } code ? new TransportException(code, message) : new InvalidDataException(message);
     }
 
     internal static class Wire
@@ -117,7 +123,9 @@ namespace EmbedIO.Quic
     // Fixed bounds limit CRYPTO reassembly independently of packet lifetime.
     // Retaining consumed bytes lets overlapping retransmissions be checked exactly.
     // Storage grows with the highest offset received, up to the bound: a handshake
-    // flight is a few kilobytes of a 64 KiB bound.
+    // flight is a few kilobytes of a 64 KiB bound. Data past the bound, including any
+    // past the largest offset a stream can carry, is CRYPTO_BUFFER_EXCEEDED (RFC 9000
+    // sections 7.5 and 19.6).
     internal sealed class Reassembly(int capacity)
     {
         private readonly int _capacity = capacity >= 0
@@ -135,7 +143,7 @@ namespace EmbedIO.Quic
         internal void Add(ulong offset, ReadOnlySpan<byte> bytes, bool final = false)
         {
             if (offset > (ulong)_capacity || (ulong)bytes.Length > (ulong)_capacity - offset)
-                throw new InvalidDataException("Reassembly budget exceeded.");
+                throw new TransportException(0x0d, "Reassembly budget exceeded.");
 
             var end = offset + (ulong)bytes.Length;
 

@@ -1142,6 +1142,10 @@ namespace EmbedIO.Quic
             );
         }
 
+        // Frame types RFC 9000 defines (0x00 to 0x1e), RESET_STREAM_AT (0x24) and DATAGRAM (0x30
+        // and 0x31). Any other type is a FRAME_ENCODING_ERROR in a packet of any level.
+        private static bool KnownFrameType(ulong type) => type <= 0x1e || type is 0x24 or 0x30 or 0x31;
+
         private bool Frames(
             int level,
             ReadOnlySpan<byte> plaintext,
@@ -1150,15 +1154,28 @@ namespace EmbedIO.Quic
             out bool nonProbing
         )
         {
+            // RFC 9000 section 12.4: a packet carries at least one frame. A frame that ends early or
+            // runs past its packet is badly formatted, a FRAME_ENCODING_ERROR (section 20.1).
+            if (plaintext.IsEmpty) throw new TransportException(0x0a, "Packet without frames.");
+
             nonProbing = false;
-            var reader = new WireReader(plaintext);
+            var reader = new WireReader(plaintext, 0x07);
             var acknowledge = false;
 
             while (reader.Remaining != 0)
             {
+                var start = reader.Remaining;
                 var type = reader.Integer();
 
                 if (type == 0) continue;
+
+                if (!KnownFrameType(type))
+                    throw new TransportException(
+                        0x07,
+                        "Unknown QUIC frame type "
+                            + type.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                            + "."
+                    );
 
                 if (type is not (0x1a or 0x1b or 0x18)) nonProbing = true;
 
@@ -1268,20 +1285,34 @@ namespace EmbedIO.Quic
 
                 else if (_streams != null && type is 0x30 or 0x31)
                 {
-                    var length = type == 0x31 ? reader.Length(1100) : reader.Remaining;
+                    var length = type == 0x31 ? reader.Integer() : (ulong)reader.Remaining;
+
+                    // RFC 9221 section 3: a frame larger than the max_datagram_frame_size the server
+                    // advertised, which counts the type and length fields, is a PROTOCOL_VIOLATION.
+                    if ((ulong)(start - reader.Remaining) + length > MaximumDatagramFrame)
+                        throw new TransportException(0x0a, "DATAGRAM frame above the advertised size.");
+
                     _streams.Datagram(
                         reader
-                            .Take(length)
+                            .Take((int)length)
                             .ToArray()
                     );
                 }
 
-                else if (type is 0x14 or 0x16 or 0x17) reader.Integer();
+                else if (type == 0x14) reader.Integer();
+
+                // RFC 9000 section 19.14: a stream count above 2^60 cannot be encoded as a stream ID.
+                else if (type is 0x16 or 0x17)
+                {
+                    if (reader.Integer() > StreamCountWindow.MaximumCount)
+                        throw new TransportException(0x07, "Stream count above 2^60.");
+                }
 
                 else if (type == 0x15)
                 {
+                    var id = reader.Integer();
                     reader.Integer();
-                    reader.Integer();
+                    _streams?.DataBlocked(id);
                 }
 
                 else if (type == 0x18)
@@ -1293,9 +1324,14 @@ namespace EmbedIO.Quic
 
                 else if (type is 0x1a or 0x1b) ReadPathControl(ref reader, type);
 
+                // NEW_TOKEN and HANDSHAKE_DONE, which a server must not receive (RFC 9000 sections
+                // 19.7 and 19.20).
                 else
-                    throw new InvalidDataException(
-                        "Unsupported QUIC frame: " + type.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    throw new TransportException(
+                        0x0a,
+                        "A client cannot send QUIC frame type "
+                            + type.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                            + "."
                     );
             }
 
@@ -1304,17 +1340,7 @@ namespace EmbedIO.Quic
 
         private void ReadPathControl(ref WireReader reader, ulong type)
         {
-            ReadOnlySpan<byte> data;
-
-            try
-            {
-                data = reader.Take(8);
-            }
-
-            catch (InvalidDataException error)
-            {
-                throw new TransportException(7, error.Message);
-            }
+            var data = reader.Take(8);
 
             if (type == 0x1b)
             {
@@ -1342,52 +1368,33 @@ namespace EmbedIO.Quic
 
         private void RetireLocalConnectionId(ref WireReader reader, ReadOnlySpan<byte> destination)
         {
-            ulong sequence;
-
-            try
-            {
-                sequence = reader.Integer();
-            }
-
-            catch (InvalidDataException error)
-            {
-                throw new TransportException(7, error.Message);
-            }
-
+            var sequence = reader.Integer();
             _localIds.Retire(sequence, destination);
         }
 
         private void ReadPeerConnectionId(ref WireReader reader)
         {
+            var sequence = reader.Integer();
+            var retirePrior = reader.Integer();
+            var size = reader.Byte();
+
+            if (size is 0 or > 20) throw new TransportException(7, "Invalid peer connection-ID length.");
+
+            var id = reader.Take(size);
+            var token = reader.Take(16);
+            _peerIds ??= new PeerConnectionIds(_clientId, RetirePeerConnectionId, SentBytes != 0);
+
             try
             {
-                var sequence = reader.Integer();
-                var retirePrior = reader.Integer();
-                var size = reader.Byte();
-
-                if (size is 0 or > 20) throw new TransportException(7, "Invalid peer connection-ID length.");
-
-                var id = reader.Take(size);
-                var token = reader.Take(16);
-                _peerIds ??= new PeerConnectionIds(_clientId, RetirePeerConnectionId, SentBytes != 0);
-
-                try
-                {
-                    _peerIds.Add(sequence, retirePrior, id, token);
-                    _retireUnusedPeerIds = true;
-                }
-
-                finally
-                {
-                    // A valid increased watermark also applies if a subsequent
-                    // retirement budget closes the connection. Never close on an old ID.
-                    if (!_peerIds.Current.SequenceEqual(_destinationId)) _destinationId = _peerIds.Current.ToArray();
-                }
+                _peerIds.Add(sequence, retirePrior, id, token);
+                _retireUnusedPeerIds = true;
             }
 
-            catch (InvalidDataException error)
+            finally
             {
-                throw new TransportException(7, error.Message);
+                // A valid increased watermark also applies if a subsequent
+                // retirement budget closes the connection. Never close on an old ID.
+                if (!_peerIds.Current.SequenceEqual(_destinationId)) _destinationId = _peerIds.Current.ToArray();
             }
         }
 
@@ -1419,7 +1426,7 @@ namespace EmbedIO.Quic
             Wire.Parameter(output, 14, 2);
             Wire.Parameter(output, 15, _serverId);
 
-            Wire.Parameter(output, 0x20, 1200);
+            Wire.Parameter(output, 0x20, MaximumDatagramFrame);
             Wire.Parameter(output, ReliableResetParameter, []);
             Wire.Parameter(output, LegacyReliableResetParameter, []);
 
@@ -1446,6 +1453,9 @@ namespace EmbedIO.Quic
         // The RESET_STREAM_AT frame is the same in both, so either enables it.
         private const ulong ReliableResetParameter = 0x1d;
         private const ulong LegacyReliableResetParameter = 0x17f7586d2cb571;
+
+        // The max_datagram_frame_size the server advertises (RFC 9221 section 3).
+        private const ulong MaximumDatagramFrame = 1200;
 
         private void ReadParameters()
         {
@@ -1485,8 +1495,9 @@ namespace EmbedIO.Quic
                     if (valueReader.Remaining != 0)
                         throw new InvalidDataException("Trailing transport parameter bytes.");
 
+                    // RFC 9000 section 18.2 sets no upper bound on max_udp_payload_size.
                     if (
-                        (id == 3 && (value < 1200 || value > 65527))
+                        (id == 3 && value < 1200)
                         || (id == 10 && value > 20)
                         || (id == 11 && value >= 16384)
                         || (id == 14 && value < 2)

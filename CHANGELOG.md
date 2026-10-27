@@ -69,6 +69,26 @@
   `RESET_STREAM_AT` from a client that did not offer `reset_stream_at` itself closed
   the connection too; the server offers the parameter on every connection, so the
   draft lets any client send the frame, and it is now accepted (#551).
+- EmbedIO.Quic closes a connection with the error code RFC 9000 names when a client
+  sends a frame the server cannot accept. An unknown frame type at any packet level, a
+  frame cut short or longer than its packet, and a stream count above 2^60 in
+  `MAX_STREAMS` close it with `FRAME_ENCODING_ERROR`; each closed it with
+  `PROTOCOL_VIOLATION` before. CRYPTO data past the 64 KiB handshake buffer closes it with
+  `CRYPTO_BUFFER_EXCEEDED` instead of `PROTOCOL_VIOLATION`. These used to be accepted
+  and now close it: a packet with no frames, with `PROTOCOL_VIOLATION`; a
+  `STREAMS_BLOCKED` count above 2^60, with `FRAME_ENCODING_ERROR`; and a
+  `STREAM_DATA_BLOCKED` for a stream the client cannot send on or past its stream
+  limit, with `STREAM_STATE_ERROR` or `STREAM_LIMIT_ERROR`. A `STOP_SENDING` for a
+  stream past the client's limit no longer reaches the application before the
+  connection closes. See
+  [received frame error codes](docs/project/quic-development-and-testing.md#received-frame-error-codes).
+- An HTTP/3 connection no longer closes when a client sends a datagram with more than
+  1,100 bytes of payload. EmbedIO.Quic advertises a `max_datagram_frame_size` of 1,200
+  bytes but refused larger payloads with `PROTOCOL_VIOLATION`; it now accepts every
+  DATAGRAM frame up to 1,200 bytes, counting its type and length, and refuses larger
+  ones as RFC 9221 requires. A client that advertises a `max_udp_payload_size` above
+  65,527 is accepted too: RFC 9000 sets no upper bound, and the connection closed with
+  `TRANSPORT_PARAMETER_ERROR`.
 
 ## [2.18.0] - 2026-10-24
 

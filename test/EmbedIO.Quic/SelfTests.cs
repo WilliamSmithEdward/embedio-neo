@@ -83,7 +83,7 @@ namespace EmbedIO.Quic
                 "reorder and overlap"
             );
             Reject(() => stream.Add(2, [9]), "conflicting overlap");
-            Reject(() => stream.Add(7, [8, 9]), "bounded receive");
+            Reject(() => stream.Add(7, [8, 9]), 0x0d, "bounded receive");
             Reject(() => stream.Add(0, [1], true), "final size consistency");
             var random = new Random(303);
 
@@ -135,6 +135,22 @@ namespace EmbedIO.Quic
             }
 
             catch (Exception error) when (error is InvalidDataException or CryptographicException)
+            {
+                _assertions++;
+                return;
+            }
+
+            throw new InvalidOperationException("Expected rejection: " + name);
+        }
+
+        private static void Reject(Action operation, ulong code, string name)
+        {
+            try
+            {
+                operation();
+            }
+
+            catch (TransportException error) when (error.ErrorCode == code)
             {
                 _assertions++;
                 return;
