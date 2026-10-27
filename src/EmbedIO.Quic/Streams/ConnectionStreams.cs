@@ -282,14 +282,17 @@ namespace EmbedIO.Quic
             Account(input, final);
             input.Buffer.Add(final, [], true);
 
-            if (input.ResetError.HasValue && reliable > input.ReliableSize)
-                throw new InvalidDataException("Reliable size increased after reset.");
-
             if (!input.ResetError.HasValue)
             {
                 input.ResetError = error;
                 input.ReliableSize = reliable;
             }
+
+            // A later reset cannot change the error code. It can only lower the Reliable Size, so
+            // a larger one is an earlier frame arriving late, and the smallest size stands
+            // (draft-ietf-quic-reliable-stream-reset, section 5.2).
+            else if (_resetNegotiated && error != input.ResetError.Value)
+                throw new TransportException(0x05, "Reset error code changed.");
 
             else input.ReliableSize = Math.Min(input.ReliableSize, reliable);
 

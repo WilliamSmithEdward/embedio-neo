@@ -48,6 +48,7 @@
             ReliablePrefix([0, 0, 0, 7]);
             ReliablePrefix([0, 255, 255, 127]);
             FinalSizeHistory();
+            LaterResets();
 
             foreach (var reset in new[] { false, true })
             {
@@ -189,6 +190,107 @@
                 );
                 RejectFrame(() => peer.Streams.Receive(0, 128, [1], false));
             }
+        }
+
+        // A reset sent after another can only lower the Reliable Size, so a larger one is an
+        // earlier frame arriving late and is ignored; a later reset cannot change the error code
+        // (draft-ietf-quic-reliable-stream-reset section 5.2, in every revision since 07).
+        private static void LaterResets()
+        {
+            var bytes = new byte[4096];
+
+            for (var index = 0; index < bytes.Length; index++) bytes[index] = (byte)(index * 7);
+
+            using (var peer = new Peer())
+            {
+                peer.Streams.Receive(
+                    0,
+                    1024,
+                    bytes
+                        .AsSpan(1024)
+                        .ToArray(),
+                    false
+                );
+                peer.Streams.Reset(0, 9, 4096, 1500, true);
+                peer.Streams.Reset(0, 9, 4096, 0, false);
+                Check(
+                    peer.App.Received.Count == 0 && peer.App.Resets.Count == 1 && peer.App.Resets[0] == (9UL, 0UL),
+                    "RESET_STREAM lowers the Reliable Size to zero"
+                );
+                peer.Streams.Reset(0, 9, 4096, 1500, true);
+                peer.Streams.Receive(
+                    0,
+                    0,
+                    bytes
+                        .AsSpan(0, 1024)
+                        .ToArray(),
+                    false
+                );
+                Check(
+                    peer.App.Received.Count == 0 && peer.App.Resets.Count == 1,
+                    "a late RESET_STREAM_AT does not raise it again"
+                );
+            }
+
+            using (var peer = new Peer())
+            {
+                peer.Streams.Receive(
+                    0,
+                    1024,
+                    bytes
+                        .AsSpan(1024)
+                        .ToArray(),
+                    false
+                );
+                peer.Streams.Reset(0, 9, 4096, 1500, true);
+                peer.Streams.Reset(0, 9, 4096, 3000, true);
+                peer.Streams.Receive(
+                    0,
+                    0,
+                    bytes
+                        .AsSpan(0, 1024)
+                        .ToArray(),
+                    false
+                );
+                Check(
+                    peer.App.Received
+                        .ToArray()
+                        .AsSpan()
+                        .SequenceEqual(bytes.AsSpan(0, 1500)),
+                    "a late larger Reliable Size delivers only the smaller prefix"
+                );
+                Check(
+                    peer.App.Resets.Count == 1 && peer.App.Resets[0] == (9UL, 1500UL),
+                    "the reset reports the smaller Reliable Size"
+                );
+            }
+
+            using (var peer = new Peer())
+            {
+                peer.Streams.Reset(0, 9, 4096, 1500, true);
+                RejectCode(() => peer.Streams.Reset(0, 10, 4096, 1500, true), 0x05, "RESET_STREAM_AT error code");
+            }
+
+            using (var peer = new Peer())
+            {
+                peer.Streams.Reset(0, 9, 4096, 1500, true);
+                RejectCode(() => peer.Streams.Reset(0, 10, 4096, 0, false), 0x05, "RESET_STREAM error code");
+            }
+        }
+
+        private static void RejectCode(Action action, ulong code, string name)
+        {
+            try
+            {
+                action();
+            }
+
+            catch (TransportException error) when (error.ErrorCode == code)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("Stream discard regression: " + name);
         }
 
         private static void RejectFrame(Action action)
