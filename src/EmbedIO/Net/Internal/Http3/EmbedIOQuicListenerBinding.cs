@@ -130,7 +130,7 @@ namespace EmbedIO.Net.Internal.Http3
 
                 if (
                     (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
-                    && UdpSegmentSender.Create(_socket) is { } segments
+                    && UdpSegmentSender.ForSocket(_socket) is { } segments
                 )
                     _sendSegments = segments.Send;
 

@@ -28,7 +28,7 @@ namespace EmbedIO.Net.Internal.Http3
         // caller sends those datagrams through the socket's own asynchronous sends.
         [SupportedOSPlatform("windows")]
         [SupportedOSPlatform("linux")]
-        internal static UdpSegmentSender? Create(Socket socket)
+        internal static UdpSegmentSender? ForSocket(Socket socket)
         {
             ArgumentNullException.ThrowIfNull(socket);
             Span<byte> value = stackalloc byte[sizeof(int)];

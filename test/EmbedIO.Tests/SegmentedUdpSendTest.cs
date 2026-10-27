@@ -51,7 +51,7 @@ namespace EmbedIO.Tests
 
             var port = ((IPEndPoint)(receiver.LocalEndPoint ?? throw new AssertionException("Missing endpoint."))).Port;
             var destination = new IPEndPoint(dualMode ? IPAddress.Loopback.MapToIPv6() : loopback, port).Serialize();
-            var send = Send(Create(sender) ?? throw new AssertionException("The platform should segment UDP sends."));
+            var send = Send(ForSocket(sender) ?? throw new AssertionException("The platform should segment UDP sends."));
             var lengths = new[] { 1200, 1200, 500 };
             var datagrams = lengths.Select((length, index) => Enumerable.Repeat((byte)(index + 1), length).ToArray()).ToArray();
 
@@ -164,8 +164,8 @@ namespace EmbedIO.Tests
             Assert.Ignore("This platform does not segment UDP sends.");
         }
 
-        private static object? Create(Socket socket) =>
-            (Sender.GetMethod("Create", BindingFlags.Static | BindingFlags.NonPublic)
+        private static object? ForSocket(Socket socket) =>
+            (Sender.GetMethod("ForSocket", BindingFlags.Static | BindingFlags.NonPublic)
                 ?? throw new AssertionException("Missing sender factory.")).Invoke(null, [socket]);
 
         private static Func<SocketAddress, ReadOnlySpan<byte>, int, SocketError> Send(object sender) =>
