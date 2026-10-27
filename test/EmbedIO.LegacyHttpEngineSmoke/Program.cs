@@ -58,6 +58,8 @@ public static partial class Program
 
     private static async Task RunAsync()
     {
+        VerifyResponseFieldsMatchFrameworkCollection();
+        await VerifyResponseFieldsOverHttp1Async().ConfigureAwait(false);
         await VerifySecurityHeadersAsync().ConfigureAwait(false);
         await VerifyLegacyIdleClosureAsync(false).ConfigureAwait(false);
         await VerifyLegacyIdleClosureAsync(true).ConfigureAwait(false);

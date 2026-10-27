@@ -730,6 +730,15 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
   `ArgumentException`; a header or cookie value with a control character throws
   `InvalidOperationException` when the response is written. Never copy request
   input into headers without validating it.
+- `Response.Headers` is built when something first reads it (unreleased; 2.18.0
+  built it for every response). The fields the engine writes, the content type and
+  length, `Server`, `Date`, framing, and `Vary` and `Content-Encoding` from content
+  negotiation, wait in a smaller list until then. A handler that sets only
+  `ContentType`, `ContentLength64`, `StatusCode` and cookies, or answers through
+  `SendStringAsync`, `SendDataAsync` or a controller, never allocates the
+  `WebHeaderCollection`, about 2 KB. Reading or writing `Headers` builds it, as do
+  helpers that set other fields, such as redirects, static files, CORS and security
+  headers. See [response header allocation](docs/project/response-field-allocation.md).
 - `StatusCode` must be 200-599. Send 1xx through `SendInformationalAsync`; see
   [response field sections](docs/guides/response-field-sections.md).
 - Cookies: `Response.SetCookie(cookie)` or `SetCookie(cookie, CookieSameSiteMode.Lax)`.

@@ -153,14 +153,21 @@ internal static class Orchestrator
             throw new ArgumentException("Durations must be finite; measurement duration must be positive, and warmup/idle may be zero.");
     }
 
+    // Each name selects the scenarios it prefixes; a name ending in $ selects only the scenario
+    // with exactly that name.
     private static List<Scenario> SelectScenarios(string selection)
     {
         if (selection == "all") return [.. Scenario.All];
         var names = selection.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        var unknown = names.Where(name => !Scenario.All.Any(scenario => scenario.Name.StartsWith(name, StringComparison.Ordinal))).ToArray();
+        var unknown = names.Where(name => !Scenario.All.Any(scenario => Selects(name, scenario))).ToArray();
         if (unknown.Length > 0) throw new ArgumentException("Unknown scenarios: " + string.Join(", ", unknown));
-        return [.. Scenario.All.Where(scenario => names.Any(name => scenario.Name.StartsWith(name, StringComparison.Ordinal)))];
+        return [.. Scenario.All.Where(scenario => names.Any(name => Selects(name, scenario)))];
     }
+
+    private static bool Selects(string name, Scenario scenario) =>
+        name.EndsWith('$')
+            ? scenario.Name.Equals(name[..^1], StringComparison.Ordinal)
+            : scenario.Name.StartsWith(name, StringComparison.Ordinal);
 
     private sealed record SampleContext(Scenario Scenario, EngineTarget Target, int Round, string Output, string CertificatePath, string Password,
         string Thumbprint, double Warmup, double Duration, double Idle, string? ServerCpus, string? ClientCpus, bool Profile, string? ReferenceBytes,

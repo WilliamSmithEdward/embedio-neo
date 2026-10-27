@@ -58,7 +58,12 @@ namespace EmbedIO.Net.Internal
             _output = new Output(this);
         }
 
-        public WebHeaderCollection Headers { get; } = [];
+        // The engine reads and writes the head's fields here; the collection exists once the
+        // application reads Headers. Room for the seven an ordinary head can have: Content-Type,
+        // Server, Alt-Svc, Date and Content-Length, and Vary and Content-Encoding from content
+        // negotiation.
+        internal ResponseHeaderFields Fields { get; } = new(7);
+        public WebHeaderCollection Headers => Fields.Collection;
 
         public int StatusCode
         {
@@ -84,14 +89,14 @@ namespace EmbedIO.Net.Internal
         )]
         public long ContentLength64
         {
-            get => long.TryParse(Headers[HttpHeaderNames.ContentLength], out var value) ? value : 0;
+            get => long.TryParse(Fields.Value(HttpHeaderNames.ContentLength), out var value) ? value : 0;
             set
             {
                 EnsureHeaders();
 
                 if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
 
-                Headers[HttpHeaderNames.ContentLength] = value.ToString(CultureInfo.InvariantCulture);
+                Fields.Set(HttpHeaderNames.ContentLength, value.ToString(CultureInfo.InvariantCulture));
             }
         }
 
@@ -199,7 +204,7 @@ namespace EmbedIO.Net.Internal
                         "A capsule carrier cannot configure representation type or chunked framing."
                     );
 
-                Headers[HttpCapsuleProtocol.HeaderName] = "?1";
+                Fields.Set(HttpCapsuleProtocol.HeaderName, "?1");
             }
 
             _tunnel = true;
@@ -229,9 +234,9 @@ namespace EmbedIO.Net.Internal
             _extendedConnectRejected = true;
             _status = 501;
             StatusDescription = HttpListenerResponseHelper.GetStatusDescription(_status);
-            Headers[HttpHeaderNames.ContentLength] = "0";
-            Headers.Remove("Trailer");
-            Headers.Remove(HttpCapsuleProtocol.HeaderName);
+            Fields.Set(HttpHeaderNames.ContentLength, "0");
+            Fields.Remove("Trailer");
+            Fields.Remove(HttpCapsuleProtocol.HeaderName);
             _trailerNames = null;
             _chunked = false;
         }
@@ -247,71 +252,98 @@ namespace EmbedIO.Net.Internal
 
             if (!_tunnel || (_contentTypeConfigured && !_capsuleCarrier))
             {
-                var contentType = Headers[HttpHeaderNames.ContentType] ?? _contentType;
+                var contentType = Fields.Value(HttpHeaderNames.ContentType) ?? _contentType;
 
                 if (ContentEncoding != null)
                     contentType = HttpResponseFieldSections.WithCharset(contentType, ContentEncoding.WebName);
 
-                Headers[HttpHeaderNames.ContentType] = contentType;
+                Fields.Set(HttpHeaderNames.ContentType, contentType);
             }
 
-            if (Headers[HttpHeaderNames.Server] == null) Headers[HttpHeaderNames.Server] = WebServer.Signature;
+            if (Fields.Value(HttpHeaderNames.Server) == null) Fields.Set(HttpHeaderNames.Server, WebServer.Signature);
 
-            if (AlternativeService != null && Headers[HttpHeaderNames.AltSvc] == null)
-                Headers[HttpHeaderNames.AltSvc] = AlternativeService;
+            if (AlternativeService != null && Fields.Value(HttpHeaderNames.AltSvc) == null)
+                Fields.Set(HttpHeaderNames.AltSvc, AlternativeService);
 
-            if (Headers[HttpHeaderNames.Date] == null)
-                Headers[HttpHeaderNames.Date] = HttpResponseFieldSections.CurrentDate();
+            if (Fields.Value(HttpHeaderNames.Date) == null)
+                Fields.Set(HttpHeaderNames.Date, HttpResponseFieldSections.CurrentDate());
 
-            if (_chunked) Headers.Remove(HttpHeaderNames.ContentLength);
+            if (_chunked) Fields.Remove(HttpHeaderNames.ContentLength);
 
             if (
                 _status == 204
                 || _status < 200
                 || (_exchange.Request.Method == "CONNECT" && _status >= 200 && _status < 300)
             )
-                Headers.Remove(HttpHeaderNames.ContentLength);
+                Fields.Remove(HttpHeaderNames.ContentLength);
 
             else if (_status == 205 || (closing && !SuppressBody && _trailerNames == null))
-                Headers[HttpHeaderNames.ContentLength] = "0";
+                Fields.Set(HttpHeaderNames.ContentLength, "0");
 
-            var fields = new List<HpackField>(Headers.Count + 1 + (_cookies?.Count ?? 0))
+            var status = new HpackField(":status", _status.ToString(CultureInfo.InvariantCulture));
+
+            // Fields that each have one value under a name the collection does not split are
+            // read in place, into an array of their own size; any other head goes through the
+            // collection's GetValues(name), as it always has.
+            if (Fields.IsSimple)
             {
-                new(":status", _status.ToString(CultureInfo.InvariantCulture))
-            };
+                var result = new HpackField[1 + Fields.Count + (_cookies?.Count ?? 0)];
+                var count = 0;
+                result[count++] = status;
 
-            foreach (var key in Headers.AllKeys)
+                for (var index = 0; index < Fields.Count; index++)
+                {
+                    var name = WireHeaderName(Fields.NameAt(index));
+
+                    if (!IsConnectionField(name)) result[count++] = new HpackField(name, Fields.ValueAt(index) ?? "");
+                }
+
+                if (_cookies != null)
+                    foreach (var cookie in _cookies)
+                        result[count++] = CookieField(cookie);
+
+                if (count < result.Length) Array.Resize(ref result, count);
+
+                return result;
+            }
+
+            var headers = Fields.Collection;
+            var fields = new List<HpackField>(headers.Count + 1 + (_cookies?.Count ?? 0)) { status };
+
+            foreach (var key in headers.AllKeys)
             {
                 if (key == null) continue;
 
                 var name = WireHeaderName(key);
 
-                // The application API preserves these legacy options; Multiplexed HTTP uses
-                // its own framing and connection-control frames on the wire.
-                if (
-                    name == "connection"
-                    || name == "keep-alive"
-                    || name == "proxy-connection"
-                    || name == "transfer-encoding"
-                    || name == "upgrade"
-                ) continue;
+                if (IsConnectionField(name)) continue;
 
-                var values = Headers.GetValues(key);
+                var values = headers.GetValues(key);
 
                 if (values != null) foreach (var value in values) fields.Add(new HpackField(name, value));
             }
 
             if (_cookies != null)
-            {
                 foreach (var cookie in _cookies)
-                {
-                    var text = new StringBuilder();
-                    HttpListenerResponse.AppendCookieHeaderValue(text, cookie, this);
-                    fields.Add(new HpackField("set-cookie", text.ToString(), true));
-                }
-            }
+                    fields.Add(CookieField(cookie));
 
             return [.. fields];
+        }
+
+        // The application API preserves these legacy options; Multiplexed HTTP uses its own
+        // framing and connection-control frames on the wire.
+        private static bool IsConnectionField(string name) =>
+            name == "connection"
+                || name == "keep-alive"
+                || name == "proxy-connection"
+                || name == "transfer-encoding"
+                || name == "upgrade";
+
+        private HpackField CookieField(Cookie cookie)
+        {
+            var text = new StringBuilder();
+            HttpListenerResponse.AppendCookieHeaderValue(text, cookie, this);
+            return new HpackField("set-cookie", text.ToString(), true);
         }
 
         // Valid names only, bounded so application-generated names cannot grow it without limit.
@@ -403,7 +435,7 @@ namespace EmbedIO.Net.Internal
                 var transport = _exchange as IMultiplexedResponseTrailers
                     ?? throw new NotSupportedException("Transport does not support response trailers.");
                 transport.ExpectTrailers();
-                Headers["Trailer"] = string.Join(", ", declared);
+                Fields.Set("Trailer", string.Join(", ", declared));
                 _trailerNames = declared;
             }
 

@@ -18,6 +18,18 @@
   `EmbedIO-Neo.Quic.Native` moves to private ABI 4. See
   [session resumption](docs/guides/http3.md#session-resumption).
 
+### Changed
+
+- A response keeps the fields the engine writes, the content type and length,
+  `Server`, `Date`, framing, `Alt-Svc`, and `Vary` and `Content-Encoding` from content
+  negotiation, in a compact list, and builds its `Headers` collection only when
+  something reads `Headers`, with the same fields in the same order. Against 2.18.0 a
+  small request allocates 36 percent less on HTTP/1.1, 21 percent less on HTTP/2 and
+  17 percent less on HTTP/3, and HTTP/2 uses 12 to 13 percent less server CPU per
+  request (#549). Reading or writing `Headers`, or a helper that sets other fields,
+  builds the collection as before. See
+  [response header allocation](docs/project/response-field-allocation.md).
+
 ### Fixed
 
 - An HTTP/3 connection no longer closes when a client cancels a request just as the

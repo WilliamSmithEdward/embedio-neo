@@ -270,7 +270,7 @@ namespace EmbedIO.Net.Internal
         {
             if (_response.SuppressesBody || _response.IsTunnelResponse || _response.SendChunked) return null;
 
-            var value = _response.Headers[HttpHeaderNames.ContentLength];
+            var value = _response.Fields.Value(HttpHeaderNames.ContentLength);
             return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var length)
                 && length >= 0
                 ? length
