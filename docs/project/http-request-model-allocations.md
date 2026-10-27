@@ -191,6 +191,8 @@ Outside the two files changed here, in the order of their share of a small reque
 
 1. Response construction and close: `MultiplexedResponse` with its
    `WebHeaderCollection` and header serialization (`HpackField[]`, header strings).
+   [Response header allocation](response-field-allocation.md) later removed the
+   collection from responses that never read `Headers`.
 2. Transport and dispatch state machines and tasks per stream.
 3. The `NameValueCollection` request headers built by the transport.
 4. `WebServer` dispatch: its Debug line is formatted for every request whether or not

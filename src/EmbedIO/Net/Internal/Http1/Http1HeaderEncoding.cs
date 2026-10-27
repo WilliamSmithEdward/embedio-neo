@@ -43,7 +43,7 @@ namespace EmbedIO.Net.Internal
         internal static Http1Head Encode(HttpListenerResponse response, int bodyCount, bool ending)
         {
             var encoding = WebServer.DefaultEncoding;
-            var rawCookies = response.Headers.GetValues(HttpHeaderNames.SetCookie);
+            var rawCookies = response.Fields.Values(HttpHeaderNames.SetCookie);
             string? cookies = null;
 
             if (response.ExistingCookies != null && response.ExistingCookies.Count > 0)
@@ -116,15 +116,15 @@ namespace EmbedIO.Net.Internal
             if (!HttpTokenSyntax.IsValidFieldValue(response.StatusDescription))
                 throw new InvalidOperationException("The reason phrase carries control characters.");
 
-            var headers = response.Headers;
+            var headers = response.Fields;
 
             for (var index = 0; index < headers.Count; index++)
             {
-                var value = headers.Get(index);
+                var value = headers.ValueAt(index);
 
                 if (value != null && !HttpTokenSyntax.IsValidFieldValue(value))
                     throw new InvalidOperationException(
-                        $"The {headers.GetKey(index)} response field carries control characters."
+                        $"The {headers.NameAt(index)} response field carries control characters."
                     );
             }
 
@@ -153,17 +153,17 @@ namespace EmbedIO.Net.Internal
             writer.Append("\r\n");
             // Positional access keeps insertion order and the comma-joined value of each
             // field, without the AllKeys array or a second lookup per name.
-            var headers = response.Headers;
+            var headers = response.Fields;
 
             for (var index = 0; index < headers.Count; index++)
             {
-                var key = headers.GetKey(index);
+                var key = headers.NameAt(index);
 
                 if (string.Equals(key, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)) continue;
 
                 writer.Append(key);
                 writer.Append(": ");
-                writer.Append(headers.Get(index));
+                writer.Append(headers.ValueAt(index));
                 writer.Append("\r\n");
             }
 

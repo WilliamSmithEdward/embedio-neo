@@ -540,7 +540,7 @@ namespace EmbedIO.Net.Internal
                     && _forceClosing == 0
                     && _context.Request.KeepAlive
                     && _context.Response.KeepAlive
-                    && _context.Response.Headers["connection"] != "close";
+                    && _context.HttpListenerResponse.Fields.Value("connection") != "close";
 
                 if (_forceClosing == 0 && !_tunnel) _requestAborts?.Complete(_context);
 

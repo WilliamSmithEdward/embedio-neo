@@ -22,7 +22,9 @@ commit even when the source does not. Treat `runners.json` as the record of the
 binaries actually run, not as a reproducibility proof. `runners.json` records revisions, uncommitted paths and SHA-256
 hashes.
 
-`run` options: `--scenarios all|<prefix>,...`, `--engines candidate,baseline,kestrel`,
+`run` options: `--scenarios all|<prefix>,...` (a name ending in `$` selects only the
+scenario with exactly that name, so `h1-plain-small-c64$` leaves out
+`h1-plain-small-c64-close100`), `--engines candidate,baseline,kestrel`,
 `--baseline-all-protocols` (alias for `--modern-baseline`; also run the baseline on HTTP/2 and HTTP/3 scenarios, for a
 baseline core that serves them, such as an earlier engine revision passed to the prepare
 script with `--baseline <revision>`),

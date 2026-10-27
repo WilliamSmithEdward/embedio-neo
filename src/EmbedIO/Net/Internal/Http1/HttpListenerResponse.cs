@@ -44,7 +44,12 @@ namespace EmbedIO.Net.Internal
 
         internal void CompleteRequestAbortObservation() => _transport.CompleteRequestAbortObservation(this);
 
-        public WebHeaderCollection Headers { get; } = [];
+        // The engine reads and writes the head's fields here; the collection exists once the
+        // application reads Headers. Room for the nine an ordinary head can have: Content-Type,
+        // Server, Alt-Svc, Date, Content-Length or Transfer-Encoding, Connection and Keep-Alive,
+        // and Vary and Content-Encoding from content negotiation.
+        internal ResponseHeaderFields Fields { get; } = new(9);
+        public WebHeaderCollection Headers => Fields.Collection;
         public Encoding? ContentEncoding { get; set; } = WebServer.DefaultEncoding;
 
         private string _statusDescription = "OK";
@@ -83,7 +88,7 @@ namespace EmbedIO.Net.Internal
 
         public long ContentLength64
         {
-            get => long.TryParse(Headers[HttpHeaderNames.ContentLength], out var count) ? count : 0;
+            get => long.TryParse(Fields.Value(HttpHeaderNames.ContentLength), out var count) ? count : 0;
             set
             {
                 RequireMutableHead();
@@ -95,7 +100,7 @@ namespace EmbedIO.Net.Internal
                         "Reserved HTTP/1 trailers require chunked framing without Content-Length."
                     );
 
-                Headers[HttpHeaderNames.ContentLength] = value.ToString(CultureInfo.InvariantCulture);
+                Fields.Set(HttpHeaderNames.ContentLength, value.ToString(CultureInfo.InvariantCulture));
             }
         }
 
@@ -240,11 +245,11 @@ namespace EmbedIO.Net.Internal
             )
                 throw new InvalidOperationException("This response cannot carry trailers.");
 
-            if (Headers[HttpHeaderNames.ContentLength] != null)
+            if (Fields.Value(HttpHeaderNames.ContentLength) != null)
                 throw new InvalidOperationException("HTTP/1 trailers require chunked framing without Content-Length.");
 
             var reserved = HttpResponseTrailerFields.Declaration(names);
-            Headers["Trailer"] = string.Join(", ", reserved);
+            Fields.Set("Trailer", string.Join(", ", reserved));
             _reservedTrailers = reserved;
             _chunks = true;
         }
@@ -280,16 +285,16 @@ namespace EmbedIO.Net.Internal
                         "Capsule carriers cannot configure representation type or chunked framing."
                     );
 
-                Headers[HttpCapsuleProtocol.HeaderName] = "?1";
+                Fields.Set(HttpCapsuleProtocol.HeaderName, "?1");
             }
 
             foreach (var field in HandoffFramingFields)
-                Headers.Remove(field);
+                Fields.Remove(field);
 
             if (protocol != null)
             {
-                Headers[HttpHeaderNames.Connection] = "Upgrade";
-                Headers[HttpHeaderNames.Upgrade] = protocol;
+                Fields.Set(HttpHeaderNames.Connection, "Upgrade");
+                Fields.Set(HttpHeaderNames.Upgrade, protocol);
             }
 
             _chunks = false;
@@ -306,7 +311,7 @@ namespace EmbedIO.Net.Internal
 
             if (
                 _reservedTrailers != null
-                && (!_chunks || SuppressesBody || _handoff || Headers[HttpHeaderNames.ContentLength] != null)
+                && (!_chunks || SuppressesBody || _handoff || Fields.Value(HttpHeaderNames.ContentLength) != null)
             )
                 throw new InvalidOperationException("Reserved trailers require a body-capable chunked response.");
 
@@ -323,7 +328,7 @@ namespace EmbedIO.Net.Internal
         {
             if (!_handoff || (_mediaTypeAssigned && !_capsules))
             {
-                Headers.Add(
+                Fields.Add(
                     HttpHeaderNames.ContentType,
                     ContentEncoding != null
                         ? HttpResponseFieldSections.WithCharset(_mediaType, ContentEncoding.WebName)
@@ -331,18 +336,18 @@ namespace EmbedIO.Net.Internal
                 );
             }
 
-            if (Headers[HttpHeaderNames.Server] == null) Headers.Add(HttpHeaderNames.Server, WebServer.Signature);
+            if (Fields.Value(HttpHeaderNames.Server) == null) Fields.Add(HttpHeaderNames.Server, WebServer.Signature);
 
-            if (AlternativeService != null && Headers[HttpHeaderNames.AltSvc] == null)
-                Headers.Add(HttpHeaderNames.AltSvc, AlternativeService);
+            if (AlternativeService != null && Fields.Value(HttpHeaderNames.AltSvc) == null)
+                Fields.Add(HttpHeaderNames.AltSvc, AlternativeService);
 
-            if (Headers[HttpHeaderNames.Date] == null)
-                Headers.Add(HttpHeaderNames.Date, HttpResponseFieldSections.CurrentDate());
+            if (Fields.Value(HttpHeaderNames.Date) == null)
+                Fields.Add(HttpHeaderNames.Date, HttpResponseFieldSections.CurrentDate());
         }
 
         private bool HasDeclaredLength =>
             long.TryParse(
-                Headers[HttpHeaderNames.ContentLength],
+                Fields.Value(HttpHeaderNames.ContentLength),
                 NumberStyles.Integer,
                 CultureInfo.InvariantCulture,
                 out var count
@@ -355,8 +360,8 @@ namespace EmbedIO.Net.Internal
             {
                 if (_status != 304)
                 {
-                    Headers.Remove(HttpHeaderNames.ContentLength);
-                    Headers.Remove(HttpHeaderNames.TransferEncoding);
+                    Fields.Remove(HttpHeaderNames.ContentLength);
+                    Fields.Remove(HttpHeaderNames.TransferEncoding);
                 }
 
                 _chunks = false;
@@ -365,14 +370,14 @@ namespace EmbedIO.Net.Internal
             else if (_status == 205)
             {
                 // Reset Content has no representation content on any HTTP version.
-                Headers[HttpHeaderNames.ContentLength] = "0";
-                Headers.Remove(HttpHeaderNames.TransferEncoding);
+                Fields.Set(HttpHeaderNames.ContentLength, "0");
+                Fields.Remove(HttpHeaderNames.TransferEncoding);
                 _chunks = false;
             }
 
             else if (closing && _reservedTrailers == null)
             {
-                if (!IsHeadResponse && !HasDeclaredLength) Headers[HttpHeaderNames.ContentLength] = "0";
+                if (!IsHeadResponse && !HasDeclaredLength) Fields.Set(HttpHeaderNames.ContentLength, "0");
 
                 _chunks = false;
             }
@@ -383,13 +388,13 @@ namespace EmbedIO.Net.Internal
 
                 if (_chunks || !HasDeclaredLength)
                 {
-                    Headers.Remove(HttpHeaderNames.ContentLength);
+                    Fields.Remove(HttpHeaderNames.ContentLength);
 
                     if (ProtocolVersion >= HttpVersion.Version11) _chunks = true;
                 }
             }
 
-            if (_chunks) Headers.Add(HttpHeaderNames.TransferEncoding, "chunked");
+            if (_chunks) Fields.Add(HttpHeaderNames.TransferEncoding, "chunked");
 
             var persistent = _status is not 400
                 and not 408
@@ -411,10 +416,10 @@ namespace EmbedIO.Net.Internal
             if (_request.IsContinueOwed) persistent = false;
 
             _persistent = persistent;
-            Headers.Add(HttpHeaderNames.Connection, persistent ? "keep-alive" : "close");
+            Fields.Add(HttpHeaderNames.Connection, persistent ? "keep-alive" : "close");
 
             if (persistent && ProtocolVersion >= HttpVersion.Version11)
-                Headers.Add(HttpHeaderNames.KeepAlive, _transport.KeepAliveHeader);
+                Fields.Add(HttpHeaderNames.KeepAlive, _transport.KeepAliveHeader);
         }
 
         private Http1Head WriteHeaders(int bodyCount, bool ending)

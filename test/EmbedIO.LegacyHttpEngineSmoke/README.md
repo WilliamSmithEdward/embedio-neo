@@ -6,8 +6,16 @@ The Windows compatibility CI job builds and runs it on the installed Framework;
 the report records the actual registry release, CLR, loaded target, source version
 and engine SHA-256. Targeting 4.7.2 does not establish execution on exactly 4.7.2.
 
-The fixture uses only public EmbedIO APIs and independent wire input. It verifies:
+The fixture uses public EmbedIO APIs and independent wire input; only the response
+field check below reaches internal types, by reflection. It verifies:
 
+- A response's field list matches the framework's `WebHeaderCollection`: 2,000
+  random sequences of valid and invalid writes, removals and reads give the same
+  results, exceptions and collection, and whenever the list's HTTP/2 and HTTP/3
+  fast path applies, the collection's `GetValues` returns each value whole. Over
+  HTTP/1, three response shapes send the same head and leave the same `Headers`
+  whether or not the handler read `Headers` first, and one that never reads it
+  leaves the collection unbuilt until then.
 - 256 HTTP/1 requests retain one connection beyond the removed 100-request cap.
 - A 65,537-byte chunked upload returns every original byte.
 - Conflicting Content-Length and Transfer-Encoding are rejected with 400 and EOF.

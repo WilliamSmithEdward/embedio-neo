@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
+using EmbedIO.Net.Internal;
 using EmbedIO.Utilities;
 
 namespace EmbedIO
@@ -86,13 +87,13 @@ namespace EmbedIO
 
             prepareResponse = r =>
             {
-                r.Headers.Add(HttpHeaderNames.Vary, HttpHeaderNames.AcceptEncoding);
+                r.AddField(HttpHeaderNames.Vary, HttpHeaderNames.AcceptEncoding);
 
                 if (compressionMethodName == CompressionMethodNames.None)
-                    r.Headers.Remove(HttpHeaderNames.ContentEncoding);
+                    r.RemoveField(HttpHeaderNames.ContentEncoding);
 
                 else
-                    r.Headers.Set(HttpHeaderNames.ContentEncoding, compressionMethodName);
+                    r.SetField(HttpHeaderNames.ContentEncoding, compressionMethodName);
             };
             return true;
         }
