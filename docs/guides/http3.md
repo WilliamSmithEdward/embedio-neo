@@ -241,6 +241,13 @@ clients' handshakes time out, a connection the listener has no room for complete
 its TLS handshake before it is closed with `H3_EXCESSIVE_LOAD`, and a closed
 connection keeps its slot until its closing or draining period ends.
 
+Where the socket can segment sends, from Windows 10 version 2004 (`UDP_SEND_MSG_SIZE`)
+and Linux 4.18 (`UDP_SEGMENT`), the listener sends consecutive datagrams of one size for
+one client in one system call, and the operating system or network adapter divides
+them. Where it cannot, and on macOS, each datagram is one call. Nothing needs
+configuring. This is unreleased; 2.18.0 sends one datagram per call. See
+[segmented UDP sends](../project/quic-development-and-testing.md#segmented-udp-sends).
+
 `Stop` and disposal cancel active requests, release pending accepts and close
 bindings. A directly used `IHttpListener` can restart after Stop; WebServer itself
 retains its existing one-run lifecycle. Prefix changes require a stopped listener.
