@@ -16,9 +16,9 @@ percent less on HTTP/2 and 16.5 percent less on HTTP/3. Server CPU per request f
 HTTP/1.1 and HTTP/3. No latency percentile up to p99.9 is significantly slower: p50
 falls on every scenario, p99 by 6 to 14 percent on HTTP/2 and HTTP/3, and p99.9 by 21
 to 27 percent on HTTP/1.1. Requests slower than 20 ms, rarer than one in 10,000,
-became more frequent on HTTP/2 and HTTP/3 under the default Server GC; with its
-dynamic heap-count adaptation (DATAS) turned off they are no more frequent than on
-2.18.0. See [latency](#latency).
+became more frequent on HTTP/2 and HTTP/3 under the default Server GC. With its
+dynamic heap-count adaptation (DATAS) turned off, HTTP/2's are no more frequent than
+on 2.18.0; HTTP/3 was not rerun that way. See [latency](#latency).
 
 | Scenario | 2.18.0 B/req | Final B/req | Change | 2.18.0 CPU us/req | Final CPU us/req | Requests/s |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -175,9 +175,9 @@ collections per second against 173, 100 and 1.7, and paused 89 ms per second aga
 114; on TLS, 140, 64 and 0.5 against 158, 90 and 1.3, pausing 85 against 106 ms per
 second.
 
-It is how Server GC's dynamic adaptation to application size (DATAS, on by default
-since .NET 9) responds to the lower allocation rate. With it turned off for every
-process (`DOTNET_GCDynamicAdaptationMode=0`), three rounds per orientation:
+On HTTP/2 it is how Server GC's dynamic adaptation to application size (DATAS, on by
+default since .NET 9) responds to the lower allocation rate. With it turned off for
+every process (`DOTNET_GCDynamicAdaptationMode=0`), three rounds per orientation:
 
 | HTTP/2, DATAS off | Requests/s | CPU us/req | p99 ms | Over 20 ms per million | Over 40 ms per million |
 | --- | --- | --- | --- | --- | --- |
@@ -187,10 +187,11 @@ process (`DOTNET_GCDynamicAdaptationMode=0`), three rounds per orientation:
 The final build's far tail is then no heavier than 2.18.0's, and both versions serve
 12 to 17 percent more requests per second than with DATAS on. The single slowest
 request per window on HTTP/2 over TLS stayed higher (median 47.5 against 33.1 ms) but
-not significantly (p 0.14). The heap-count changes themselves were not traced.
-Applications that care more about the far tail than about Server GC's memory
-footprint can turn DATAS off with `System.GC.DynamicAdaptationMode` set to 0 in their
-runtime configuration.
+not significantly (p 0.14). The heap-count changes themselves were not traced, and
+HTTP/3 was not rerun with DATAS off, so its excess (98 to 123 per million) has no
+measured cause. Applications that care more about the far tail than about Server GC's
+memory footprint can turn DATAS off with `System.GC.DynamicAdaptationMode` set to 0
+in their runtime configuration.
 
 ## Remaining contributors
 
@@ -297,6 +298,8 @@ environment, on the same runners and CPU sets.
   layout and rewrote two expressions to equivalent ones. Merging main before the pull
   request adds TLS session resumption, which changes HTTP/3 handshakes but not the
   per-request path measured here.
+- The DATAS-off comparison covers HTTP/2 only; HTTP/3's heavier far tail has no
+  measured cause.
 - `--profile` amounts are sampled and biased toward small objects; totals are exact.
 - p99.9 and the maximum are histogram-bucketed and come from one 15-second window
   each; differences of one or two buckets are within noise.
