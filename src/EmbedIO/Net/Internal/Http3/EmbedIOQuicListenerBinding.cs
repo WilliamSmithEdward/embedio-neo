@@ -56,6 +56,13 @@ namespace EmbedIO.Net.Internal.Http3
         private Task? _acceptanceStopped;
         private int _accepting = 1;
         private long _datagramPathErrors;
+        private long _segmentedSends;
+        private long _segmentedDatagrams;
+        private long _segmentFallbacks;
+
+        // The socket's segmented send, or null where its platform cannot segment. A send the
+        // platform refuses as unsupported clears it.
+        private volatile Func<SocketAddress, ReadOnlySpan<byte>, int, SocketError>? _sendSegments;
         private int _reportedRefusals;
         private long _refusalReport;
 
@@ -120,6 +127,10 @@ namespace EmbedIO.Net.Internal.Http3
 
                 SizeBuffers(_socket);
                 _socket.Bind(endpoint);
+
+                if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) && UdpSegmentSender.Create(_socket) is { } segments)
+                    _sendSegments = segments.Send;
+
                 _local = QuicConnectionEndpoints.Copy(
                     (IPEndPoint)(_socket.LocalEndPoint
                         ?? throw new InvalidOperationException("UDP socket has no local endpoint."))
@@ -162,12 +173,18 @@ namespace EmbedIO.Net.Internal.Http3
                 if (failure?.Length > 4096) failure = failure[..4096];
 
                 return FormattableString.Invariant(
-                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};refused={_connections.Refused};refused-at-capacity={_connections.RefusedAtCapacity};refused-for-delay={_connections.RefusedForQueueDelay};refused-for-http3={_connections.RefusedForApplication};unsent-refusals={_connections.UnsentRefusals};retries={_connections.RetriesSent};invalid-tokens={_connections.InvalidTokens};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};issued-routes={_connections.IssuedRoutes};datagram-path-errors={DatagramPathErrors};last-rejection={failure}"
+                    $"active={_connections.Active};accepted={_connections.Accepted};retired={_connections.Retired};peak={_connections.Peak};rejected={_connections.Rejected};refused={_connections.Refused};refused-at-capacity={_connections.RefusedAtCapacity};refused-for-delay={_connections.RefusedForQueueDelay};refused-for-http3={_connections.RefusedForApplication};unsent-refusals={_connections.UnsentRefusals};retries={_connections.RetriesSent};invalid-tokens={_connections.InvalidTokens};expired={_connections.ExpiredHandshakes};failed={_connections.FailedOwners};dropped={_connections.DroppedOutput};reset-routes={_connections.ResetRoutes};peer-groups={_connections.EndpointGroups};issued-routes={_connections.IssuedRoutes};datagram-path-errors={DatagramPathErrors};segmented-sends={SegmentedSends};segmented-datagrams={SegmentedDatagrams};segment-fallbacks={SegmentFallbacks};last-rejection={failure}"
                 );
             }
         }
 
         internal long DatagramPathErrors => Interlocked.Read(ref _datagramPathErrors);
+
+        // Segmented sends that left, the datagrams they carried, and those that failed and
+        // left one datagram at a time instead.
+        internal long SegmentedSends => Interlocked.Read(ref _segmentedSends);
+        internal long SegmentedDatagrams => Interlocked.Read(ref _segmentedDatagrams);
+        internal long SegmentFallbacks => Interlocked.Read(ref _segmentFallbacks);
 
         // The session counts a connection once its accept loop takes it from this binding, so
         // the ones admitted but not yet created, and the ones waiting to be accepted, are
@@ -493,10 +510,13 @@ namespace EmbedIO.Net.Internal.Http3
         private const int PeerCacheLimit = 1024;
 
         // Sends every queued datagram, in the dispatcher's order, then waits for the next.
+        // Where the socket can segment, consecutive datagrams of one length for one peer are
+        // gathered and leave in one call.
         private async Task SendLoopAsync()
         {
             var addresses = new Dictionary<IPEndPoint, SocketAddress>();
             var dualMode = _socket.AddressFamily == AddressFamily.InterNetworkV6 && _socket.DualMode;
+            SegmentRun? run = null;
 
             while (true)
             {
@@ -510,35 +530,40 @@ namespace EmbedIO.Net.Internal.Http3
 
                     try
                     {
-                        if (!addresses.TryGetValue(peer, out var address))
+                        var address = Address(addresses, peer, dualMode);
+
+                        if (_sendSegments == null && (run == null || run.Count == 0))
+                            await SendAsync(bytes, address).ConfigureAwait(false);
+
+                        else
                         {
-                            if (addresses.Count >= PeerCacheLimit) addresses.Clear();
+                            run ??= new SegmentRun();
 
-                            // A dual-mode socket sends to IPv4 peers at their mapped address.
-                            address = (dualMode && peer.AddressFamily == AddressFamily.InterNetwork
-                                ? new IPEndPoint(peer.Address.MapToIPv6(), peer.Port)
-                                : peer).Serialize();
-                            addresses.Add(peer, address);
+                            // A datagram that cannot join those gathered sends them first.
+                            if (!run.TryAdd(peer, address, bytes))
+                            {
+                                await FlushAsync(run).ConfigureAwait(false);
+
+                                // Only a datagram longer than the run's buffer is never gathered.
+                                if (!run.TryAdd(peer, address, bytes))
+                                    await SendAsync(bytes, address).ConfigureAwait(false);
+                            }
                         }
-
-                        var count = await _socket
-                            .SendToAsync(bytes, SocketFlags.None, address, _stop.Token)
-                            .ConfigureAwait(false);
-
-                        if (count != bytes.Length)
-                            throw new InvalidOperationException("UDP send did not consume its datagram.");
-                    }
-
-                    catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
-                    {
-                        Interlocked.Increment(ref _datagramPathErrors);
                     }
 
                     finally
                     {
+                        // A gathered datagram was copied, so the dispatcher's array is done with.
                         _connections.FinishOutput();
                     }
+
+                    if (run?.Full == true)
+                        await FlushAsync(run).ConfigureAwait(false);
                 }
+
+                // Nothing more is queued, so what was gathered leaves now.
+                if (run?.Count > 0)
+                    await FlushAsync(run).ConfigureAwait(false);
 
                 if (
                     !await _outputReady.Reader
@@ -547,6 +572,77 @@ namespace EmbedIO.Net.Internal.Http3
                 ) return;
 
                 _outputReady.Reader.TryRead(out _);
+            }
+        }
+
+        // A dual-mode socket sends to IPv4 peers at their mapped address.
+        private static SocketAddress Address(Dictionary<IPEndPoint, SocketAddress> addresses, IPEndPoint peer, bool dualMode)
+        {
+            if (addresses.TryGetValue(peer, out var address)) return address;
+
+            if (addresses.Count >= PeerCacheLimit) addresses.Clear();
+
+            address = (dualMode && peer.AddressFamily == AddressFamily.InterNetwork
+                ? new IPEndPoint(peer.Address.MapToIPv6(), peer.Port)
+                : peer).Serialize();
+            addresses.Add(peer, address);
+            return address;
+        }
+
+        // A datagram path error loses only the datagram that met it.
+        private async ValueTask SendAsync(ReadOnlyMemory<byte> datagram, SocketAddress address)
+        {
+            try
+            {
+                var count = await _socket
+                    .SendToAsync(datagram, SocketFlags.None, address, _stop.Token)
+                    .ConfigureAwait(false);
+
+                if (count != datagram.Length)
+                    throw new InvalidOperationException("UDP send did not consume its datagram.");
+            }
+
+            catch (SocketException error) when (IsDatagramPathError(error.SocketErrorCode))
+            {
+                Interlocked.Increment(ref _datagramPathErrors);
+            }
+        }
+
+        // Sends the gathered datagrams in one segmented call, or one at a time when there is
+        // one or the call fails. A call that would block, that met a datagram path error, or
+        // that the platform cannot segment loses nothing: its datagrams then leave as single
+        // ones would have, through the socket's own asynchronous sends.
+        private async ValueTask FlushAsync(SegmentRun run)
+        {
+            try
+            {
+                if (run.Count > 1 && _sendSegments is { } send)
+                {
+                    var error = send(run.Address, run.Bytes, run.SegmentLength);
+
+                    if (error == SocketError.Success)
+                    {
+                        Interlocked.Increment(ref _segmentedSends);
+                        Interlocked.Add(ref _segmentedDatagrams, run.Count);
+                        return;
+                    }
+
+                    Interlocked.Increment(ref _segmentFallbacks);
+
+                    if (IsDatagramPathError(error)) Interlocked.Increment(ref _datagramPathErrors);
+
+                    // The platform cannot segment at all, so later sends do not try.
+                    else if (error is SocketError.OperationNotSupported or SocketError.ProtocolOption)
+                        _sendSegments = null;
+                }
+
+                for (var index = 0; index < run.Count; index++)
+                    await SendAsync(run.Datagram(index), run.Address).ConfigureAwait(false);
+            }
+
+            finally
+            {
+                run.Clear();
             }
         }
 
@@ -633,6 +729,65 @@ namespace EmbedIO.Net.Internal.Http3
                 or SocketError.HostUnreachable
                 or SocketError.HostDown
                 or SocketError.NetworkUnreachable;
+
+        // Datagrams gathered for one segmented send: consecutive, for one peer, and each the
+        // length of the first but the last, which may be shorter. Each is copied in, so the
+        // dispatcher's array is released as soon as it is gathered.
+        private sealed class SegmentRun
+        {
+            private readonly byte[] _bytes = GC.AllocateUninitializedArray<byte>(UdpSegmentSender.MaximumBytes, pinned: true);
+            private IPEndPoint? _peer;
+            private SocketAddress? _address;
+
+            internal int Count { get; private set; }
+            internal int Length { get; private set; }
+            internal int SegmentLength { get; private set; }
+
+            // A shorter datagram ends the run, as do the platforms' limits.
+            internal bool Full =>
+                Count > 0
+                && (Count == UdpSegmentSender.MaximumSegments
+                    || Length % SegmentLength != 0
+                    || Length + SegmentLength > _bytes.Length);
+
+            internal SocketAddress Address => _address ?? throw new InvalidOperationException("No datagrams are gathered.");
+            internal ReadOnlySpan<byte> Bytes => _bytes.AsSpan(0, Length);
+
+            internal ReadOnlyMemory<byte> Datagram(int index)
+            {
+                var start = index * SegmentLength;
+                return _bytes.AsMemory(start, Math.Min(SegmentLength, Length - start));
+            }
+
+            internal bool TryAdd(IPEndPoint peer, SocketAddress address, byte[] datagram)
+            {
+                if (Count == 0)
+                {
+                    if (datagram.Length == 0 || datagram.Length > _bytes.Length) return false;
+
+                    _peer = peer;
+                    _address = address;
+                    SegmentLength = datagram.Length;
+                }
+
+                else if (Full || datagram.Length > SegmentLength || !(ReferenceEquals(peer, _peer) || peer.Equals(_peer)))
+                    return false;
+
+                datagram.CopyTo(_bytes.AsSpan(Length));
+                Length += datagram.Length;
+                Count++;
+                return true;
+            }
+
+            internal void Clear()
+            {
+                Count = 0;
+                Length = 0;
+                SegmentLength = 0;
+                _peer = null;
+                _address = null;
+            }
+        }
 
         private sealed class Peer : Http3AcceptedConnection
         {
