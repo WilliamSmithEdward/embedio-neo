@@ -1,4 +1,4 @@
-# Semgrep 1.181.0 and complete wheel-only dependency closure.
+# Semgrep 1.182.0 and complete wheel-only dependency closure.
 # Resolved for Ubuntu x86_64 / Python 3.12; CI-only, never packaged.
 # Install with --require-hashes --only-binary=:all:.
 annotated-types==0.8.0 --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
