@@ -23,7 +23,8 @@
             public override void Dispose() { }
         }
 
-        private sealed class Peer : IDisposable
+        // resetOffered is whether the remote endpoint offered reset_stream_at.
+        private sealed class Peer(bool resetOffered = true) : IDisposable
         {
             internal ConnectionStreams Streams { get; } = new(
                 (bytes, reliable) => new Delivery(2, bytes, reliable),
@@ -34,7 +35,7 @@
                 32,
                 32,
                 1200,
-                true,
+                resetOffered,
                 operations => new Application(operations)
             );
             internal Application App => (Application)Streams.Protocol;
@@ -49,6 +50,7 @@
             ReliablePrefix([0, 255, 255, 127]);
             FinalSizeHistory();
             LaterResets();
+            ResetFrameRules();
 
             foreach (var reset in new[] { false, true })
             {
@@ -56,7 +58,7 @@
                 peer.Streams.Receive(0, 32768, new byte[32768], false);
                 Check(peer.Streams.RetainedReceiveCapacity > 0, "sparse bytes are initially owned");
 
-                if (reset) peer.Streams.Reset(0, 16, 65536, 0, true);
+                if (reset) peer.Streams.Reset(0, 16, 65536, 0);
 
                 else peer.App.Operations.AbortRead(0, 16);
 
@@ -126,13 +128,13 @@
                 false
             );
             var before = peer.Streams.RetainedReceiveCapacity;
-            peer.Streams.Reset(0, error, (ulong)extent, (ulong)(gap + 2048), true);
+            peer.Streams.Reset(0, error, (ulong)extent, (ulong)(gap + 2048));
             Check(peer.Streams.RetainedReceiveCapacity < before, "unused reset tail releases while prefix is pending");
             Check(
                 peer.App.Received.Count == 0 && peer.App.Resets.Count == 0,
                 "reset waits for its missing reliable prefix"
             );
-            peer.Streams.Reset(0, error, (ulong)extent, (ulong)reliable, true);
+            peer.Streams.Reset(0, error, (ulong)extent, (ulong)reliable);
             peer.Streams.Receive(
                 0,
                 0,
@@ -159,7 +161,7 @@
             peer.App.Operations.Consume(0, reliable);
             Check(peer.Streams.ReleasedData == (ulong)extent, "reset prefix consumption completes credit once");
             peer.Streams.Receive(0, 0, bytes, true);
-            peer.Streams.Reset(0, error, (ulong)extent, 0, true);
+            peer.Streams.Reset(0, error, (ulong)extent, 0);
             Check(
                 peer.Streams.RetainedReceiveCapacity == 0
                     && peer.App.Resets.Count == 1
@@ -194,7 +196,9 @@
 
         // A reset sent after another can only lower the Reliable Size, so a larger one is an
         // earlier frame arriving late and is ignored; a later reset cannot change the error code
-        // (draft-ietf-quic-reliable-stream-reset section 5.2, in every revision since 07).
+        // (draft-ietf-quic-reliable-stream-reset section 5.2, in every revision since 07). Nor can
+        // a later reset or FIN change the final size, which is FINAL_SIZE_ERROR (section 5.2 since
+        // revision 08, and RFC 9000 section 4.5).
         private static void LaterResets()
         {
             var bytes = new byte[4096];
@@ -211,13 +215,13 @@
                         .ToArray(),
                     false
                 );
-                peer.Streams.Reset(0, 9, 4096, 1500, true);
-                peer.Streams.Reset(0, 9, 4096, 0, false);
+                peer.Streams.Reset(0, 9, 4096, 1500);
+                peer.Streams.Reset(0, 9, 4096, 0);
                 Check(
                     peer.App.Received.Count == 0 && peer.App.Resets.Count == 1 && peer.App.Resets[0] == (9UL, 0UL),
                     "RESET_STREAM lowers the Reliable Size to zero"
                 );
-                peer.Streams.Reset(0, 9, 4096, 1500, true);
+                peer.Streams.Reset(0, 9, 4096, 1500);
                 peer.Streams.Receive(
                     0,
                     0,
@@ -242,8 +246,8 @@
                         .ToArray(),
                     false
                 );
-                peer.Streams.Reset(0, 9, 4096, 1500, true);
-                peer.Streams.Reset(0, 9, 4096, 3000, true);
+                peer.Streams.Reset(0, 9, 4096, 1500);
+                peer.Streams.Reset(0, 9, 4096, 3000);
                 peer.Streams.Receive(
                     0,
                     0,
@@ -267,15 +271,84 @@
 
             using (var peer = new Peer())
             {
-                peer.Streams.Reset(0, 9, 4096, 1500, true);
-                RejectCode(() => peer.Streams.Reset(0, 10, 4096, 1500, true), 0x05, "RESET_STREAM_AT error code");
+                peer.Streams.Reset(0, 9, 4096, 1500);
+                RejectCode(() => peer.Streams.Reset(0, 10, 4096, 1500), 0x05, "RESET_STREAM_AT error code");
             }
 
             using (var peer = new Peer())
             {
-                peer.Streams.Reset(0, 9, 4096, 1500, true);
-                RejectCode(() => peer.Streams.Reset(0, 10, 4096, 0, false), 0x05, "RESET_STREAM error code");
+                peer.Streams.Reset(0, 9, 4096, 1500);
+                RejectCode(() => peer.Streams.Reset(0, 10, 4096, 0), 0x05, "RESET_STREAM error code");
             }
+
+            using (var peer = new Peer())
+            {
+                peer.Streams.Reset(0, 9, 4096, 1500);
+                RejectCode(() => peer.Streams.Reset(0, 9, 4095, 1500), 0x06, "RESET_STREAM_AT final size");
+            }
+
+            using (var peer = new Peer())
+            {
+                peer.Streams.Reset(0, 9, 4096, 1500);
+                RejectCode(() => peer.Streams.Receive(0, 0, new byte[16], true), 0x06, "FIN after reset");
+            }
+
+            using (var peer = new Peer())
+            {
+                peer.Streams.Receive(0, 1024, new byte[1024], false);
+                RejectCode(() => peer.Streams.Reset(0, 9, 1000, 0), 0x06, "final size below received data");
+            }
+        }
+
+        // EmbedIO.Quic offers reset_stream_at on every connection, so a peer may send
+        // RESET_STREAM_AT without offering the parameter itself (section 3). A Reliable Size above
+        // the Final Size is FRAME_ENCODING_ERROR, which BridgeTests covers, and a Final Size past
+        // either flow-control limit is FLOW_CONTROL_ERROR (section 4, and RFC 9000 section 4.1).
+        private static void ResetFrameRules()
+        {
+            var bytes = new byte[4096];
+
+            for (var index = 0; index < bytes.Length; index++) bytes[index] = (byte)(index * 7);
+
+            using (var peer = new Peer(resetOffered: false))
+            {
+                peer.Streams.Receive(
+                    0,
+                    1024,
+                    bytes
+                        .AsSpan(1024)
+                        .ToArray(),
+                    false
+                );
+                peer.Streams.Reset(0, 9, 4096, 1500);
+                peer.Streams.Receive(
+                    0,
+                    0,
+                    bytes
+                        .AsSpan(0, 1024)
+                        .ToArray(),
+                    false
+                );
+                Check(
+                    peer.App.Received
+                        .ToArray()
+                        .AsSpan()
+                        .SequenceEqual(bytes.AsSpan(0, 1500))
+                        && peer.App.Resets.Count == 1
+                        && peer.App.Resets[0] == (9UL, 1500UL),
+                    "RESET_STREAM_AT from a peer that did not offer reset_stream_at"
+                );
+            }
+
+            using (var peer = new Peer())
+                RejectCode(() => peer.Streams.Reset(0, 9, 65537, 0), 0x03, "final size past stream credit");
+
+            using (var peer = new Peer())
+                RejectCode(
+                    () => peer.Streams.Receive(0, StreamReassembly.MaximumOffset, [1], false),
+                    0x03,
+                    "data past the largest stream offset"
+                );
         }
 
         private static void RejectCode(Action action, ulong code, string name)
@@ -300,7 +373,7 @@
                 action();
             }
 
-            catch (InvalidDataException)
+            catch (TransportException error) when (error.ErrorCode == 0x06)
             {
                 return;
             }

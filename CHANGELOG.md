@@ -50,10 +50,18 @@
 - An HTTP/3 connection no longer closes when a peer's `RESET_STREAM_AT` for a stream
   carries a larger Reliable Size than an earlier reset of it, as a late or
   retransmitted frame can. draft-ietf-quic-reliable-stream-reset tells the receiver to
-  ignore the increase, and the smallest size now stands. When reliable reset was
-  negotiated, a later reset that changes the stream's error code now closes the
+  ignore the increase, and the smallest size now stands. When the client offered
+  `reset_stream_at`, a later reset that changes the stream's error code now closes the
   connection with `STREAM_STATE_ERROR`, as the draft requires; the change used to be
   ignored (#551).
+- EmbedIO.Quic closes a connection with the error code RFC 9000 and the draft name
+  when a client breaks a stream's limits: `FLOW_CONTROL_ERROR` for data or a final size
+  past the flow-control limits, `FINAL_SIZE_ERROR` for a changed final size or data
+  past it, and `FRAME_ENCODING_ERROR` for a `RESET_STREAM_AT` whose Reliable Size is
+  larger than its Final Size. All of them closed it with `PROTOCOL_VIOLATION`. A
+  `RESET_STREAM_AT` from a client that did not offer `reset_stream_at` itself closed
+  the connection too; the server offers the parameter on every connection, so the
+  draft lets any client send the frame, and it is now accepted (#551).
 
 ## [2.18.0] - 2026-10-24
 

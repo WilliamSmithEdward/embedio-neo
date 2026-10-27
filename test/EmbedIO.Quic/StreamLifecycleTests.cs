@@ -95,7 +95,7 @@ namespace EmbedIO.Quic
                 );
                 var before = peer.Streams.ReceivedData;
                 peer.Streams.Receive(0, 0, Headers, true);
-                peer.Streams.Reset(0, 1, (ulong)Headers.Length, 0, false);
+                peer.Streams.Reset(0, 1, (ulong)Headers.Length, 0);
                 QuicFuzzChecks.Require(
                     peer.Streams.RetiredStreams == 1 && peer.Streams.ReceivedData == before,
                     "retired-bidi-not-reopened-or-accounted-twice"
@@ -266,7 +266,7 @@ namespace EmbedIO.Quic
             {
                 var prefix = Wire.Frame(0x54, 4);
                 peer.Streams.Receive(6, 0, prefix, false);
-                peer.Streams.Reset(6, 1, (ulong)prefix.Length, (ulong)prefix.Length, true);
+                peer.Streams.Reset(6, 1, (ulong)prefix.Length, (ulong)prefix.Length);
                 peer.Streams.Receive(4, 0, Headers, false);
                 QuicFuzzChecks.Require(
                     ((WebTransportApplication)peer.Streams.Protocol).AcceptedSessions == 1

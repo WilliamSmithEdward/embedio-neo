@@ -513,7 +513,7 @@
                     .AcceptInboundStreamAsync()
                     .AsTask()
             );
-            peer.Streams.Reset(0, 0x10c, 1, 0, false);
+            peer.Streams.Reset(0, 0x10c, 1, 0);
             peer.Streams.Stop(0, 0x10c);
             peer.Pump();
             forwarding.Between = id =>
@@ -576,7 +576,7 @@
                     .AcceptInboundStreamAsync()
                     .AsTask()
             );
-            peer.Streams.Reset(2, 909, 65536, 32768, true);
+            peer.Streams.Reset(2, 909, 65536, 32768);
             Check(
                 peer.Streams.ReleasedData == 32768 && stream.Buffered == 32768 && peer.Streams.RetiredStreams == 0,
                 "reliable-reset-keeps-unread-prefix-credit"
@@ -635,7 +635,7 @@
                         .AsTask()
                 );
                 var closed = stream.ReadsClosed;
-                peer.Streams.Reset(2, 901, 32768, 0, false);
+                peer.Streams.Reset(2, 901, 32768, 0);
                 var failure = Expect<QuicStreamFailure>(() => Await(closed));
                 Check(
                     failure.ErrorCode == 901
@@ -675,7 +675,7 @@
                         == 8,
                     "reset-trim-initial-consumption"
                 );
-                peer.Streams.Reset(2, 902, 100, 16, true);
+                peer.Streams.Reset(2, 902, 100, 16);
                 Check(
                     stream.Buffered == 8 && peer.Streams.ReleasedData == 92,
                     "reset-keeps-only-unread-required-prefix"
@@ -754,7 +754,7 @@
                     frame.Integer() == 5 && frame.Integer() == 0 && frame.Integer() == 0x100,
                     "read-cancel-explicit-no-error-code"
                 );
-                peer.Streams.Reset(0, 0, 20, 0, false);
+                peer.Streams.Reset(0, 0, 20, 0);
                 var write = stream
                     .WriteOwnedAsync(new byte[] { 9 }, true, default)
                     .AsTask();
@@ -1304,7 +1304,7 @@
             }
 
             var closed = stream.ReadsClosed;
-            peer.Streams.Reset(2, code, final, reliable, partial);
+            peer.Streams.Reset(2, code, final, reliable);
             var keep = reliable > (ulong)consumed ? (int)reliable - consumed : 0;
             Check(
                 stream.Buffered == keep && peer.Streams.ReleasedData == final - (ulong)keep,
