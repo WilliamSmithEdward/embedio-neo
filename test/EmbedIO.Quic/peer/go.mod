@@ -8,7 +8,7 @@ toolchain go1.27.2
 
 require (
 	github.com/quic-go/qpack v0.6.0
-	github.com/quic-go/quic-go v0.63.0
+	github.com/quic-go/quic-go v0.64.1
 )
 
 require (
