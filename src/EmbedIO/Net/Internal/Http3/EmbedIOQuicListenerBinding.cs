@@ -128,7 +128,10 @@ namespace EmbedIO.Net.Internal.Http3
                 SizeBuffers(_socket);
                 _socket.Bind(endpoint);
 
-                if ((OperatingSystem.IsWindows() || OperatingSystem.IsLinux()) && UdpSegmentSender.Create(_socket) is { } segments)
+                if (
+                    (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
+                    && UdpSegmentSender.Create(_socket) is { } segments
+                )
                     _sendSegments = segments.Send;
 
                 _local = QuicConnectionEndpoints.Copy(
@@ -576,7 +579,11 @@ namespace EmbedIO.Net.Internal.Http3
         }
 
         // A dual-mode socket sends to IPv4 peers at their mapped address.
-        private static SocketAddress Address(Dictionary<IPEndPoint, SocketAddress> addresses, IPEndPoint peer, bool dualMode)
+        private static SocketAddress Address(
+            Dictionary<IPEndPoint, SocketAddress> addresses,
+            IPEndPoint peer,
+            bool dualMode
+        )
         {
             if (addresses.TryGetValue(peer, out var address)) return address;
 
@@ -735,7 +742,10 @@ namespace EmbedIO.Net.Internal.Http3
         // dispatcher's array is released as soon as it is gathered.
         private sealed class SegmentRun
         {
-            private readonly byte[] _bytes = GC.AllocateUninitializedArray<byte>(UdpSegmentSender.MaximumBytes, pinned: true);
+            private readonly byte[] _bytes = GC.AllocateUninitializedArray<byte>(
+                UdpSegmentSender.MaximumBytes,
+                pinned: true
+            );
             private IPEndPoint? _peer;
             private SocketAddress? _address;
 
@@ -746,11 +756,11 @@ namespace EmbedIO.Net.Internal.Http3
             // A shorter datagram ends the run, as do the platforms' limits.
             internal bool Full =>
                 Count > 0
-                && (Count == UdpSegmentSender.MaximumSegments
-                    || Length % SegmentLength != 0
-                    || Length + SegmentLength > _bytes.Length);
-
-            internal SocketAddress Address => _address ?? throw new InvalidOperationException("No datagrams are gathered.");
+                    && (Count == UdpSegmentSender.MaximumSegments
+                        || Length % SegmentLength != 0
+                        || Length + SegmentLength > _bytes.Length);
+            internal SocketAddress Address =>
+                _address ?? throw new InvalidOperationException("No datagrams are gathered.");
             internal ReadOnlySpan<byte> Bytes => _bytes.AsSpan(0, Length);
 
             internal ReadOnlyMemory<byte> Datagram(int index)
@@ -770,7 +780,9 @@ namespace EmbedIO.Net.Internal.Http3
                     SegmentLength = datagram.Length;
                 }
 
-                else if (Full || datagram.Length > SegmentLength || !(ReferenceEquals(peer, _peer) || peer.Equals(_peer)))
+                else if (
+                    Full || datagram.Length > SegmentLength || !(ReferenceEquals(peer, _peer) || peer.Equals(_peer))
+                )
                     return false;
 
                 datagram.CopyTo(_bytes.AsSpan(Length));

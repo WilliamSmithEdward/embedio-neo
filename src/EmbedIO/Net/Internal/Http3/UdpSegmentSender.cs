@@ -98,7 +98,11 @@ namespace EmbedIO.Net.Internal.Http3
             int segmentLength
         )
         {
-            var buffer = new WindowsBuffer { Length = (uint)length, Pointer = (nint)data };
+            var buffer = new WindowsBuffer
+            {
+                Length = (uint)length,
+                Pointer = (nint)data
+            };
             var control = new WindowsSegmentControl
             {
                 Level = UdpLevel,
@@ -114,7 +118,11 @@ namespace EmbedIO.Net.Internal.Http3
                 NameLength = nameLength,
                 Buffers = (nint)(&buffer),
                 BufferCount = 1,
-                Control = new WindowsBuffer { Length = (uint)sizeof(WindowsSegmentControl), Pointer = (nint)(&control) }
+                Control = new WindowsBuffer
+                {
+                    Length = (uint)sizeof(WindowsSegmentControl),
+                    Pointer = (nint)(&control)
+                }
             };
             uint sent;
 
@@ -132,7 +140,11 @@ namespace EmbedIO.Net.Internal.Http3
             int segmentLength
         )
         {
-            var vector = new LinuxVector { Base = (nint)data, Length = (nuint)length };
+            var vector = new LinuxVector
+            {
+                Base = (nint)data,
+                Length = (nuint)length
+            };
             var control = new LinuxSegmentControl
             {
                 Level = UdpLevel,
@@ -168,22 +180,21 @@ namespace EmbedIO.Net.Internal.Http3
 
         // The errno values sendmsg reports for a UDP socket, the same on every Linux
         // architecture .NET supports.
-        private static SocketError LinuxError(int error) =>
-            error switch
-            {
-                5 or 95 => SocketError.OperationNotSupported,
-                11 => SocketError.WouldBlock,
-                22 => SocketError.InvalidArgument,
-                90 => SocketError.MessageSize,
-                92 => SocketError.ProtocolOption,
-                101 => SocketError.NetworkUnreachable,
-                104 => SocketError.ConnectionReset,
-                105 => SocketError.NoBufferSpaceAvailable,
-                111 => SocketError.ConnectionRefused,
-                112 => SocketError.HostDown,
-                113 => SocketError.HostUnreachable,
-                _ => SocketError.SocketError
-            };
+        private static SocketError LinuxError(int error) => error switch
+        {
+            5 or 95 => SocketError.OperationNotSupported,
+            11 => SocketError.WouldBlock,
+            22 => SocketError.InvalidArgument,
+            90 => SocketError.MessageSize,
+            92 => SocketError.ProtocolOption,
+            101 => SocketError.NetworkUnreachable,
+            104 => SocketError.ConnectionReset,
+            105 => SocketError.NoBufferSpaceAvailable,
+            111 => SocketError.ConnectionRefused,
+            112 => SocketError.HostDown,
+            113 => SocketError.HostUnreachable,
+            _ => SocketError.SocketError
+        };
 
         // WSABUF.
         [StructLayout(LayoutKind.Sequential)]

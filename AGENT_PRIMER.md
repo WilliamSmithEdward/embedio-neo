@@ -398,6 +398,12 @@ Select with `options.WithMode(HttpListenerMode.X)`:
   not check the lifetime). A publication, disposal or listener stop discards them. A
   `ClientCertificateMode` of `Allow` or `Require` turns tickets off. The tickets allow
   no early data. See [session resumption](docs/guides/http3.md#session-resumption).
+- On Windows 10 version 2004 and later and Linux 4.18 and later, HTTP/3 sends
+  consecutive datagrams for one client in one segmented system call (unreleased;
+  2.18.0 sends one per call). Nothing needs configuring; where the socket cannot
+  segment, and on macOS, each datagram is one call. A 1 MiB response costs 27 to 29
+  percent less server CPU on Windows and 54 percent less on Linux than in 2.18.0. See
+  [segmented UDP sends](docs/project/quic-development-and-testing.md#segmented-udp-sends).
 - An HTTP/3 listener prepares each certificate's TLS credential once and reuses it
   for later handshakes that select the same `X509Certificate2` object (2.18.0 and
   later). `ServerCertificateSource.Publish` drops the prepared
