@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 import socket
-from aioquic.asyncio import connect
+from quic_client import connect
 from aioquic.quic.logger import QuicLogger
 from aioquic.tls import CipherSuite
 from verify import provenance

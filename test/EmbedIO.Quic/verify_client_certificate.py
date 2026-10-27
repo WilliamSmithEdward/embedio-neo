@@ -8,7 +8,7 @@ import uuid
 import importlib.metadata
 import json
 from pathlib import Path
-from aioquic.asyncio import connect
+from quic_client import connect
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization

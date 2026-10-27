@@ -12,7 +12,7 @@ import math
 import random
 import time
 from pathlib import Path
-from aioquic.asyncio import connect
+from quic_client import connect
 from aioquic.quic.logger import QuicLogger
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization, hashes
@@ -136,8 +136,12 @@ async def main(args):
                 if peers:
                     (args.output / f'failure-{index}.qlog').write_text(json.dumps(peers[0].mutation_trace.to_dict()), encoding='utf-8')
                 (args.output / f'failure-{index}.der').write_bytes(payload)
+                # A client given a port another socket holds never hears from the server
+                # (quic_client.py); the ports show whether that socket was the listener.
+                transport = peers[0]._transport if peers else None
                 (args.output / f'failure-{index}.json').write_text(json.dumps({'seed': args.seed, 'index': index,
-                    'kind': kind, 'failure': repr(error), 'termination': repr(peers[0].termination) if peers else None, 'sha256': hashlib.sha256(payload).hexdigest()}), encoding='utf-8')
+                    'kind': kind, 'failure': repr(error), 'termination': repr(peers[0].termination) if peers else None, 'sha256': hashlib.sha256(payload).hexdigest(),
+                    'localPort': transport.get_extra_info('sockname')[1] if transport else None, 'serverPort': ready['port']}), encoding='utf-8')
                 raise
 
     try:
