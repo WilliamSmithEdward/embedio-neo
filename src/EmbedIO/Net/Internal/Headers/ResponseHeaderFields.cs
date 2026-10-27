@@ -70,10 +70,8 @@ namespace EmbedIO.Net.Internal
 
                     if (
                         !IsUnsplit(entry.Name)
-                        && (
-                            value.IndexOf(",", StringComparison.Ordinal) >= 0
-                            || string.Equals(entry.Name, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase)
-                        )
+                        && (EmbedIO.Internal.StringOperations.IndexOfOrdinal(value, ',') >= 0
+                            || string.Equals(entry.Name, HttpHeaderNames.SetCookie, StringComparison.OrdinalIgnoreCase))
                     )
                         return false;
                 }
@@ -120,10 +118,11 @@ namespace EmbedIO.Net.Internal
                 else if (_fields[index].Value is List<string> values) values.Add(value);
 
                 else
-                    _fields[index] = new Field(
-                        _fields[index].Name,
-                        new List<string>(2) { (string)_fields[index].Value, value }
-                    );
+                    _fields[index] = new Field(_fields[index].Name, new List<string>(2)
+                    {
+                        (string)_fields[index].Value,
+                        value
+                    });
 
                 return;
             }
@@ -165,9 +164,7 @@ namespace EmbedIO.Net.Internal
                 if (index < 0) return null;
 
                 if (IsUnsplit(name))
-                    return _fields[index].Value is string value
-                        ? [value]
-                        : ((List<string>)_fields[index].Value).ToArray();
+                    return _fields[index].Value is string value ? [value] : [.. (List<string>)_fields[index].Value];
             }
 
             // The base signature takes null; the call still reaches the collection's override.
@@ -208,11 +205,11 @@ namespace EmbedIO.Net.Internal
         // Names the collection's GetValues(name) returns whole on .NET and .NET Framework alike.
         private static bool IsUnsplit(string name) =>
             string.Equals(name, HttpHeaderNames.ContentType, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(name, HttpHeaderNames.ContentLength, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(name, HttpHeaderNames.Date, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(name, HttpHeaderNames.Server, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(name, HttpHeaderNames.KeepAlive, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(name, HttpHeaderNames.AltSvc, StringComparison.OrdinalIgnoreCase);
+                || string.Equals(name, HttpHeaderNames.ContentLength, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, HttpHeaderNames.Date, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, HttpHeaderNames.Server, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, HttpHeaderNames.KeepAlive, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, HttpHeaderNames.AltSvc, StringComparison.OrdinalIgnoreCase);
 
         // A token (RFC 9110, Section 5.6.2) without the apostrophe, which the collection refuses.
         private static bool IsPlainName(string? name)
@@ -222,8 +219,23 @@ namespace EmbedIO.Net.Internal
             foreach (var character in name)
             {
                 if (
-                    character is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9')
-                    or '!' or '#' or '$' or '%' or '&' or '*' or '+' or '-' or '.' or '^' or '_' or '`' or '|' or '~'
+                    character is (>= 'a' and <= 'z')
+                        or (>= 'A' and <= 'Z')
+                        or (>= '0' and <= '9')
+                        or '!'
+                        or '#'
+                        or '$'
+                        or '%'
+                        or '&'
+                        or '*'
+                        or '+'
+                        or '-'
+                        or '.'
+                        or '^'
+                        or '_'
+                        or '`'
+                        or '|'
+                        or '~'
                 )
                     continue;
 

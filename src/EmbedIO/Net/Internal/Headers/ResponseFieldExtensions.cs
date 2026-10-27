@@ -26,12 +26,11 @@
             else response.Headers.Remove(name);
         }
 
-        private static ResponseHeaderFields? Fields(IHttpResponse response) =>
-            response switch
-            {
-                HttpListenerResponse http1 => http1.Fields,
-                MultiplexedResponse multiplexed => multiplexed.Fields,
-                _ => null,
-            };
+        private static ResponseHeaderFields? Fields(IHttpResponse response) => response switch
+        {
+            HttpListenerResponse http1 => http1.Fields,
+            MultiplexedResponse multiplexed => multiplexed.Fields,
+            _ => null
+        };
     }
 }

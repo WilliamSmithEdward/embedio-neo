@@ -334,10 +334,10 @@ namespace EmbedIO.Net.Internal
         // framing and connection-control frames on the wire.
         private static bool IsConnectionField(string name) =>
             name == "connection"
-            || name == "keep-alive"
-            || name == "proxy-connection"
-            || name == "transfer-encoding"
-            || name == "upgrade";
+                || name == "keep-alive"
+                || name == "proxy-connection"
+                || name == "transfer-encoding"
+                || name == "upgrade";
 
         private HpackField CookieField(Cookie cookie)
         {
