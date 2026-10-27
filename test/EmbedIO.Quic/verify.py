@@ -17,7 +17,7 @@ import socket
 import ssl
 import subprocess
 
-from aioquic.asyncio import connect
+from quic_client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import HandshakeCompleted, ConnectionTerminated

@@ -13,7 +13,7 @@ import json
 import os
 import time
 from pathlib import Path
-from aioquic.asyncio import connect
+from quic_client import connect
 from cryptography import x509
 from verify import provenance
 from verify_tls_listener import CertificatePeer, configuration, fingerprint

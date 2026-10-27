@@ -10,7 +10,7 @@ import socket
 import ssl
 import subprocess
 from verify import ALPN, Peer, DatagramRelay, provenance
-from aioquic.asyncio import connect
+from quic_client import connect
 from aioquic.quic.configuration import QuicConfiguration
 
 
