@@ -5,7 +5,7 @@ import importlib.metadata
 import json
 import os
 from pathlib import Path
-from aioquic.asyncio import connect
+from quic_client import connect
 from aioquic.quic.logger import QuicLogger
 from aioquic.quic.packet import QuicFrameType
 from aioquic.tls import CipherSuite

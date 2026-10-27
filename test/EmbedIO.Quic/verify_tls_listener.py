@@ -6,7 +6,7 @@ import importlib.metadata
 import json
 import ssl
 from pathlib import Path
-from aioquic.asyncio import connect
+from quic_client import connect
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import ConnectionTerminated
 from cryptography import x509

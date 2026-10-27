@@ -12,11 +12,11 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
-from aioquic.asyncio import connect
 from aioquic.tls import CipherSuite
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "EmbedIO.Quic"))
 from verify_http3 import HttpPeer
 from verify_tls_listener import configuration
+from quic_client import connect
 
 
 def certificate(directory):

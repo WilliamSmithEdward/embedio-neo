@@ -5,7 +5,7 @@ import json
 import importlib.metadata
 import ssl
 from pathlib import Path
-from aioquic.asyncio import connect
+from quic_client import connect
 from aioquic.asyncio.protocol import QuicConnectionProtocol
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.connection import QuicConnectionState

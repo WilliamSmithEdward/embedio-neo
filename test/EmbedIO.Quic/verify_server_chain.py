@@ -2,7 +2,8 @@ import argparse, asyncio, hashlib, importlib.metadata, json, os, ssl, sys
 from verify import provenance
 from cryptography.hazmat.primitives import hashes
 from pathlib import Path
-from aioquic.asyncio import connect, QuicConnectionProtocol
+from aioquic.asyncio import QuicConnectionProtocol
+from quic_client import connect
 from aioquic.quic.configuration import QuicConfiguration
 from aioquic.quic.events import ConnectionTerminated
 
