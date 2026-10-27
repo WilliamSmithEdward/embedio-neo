@@ -54,7 +54,7 @@ namespace EmbedIO.Quic
                 connection.Receive(0, 0, Frame(1, headers), false);
                 Check(((WebTransportApplication)connection.Protocol).AcceptedSessions == 1, "linked session admission");
                 var prefix = Wire.Frame(0x54, 0);
-                connection.Reset(6, 1234, 100, (ulong)prefix.Length, true);
+                connection.Reset(6, 1234, 100, (ulong)prefix.Length);
                 connection.Receive(6, 1, prefix[1..], false);
                 Check(
                     ((WebTransportApplication)connection.Protocol).ResetsDelivered == 0,
@@ -66,9 +66,9 @@ namespace EmbedIO.Quic
                         && ((WebTransportApplication)connection.Protocol).StreamsDelivered == 1,
                     "prefix routed before reset delivery"
                 );
-                Reject(() => connection.Reset(6, 1234, 99, 0, true), "reset final-size conflict", 0x06);
+                Reject(() => connection.Reset(6, 1234, 99, 0), "reset final-size conflict", 0x06);
                 Reject(() => connection.Receive(6, 100, [1], false), "data beyond final size", 0x06);
-                Reject(() => connection.Reset(10, 1234, 3, 4, true), "reliable size above final size");
+                Reject(() => connection.Reset(10, 1234, 3, 4), "reliable size above final size", 0x07);
                 Reject(
                     () => connection.Receive(3, 0, [1], false),
                     "peer cannot write server unidirectional stream",
@@ -76,7 +76,7 @@ namespace EmbedIO.Quic
                 );
                 Reject(() => connection.Stop(3, 0), "critical stream stop");
                 Reject(
-                    () => connection.Reset(2, 1, (ulong)(1 + Frame(4, settings).Length), 0, true),
+                    () => connection.Reset(2, 1, (ulong)(1 + Frame(4, settings).Length), 0),
                     "critical stream reset"
                 );
             }
@@ -85,22 +85,22 @@ namespace EmbedIO.Quic
             {
                 for (ulong id = 2; id < 18; id += 4)
                 {
-                    connection.Reset(id, 1, 65536, 0, true);
-                    connection.Reset(id, 1, 65536, 0, true);
+                    connection.Reset(id, 1, 65536, 0);
+                    connection.Reset(id, 1, 65536, 0);
                 }
 
                 Check(
                     connection.ReceivedData == 262144 && connection.ReceiveCreditUpdates == 2,
                     "reset final sizes consume and release connection credit once"
                 );
-                connection.Reset(18, 1, 1, 0, true);
+                connection.Reset(18, 1, 1, 0);
             }
 
             using (var connection = Create())
             {
-                for (ulong id = 2; id < 18; id += 4) connection.Reset(id, 1, 65536, 65536, true);
+                for (ulong id = 2; id < 18; id += 4) connection.Reset(id, 1, 65536, 65536);
 
-                Reject(() => connection.Reset(18, 1, 1, 0, true), "reliable gaps retain connection credit");
+                Reject(() => connection.Reset(18, 1, 1, 0), "reliable gaps retain connection credit", 0x03);
             }
 
             using (var connection = Create())
@@ -117,7 +117,8 @@ namespace EmbedIO.Quic
                 );
                 Reject(
                     () => connection.Receive(6, 65536, [1], false),
-                    "fresh stream cannot borrow another stream credit"
+                    "fresh stream cannot borrow another stream credit",
+                    0x03
                 );
             }
 

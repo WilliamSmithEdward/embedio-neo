@@ -24,6 +24,7 @@ namespace EmbedIO.Quic
             OutboundQueuePressure();
             AuthenticationLimits();
             ReliableResetParameters();
+            StreamErrorCodes();
 
             foreach (var input in new byte[][]
             {
@@ -362,6 +363,76 @@ namespace EmbedIO.Quic
             connection.CancelApplications();
             connection.Dispose();
             Require(tls.DisposeCalls == 1, "disposed-work-preserves-tls-retirement");
+        }
+
+        // A peer's stream error closes the connection with the code RFC 9000 and
+        // draft-ietf-quic-reliable-stream-reset name: FLOW_CONTROL_ERROR past the stream's credit,
+        // FINAL_SIZE_ERROR for a changed final size and FRAME_ENCODING_ERROR for a Reliable Size
+        // above the Final Size. The server offers reset_stream_at, so RESET_STREAM_AT is accepted
+        // from a peer that did not offer it.
+        private static void StreamErrorCodes()
+        {
+            using var offer = new MemoryStream();
+            Wire.Parameter(offer, 0x1d, []);
+
+            foreach (var (name, offered, payload, expected) in new (string, bool, byte[], ulong?)[]
+            {
+                ("reset-at-without-offer", false, Wire.Frame(0x24, 0, 9, 10, 0), null),
+                (
+                    "stream-past-credit",
+                    true,
+                    [
+                        .. Wire.Frame(0x0e, 0, 65536, 1),
+                        7
+                    ],
+                    0x03
+                ),
+                (
+                    "stream-past-largest-offset",
+                    true,
+                    [
+                        .. Wire.Frame(0x0e, 0, StreamReassembly.MaximumOffset, 1),
+                        7
+                    ],
+                    0x03
+                ),
+                ("reset-past-credit", true, Wire.Frame(0x24, 0, 9, 65537, 0), 0x03),
+                (
+                    "changed-final-size",
+                    true,
+                    [
+                        .. Wire.Frame(0x24, 0, 9, 100, 10),
+                        .. Wire.Frame(0x24, 0, 9, 99, 10)
+                    ],
+                    0x06
+                ),
+                ("reliable-above-final", true, Wire.Frame(0x24, 0, 9, 10, 11), 0x07)
+            })
+            {
+                using var keys = PacketKeys.Initial(Original, false);
+                var first = NativeFuzz.Initial(keys, Original, Client, 0, [1]);
+                using var connection = new QuicConnection(
+                    first,
+                    _ => new ModelTls(true) { ExtraParameters = offered ? offer.ToArray() : [] },
+                    static (port, _) => new AsyncStreamApplication(port)
+                );
+                connection.Receive(first, 0);
+                var output = connection.Receive(ApplicationPacket(connection.ServerId, payload), 1);
+
+                if (!expected.HasValue)
+                {
+                    Require(connection.Phase == ConnectionPhase.Active, "stream-error-" + name);
+                    continue;
+                }
+
+                Require(
+                    connection.Phase == ConnectionPhase.Closing && output.Count == 1,
+                    "stream-error-closes-" + name
+                );
+                using var applicationKeys = new PacketKeys(new byte[32]);
+                var close = new WireReader(applicationKeys.Unprotect(output[0], 1 + Client.Length, 0, out _));
+                Require(close.Integer() == 0x1c && close.Integer() == expected, "stream-error-code-" + name);
+            }
         }
 
         private static void ConfiguredStreamLimit()

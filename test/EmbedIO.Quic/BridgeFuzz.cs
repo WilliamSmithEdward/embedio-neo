@@ -109,8 +109,7 @@ namespace EmbedIO.Quic
                             6,
                             1,
                             (ulong)payload.Length + (ulong)prefix.Length,
-                            (ulong)prefix.Length,
-                            true
+                            (ulong)prefix.Length
                         );
                         mutated.Streams.Receive(6, 1, prefix[1..], false);
                         QuicFuzzChecks.Require(

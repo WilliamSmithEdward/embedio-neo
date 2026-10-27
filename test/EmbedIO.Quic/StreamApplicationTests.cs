@@ -82,11 +82,11 @@
                         && reader.Remaining == 0,
                     "generic-no-implicit-http-prefix-or-critical-stream"
                 );
-                peer.Streams.Reset(0, 123456, 8, 4, true);
+                peer.Streams.Reset(0, 123456, 8, 4);
                 peer.Streams.Receive(0, 2, [3, 4], false);
                 QuicFuzzChecks.Require(app.Resets.Count == 0, "generic-reset-awaits-reliable-prefix");
                 peer.Streams.Receive(0, 0, [1, 2], false);
-                peer.Streams.Reset(0, 123456, 8, 4, true);
+                peer.Streams.Reset(0, 123456, 8, 4);
                 QuicFuzzChecks.Require(
                     app.Resets.SequenceEqual([(0UL, 123456UL)])
                         && app.Received

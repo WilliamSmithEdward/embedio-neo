@@ -184,7 +184,7 @@ namespace EmbedIO.Quic
         private void Account(Incoming input, ulong extent)
         {
             if (extent > input.Maximum || extent - Math.Min(extent, input.Extent) > _receiveMaximum - _receivedExtent)
-                throw new InvalidDataException("QUIC receive flow control exceeded.");
+                throw new TransportException(0x03, "QUIC receive flow control exceeded.");
 
             _receivedExtent += extent - Math.Min(extent, input.Extent);
             input.Extent = Math.Max(extent, input.Extent);
@@ -197,7 +197,7 @@ namespace EmbedIO.Quic
             if (
                 offset > StreamReassembly.MaximumOffset || (ulong)bytes.Length > StreamReassembly.MaximumOffset - offset
             )
-                throw new InvalidDataException("QUIC stream limit exceeded.");
+                throw new TransportException(0x03, "QUIC stream limit exceeded.");
 
             var input = GetIncoming(id);
 
@@ -263,13 +263,14 @@ namespace EmbedIO.Quic
             else input.Terminal = fin;
         }
 
-        internal void Reset(ulong id, ulong error, ulong final, ulong reliable, bool partial)
+        // EmbedIO.Quic offers reset_stream_at on every connection, so a peer may send RESET_STREAM_AT
+        // whether or not it offered the parameter itself (draft-ietf-quic-reliable-stream-reset,
+        // section 3). A RESET_STREAM frame arrives with a Reliable Size of zero.
+        internal void Reset(ulong id, ulong error, ulong final, ulong reliable)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if (partial && !_resetNegotiated) throw new InvalidDataException("Reliable reset was not negotiated.");
-
-            if (reliable > final) throw new InvalidDataException("Reliable size exceeds final size.");
+            if (reliable > final) throw new TransportException(0x07, "Reliable size exceeds final size.");
 
             var input = GetIncoming(id);
 

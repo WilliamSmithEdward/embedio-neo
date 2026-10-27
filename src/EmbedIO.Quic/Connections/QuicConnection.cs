@@ -1261,7 +1261,7 @@ namespace EmbedIO.Quic
                     var error = reader.Integer();
                     var final = reader.Integer();
                     var reliable = type == 0x24 ? reader.Integer() : 0;
-                    _streams.Reset(id, error, final, reliable, type == 0x24);
+                    _streams.Reset(id, error, final, reliable);
                 }
 
                 else if (_streams != null && type == 5) _streams.Stop(reader.Integer(), reader.Integer());
