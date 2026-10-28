@@ -11,24 +11,26 @@ and 2.2.0.
 ## Repository use
 
 The affected package is not a production or test dependency of EmbedIO-Neo. It
-is part of the complete, wheel-only Python closure for Semgrep 1.181.0 under
+is part of the complete, wheel-only Python closure for Semgrep 1.182.0 under
 `.github/security/semgrep/requirements.txt`. Semgrep's published package
 metadata requires `mcp==1.29.0`, so updating this transitive package alone would
 make the scanner environment inconsistent with its direct dependency. This
-review was written for Semgrep 1.180.0 and rechecked on 2026-10-22 for 1.181.0,
-which still requires `mcp==1.29.0`, as does every release through 1.182.1.
+review was written for Semgrep 1.180.0 and rechecked for 1.181.0 on 2026-10-22
+and for 1.182.0 on 2026-10-27. Every release through 1.182.1 still requires
+`mcp==1.29.0`.
 
 The security workflow builds that pinned scanner image and invokes only
-`semgrep scan` over the repository. It does not import MCP application APIs,
-start FastMCP, create a `StreamableHTTPSessionManager`, bind an MCP HTTP
-listener, or expose any container port. The container is removed after the
-scan. No untrusted client can create an MCP session in this use.
+`semgrep scan` over the repository. A scan imports the MCP SDK's server modules
+while loading Semgrep's command line, but only `semgrep mcp` creates FastMCP, a
+`StreamableHTTPSessionManager` or an MCP HTTP listener. The container exposes
+no port and is removed after the scan. No untrusted client can create an MCP
+session in this use.
 
 ## Acceptance boundary
 
 William approved dismissing alert #16 as `not_used` on 2026-10-15. This is a
 narrow acceptance of the unreachable Streamable HTTP server path in the
-Semgrep 1.181.0 CI scanner environment. It is not a claim that `mcp` 1.29.0 is
+Semgrep 1.182.0 CI scanner environment. It is not a claim that `mcp` 1.29.0 is
 generally safe and does not accept use of that version by production code,
 tests, repository services, or any workflow that starts an MCP transport.
 
