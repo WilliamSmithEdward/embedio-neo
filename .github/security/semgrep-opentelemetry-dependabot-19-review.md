@@ -13,16 +13,17 @@ is limited to availability. The patched release is `opentelemetry-api` 1.45.1.
 ## Repository use
 
 The affected package is not a production or test dependency of EmbedIO-Neo. It
-is part of the complete, wheel-only Python closure for Semgrep 1.181.0 under
+is part of the complete, wheel-only Python closure for Semgrep 1.182.0 under
 `.github/security/semgrep/requirements.txt`. Every Semgrep release through
 1.182.1 requires `opentelemetry-api~=1.37.0`, and `opentelemetry-sdk` 1.37.0
 requires `opentelemetry-api==1.37.0`, so the patched release cannot enter the
 closure that the image's `pip check` verifies. Semgrep's request to raise those
 pins, [semgrep/semgrep#11863](https://github.com/semgrep/semgrep/issues/11863),
-targets 1.44.0, which is still affected.
+targets 1.44.0, which is still affected. This review was written for Semgrep
+1.181.0 and rechecked for 1.182.0 on 2026-10-27.
 
 The parser runs only when `TraceContextTextMapPropagator.extract` receives a
-carrier with a `tracestate` entry. Semgrep 1.181.0 calls
+carrier with a `tracestate` entry. Semgrep 1.182.0 calls
 `opentelemetry.propagate.extract` in one place, `Telemetry.extract`. That runs
 only when a scan starts with `--trace`, and its carrier holds a single
 `traceparent` built from two environment variables, never a `tracestate`. The
