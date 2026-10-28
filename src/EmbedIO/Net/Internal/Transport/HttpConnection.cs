@@ -365,6 +365,9 @@ namespace EmbedIO.Net.Internal
                     _context.HttpListenerResponse,
                     _context.Listener?.IgnoreWriteExceptions ?? true
                 );
+
+                if (_outputWindow) owner.OpenWindow();
+
                 _oStream = owner;
                 var abort = _requestAborts == null ? null : EmbedIO.Internal.RequestAbortRegistry.Find(_context);
 
