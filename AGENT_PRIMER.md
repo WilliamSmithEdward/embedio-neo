@@ -252,7 +252,7 @@ limits, failure matrix, concurrency fuzzing and cross-target support.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current source version | 2.18.0, the v2 engine. 2.18.0 cuts EmbedIO.Quic's HTTP/3 cost per datagram and per request, refuses new HTTP/3 connections before any TLS work under overload, advertises HTTP/3 with Alt-Svc in `EmbedIOCombined`, adds opt-in Retry address validation, reuses each certificate's TLS credential and speaks WebTransport draft-14 for Safari. 2.17.0 runs HTTP/3 on EmbedIO.Quic instead of `System.Net.Quic`; opt-in WebTransport requires 2.17.0+. 2.16.1 keeps the server running when one HTTP/1 request fails. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current source version | 2.19.0, the v2 engine. 2.19.0 resumes HTTP/3 TLS sessions with session tickets, sends consecutive HTTP/3 datagrams in one segmented system call, builds a response's `Headers` collection only when something reads it, keeps an HTTP/3 connection open when a client cancels a request just as the server starts it, and closes connections that break QUIC's stream and frame rules with the error codes RFC 9000 names. 2.18.0 cuts EmbedIO.Quic's HTTP/3 cost per datagram and per request, refuses new HTTP/3 connections before any TLS work under overload, advertises HTTP/3 with Alt-Svc in `EmbedIOCombined`, adds opt-in Retry address validation, reuses each certificate's TLS credential and speaks WebTransport draft-14 for Safari. 2.17.0 runs HTTP/3 on EmbedIO.Quic instead of `System.Net.Quic`; opt-in WebTransport requires 2.17.0+. 2.16.1 keeps the server running when one HTTP/1 request fails. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -392,14 +392,14 @@ Select with `options.WithMode(HttpListenerMode.X)`:
   round trip. There is no 0-RTT, and on Linux and macOS the certificate key must be
   exportable. See [address validation](docs/guides/http3.md#address-validation).
 - HTTP/3 issues a TLS 1.3 session ticket with every handshake, so reconnecting clients
-  resume without the certificate and its signature (unreleased; 2.18.0 issues none).
+  resume without the certificate and its signature (new in 2.19.0; 2.18.0 issues none).
   Ticket keys are random, in memory and per certificate object; a new one starts every
   hour and tickets resume for two hours (two to three on Windows, where Schannel does
   not check the lifetime). A publication, disposal or listener stop discards them. A
   `ClientCertificateMode` of `Allow` or `Require` turns tickets off. The tickets allow
   no early data. See [session resumption](docs/guides/http3.md#session-resumption).
 - On Windows 10 version 2004 and later and Linux 4.18 and later, HTTP/3 sends
-  consecutive datagrams for one client in one segmented system call (unreleased;
+  consecutive datagrams for one client in one segmented system call (new in 2.19.0;
   2.18.0 sends one per call). Nothing needs configuring; where the socket cannot
   segment, and on macOS, each datagram is one call. A 1 MiB response costs 27 to 29
   percent less server CPU on Windows and 54 percent less on Linux than in 2.18.0. See
@@ -453,7 +453,7 @@ permanent duplicate-rejection floor. Retired send records and acknowledgement
 history also compact within fixed bounds. Incoming ACK frames accept range counts
 that fit the datagram and sent-packet bounds; ordered ranges use indexed recovery
 lookup. Malformed ranges use FRAME_ENCODING_ERROR, while acknowledgements for
-unsent packets use PROTOCOL_VIOLATION. Unreleased: unknown and truncated frames also
+unsent packets use PROTOCOL_VIOLATION. From 2.19.0, unknown and truncated frames also
 close the connection with FRAME_ENCODING_ERROR, CRYPTO data past the 64 KiB handshake
 buffer with CRYPTO_BUFFER_EXCEEDED and a packet without frames with PROTOCOL_VIOLATION,
 and DATAGRAM frames up to the advertised 1,200 bytes are accepted.
@@ -743,7 +743,7 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
   `ArgumentException`; a header or cookie value with a control character throws
   `InvalidOperationException` when the response is written. Never copy request
   input into headers without validating it.
-- `Response.Headers` is built when something first reads it (unreleased; 2.18.0
+- `Response.Headers` is built when something first reads it (new in 2.19.0; 2.18.0
   built it for every response). The fields the engine writes, the content type and
   length, `Server`, `Date`, framing, and `Vary` and `Content-Encoding` from content
   negotiation, wait in a smaller list until then. A handler that sets only
@@ -1416,8 +1416,7 @@ The [development record](docs/project/quic-development-and-testing.md) lists the
 platform, browser and endurance results, the open-issue audit and the work that
 remains. In 2.18.0 an HTTP/3 connection can, rarely, close when a client cancels a
 request just as the server starts it
-([#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555)); the fix is
-on main and not yet released.
+([#555](https://github.com/WilliamSmithEdward/embedio-neo/issues/555)); 2.19.0 fixes it.
 
 The source-built Native AOT smoke imports the same explicit test-only Unix TLS
 copy hook as the NUnit and development hosts. Ordinary CI supplies its verified

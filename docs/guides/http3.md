@@ -245,7 +245,7 @@ Where the socket can segment sends, from Windows 10 version 2004 (`UDP_SEND_MSG_
 and Linux 4.18 (`UDP_SEGMENT`), the listener sends consecutive datagrams of one size for
 one client in one system call, and the operating system or network adapter divides
 them. Where it cannot, and on macOS, each datagram is one call. Nothing needs
-configuring. This is unreleased; 2.18.0 sends one datagram per call. See
+configuring. This is new in 2.19.0; 2.18.0 sends one datagram per call. See
 [segmented UDP sends](../project/quic-development-and-testing.md#segmented-udp-sends).
 
 `Stop` and disposal cancel active requests, release pending accepts and close
@@ -334,7 +334,7 @@ to start with it. This option is new in 2.18.0; 2.17.0 does not send Retry.
 <a id="session-resumption"></a>
 The server issues a TLS 1.3 session ticket with every handshake, so a client that
 reconnects can resume the session and skip the certificate and its signature (RFC 8446
-section 2.2). This is unreleased; 2.18.0 and earlier issue no tickets.
+section 2.2). This is new in 2.19.0; 2.18.0 and earlier issue no tickets.
 
 - The keys that protect the tickets are random, live only in the server's memory and
   belong to one certificate object, so a ticket resumes only under the certificate it

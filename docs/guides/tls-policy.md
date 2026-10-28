@@ -139,8 +139,8 @@ Do not dispose it: requests on the same connection share it.
 
 With `ClientCertificateMode` set to `Allow` or `Require`, an HTTP/3 listener issues no
 TLS session tickets, so every connection runs the full handshake and its
-client-certificate check. With `None`, HTTP/3 clients can resume (unreleased); see
-[session resumption](http3.md#session-resumption).
+client-certificate check. With `None`, HTTP/3 clients can resume (2.19.0 and later);
+see [session resumption](http3.md#session-resumption).
 
 ## Protocol versions
 
