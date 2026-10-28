@@ -18,8 +18,8 @@ namespace EmbedIO.Net.Internal
         private const int FirstSegmentPrefix = 16384;
         private const int HeldOutputBound = 65536;
         private static readonly WaitCallback SendQueued = static state =>
-            _ = ((ResponseStream)(state ?? throw new InvalidOperationException("Missing response output.")))
-                .SendQueuedAsync();
+            _ = ((ResponseStream)(state
+                ?? throw new InvalidOperationException("Missing response output."))).SendQueuedAsync();
         private static readonly byte[] CrLf = [13, 10];
         private static readonly byte[] EndOfChunks =
         [
@@ -453,8 +453,13 @@ namespace EmbedIO.Net.Internal
 
                         if (prefix != count)
                         {
-                            await SubmitAsync(buffer, offset + prefix, count - prefix, synchronous, token)
-                                .ConfigureAwait(false);
+                            await SubmitAsync(
+                                buffer,
+                                offset + prefix,
+                                count - prefix,
+                                synchronous,
+                                token
+                            ).ConfigureAwait(false);
 
                             if (chunked) await SubmitChunkEndAsync(tail, synchronous, token).ConfigureAwait(false);
                         }

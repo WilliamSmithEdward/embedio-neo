@@ -214,7 +214,10 @@ namespace EmbedIO.Net.Internal
                     }
 
                     // A completed response has already sent its output and released the stream.
-                    if (output != null) await output.CloseWindowAsync().ConfigureAwait(false);
+                    if (output != null)
+                        await output
+                            .CloseWindowAsync()
+                            .ConfigureAwait(false);
                 }
 
                 return true;
