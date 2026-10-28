@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -392,6 +393,227 @@ namespace EmbedIO.Tests
                 transport.Dispose();
                 await attempting.WaitAsync(TimeSpan.FromSeconds(5));
             }
+        }
+
+        [Test]
+        public void NeverActiveConnectionsDoNotEnterTheOutputWatchlistOrStartItsTimer()
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            List<IDisposable> registrations = [];
+
+            try
+            {
+                for (var index = 0; index < 512; index++)
+                    registrations.Add(
+                        (IDisposable)EngineInternals.Create("EmbedIO.Net.Internal.Http1OutputHeartbeat+Registration")
+                    );
+
+                TickHeartbeat();
+
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(MonitoredCount, Is.EqualTo(512));
+                    Assert.That(ActiveCount, Is.Zero);
+                    Assert.That(HeartbeatRunning, Is.Zero);
+                }
+
+                foreach (var registration in registrations)
+                    Assert.That(EngineInternals.Field(registration, "_slot"), Is.EqualTo(-1));
+            }
+
+            finally
+            {
+                foreach (var registration in registrations) registration.Dispose();
+            }
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(MonitoredCount, Is.Zero);
+                Assert.That(ActiveCount, Is.Zero);
+            }
+        }
+
+        [Test]
+        public async Task AQuiescentConnectionIsPrunedWhileAnotherConnectionStillHoldsOutput()
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var quiet = await Issue574_ResponseWrites.Fixture.Create(true, ignoreErrors: true);
+            using var held = await Issue574_ResponseWrites.Fixture.Create(true, ignoreErrors: true);
+            using var quietRegistration = OpenWindow(quiet.Stream);
+            using var heldRegistration = OpenWindow(held.Stream);
+            quiet.Stream.Write(Encoding.ASCII.GetBytes("AAA"), 0, 3);
+            held.Stream.Write(Encoding.ASCII.GetBytes("BBB"), 0, 3);
+            quiet.Stream.Dispose();
+            Assert.That(ActiveCount, Is.EqualTo(2));
+            TickHeartbeat();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(MonitoredCount, Is.EqualTo(2));
+                Assert.That(ActiveCount, Is.EqualTo(1));
+                Assert.That(EngineInternals.Field(quietRegistration, "_slot"), Is.EqualTo(-1));
+                Assert.That(EngineInternals.Field(heldRegistration, "_output"), Is.SameAs(held.Stream));
+                Assert.That(held.Transport.AsyncWrites, Is.Zero);
+                Assert.That(HeartbeatRunning, Is.EqualTo(1));
+            }
+
+            TickHeartbeat();
+            Assert.That(Body(held.Transport), Is.EqualTo("3\r\nBBB\r\n"));
+            TickHeartbeat();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ActiveCount, Is.Zero);
+                Assert.That(HeartbeatRunning, Is.Zero);
+                Assert.That(MonitoredCount, Is.EqualTo(2));
+            }
+        }
+
+        [Test]
+        public async Task ConcurrentPruningAndReactivationRetainHeldOutputAndItsTimerWakeup()
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var fixture = await Issue574_ResponseWrites.Fixture.Create(true, ignoreErrors: true);
+            using var registration = OpenWindow(fixture.Stream);
+            byte[] payload = [(byte)'X'];
+            fixture.Stream.Write(payload, 0, payload.Length);
+
+            for (var round = 0; round < 64; round++)
+            {
+                await SendDueHeartbeatAsync(fixture.Stream);
+                using var start = new ManualResetEventSlim();
+                var pruning = Task.Run(() =>
+                {
+                    start.Wait();
+                    TickHeartbeat();
+                });
+                var holding = Task.Run(() =>
+                {
+                    start.Wait();
+                    fixture.Stream.Write(payload, 0, payload.Length);
+                });
+                start.Set();
+                await Task
+                    .WhenAll(pruning, holding)
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(ActiveCount, Is.EqualTo(1));
+                    Assert.That(HeartbeatRunning, Is.EqualTo(1));
+                    Assert.That(EngineInternals.Field(registration, "_output"), Is.SameAs(fixture.Stream));
+                }
+            }
+
+            await EngineInternals.AwaitAsync(EngineInternals.Call(fixture.Stream, "CloseWindowAsync"));
+            TickHeartbeat();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ActiveCount, Is.Zero);
+                Assert.That(HeartbeatRunning, Is.Zero);
+            }
+        }
+
+        [Test]
+        public async Task ANewBusyEpochRestartsTheTimerAndRetirementRemovesTheConnectionImmediately()
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var fixture = await Issue574_ResponseWrites.Fixture.Create(true, ignoreErrors: true);
+            using var registration = OpenWindow(fixture.Stream);
+            fixture.Stream.Write(Encoding.ASCII.GetBytes("AAA"), 0, 3);
+            await SendDueHeartbeatAsync(fixture.Stream);
+            Assert.That(ActiveCount, Is.EqualTo(1));
+            TickHeartbeat();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ActiveCount, Is.Zero);
+                Assert.That(HeartbeatRunning, Is.Zero);
+            }
+
+            fixture.Stream.Write(Encoding.ASCII.GetBytes("BBB"), 0, 3);
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ActiveCount, Is.EqualTo(1));
+                Assert.That(HeartbeatRunning, Is.EqualTo(1));
+            }
+
+            registration.Dispose();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ActiveCount, Is.Zero);
+                Assert.That(MonitoredCount, Is.Zero);
+                Assert.That(HeartbeatRunning, Is.Zero);
+                Assert.That(EngineInternals.Field(registration, "_output"), Is.Null);
+            }
+
+            await EngineInternals.AwaitAsync(EngineInternals.Call(fixture.Stream, "AbandonAsync"));
+            fixture.Stream.Dispose();
+            Assert.That(Body(fixture.Transport), Is.EqualTo("3\r\nAAA\r\n"));
+        }
+
+        [Test]
+        public async Task RetiringAMiddleActiveConnectionKeepsOtherWatchlistSlotsValid()
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var first = await Issue574_ResponseWrites.Fixture.Create(true, ignoreErrors: true);
+            using var middle = await Issue574_ResponseWrites.Fixture.Create(true, ignoreErrors: true);
+            using var last = await Issue574_ResponseWrites.Fixture.Create(true, ignoreErrors: true);
+            using var firstRegistration = OpenWindow(first.Stream);
+            using var middleRegistration = OpenWindow(middle.Stream);
+            using var lastRegistration = OpenWindow(last.Stream);
+            first.Stream.Write(Encoding.ASCII.GetBytes("AAA"), 0, 3);
+            middle.Stream.Write(Encoding.ASCII.GetBytes("BBB"), 0, 3);
+            last.Stream.Write(Encoding.ASCII.GetBytes("CCC"), 0, 3);
+            Assert.That(ActiveCount, Is.EqualTo(3));
+            middleRegistration.Dispose();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ActiveCount, Is.EqualTo(2));
+                Assert.That(MonitoredCount, Is.EqualTo(2));
+                Assert.That(EngineInternals.Field(middleRegistration, "_slot"), Is.EqualTo(-1));
+                Assert.That(EngineInternals.Field(lastRegistration, "_slot"), Is.EqualTo(1));
+            }
+
+            TickHeartbeat();
+            TickHeartbeat();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(Body(first.Transport), Is.EqualTo("3\r\nAAA\r\n"));
+                Assert.That(Body(last.Transport), Is.EqualTo("3\r\nCCC\r\n"));
+                Assert.That(middle.Transport.AsyncWrites, Is.Zero);
+            }
+
+            TickHeartbeat();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(ActiveCount, Is.Zero);
+                Assert.That(HeartbeatRunning, Is.Zero);
+            }
+
+            await EngineInternals.AwaitAsync(EngineInternals.Call(middle.Stream, "AbandonAsync"));
+        }
+
+        private static int HeartbeatRunning =>
+            (int)(Heartbeat
+                .GetField("_running", EngineInternals.Members)
+                ?.GetValue(null)
+                ?? throw new AssertionException("Missing output heartbeat running state."));
+
+        private static void TickHeartbeat() => _ = EngineInternals.CallStatic(Heartbeat, "Tick", [null]);
+
+        private static Task<object?> SendDueHeartbeatAsync(Stream output)
+        {
+            var tick =
+                (int)(EngineInternals.Field(output, "_heldTick")
+                    ?? throw new AssertionException("Missing held output tick."));
+            return EngineInternals.AwaitAsync(EngineInternals.Call(output, "SendHeartbeatAsync", unchecked(tick + 2)));
         }
 
         private sealed class CloseReleasedTransport : MemoryStream

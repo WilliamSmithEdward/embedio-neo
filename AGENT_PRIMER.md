@@ -739,6 +739,11 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
 - `Redirect(location, statusCode)` accepts only 3xx statuses.
 - Set status, headers and cookies before the first body write or flush. After
   headers are sent they cannot change.
+- In unreleased HTTP/1 source, incomplete writes and flushes can be held while a
+  handler for a request without a body runs inline. Metadata is committed by the
+  first write or flush as before. Returning, suspending or the shared heartbeat
+  sends the held bytes; strict write errors retain write-through behavior. See
+  [HTTP/1.1 response completion](docs/project/http1-coalesced-output.md).
 - Response text is validated. `StatusDescription` with a control character throws
   `ArgumentException`; a header or cookie value with a control character throws
   `InvalidOperationException` when the response is written. Never copy request

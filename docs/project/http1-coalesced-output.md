@@ -1,7 +1,7 @@
 # HTTP/1.1 response completion and held output
 
 This is the first increment of [#577](https://github.com/WilliamSmithEdward/embedio-neo/issues/577).
-The change is pending and is absent from the 2.19.0 packages. The wider goal is
+The change is absent from the 2.19.0 packages. The wider goal is
 lower cold-start and warm latency and higher throughput than Kestrel. Warm
 steady-state and tail latency take priority, and Windows is the lead environment.
 This increment does not establish that the wider goal has been met.
@@ -35,10 +35,12 @@ at a 10 ms interval. A fast inline handler therefore has at least one complete
 tick to finish. This is a scheduling interval, not a real-time latency guarantee.
 No option or public API is added.
 
-Each connection registers once, on its first eligible output window, and removes
-its registration at transport retirement. The timer stops while no output is
-held. A response publishes its held output without registering another callback
-or queuing a work item. The sender rechecks output age under the existing write
+Each connection owns one registration, created on its first eligible output
+window and removed at transport retirement. It enters the shared watchlist only
+when output is held. Fast successive responses reuse that active epoch; a tick
+prunes quiescent entries with a publication recheck, and an empty watchlist stops
+the timer. Idle connections are not scanned. A response publishes its output
+without registering another callback or queuing a work item. The sender rechecks output age under the existing write
 gate; a slow connection has at most one heartbeat sender and does not hold the
 shared registration lock during I/O. Pooled held bytes are cleared before return,
 including on write failure and connection retirement.
@@ -78,7 +80,7 @@ Fresh processes do not imply cold OS caches.
 
 ## Validation
 
-The 39 new cases and 96 existing compatibility cases pass on Windows (135 total).
+The 44 new cases and 96 existing compatibility cases pass on Windows (140 total).
 Four identical single-write assertions fail on exact main: synchronous responses
 use three writes, while asynchronous variants use two asynchronous writes before
 completion. The baseline proof adapts only the unavailable holding-window setup;
@@ -88,12 +90,27 @@ The final source-quality scripts pass all 588 source files and all 16 project
 scans. Changed source and tests have no informational, warning or error
 diagnostics; hidden hints remain report-only. Both library targets build in
 Debug and Release, changed-file whitespace and analyzer guards pass, and all four
-existing allocation ceiling checks pass. The complete Windows suite is pending.
+existing allocation ceiling checks pass. The final complete Windows suite passes:
+7,576 successes, four expected skips and zero failures, 7,580 total, in 8m17s.
+
+The benchmark's changed HTTP/1 client file also passes its separate build,
+whitespace and informational-diagnostic checks. A one-connection refusal probe
+verifies failure-only stack, endpoint and socket-code diagnostics, the unchanged
+error result, no retry and cleanup. Successful binding, request validation and
+certificate pinning are unchanged; cold clients use a separate unchanged factory.
+
+The initial full run exposed eight committed-output compatibility failures and
+two Windows socket10055 failures while allocating test ports. The output
+corrections above restore the committed-output behavior; all affected classes
+pass focused confirmation and the final full suite. The initial run and retry
+provenance are retained under ignored `TestResults/h1perf`; no OS settings or
+test assertions were relaxed.
 
 The cases exercise transport write counts, blocking-handler flush promptness,
 strict errors, pipelining and keep-alive order, window closure, tick aging,
 registration lifetime, held-buffer cleanup, telemetry, committed errors and
-nonblocking shutdown under backpressure. The discovery floor is 7,575.
+nonblocking shutdown under backpressure and active-watchlist epochs. The discovery
+floor is 7,580.
 
 The broader #577 work, including pipelined response batching, per-request
 allocation and a Windows Registered I/O transport, remains separate. A transport

@@ -154,7 +154,7 @@ namespace EmbedIO.Tests
         [Test]
         public async Task AConnectionRegistrationCanMonitorSuccessiveResponsesWithoutRetainingCompletedOnes()
         {
-            using var slowHeartbeat = new SlowHeartbeat();
+            using var slowHeartbeat = new SlowHeartbeat(10000);
             using var registration = (IDisposable)EngineInternals.Create(
                 "EmbedIO.Net.Internal.Http1OutputHeartbeat+Registration"
             );
@@ -168,6 +168,7 @@ namespace EmbedIO.Tests
                 {
                     Assert.That(MonitoredCount, Is.EqualTo(1));
                     Assert.That(EngineInternals.Field(registration, "_output"), Is.Null);
+                    Assert.That(ActiveCount, Is.EqualTo(response == 0 ? 0 : 1));
                 }
 
                 fixture.Stream.Write(Encoding.ASCII.GetBytes("ABC"), 0, 3);
@@ -176,6 +177,7 @@ namespace EmbedIO.Tests
                 {
                     Assert.That(MonitoredCount, Is.EqualTo(1));
                     Assert.That(EngineInternals.Field(registration, "_output"), Is.SameAs(fixture.Stream));
+                    Assert.That(ActiveCount, Is.EqualTo(1));
                 }
 
                 fixture.Stream.Dispose();
@@ -185,8 +187,16 @@ namespace EmbedIO.Tests
                     Assert.That(MonitoredCount, Is.EqualTo(1));
                     Assert.That(EngineInternals.Field(registration, "_output"), Is.Null);
                     Assert.That(fixture.Transport.SynchronousWrites, Is.EqualTo(1));
+                    Assert.That(
+                        ActiveCount,
+                        Is.EqualTo(1),
+                        "Fast responses share their connection's busy epoch until pruning."
+                    );
                 }
             }
+
+            registration.Dispose();
+            Assert.That(ActiveCount, Is.Zero);
         }
 
         [TestCase(false)]
@@ -359,6 +369,11 @@ namespace EmbedIO.Tests
             Heartbeat
                 .GetProperty("MonitoredCount", EngineInternals.Members)
                 ?.GetValue(null);
+        private static int ActiveCount =>
+            (int)(Heartbeat
+                .GetProperty("ActiveCount", EngineInternals.Members)
+                ?.GetValue(null)
+                ?? throw new AssertionException("Missing active output watchlist count."));
 
         private static IDisposable OpenWindow(Stream stream)
         {
@@ -376,12 +391,12 @@ namespace EmbedIO.Tests
                 ?? throw new AssertionException("Missing output heartbeat interval.");
             private readonly object _previous;
 
-            internal SlowHeartbeat()
+            internal SlowHeartbeat(int milliseconds = 1000)
             {
                 Assert.That(MonitoredCount, Is.Zero);
                 _previous = _interval.GetValue(null)
                     ?? throw new AssertionException("Missing output heartbeat interval value.");
-                _interval.SetValue(null, TimeSpan.FromSeconds(1));
+                _interval.SetValue(null, TimeSpan.FromMilliseconds(milliseconds));
             }
 
             public void Dispose() => _interval.SetValue(null, _previous);

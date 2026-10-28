@@ -6,14 +6,15 @@ using EmbedIO.Internal;
 
 namespace EmbedIO.Net.Internal
 {
-    // Connections register once. Fast inline responses only publish and clear their held
-    // output; one timer wakes for the process while any output remains held.
+    // Each connection owns one registration. Only busy registrations enter the shared
+    // watchlist; fast responses publish and clear output within the same busy epoch.
     internal static class Http1OutputHeartbeat
     {
         private static readonly object Sync = new();
         private static readonly List<Registration> Connections = [];
         private static TimeSpan _interval = TimeSpan.FromMilliseconds(10);
         private static Timer? _timer;
+        private static int _registrations;
         private static int _running;
         private static int _ticking;
         private static int _tick;
@@ -31,7 +32,7 @@ namespace EmbedIO.Net.Internal
 
                 lock (Sync)
                 {
-                    if (Connections.Count != 0)
+                    if (_registrations != 0)
                         throw new InvalidOperationException("Output connections are registered.");
 
                     _interval = value;
@@ -40,6 +41,14 @@ namespace EmbedIO.Net.Internal
         }
 
         internal static int MonitoredCount
+        {
+            get
+            {
+                lock (Sync) return _registrations;
+            }
+        }
+
+        internal static int ActiveCount
         {
             get
             {
@@ -56,41 +65,24 @@ namespace EmbedIO.Net.Internal
             return new Timer(Tick, null, Timeout.Infinite, Timeout.Infinite);
         }
 
+        // Called under Sync after adding a busy registration. An idle connection is
+        // never scanned just because another connection has held output.
         private static void Start()
         {
-            if (Volatile.Read(ref _running) != 0) return;
+            if (_running != 0) return;
 
-            lock (Sync)
-            {
-                if (_running != 0 || !HasHeldOutput()) return;
-
-                Volatile.Write(ref _running, 1);
-                (_timer ??= CreateTimer()).Change(_interval, _interval);
-            }
+            Volatile.Write(ref _running, 1);
+            (_timer ??= CreateTimer()).Change(_interval, _interval);
         }
 
-        private static bool HasHeldOutput()
-        {
-            foreach (var connection in Connections)
-                if (connection.HasHeldOutput) return true;
-
-            return false;
-        }
-
-        // Called under Sync. Hold publishes before checking _running, so either the
-        // recheck observes it or its subsequent Start acquires Sync and wakes the timer.
+        // Called under Sync. Pruning first marks each removed registration inactive,
+        // then rechecks its output, so a concurrent Hold cannot lose a timer wakeup.
         private static void StopIfIdle()
         {
-            if (HasHeldOutput()) return;
+            if (Connections.Count != 0) return;
 
             Volatile.Write(ref _running, 0);
             _timer?.Change(Timeout.Infinite, Timeout.Infinite);
-
-            if (HasHeldOutput())
-            {
-                Volatile.Write(ref _running, 1);
-                _timer?.Change(_interval, _interval);
-            }
         }
 
         private static void Tick(object? state)
@@ -104,8 +96,20 @@ namespace EmbedIO.Net.Internal
 
                 lock (Sync)
                 {
-                    foreach (var connection in Connections)
-                        if (connection.IsReady(tick)) (ready ??= []).Add(connection);
+                    // Descending traversal visits a swapped last entry at most once and
+                    // never loops over an entry reactivated during its own pruning.
+                    for (
+                        var slot = Connections.Count - 1;
+                        slot >= 0;
+                        slot--
+                    )
+                    {
+                        var connection = Connections[slot];
+
+                        if (!connection.HasHeldOutput) connection.PruneIfIdle();
+
+                        else if (connection.IsReady(tick)) (ready ??= []).Add(connection);
+                    }
 
                     StopIfIdle();
                 }
@@ -126,15 +130,11 @@ namespace EmbedIO.Net.Internal
             private ResponseStream? _output;
             private int _retired;
             private int _sending;
-            private int _slot;
+            private int _slot = -1;
 
             internal Registration()
             {
-                lock (Sync)
-                {
-                    _slot = Connections.Count;
-                    Connections.Add(this);
-                }
+                lock (Sync) _registrations++;
             }
 
             internal bool HasHeldOutput => Volatile.Read(ref _output) != null;
@@ -147,7 +147,9 @@ namespace EmbedIO.Net.Internal
 
             internal void Hold(ResponseStream output)
             {
-                Volatile.Write(ref _output, output);
+                // The full publication fence pairs with pruning's inactive transition.
+                // Either its recheck sees this output or this thread sees an inactive slot.
+                Interlocked.Exchange(ref _output, output);
 
                 if (Volatile.Read(ref _retired) != 0)
                 {
@@ -155,10 +157,54 @@ namespace EmbedIO.Net.Internal
                     return;
                 }
 
-                Start();
+                if (Volatile.Read(ref _slot) >= 0) return;
+
+                lock (Sync)
+                {
+                    if (_retired != 0) return;
+
+                    AddActive();
+                    Start();
+                }
             }
 
             internal void Release(ResponseStream output) => Interlocked.CompareExchange(ref _output, null, output);
+
+            // All list mutations run under Sync. Retaining an entry until a tick keeps
+            // successive fast responses from taking the shared lock for each response.
+            private void AddActive()
+            {
+                if (_slot >= 0) return;
+
+                var slot = Connections.Count;
+                Connections.Add(this);
+                Volatile.Write(ref _slot, slot);
+            }
+
+            private void RemoveActive()
+            {
+                var slot = _slot;
+
+                if (slot < 0) return;
+
+                var last = Connections[Connections.Count - 1];
+                Connections[slot] = last;
+                Volatile.Write(ref last._slot, slot);
+                Connections.RemoveAt(Connections.Count - 1);
+                Interlocked.Exchange(ref _slot, -1);
+            }
+
+            // Called under Sync. Hold publishes before checking the slot. If it saw the
+            // old active slot, this post-removal recheck sees its publication and restores
+            // the entry. Otherwise Hold takes Sync and activates it after pruning exits.
+            internal void PruneIfIdle()
+            {
+                if (HasHeldOutput) return;
+
+                RemoveActive();
+
+                if (_retired == 0 && HasHeldOutput) AddActive();
+            }
 
             internal void Send(int tick)
             {
@@ -206,11 +252,8 @@ namespace EmbedIO.Net.Internal
                     if (Interlocked.Exchange(ref _retired, 1) != 0) return;
 
                     Volatile.Write(ref _output, null);
-                    var last = Connections[Connections.Count - 1];
-                    Connections[_slot] = last;
-                    last._slot = _slot;
-                    Connections.RemoveAt(Connections.Count - 1);
-                    _slot = -1;
+                    RemoveActive();
+                    _registrations--;
 
                     StopIfIdle();
                 }
