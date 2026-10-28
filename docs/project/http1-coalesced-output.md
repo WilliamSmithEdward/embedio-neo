@@ -45,6 +45,12 @@ gate; a slow connection has at most one heartbeat sender and does not hold the
 shared registration lock during I/O. Pooled held bytes are cleared before return,
 including on write failure and connection retirement.
 
+A completing write or a flush of a complete zero-length or suppressed response
+closes its own holding window before awaiting transport I/O. That operation owns
+the held prefix, ending and failure cleanup, so the connection actor need not
+queue behind it merely to close the window. Committed-error cleanup still uses
+the stronger drain operation and waits for any previous send before aborting.
+
 ## Why the first promptness mechanism was replaced
 
 The first candidate queued a ThreadPool work item for every response's first held
@@ -58,6 +64,13 @@ The shared heartbeat delays its intervention until output has survived a full
 tick and avoids creating a competing sender for each fast response. Synchronous
 completion still serializes behind a heartbeat write that is already in flight
 for a long-running handler, preserving wire order.
+
+A second controlled test on `41b18af2` found an unnecessary actor waiter behind a
+pending complete fixed-length write. Five completing-I/O cases failed on that
+waiter while six cancellation, validation and drain-preservation cases passed.
+The actor-only completion path removes the waiter; all eleven then pass. This
+proves the scheduling change, without attributing an end-to-end tail difference
+to that path.
 
 ## Measurements
 
@@ -80,7 +93,7 @@ Fresh processes do not imply cold OS caches.
 
 ## Validation
 
-The 44 new cases and 96 existing compatibility cases pass on Windows (140 total).
+The 55 new cases and 96 existing compatibility cases pass on Windows (151 total).
 Four identical single-write assertions fail on exact main: synchronous responses
 use three writes, while asynchronous variants use two asynchronous writes before
 completion. The baseline proof adapts only the unavailable holding-window setup;
@@ -90,8 +103,19 @@ The final source-quality scripts pass all 588 source files and all 16 project
 scans. Changed source and tests have no informational, warning or error
 diagnostics; hidden hints remain report-only. Both library targets build in
 Debug and Release, changed-file whitespace and analyzer guards pass, and all four
-existing allocation ceiling checks pass. The final complete Windows suite passes:
-7,576 successes, four expected skips and zero failures, 7,580 total, in 8m17s.
+existing allocation ceiling checks pass. The complete local Windows suite reports
+7,591 cases in 8m14.6s: 7,586 successes, four expected skips and one client-connect
+failure with Windows socket error 10055, before an unrelated route handler runs.
+The affected route family (36 cases) and all 55 new cases then pass on the final
+formatted source, 91 total. The run and TCP-state snapshot are retained;
+exact-head hosted full-suite checks are required for the PR.
+
+A separate BCL-only .NET 10.0.13 control observes one 10055 in 18,000 loopback
+bind/close operations, without loading EmbedIO. The failure follows selected port
+65,531; the next independent operation selects 49,153. This reproduces a native
+bind-allocation exposure on this host, without establishing the cause of the
+test's connect failure. No OS settings, fixture assertions or request retries
+were changed.
 
 The benchmark's changed HTTP/1 client file also passes its separate build,
 whitespace and informational-diagnostic checks. A one-connection refusal probe
@@ -102,7 +126,7 @@ certificate pinning are unchanged; cold clients use a separate unchanged factory
 The initial full run exposed eight committed-output compatibility failures and
 two Windows socket10055 failures while allocating test ports. The output
 corrections above restore the committed-output behavior; all affected classes
-pass focused confirmation and the final full suite. The initial run and retry
+pass focused confirmation and the current full run. The initial run and retry
 provenance are retained under ignored `TestResults/h1perf`; no OS settings or
 test assertions were relaxed.
 
@@ -110,7 +134,7 @@ The cases exercise transport write counts, blocking-handler flush promptness,
 strict errors, pipelining and keep-alive order, window closure, tick aging,
 registration lifetime, held-buffer cleanup, telemetry, committed errors and
 nonblocking shutdown under backpressure and active-watchlist epochs. The discovery
-floor is 7,580.
+floor is 7,591.
 
 The broader #577 work, including pipelined response batching, per-request
 allocation and a Windows Registered I/O transport, remains separate. A transport

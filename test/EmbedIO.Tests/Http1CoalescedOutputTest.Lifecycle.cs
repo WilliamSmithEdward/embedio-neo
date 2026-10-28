@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -598,6 +599,362 @@ namespace EmbedIO.Tests
             }
 
             await EngineInternals.AwaitAsync(EngineInternals.Call(middle.Stream, "AbandonAsync"));
+        }
+
+        [TestCase(false, false)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public async Task CompletingAsyncWriteDoesNotQueueActorWindowClose(bool heldPrefix, bool failWrite)
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var fixture = await Issue574_ResponseWrites.Fixture.Create(false, ignoreErrors: true);
+            using var registration = OpenWindow(fixture.Stream);
+            byte[]? lease = null;
+            var leaseLength = 0;
+
+            if (heldPrefix)
+            {
+                fixture.Stream.Write(Encoding.ASCII.GetBytes("ABC"), 0, 3);
+                lease =
+                    (byte[])(EngineInternals.Field(fixture.Stream, "_held")
+                        ?? throw new AssertionException("Missing held output lease."));
+                leaseLength = (int)(EngineInternals.Field(fixture.Stream, "_heldLength")
+                    ?? throw new AssertionException("Missing held output length."))
+                    + 3;
+            }
+
+            fixture.Transport.BlockWrites = true;
+
+            if (failWrite) fixture.Transport.Error = new IOException("controlled completing write failure");
+
+            var bytes = Encoding.ASCII.GetBytes(heldPrefix ? "DEF" : "ABCDEF");
+            var writing = fixture.Stream.WriteAsync(bytes, 0, bytes.Length);
+            await VerifyActorCloseDuringCompletingIoAsync(
+                fixture,
+                writing,
+                failWrite ? null : "ABCDEF",
+                lease,
+                leaseLength
+            );
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task CompletingFlushDoesNotQueueActorWindowClose(bool suppressed)
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var fixture = await Issue574_ResponseWrites.Fixture.Create(false, ignoreErrors: true);
+
+            if (suppressed) fixture.Response.StatusCode = 204;
+
+            else fixture.Response.ContentLength64 = 0;
+
+            using var registration = OpenWindow(fixture.Stream);
+            fixture.Transport.BlockWrites = true;
+            var flushing = fixture.Stream.FlushAsync();
+            await VerifyActorCloseDuringCompletingIoAsync(fixture, flushing, "", null, 0);
+        }
+
+        [Test]
+        public async Task PartialOutputStillWaitsForActorWindowDrain()
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var fixture = await Issue574_ResponseWrites.Fixture.Create(false, ignoreErrors: true);
+            using var registration = OpenWindow(fixture.Stream);
+            fixture.Stream.Write(Encoding.ASCII.GetBytes("ABC"), 0, 3);
+            fixture.Transport.BlockWrites = true;
+            var gate = EngineInternals.Field(fixture.Stream, "_writers")
+                ?? throw new AssertionException("Missing response write gate.");
+            var writer =
+                (IDisposable)(EngineInternals.Call(gate, "Enter")
+                    ?? throw new AssertionException("Missing admitted writer scope."));
+            var closing = CloseActorWindow(fixture.Stream);
+            var writerReleased = false;
+
+            try
+            {
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(closing.IsCompleted, Is.False);
+                    Assert.That(EngineInternals.Field(gate, "_state"), Is.EqualTo(2));
+                }
+
+                writer.Dispose();
+                writerReleased = true;
+                await fixture.Transport.AsyncEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.That(
+                    closing.IsCompleted,
+                    Is.False,
+                    "Closing a partial window must await its actual held-byte submission."
+                );
+            }
+
+            finally
+            {
+                if (!writerReleased) writer.Dispose();
+
+                fixture.Transport.BlockWrites = false;
+                fixture.Transport.ReleaseWrites.TrySetResult();
+                await closing
+                    .AsTask()
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+            }
+
+            Assert.That(Body(fixture.Transport), Is.EqualTo("ABC"));
+            await fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("DEF"), 0, 3);
+            fixture.Stream.Dispose();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(Body(fixture.Transport), Is.EqualTo("ABCDEF"));
+                Assert.That(fixture.Transport.AsyncWrites, Is.EqualTo(2));
+                Assert.That(fixture.Transport.SynchronousWrites, Is.Zero);
+            }
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task RejectedOverlengthWriteDoesNotDisarmInlineWindow(bool asynchronous)
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var fixture = await Issue574_ResponseWrites.Fixture.Create(false, ignoreErrors: true);
+            using var registration = OpenWindow(fixture.Stream);
+            fixture.Stream.Write(Encoding.ASCII.GetBytes("ABC"), 0, 3);
+            var bytes = Encoding.ASCII.GetBytes("DEFG");
+
+            if (asynchronous)
+                await Assert.ThrowsAsync<ProtocolViolationException>(
+                    async () => await fixture.Stream.WriteAsync(bytes, 0, bytes.Length)
+                );
+
+            else
+                Assert.Throws<ProtocolViolationException>(() => fixture.Stream.Write(bytes, 0, bytes.Length));
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(EngineInternals.Field(fixture.Stream, "_window"), Is.True);
+                Assert.That(fixture.Transport.AsyncWrites + fixture.Transport.SynchronousWrites, Is.Zero);
+            }
+
+            await CloseActorWindow(fixture.Stream);
+            Assert.That(Body(fixture.Transport), Is.EqualTo("ABC"));
+            await fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("DEF"), 0, 3);
+            fixture.Stream.Dispose();
+            Assert.That(Body(fixture.Transport), Is.EqualTo("ABCDEF"));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public async Task CanceledCompletingWriteDoesNotDisarmInlineWindow(bool queued)
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var fixture = await Issue574_ResponseWrites.Fixture.Create(false, ignoreErrors: true);
+            using var registration = OpenWindow(fixture.Stream);
+            fixture.Stream.Write(Encoding.ASCII.GetBytes("ABC"), 0, 3);
+            var gate = EngineInternals.Field(fixture.Stream, "_writers")
+                ?? throw new AssertionException("Missing response write gate.");
+            var writer = queued ? (IDisposable?)EngineInternals.Call(gate, "Enter") : null;
+            using var cancellation = new CancellationTokenSource();
+
+            try
+            {
+                if (!queued) cancellation.Cancel();
+
+                var writing = fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("DEF"), 0, 3, cancellation.Token);
+
+                if (queued)
+                {
+                    Assert.That(writing.IsCompleted, Is.False);
+                    cancellation.Cancel();
+                }
+
+                await Assert.CatchAsync<OperationCanceledException>(async () => await writing);
+            }
+
+            finally
+            {
+                cancellation.Cancel();
+                writer?.Dispose();
+            }
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(EngineInternals.Field(fixture.Stream, "_window"), Is.True);
+                Assert.That(fixture.Transport.AsyncWrites + fixture.Transport.SynchronousWrites, Is.Zero);
+            }
+
+            await CloseActorWindow(fixture.Stream);
+            Assert.That(Body(fixture.Transport), Is.EqualTo("ABC"));
+            await fixture.Stream.WriteAsync(Encoding.ASCII.GetBytes("DEF"), 0, 3);
+            fixture.Stream.Dispose();
+            Assert.That(Body(fixture.Transport), Is.EqualTo("ABCDEF"));
+        }
+
+        [Test]
+        public async Task CommittedErrorStillWaitsForAnActorWindowDrainAlreadyInProgress()
+        {
+            using var slowHeartbeat = new SlowHeartbeat(10000);
+            using var fixture = await Issue574_ResponseWrites.Fixture.Create(true, ignoreErrors: true);
+            using var registration = OpenWindow(fixture.Stream);
+            EngineInternals.SetField(fixture.Response, "_output", fixture.Stream);
+            fixture.Stream.Write(Encoding.ASCII.GetBytes("before"), 0, 6);
+            fixture.Transport.BlockWrites = true;
+            var actorClosing = CloseActorWindow(fixture.Stream);
+            await fixture.Transport.AsyncEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var errorClosing = EngineInternals.AwaitAsync(
+                EngineInternals.Call(fixture.Response, "AbortCommittedAsync")
+            );
+            var errorWasPending = !errorClosing.IsCompleted;
+            var gate = EngineInternals.Field(fixture.Stream, "_writers")
+                ?? throw new AssertionException("Missing response write gate.");
+            var usersDuringError = EngineInternals.Field(gate, "_state");
+
+            try
+            {
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(EngineInternals.Field(fixture.Stream, "_window"), Is.False);
+                    Assert.That(fixture.Transport.Length, Is.Zero);
+                }
+            }
+
+            finally
+            {
+                fixture.Transport.BlockWrites = false;
+                fixture.Transport.ReleaseWrites.TrySetResult();
+                await actorClosing
+                    .AsTask()
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+                await errorClosing.WaitAsync(TimeSpan.FromSeconds(5));
+                await EngineInternals.AwaitAsync(EngineInternals.Call(fixture.Stream, "AbandonAsync"));
+            }
+
+            fixture.Stream.Dispose();
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(
+                    errorWasPending,
+                    Is.True,
+                    "A committed error must await the drain that already owns accepted bytes."
+                );
+                Assert.That(usersDuringError, Is.EqualTo(2));
+                Assert.That(Body(fixture.Transport), Is.EqualTo("6\r\nbefore\r\n"));
+                Assert.That(fixture.Transport.AsyncWrites, Is.EqualTo(1));
+                Assert.That(fixture.Transport.SynchronousWrites, Is.Zero);
+                Assert.That(EngineInternals.Field(fixture.Stream, "_held"), Is.Null);
+            }
+        }
+
+        private static ValueTask CloseActorWindow(Stream output)
+        {
+            // The before-change proof uses the actor's old entry point, preserving the
+            // same behavioral assertion instead of failing on a missing new method.
+            var name = output
+                .GetType()
+                .GetMethod("CloseInlineWindowAsync", EngineInternals.Members) is null
+                ? "CloseWindowAsync"
+                : "CloseInlineWindowAsync";
+            return (ValueTask)(EngineInternals.Call(output, name)
+                ?? throw new AssertionException("Missing actor window close operation."));
+        }
+
+        private static async Task VerifyActorCloseDuringCompletingIoAsync(
+            Issue574_ResponseWrites.Fixture fixture,
+            Task writing,
+            string? expectedBody,
+            byte[]? heldLease,
+            int leaseLength
+        )
+        {
+            await fixture.Transport.AsyncEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var gate = EngineInternals.Field(fixture.Stream, "_writers")
+                ?? throw new AssertionException("Missing response write gate.");
+            var closing = CloseActorWindow(fixture.Stream);
+            var actorCompletedSynchronously = closing.IsCompletedSuccessfully;
+            var usersAfterActorClose = EngineInternals.Field(gate, "_state");
+            var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            void Complete()
+            {
+                try
+                {
+                    fixture.Stream.Dispose();
+                    completed.TrySetResult();
+                }
+
+                catch (IOException error)
+                {
+                    completed.TrySetException(error);
+                }
+
+                catch (ObjectDisposedException error)
+                {
+                    completed.TrySetException(error);
+                }
+            }
+
+            var disposing = new Thread(Complete) { IsBackground = true };
+            disposing.Start();
+
+            try
+            {
+                using (Assert.EnterMultipleScope())
+                {
+                    Assert.That(
+                        () => (disposing.ThreadState & ThreadState.WaitSleepJoin) != 0,
+                        Is.True.After(5000, 10),
+                        "Real Dispose must still wait for the actual transport write."
+                    );
+                    Assert.That(completed.Task.IsCompleted, Is.False);
+                }
+
+                if (heldLease is not null)
+                {
+                    using (Assert.EnterMultipleScope())
+                    {
+                        Assert.That(EngineInternals.Field(fixture.Stream, "_held"), Is.SameAs(heldLease));
+                        Assert.That(Encoding.ASCII.GetString(heldLease, 0, leaseLength), Does.EndWith("ABCDEF"));
+                    }
+                }
+            }
+
+            finally
+            {
+                fixture.Transport.BlockWrites = false;
+                fixture.Transport.ReleaseWrites.TrySetResult();
+                await writing.WaitAsync(TimeSpan.FromSeconds(5));
+                await closing
+                    .AsTask()
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+                await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.That(disposing.Join(TimeSpan.FromSeconds(5)), Is.True);
+            }
+
+            using (Assert.EnterMultipleScope())
+            {
+                Assert.That(
+                    actorCompletedSynchronously,
+                    Is.True,
+                    "The actor must not queue a no-op waiter behind a write that owns completion."
+                );
+                Assert.That(usersAfterActorClose, Is.EqualTo(1));
+                Assert.That(fixture.Transport.AsyncWrites, Is.EqualTo(1));
+                Assert.That(fixture.Transport.SynchronousWrites, Is.Zero);
+                Assert.That(EngineInternals.Field(fixture.Stream, "_held"), Is.Null);
+            }
+
+            if (expectedBody is null) Assert.That(fixture.Transport.Length, Is.Zero);
+
+            else Assert.That(Body(fixture.Transport), Is.EqualTo(expectedBody));
+
+            if (heldLease is not null)
+                Assert.That(
+                    heldLease
+                        .AsSpan(0, leaseLength)
+                        .IndexOfAnyExcept((byte)0),
+                    Is.EqualTo(-1)
+                );
         }
 
         private static int HeartbeatRunning =>

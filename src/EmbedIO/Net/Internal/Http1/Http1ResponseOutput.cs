@@ -48,7 +48,8 @@ namespace EmbedIO.Net.Internal
         // does not finish the response is held, so the response's end leaves in the same
         // transport write. The window's end sends anything still held; a shared heartbeat
         // sends output held for more than one tick if the handler keeps running instead.
-        // The write gate guards the held bytes, the window and the holding decision.
+        // The write gate guards the held bytes and holding decision. A completing writer
+        // publishes its closed window before awaiting I/O, while retaining output ownership.
         private byte[]? _held;
         private int _heldLength;
         private int _heldBody;
@@ -89,6 +90,10 @@ namespace EmbedIO.Net.Internal
 
             if (_window) _heartbeat = heartbeat;
         }
+
+        // A completing writer already owns all held bytes and the response ending. The
+        // actor need not queue behind its I/O just to close that writer's window.
+        internal ValueTask CloseInlineWindowAsync() => Volatile.Read(ref _window) ? CloseWindowAsync() : default;
 
         // The handler returned or suspended: anything it left held goes out now, and later
         // writes, which run on other threads, go out as they are made.
@@ -261,6 +266,8 @@ namespace EmbedIO.Net.Internal
         {
             using var head = PrepareHead(false, 0);
             var holding = _window && !CompletesWith(0, null);
+
+            if (_window && !holding) Volatile.Write(ref _window, false);
 
             if (!head.IsEmpty)
             {
@@ -478,6 +485,8 @@ namespace EmbedIO.Net.Internal
             var tail = ending && chunked && count != 0 ? _response.EndingChunk ?? EndOfChunks : null;
             // A write that finishes the response leaves at once, together with anything held.
             _holding = _window && !CompletesWith(count, tail);
+
+            if (_window && !_holding) Volatile.Write(ref _window, false);
 
             try
             {
