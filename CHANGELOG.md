@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.19.0] - 2026-10-27
+
 ### Added
 
 - HTTP/3 clients can resume TLS sessions. The server issues a TLS 1.3 session ticket

@@ -3565,7 +3565,7 @@ and off, and CI runs them with it on Linux and macOS (`--address-validation`).
 session resumption on both TLS paths, measured first, and for 0-RTT either as an
 opt-in with replay protection or left out with the measured reason. The server now
 issues a session ticket with every handshake on Windows, Linux and macOS. This is
-unreleased.
+in 2.19.0.
 
 ### Tickets and keys
 
@@ -4456,7 +4456,7 @@ batched sends left above, on Windows and Linux with the fallback tested, and for
 comparison of the eight `h3-` scenarios against 2.18.0 that records the 1 MiB costs on
 both platforms with no regression in the small-request or churn scenarios. The HTTP/3
 listener now sends consecutive datagrams for one peer in one system call where its
-socket can segment them. This is unreleased.
+socket can segment them. This is in 2.19.0.
 
 ### Sends
 
@@ -4631,7 +4631,7 @@ the same server CPU. [TLS session resumption](#tls-session-resumption) moved the
 path onto the managed ClientHello reader, `TlsClientHello.Read`, which the Schannel path
 has used since 2.17.0. To refuse a repeated extension the reader allocated an 8 KB table,
 one bit per extension type, for every ClientHello. It now keeps the table on the stack.
-This is unreleased.
+This is in 2.19.0.
 
 ### Cause
 
@@ -4762,7 +4762,7 @@ draft-ietf-quic-reliable-stream-reset into line under
 [#551](https://github.com/WilliamSmithEdward/embedio-neo/issues/551). This change does
 the same for the rest of the frame loop, `QuicConnection.Frames`: each refusal there was
 compared with the code RFC 9000 names for it, and with RFC 9221 for DATAGRAM frames. This
-is unreleased.
+is in 2.19.0.
 
 ### What changed
 
