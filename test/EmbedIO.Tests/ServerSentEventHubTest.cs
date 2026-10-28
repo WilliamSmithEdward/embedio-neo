@@ -379,10 +379,22 @@ namespace EmbedIO.Tests
                 new ServerSentEventHubOptions(heartbeatInterval: TimeSpan.FromMilliseconds(10))
             );
             using var stop = new CancellationTokenSource();
+            var handlerCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             await Wire(
-                context => hub
-                    .Stream()
-                    .WriteAsync(context, stop.Token),
+                async context =>
+                {
+                    try
+                    {
+                        await hub
+                            .Stream()
+                            .WriteAsync(context, stop.Token);
+                    }
+
+                    finally
+                    {
+                        handlerCompleted.TrySetResult();
+                    }
+                },
                 async client =>
                 {
                     using var response = await client.GetAsync("/", HttpCompletionOption.ResponseHeadersRead);
@@ -392,6 +404,8 @@ namespace EmbedIO.Tests
                     stop.Cancel();
                 }
             );
+            // RunAsync does not wait for the handler, which releases its slot after aborting the response.
+            await handlerCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.That(hub.SubscriberCount, Is.Zero);
         }
 
