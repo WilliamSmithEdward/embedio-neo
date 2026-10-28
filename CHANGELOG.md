@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed
+
+- HTTP/1.1 responses to requests without entity bodies hold up to 64 KiB while an
+  application handler runs inline,
+  combining incomplete writes with the response's ending when they fit. Output
+  leaves when the handler returns or suspends; one shared heartbeat also sends
+  output held past a complete 10 ms tick if the handler blocks synchronously.
+  Strict write errors continue to write through, and response-body telemetry
+  counts held bytes only after successful transport output. See
+  [HTTP/1.1 response completion](docs/project/http1-coalesced-output.md) (#577).
+
 ## [2.19.0] - 2026-10-27
 
 ### Added

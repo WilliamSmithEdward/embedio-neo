@@ -366,7 +366,8 @@ namespace EmbedIO.Net.Internal
                     _context.Listener?.IgnoreWriteExceptions ?? true
                 );
 
-                if (_outputWindow) owner.OpenWindow();
+                if (_outputWindow && _protocolEnded == 0 && (_context.Listener?.IgnoreWriteExceptions ?? true))
+                    owner.OpenWindow(_outputHeartbeat ??= new Http1OutputHeartbeat.Registration());
 
                 _oStream = owner;
                 var abort = _requestAborts == null ? null : EmbedIO.Internal.RequestAbortRegistry.Find(_context);
@@ -657,6 +658,8 @@ namespace EmbedIO.Net.Internal
 
         private void CloseTransport(bool shutdown, bool deadlineOnly = false)
         {
+            Http1OutputHeartbeat.Registration? outputHeartbeat;
+            ResponseStream? output;
             CancellationTokenSource? protocolStop;
             HttpListener[] protocolListeners;
             RequestStream? input;
@@ -681,6 +684,9 @@ namespace EmbedIO.Net.Internal
                 protocolVersion = _http2 ? "2" : "1.1";
                 _protocolSocket = null;
                 _protocolEnded = 1;
+                outputHeartbeat = _outputHeartbeat;
+                _outputHeartbeat = null;
+                output = _oStream;
                 _requestAborts?.Retire();
                 EndResponse(false);
                 protocolStop = _http2Stop?.Value;
@@ -693,6 +699,10 @@ namespace EmbedIO.Net.Internal
                 _buffer = null;
                 _headReader.Reset();
             }
+
+            outputHeartbeat?.Dispose();
+
+            if (output != null) _ = output.AbandonAsync();
 
             request.RetireBodyLimit();
             Task? pendingWrite = null;

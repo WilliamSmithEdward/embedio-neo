@@ -27,8 +27,17 @@ namespace EmbedIO.Internal
                     return AbortAsync(capture.Inner, cause);
 
                 case HttpListenerContext http1:
-                    http1.HttpListenerResponse.Abort();
-                    return Task.CompletedTask;
+                    if (
+                        cause is OperationCanceledException
+                            || http1.CancellationToken.IsCancellationRequested
+                            || http1 is IRequestAbortState { IsRequestAborted: true }
+                    )
+                    {
+                        http1.HttpListenerResponse.Abort();
+                        return Task.CompletedTask;
+                    }
+
+                    return http1.HttpListenerResponse.AbortCommittedAsync();
 
                 case MultiplexedContext multiplexed:
                     return multiplexed.AbortExchangeAsync(cause);

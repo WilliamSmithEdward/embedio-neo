@@ -17,9 +17,6 @@ namespace EmbedIO.Net.Internal
         private const int BatchedBodyBound = 65536;
         private const int FirstSegmentPrefix = 16384;
         private const int HeldOutputBound = 65536;
-        private static readonly WaitCallback SendQueued = static state =>
-            _ = ((ResponseStream)(state
-                ?? throw new InvalidOperationException("Missing response output."))).SendQueuedAsync();
         private static readonly byte[] CrLf = [13, 10];
         private static readonly byte[] EndOfChunks =
         [
@@ -49,15 +46,17 @@ namespace EmbedIO.Net.Internal
 
         // While the connection runs a handler on its own thread (the window), output that
         // does not finish the response is held, so the response's end leaves in the same
-        // transport write. The window's end sends anything still held, and a pool work item
-        // queued with the first held byte sends it if the handler keeps running instead.
+        // transport write. The window's end sends anything still held; a shared heartbeat
+        // sends output held for more than one tick if the handler keeps running instead.
         // The write gate guards the held bytes, the window and the holding decision.
         private byte[]? _held;
         private int _heldLength;
+        private int _heldBody;
         private bool _window;
         private bool _holding;
         private bool _completing;
-        private int _sendQueued;
+        private Http1OutputHeartbeat.Registration? _heartbeat;
+        private int _heldTick;
 
         internal bool HasOutputFailure => Volatile.Read(ref _failed) != 0;
 
@@ -84,7 +83,12 @@ namespace EmbedIO.Net.Internal
 
         // The connection opens the window before the handler can write. A held write cannot
         // report its own transport failure, so strict write errors keep every write immediate.
-        internal void OpenWindow() => _window = _ignoreErrors;
+        internal void OpenWindow(Http1OutputHeartbeat.Registration heartbeat)
+        {
+            _window = _ignoreErrors;
+
+            if (_window) _heartbeat = heartbeat;
+        }
 
         // The handler returned or suspended: anything it left held goes out now, and later
         // writes, which run on other threads, go out as they are made.
@@ -113,12 +117,13 @@ namespace EmbedIO.Net.Internal
             }
         }
 
-        // Queued with the first held byte. The response's end or the window's end has usually
-        // sent the held bytes already; this sends them if the handler is still running.
-        private async Task SendQueuedAsync()
-        {
-            Volatile.Write(ref _sendQueued, 0);
+        internal bool IsHeldBefore(int tick) =>
+            Volatile.Read(ref _heldLength) != 0 && unchecked(tick - Volatile.Read(ref _heldTick)) >= 2;
 
+        // The heartbeat snapshots connections outside the output gate. Recheck the age after
+        // entering: completion or a newer held segment may have replaced that snapshot.
+        internal async ValueTask SendHeartbeatAsync(int tick)
+        {
             if (Volatile.Read(ref _closed) != 0) return;
 
             AsyncWriteGate.Scope writer;
@@ -135,7 +140,68 @@ namespace EmbedIO.Net.Internal
                 return;
             }
 
-            using (writer) await SendHeldAsync(false, CancellationToken.None).ConfigureAwait(false);
+            using (writer)
+                if (Volatile.Read(ref _closed) == 0 && _window && IsHeldBefore(tick))
+                    await SendHeldAsync(false, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        // Retirement must drop buffered output even when the application has not resumed.
+        // The connection closes the transport independently, settling any writer ahead of us.
+        internal async Task AbandonAsync()
+        {
+            AsyncWriteGate.Scope writer;
+
+            try
+            {
+                writer = await _writers
+                    .EnterAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+
+            using (writer)
+            {
+                if (Volatile.Read(ref _completionFinished) != 0) return;
+
+                _window = false;
+                Volatile.Write(ref _failed, 1);
+                ReleaseHeld();
+            }
+        }
+
+        // A response abort or listener stop preserves accepted bytes when submission can
+        // start immediately. Its caller closes the transport without waiting, so pending
+        // I/O is interrupted rather than extending shutdown under backpressure.
+        internal void TrySendHeldBeforeAbort()
+        {
+            if (!_writers.TryEnter(out var writer)) return;
+
+            _ = SendBeforeAbortAsync(writer);
+        }
+
+        private async Task SendBeforeAbortAsync(AsyncWriteGate.Scope writer)
+        {
+            using (writer)
+            {
+                if (Volatile.Read(ref _closed) != 0 || Volatile.Read(ref _failed) != 0) return;
+
+                _window = false;
+
+                try
+                {
+                    await SendHeldAsync(false, CancellationToken.None).ConfigureAwait(false);
+                }
+
+                catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))
+                {
+                    Volatile.Write(ref _failed, 1);
+                    ReleaseHeld();
+                }
+            }
         }
 
         internal bool OutputCompleted =>
@@ -211,9 +277,8 @@ namespace EmbedIO.Net.Internal
                 }
             }
 
-            // Inside the window held output already has its send queued, so the flush waits
-            // for nothing: the bytes leave when the handler's synchronous run ends, or from the
-            // pool if it keeps running.
+            // Inside the window the heartbeat bounds the hold, so the flush waits for nothing:
+            // bytes leave when the handler's synchronous run ends, or after a full tick.
             if (holding) return;
 
             await SendHeldAsync(synchronous, token).ConfigureAwait(false);
@@ -443,7 +508,9 @@ namespace EmbedIO.Net.Internal
 
                         try
                         {
-                            await SubmitAsync(segment, 0, segmentLength, synchronous, token).ConfigureAwait(false);
+                            await SubmitAsync(segment, 0, segmentLength, synchronous, token, prefix).ConfigureAwait(
+                                false
+                            );
                         }
 
                         finally
@@ -458,7 +525,8 @@ namespace EmbedIO.Net.Internal
                                 offset + prefix,
                                 count - prefix,
                                 synchronous,
-                                token
+                                token,
+                                count - prefix
                             ).ConfigureAwait(false);
 
                             if (chunked) await SubmitChunkEndAsync(tail, synchronous, token).ConfigureAwait(false);
@@ -474,7 +542,7 @@ namespace EmbedIO.Net.Internal
                 if (count == 0) return;
 
                 if (!chunked)
-                    await SubmitAsync(buffer, offset, count, synchronous, token).ConfigureAwait(false);
+                    await SubmitAsync(buffer, offset, count, synchronous, token, count).ConfigureAwait(false);
 
                 else if (count <= BatchedBodyBound)
                 {
@@ -482,7 +550,7 @@ namespace EmbedIO.Net.Internal
 
                     try
                     {
-                        await SubmitAsync(segment, 0, length, synchronous, token).ConfigureAwait(false);
+                        await SubmitAsync(segment, 0, length, synchronous, token, count).ConfigureAwait(false);
                     }
 
                     finally
@@ -495,7 +563,7 @@ namespace EmbedIO.Net.Internal
                 {
                     var size = GetChunkSizeBytes(count, false);
                     await SubmitAsync(size, 0, size.Length, synchronous, token).ConfigureAwait(false);
-                    await SubmitAsync(buffer, offset, count, synchronous, token).ConfigureAwait(false);
+                    await SubmitAsync(buffer, offset, count, synchronous, token, count).ConfigureAwait(false);
                     await SubmitChunkEndAsync(tail, synchronous, token).ConfigureAwait(false);
                 }
 
@@ -536,8 +604,6 @@ namespace EmbedIO.Net.Internal
 
             if (_bodyLimit.HasValue) _committedBody += count;
 
-            Volatile.Write(ref _sentBody, _sentBody + count);
-
             if (tail != null) _wireEndSent = true;
 
             ObserveWireEnd();
@@ -557,25 +623,34 @@ namespace EmbedIO.Net.Internal
             _response.CompleteRequestAbortObservation();
         }
 
-        private ValueTask SubmitAsync(byte[] bytes, int offset, int count, bool synchronous, CancellationToken token)
+        private ValueTask SubmitAsync(
+            byte[] bytes,
+            int offset,
+            int count,
+            bool synchronous,
+            CancellationToken token,
+            int bodyCount = 0
+        )
         {
             if (Volatile.Read(ref _failed) != 0) return default;
 
             if (_holding && count <= HeldOutputBound - _heldLength)
             {
-                Append(bytes, offset, count);
+                var first = _heldLength == 0;
+                Append(bytes, offset, count, bodyCount);
 
-                // The response's completion sends what it holds itself; anything else held
-                // has a pool send queued, at most one at a time.
-                if (!_completing && Interlocked.Exchange(ref _sendQueued, 1) == 0)
-                    ThreadPool.UnsafeQueueUserWorkItem(SendQueued, this);
+                if (first && !_completing)
+                {
+                    Volatile.Write(ref _heldTick, Http1OutputHeartbeat.CurrentTick);
+                    _heartbeat?.Hold(this);
+                }
 
                 return default;
             }
 
             return _heldLength == 0
-                ? WriteTransportAsync(bytes, offset, count, synchronous, token)
-                : SendHeldWithAsync(bytes, offset, count, synchronous, token);
+                ? WriteTransportAsync(bytes, offset, count, synchronous, bodyCount, token)
+                : SendHeldWithAsync(bytes, offset, count, synchronous, bodyCount, token);
         }
 
         // Held output leaves before these bytes, in the same transport write when both fit.
@@ -584,18 +659,19 @@ namespace EmbedIO.Net.Internal
             int offset,
             int count,
             bool synchronous,
+            int bodyCount,
             CancellationToken token
         )
         {
             if (count <= HeldOutputBound - _heldLength)
             {
-                Append(bytes, offset, count);
+                Append(bytes, offset, count, bodyCount);
                 await SendHeldAsync(synchronous, token).ConfigureAwait(false);
                 return;
             }
 
             await SendHeldAsync(synchronous, token).ConfigureAwait(false);
-            await WriteTransportAsync(bytes, offset, count, synchronous, token).ConfigureAwait(false);
+            await WriteTransportAsync(bytes, offset, count, synchronous, bodyCount, token).ConfigureAwait(false);
         }
 
         private ValueTask SendHeldAsync(bool synchronous, CancellationToken token)
@@ -605,24 +681,35 @@ namespace EmbedIO.Net.Internal
             if (length == 0) return default;
 
             _heldLength = 0;
+            var bodyCount = _heldBody;
+            _heldBody = 0;
+            _heartbeat?.Release(this);
             var held = _held ?? throw new InvalidOperationException("Missing held output.");
-            return SendHeldCoreAsync(held, length, synchronous, token);
+            return SendHeldCoreAsync(held, length, synchronous, bodyCount, token);
         }
 
-        private async ValueTask SendHeldCoreAsync(byte[] held, int length, bool synchronous, CancellationToken token)
+        private async ValueTask SendHeldCoreAsync(
+            byte[] held,
+            int length,
+            bool synchronous,
+            int bodyCount,
+            CancellationToken token
+        )
         {
             try
             {
-                await WriteTransportAsync(held, 0, length, synchronous, token).ConfigureAwait(false);
+                await WriteTransportAsync(held, 0, length, synchronous, bodyCount, token).ConfigureAwait(false);
             }
 
             finally
             {
                 Array.Clear(held, 0, length);
+
+                if (HasOutputFailure) ReleaseHeld();
             }
         }
 
-        private void Append(byte[] bytes, int offset, int count)
+        private void Append(byte[] bytes, int offset, int count, int bodyCount)
         {
             var held = _held;
 
@@ -641,17 +728,20 @@ namespace EmbedIO.Net.Internal
 
             Buffer.BlockCopy(bytes, offset, held, _heldLength, count);
             _heldLength += count;
+            _heldBody += bodyCount;
         }
 
         // Unsent held bytes are dropped with a failed or abandoned response; the lease is cleared.
         private void ReleaseHeld()
         {
+            _heartbeat?.Release(this);
             var held = _held;
             _held = null;
 
             if (held != null) ReturnCleared(held, _heldLength);
 
             _heldLength = 0;
+            _heldBody = 0;
         }
 
         private async ValueTask WriteTransportAsync(
@@ -659,6 +749,7 @@ namespace EmbedIO.Net.Internal
             int offset,
             int count,
             bool synchronous,
+            int bodyCount,
             CancellationToken token
         )
         {
@@ -674,6 +765,8 @@ namespace EmbedIO.Net.Internal
                     await _transport.Value
                         .WriteAsync(bytes, offset, count, token)
                         .ConfigureAwait(false);
+
+                Volatile.Write(ref _sentBody, _sentBody + bodyCount);
             }
 
             catch (Exception error) when (ExceptionPolicy.IsRecoverable(error))

@@ -193,6 +193,7 @@ for a complete app you can run, then choose files or controllers as needed.
 - [Managed TCP write latency](project/http-tcp-latency.md): controlled socket-delay comparison with unchanged keep-alive and HTTP/2 reset regressions.
 - [Managed engine load comparison](project/http-engine-load-comparison.md): separate-process HTTP/1.1, HTTP/2 and HTTP/3 measurements against main and Kestrel, profiled bottlenecks and prioritized improvements.
 - [Direct request dispatch from connections](project/http1-direct-dispatch.md): the accept-queue hops removed from the HTTP/1.1, HTTP/2 and HTTP/3 request path, the lifecycle semantics kept, and the measurements against the base and Kestrel.
+- [HTTP/1.1 response completion](project/http1-coalesced-output.md): bounded inline output holding, shared heartbeat promptness, transport-write regressions and separate warm/cold comparisons for #577.
 - [HTTP teardown exception attribution](project/http-teardown-exceptions.md): phase accounting, profiler correction and bounded protocol comparisons for issue #282.
 - [Managed engine load baseline on a second host](project/http-engine-load-baseline-evo-x1.md): noise-controlled engine baseline against main and Kestrel on a Ryzen AI 9 HX 370 host, including request-inspection routes, failures and bottleneck evidence.
 - [HTTPS 1 MiB uploads on the v2 engine](project/https-upload-read-path-436.md): the issue #436 re-measurement of HTTPS uploads against the v1.0.3 core at 2.0.0, transport read counts per request and the stack-sampled CPU attribution of the TLS read path.

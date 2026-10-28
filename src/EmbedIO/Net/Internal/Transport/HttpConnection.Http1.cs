@@ -20,6 +20,7 @@ namespace EmbedIO.Net.Internal
         // Open while this actor dispatches a handler on its own thread: the response output
         // created meanwhile holds what the handler writes until the handler returns or suspends.
         private bool _outputWindow;
+        private Http1OutputHeartbeat.Registration? _outputHeartbeat;
 #if NET10_0_OR_GREATER
         private ManualResetValueTaskSourceCore<bool> _responseCompletion;
         private bool _responseWaitRequested;
@@ -192,7 +193,9 @@ namespace EmbedIO.Net.Internal
                     }
 
                     _contextBound = true;
-                    _outputWindow = true;
+                    // Request-body parsing can fail synchronously after the application
+                    // has already committed output. Preserve that interleaving on the wire.
+                    _outputWindow = !_context.Request.HasEntityBody;
                 }
 
                 try

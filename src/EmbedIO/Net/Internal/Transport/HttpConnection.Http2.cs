@@ -50,6 +50,7 @@ namespace EmbedIO.Net.Internal
         internal void CloseForListener(HttpListener owner)
         {
             List<Http2Exchange>? canceled = null;
+            ResponseStream? output = null;
 
             lock (_connectionSync)
             {
@@ -65,6 +66,7 @@ namespace EmbedIO.Net.Internal
                     }
 
                     Volatile.Write(ref _forceClosing, 1);
+                    output = _oStream;
                 }
 
                 // A shared endpoint remains open after this owner removes its routes.
@@ -83,7 +85,16 @@ namespace EmbedIO.Net.Internal
 
             if (canceled == null)
             {
-                ForceClose();
+                try
+                {
+                    output?.TrySendHeldBeforeAbort();
+                }
+
+                finally
+                {
+                    ForceClose();
+                }
+
                 return;
             }
 

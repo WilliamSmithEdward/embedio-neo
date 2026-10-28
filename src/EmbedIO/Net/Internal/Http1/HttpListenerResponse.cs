@@ -190,11 +190,40 @@ namespace EmbedIO.Net.Internal
 
         internal void Abort() => Finish(true, true);
 
+        // An application exception cannot replace committed output. Send only the bytes
+        // already accepted before closing the connection, without a synthetic ending.
+        internal async Task AbortCommittedAsync()
+        {
+            try
+            {
+                if (_output != null)
+                    await _output
+                        .CloseWindowAsync()
+                        .ConfigureAwait(false);
+            }
+
+            finally
+            {
+                Abort();
+            }
+        }
+
         private void Finish(bool force, bool abort)
         {
             if (Interlocked.Exchange(ref _closed, 1) != 0) return;
 
-            if (abort) _transport.ForceClose();
+            if (abort)
+            {
+                try
+                {
+                    _output?.TrySendHeldBeforeAbort();
+                }
+
+                finally
+                {
+                    _transport.ForceClose();
+                }
+            }
 
             else _transport.Close(force);
         }
