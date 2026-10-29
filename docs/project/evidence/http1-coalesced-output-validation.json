@@ -1,0 +1,586 @@
+{
+  "schema_version": 1,
+  "kind": "http1-coalesced-output-validation",
+  "repository": "WilliamSmithEdward/embedio-neo",
+  "source": {
+    "baseline_commit": "b30f186436b23b0a924952b9e2a231266666d01f",
+    "implementation_commit": "9d62d6b0af37c1a4e8f4dda117d90e1cf71e3d05",
+    "prior_implementation_commit": "41b18af29cacffaedf2443404437d38737c92d63",
+    "current_files": [
+      {
+        "file": "src/EmbedIO/Net/Internal/Http1/Http1OutputHeartbeat.cs",
+        "sha256": "f86279d24bba1c3f84a61be1346f4eb78e73fc9bafd73307ea06a7b40b3de565"
+      },
+      {
+        "file": "src/EmbedIO/Net/Internal/Http1/Http1ResponseOutput.cs",
+        "sha256": "690bc31a59338ab1acc00a78c87eb9ac68b1a9c6d6cf0d73249c36cc6eb67bce"
+      },
+      {
+        "file": "src/EmbedIO/Net/Internal/Transport/HttpConnection.Http1.cs",
+        "sha256": "20d8a9fb11427a3d5348960637c34f97b56dd05605c51761ce38b28ae7f90898"
+      },
+      {
+        "file": "src/EmbedIO/Net/Internal/Transport/HttpConnection.cs",
+        "sha256": "1d28fa04cb8c37d849bb322b87d05eed324187a4442f8246b088d03400b79339"
+      },
+      {
+        "file": "src/EmbedIO/Net/Internal/Http1/HttpListenerResponse.cs",
+        "sha256": "9868c70c9e202ab90f5f1d8619764fd7f31b27743fe33cc72935c5bbb8715ef6"
+      },
+      {
+        "file": "src/EmbedIO/Internal/Responses/ResponseCommitment.cs",
+        "sha256": "90317ba58fd2c25c80a0d74467c148d9387e90d656831c2d49929e82c3f0327e"
+      },
+      {
+        "file": "src/EmbedIO/Internal/Responses/AsyncWriteGate.cs",
+        "sha256": "6abf57c6bfa4941c09b53a914894947b5bd552ccb7e8d2d183a2eed218528c02"
+      },
+      {
+        "file": "src/EmbedIO/Net/Internal/Transport/HttpConnection.Http2.cs",
+        "sha256": "2b64d568a1552c5be4c4a072bbefe55d0116e41abede34f3696cd55f19443cf8"
+      },
+      {
+        "file": "test/EmbedIO.LoadBenchmark/LoadClient.cs",
+        "sha256": "d78143cc8d3aa4c3001c8730f457ca4539f8a1a6412bc435930612650224ab3d"
+      },
+      {
+        "file": "test/EmbedIO.Tests/Http1CoalescedOutputTest.cs",
+        "sha256": "8b28432a326882935486f9ba2be7571a0dd9f725af2fbb1a0e07d76b72893125"
+      },
+      {
+        "file": "test/EmbedIO.Tests/Http1CoalescedOutputTest.Lifecycle.cs",
+        "sha256": "104f397ee6bb5407bb489ae799b39c8f673774842dba1873bce52c1bb04e7a9c"
+      },
+      {
+        "file": "test/EmbedIO.Tests/Http1CoalescedOutputTest.Telemetry.cs",
+        "sha256": "207a2a330ee6bbaa93d5c7785a1aa4dac7c0343ec169a0d91d22d78c4aebc88a"
+      },
+      {
+        "file": "test/EmbedIO.Tests/Http1CoalescedWindowWireTest.cs",
+        "sha256": "d80e2e12371f6005af481885c33f6805fdcd9921c50e97c1bdd4593006a5c6f3"
+      }
+    ]
+  },
+  "platform": {
+    "os_family": "Windows",
+    "test_target_framework": "net10.0",
+    "test_architecture": "x64",
+    "time_zone": "America/Los_Angeles",
+    "timestamp_precision": "seconds",
+    "test_runtime_requirement": {
+      "framework": "Microsoft.NETCore.App",
+      "minimum_version": "10.0.0",
+      "actual_version_not_recorded_in_trx": true
+    }
+  },
+  "gates": {
+    "completed_pacific": "2026-10-28T15:56:39-07:00",
+    "source_quality": {
+      "guard_unit_tests": 9,
+      "formatted_source_files": 588,
+      "projects": 8,
+      "style_and_analyzer_scans": 16,
+      "info_warning_error_unknown": 0,
+      "source_hashes_stable": true,
+      "steps": [
+        {
+          "name": "test-source-quality",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:51:03-07:00",
+          "finished_pacific": "2026-10-28T15:51:04-07:00"
+        },
+        {
+          "name": "check-source-quality",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:51:04-07:00",
+          "finished_pacific": "2026-10-28T15:54:44-07:00"
+        },
+        {
+          "name": "suppression-guard",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:54:44-07:00",
+          "finished_pacific": "2026-10-28T15:54:46-07:00"
+        },
+        {
+          "name": "analyzer-guard",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:54:46-07:00",
+          "finished_pacific": "2026-10-28T15:54:47-07:00"
+        },
+        {
+          "name": "source-whitespace",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:54:47-07:00",
+          "finished_pacific": "2026-10-28T15:54:51-07:00"
+        }
+      ]
+    },
+    "production_diagnostics": {
+      "configuration_framework_pairs": [
+        {
+          "configuration": "Release",
+          "target_framework": "netstandard2.0",
+          "exit_code": 0,
+          "completed_pacific": "2026-10-28T15:47:58-07:00"
+        },
+        {
+          "configuration": "Release",
+          "target_framework": "net10.0",
+          "exit_code": 0,
+          "completed_pacific": "2026-10-28T15:48:14-07:00"
+        },
+        {
+          "configuration": "Debug",
+          "target_framework": "netstandard2.0",
+          "exit_code": 0,
+          "completed_pacific": "2026-10-28T15:48:21-07:00"
+        },
+        {
+          "configuration": "Debug",
+          "target_framework": "net10.0",
+          "exit_code": 0,
+          "completed_pacific": "2026-10-28T15:48:37-07:00"
+        }
+      ],
+      "build_warnings": 0,
+      "build_errors": 0,
+      "unsuppressed_results": 0,
+      "changed_production_file_results": 0,
+      "unchanged_eight_production_source_hashes_after_test_local_style_edit": true
+    },
+    "changed_test_sources": {
+      "files": 4,
+      "info_warning_error": 0,
+      "report_only_hidden_style": 98,
+      "report_only_hidden_analyzers": 97,
+      "hashes_stable": true,
+      "formatting_and_whitespace_passed": true
+    },
+    "allocations": {
+      "verifier_count": 4,
+      "socket_free": true,
+      "timing_results_are_informational": true,
+      "steps": [
+        {
+          "name": "performance-restore",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:50:29-07:00",
+          "finished_pacific": "2026-10-28T15:50:30-07:00"
+        },
+        {
+          "name": "performance-build",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:50:30-07:00",
+          "finished_pacific": "2026-10-28T15:50:33-07:00"
+        },
+        {
+          "name": "verify-allocations",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:50:33-07:00",
+          "finished_pacific": "2026-10-28T15:50:36-07:00"
+        },
+        {
+          "name": "verify-audit-allocations",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:50:36-07:00",
+          "finished_pacific": "2026-10-28T15:50:36-07:00"
+        },
+        {
+          "name": "verify-listener-queue-allocations",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:50:36-07:00",
+          "finished_pacific": "2026-10-28T15:50:36-07:00"
+        },
+        {
+          "name": "verify-cold-start",
+          "exit_code": 0,
+          "started_pacific": "2026-10-28T15:50:36-07:00",
+          "finished_pacific": "2026-10-28T15:50:38-07:00"
+        }
+      ]
+    },
+    "unchanged_load_driver": {
+      "file": "test/EmbedIO.LoadBenchmark/LoadClient.cs",
+      "sha256": "d78143cc8d3aa4c3001c8730f457ca4539f8a1a6412bc435930612650224ab3d",
+      "source_diagnostics_previously_completed_for_same_hash": true
+    }
+  },
+  "regression_proof": {
+    "purpose": "A completing write owns its drain, while partial writes and committed-error drains retain their required ordering.",
+    "before": {
+      "implementation_commit": "41b18af29cacffaedf2443404437d38737c92d63",
+      "status": "failed",
+      "runner_exit_code": 2,
+      "build_warnings": 0,
+      "counts": {
+        "total": 11,
+        "executed": 11,
+        "passed": 6,
+        "failed": 5,
+        "skipped": 0
+      },
+      "started_pacific": "2026-10-28T15:42:11-07:00",
+      "finished_pacific": "2026-10-28T15:42:11-07:00",
+      "trx_sha256": "01a16eefb9d75cadd2f25abce8d2cf8145cd3f1aed87f0319637d1d1eddc3208",
+      "response_source_sha256": "727e793ebc4c5c7ce4b260b125de9d9da72b3c21fbe224b51bfe884ff8425f65",
+      "lifecycle_test_source_sha256": "a46a67a4f4bbf146bb6055e3e7136677338dc1ea7f79f794fcc435f84cf9f396",
+      "library_assembly_sha256": "efb5a9e4e7d6383ce901f8f38349c091517208a943abfb42ca0b0238c3e41995",
+      "unnecessary_actor_waiter_cases_failed": 5,
+      "preservation_cases_passed": 6,
+      "cases": [
+        {
+          "name": "CanceledCompletingWriteDoesNotDisarmInlineWindow(False)",
+          "outcome": "passed"
+        },
+        {
+          "name": "CanceledCompletingWriteDoesNotDisarmInlineWindow(True)",
+          "outcome": "passed"
+        },
+        {
+          "name": "CommittedErrorStillWaitsForAnActorWindowDrainAlreadyInProgress",
+          "outcome": "passed"
+        },
+        {
+          "name": "CompletingAsyncWriteDoesNotQueueActorWindowClose(False,False)",
+          "outcome": "failed"
+        },
+        {
+          "name": "CompletingAsyncWriteDoesNotQueueActorWindowClose(True,False)",
+          "outcome": "failed"
+        },
+        {
+          "name": "CompletingAsyncWriteDoesNotQueueActorWindowClose(True,True)",
+          "outcome": "failed"
+        },
+        {
+          "name": "CompletingFlushDoesNotQueueActorWindowClose(False)",
+          "outcome": "failed"
+        },
+        {
+          "name": "CompletingFlushDoesNotQueueActorWindowClose(True)",
+          "outcome": "failed"
+        },
+        {
+          "name": "PartialOutputStillWaitsForActorWindowDrain",
+          "outcome": "passed"
+        },
+        {
+          "name": "RejectedOverlengthWriteDoesNotDisarmInlineWindow(False)",
+          "outcome": "passed"
+        },
+        {
+          "name": "RejectedOverlengthWriteDoesNotDisarmInlineWindow(True)",
+          "outcome": "passed"
+        }
+      ],
+      "failure_observation": {
+        "gate_users_expected": 1,
+        "gate_users_observed": 2
+      },
+      "wrapper_started_pacific": "2026-10-28T15:41:28-07:00",
+      "wrapper_finished_pacific": "2026-10-28T15:42:12-07:00"
+    },
+    "after": {
+      "status": "passed",
+      "implementation_source_equivalent_to_commit": "9d62d6b0af37c1a4e8f4dda117d90e1cf71e3d05",
+      "runner_exit_code": 0,
+      "build_warnings": 0,
+      "counts": {
+        "total": 151,
+        "executed": 151,
+        "passed": 151,
+        "failed": 0,
+        "skipped": 0
+      },
+      "started_pacific": "2026-10-28T15:44:03-07:00",
+      "finished_pacific": "2026-10-28T15:44:23-07:00",
+      "trx_sha256": "99e6a01f0146747bf93941caae61fe39b84e417e14efb5b3d48d4aaba9d43738",
+      "new_coalesced_cases": 55,
+      "existing_compatibility_cases": 96,
+      "response_source_sha256": "690bc31a59338ab1acc00a78c87eb9ac68b1a9c6d6cf0d73249c36cc6eb67bce",
+      "actor_source_sha256": "20d8a9fb11427a3d5348960637c34f97b56dd05605c51761ce38b28ae7f90898",
+      "lifecycle_test_source_sha256": "a46a67a4f4bbf146bb6055e3e7136677338dc1ea7f79f794fcc435f84cf9f396",
+      "library_assembly_sha256": "c77b0ed12600977094cc76713377e6a6dff6fd48a55d363c2a9553242fa3e590",
+      "all_eleven_proof_cases_passed": true,
+      "class_counts": [
+        {
+          "class_name": "EmbedIO.Tests.CliTest",
+          "count": 22
+        },
+        {
+          "class_name": "EmbedIO.Tests.Http1CoalescedOutputTest",
+          "count": 47
+        },
+        {
+          "class_name": "EmbedIO.Tests.Http1CoalescedWindowWireTest",
+          "count": 8
+        },
+        {
+          "class_name": "EmbedIO.Tests.HttpConformanceFindingsTest",
+          "count": 15
+        },
+        {
+          "class_name": "EmbedIO.Tests.Issues.Issue143_ProblemDetails",
+          "count": 22
+        },
+        {
+          "class_name": "EmbedIO.Tests.Issues.Issue280_WebSocketDrain",
+          "count": 19
+        },
+        {
+          "class_name": "EmbedIO.Tests.Issues.Issue42_DeferredResponses",
+          "count": 18
+        }
+      ],
+      "wrapper_started_pacific": "2026-10-28T15:43:36-07:00",
+      "wrapper_finished_pacific": "2026-10-28T15:44:24-07:00",
+      "source_timing_note": "Run on the prior commit plus completing-writer changes later committed as the implementation commit."
+    },
+    "final_formatted_source_confirmation": {
+      "status": "passed",
+      "implementation_source_equivalent_to_commit": "9d62d6b0af37c1a4e8f4dda117d90e1cf71e3d05",
+      "counts": {
+        "total": 91,
+        "executed": 91,
+        "passed": 91,
+        "failed": 0,
+        "skipped": 0
+      },
+      "started_pacific": "2026-10-28T15:58:28-07:00",
+      "finished_pacific": "2026-10-28T15:58:29-07:00",
+      "trx_sha256": "3cc58fff11712befb7a4ab0981e1783d0b96472a23b1c0776cbb4ff543770fa6",
+      "new_coalesced_cases": 55,
+      "existing_typed_route_cases": 36,
+      "all_eleven_proof_cases_passed": true,
+      "class_counts": [
+        {
+          "class_name": "EmbedIO.Tests.Http1CoalescedOutputTest",
+          "count": 47
+        },
+        {
+          "class_name": "EmbedIO.Tests.Http1CoalescedWindowWireTest",
+          "count": 8
+        },
+        {
+          "class_name": "EmbedIO.Tests.Issues.Issue163_TypedRouteValidation",
+          "count": 36
+        }
+      ],
+      "lifecycle_test_source_sha256": "104f397ee6bb5407bb489ae799b39c8f673774842dba1873bce52c1bb04e7a9c"
+    },
+    "test_source_timing_note": "The 151-case run preceded an equivalent explicit-local-type to var edit in one test. The 91-case run used the final formatted test source, including all 55 new cases and 36 typed-route cases."
+  },
+  "full_suite": {
+    "status": "failed",
+    "staged_from_commit": "41b18af29cacffaedf2443404437d38737c92d63",
+    "production_implementation_source_equivalent_to_commit": "9d62d6b0af37c1a4e8f4dda117d90e1cf71e3d05",
+    "counts": {
+      "total": 7591,
+      "executed": 7587,
+      "passed": 7586,
+      "failed": 1,
+      "skipped": 4
+    },
+    "started_pacific": "2026-10-28T15:45:13-07:00",
+    "finished_pacific": "2026-10-28T15:53:26-07:00",
+    "trx_sha256": "a8dd1344806d1049a22d754715b50dd92f3f51a3418b80abaada0f28176fb6bf",
+    "runner_duration_seconds": 494.571,
+    "requested_processor_count": 4,
+    "affinity_cpus": [
+      4,
+      5,
+      6,
+      7
+    ],
+    "staged_at_pacific": "2026-10-28T15:45:13-07:00",
+    "assemblies": [
+      {
+        "filename": "EmbedIO.dll",
+        "sha256": "c77b0ed12600977094cc76713377e6a6dff6fd48a55d363c2a9553242fa3e590"
+      },
+      {
+        "filename": "EmbedIO.Tests.dll",
+        "sha256": "03ed345fe3906bd286b7e6e0ccb7c367ca847c92737b8d012f409a9dee5b1a35"
+      },
+      {
+        "filename": "EmbedIO.Tests.runtimeconfig.json",
+        "sha256": "c230a317a54dd960bcbeb5f347f52e18dc665a26f7efda2159fced9a5ac7e097"
+      }
+    ],
+    "manifest_sha256": "590175c4b09518bc98098f7dfd68bed4540aacbccf3e595eeb81a0eb20f81500",
+    "failure": {
+      "class_name": "EmbedIO.Tests.Issues.Issue163_TypedRouteValidation",
+      "test_name": "MalformedSupportedRouteValuesReturn400BeforeMethodInvocation(EmbedIO,\"guid/not-a-guid\")",
+      "stage": "client_connect_before_route_handler",
+      "socket_error_code": "NoBufferSpaceAvailable",
+      "native_error_code": 10055
+    },
+    "test_source_timing_note": "The copied full-suite runner contained the completing-writer implementation before the equivalent test-local style edit. The full suite has one failure; the later 91-case run is a focused confirmation, not a replacement full-suite result.",
+    "outstanding_validation": "An exact-current-head hosted full-suite result remains pending.",
+    "source_timing_note": "Run on the prior commit plus completing-writer changes later committed as the implementation commit. Its staged library SHA-256 equals the library used by the 151-case run."
+  },
+  "independent_socket_control": {
+    "status": "observed_failure",
+    "purpose": "Record an independent Windows socket-allocation observation without EmbedIO.",
+    "operation": "create TCP IPv4 socket, bind loopback port zero, dispose; sequential iterations",
+    "runtime": ".NET 10.0.13",
+    "runtime_version": "10.0.13",
+    "sdk_pin": "10.0.402",
+    "os": "Microsoft Windows 10.0.26300",
+    "architecture": "X64",
+    "requested_processor_count": 4,
+    "started_pacific": "2026-10-28T15:57:15-07:00",
+    "finished_pacific": "2026-10-28T15:57:16-07:00",
+    "elapsed_milliseconds": 712.2519,
+    "exit_code": 1,
+    "attempted_operations": 18000,
+    "successful_operations": 17999,
+    "failed_operations": 1,
+    "retries": 0,
+    "embedio_loaded": false,
+    "first_selected_port": 50394,
+    "last_selected_port": 56633,
+    "minimum_observed_selected_port": 49153,
+    "maximum_observed_selected_port": 65531,
+    "observed_port_decrease_count": 1,
+    "failure": {
+      "operation": 12759,
+      "phase": "bind",
+      "socket_error_code": "NoBufferSpaceAvailable",
+      "native_error_code": 10055,
+      "previous_successful_selected_port": 65531,
+      "managed_stack_frame": "Socket.DoBind"
+    },
+    "following_success": {
+      "operation": 12760,
+      "previous_successful_selected_port": 65531,
+      "selected_port": 49153
+    },
+    "source_files": [
+      {
+        "filename": "Directory.Build.props",
+        "sha256": "17284cb74605517cbec8a8153505da71a685b28694b67b5ef80608cd79b1c0ea"
+      },
+      {
+        "filename": "Directory.Build.targets",
+        "sha256": "17284cb74605517cbec8a8153505da71a685b28694b67b5ef80608cd79b1c0ea"
+      },
+      {
+        "filename": "global.json",
+        "sha256": "3f9b8063fdc946bf82db965d9a228d4ea581390f83680ee3b952fb0ec00b2cf3"
+      },
+      {
+        "filename": "Program.cs",
+        "sha256": "7b91131cc3d735791f3dd404ffc7f8b970ccd5a51a6c11e82f5ceed0c097917a"
+      },
+      {
+        "filename": "SocketAllocationControl.csproj",
+        "sha256": "8c0f03092d11c9a2fcce54da8f23d4771adb9d813a461c057b17d079e241672b"
+      }
+    ],
+    "assembly_sha256": "cb1a769fbb814a24c27a05af8c36b2f2e56ef443eaa5e627d0575a053f4c0d72",
+    "result_sha256": "bb5ba8423e3ca810898213011ef6ea5ef7ef41b94e908f5128cda1ccb885116c",
+    "limitations": [
+      "This is a newly authored bind control; the source of the earlier historical control was unavailable.",
+      "The full-suite failure arose in client connect, whereas this control failed in bind. This observation does not establish the cause of the full-suite failure.",
+      "The selected-port decrease is an observation of this run, not a measurement of the configured Windows port range."
+    ]
+  },
+  "evidence_inputs": [
+    {
+      "id": "close-window-before-41-trx",
+      "filename": "EmbedIO.Tests_net10.0_x64.trx",
+      "sha256": "01a16eefb9d75cadd2f25abce8d2cf8145cd3f1aed87f0319637d1d1eddc3208"
+    },
+    {
+      "id": "close-window-after-41-trx",
+      "filename": "EmbedIO.Tests_net10.0_x64.trx",
+      "sha256": "99e6a01f0146747bf93941caae61fe39b84e417e14efb5b3d48d4aaba9d43738"
+    },
+    {
+      "id": "close-window-full-final-trx",
+      "filename": "EmbedIO.Tests_net10.0_x64.trx",
+      "sha256": "a8dd1344806d1049a22d754715b50dd92f3f51a3418b80abaada0f28176fb6bf"
+    },
+    {
+      "id": "close-window-focused-current-trx",
+      "filename": "EmbedIO.Tests_net10.0_x64.trx",
+      "sha256": "3cc58fff11712befb7a4ab0981e1783d0b96472a23b1c0776cbb4ff543770fa6"
+    },
+    {
+      "id": "gate-certificate",
+      "filename": "close-window-final-certificate-55.json",
+      "sha256": "ec84be78047583efef78c937b256736adb3764fe66ad187c22ff6f34721bb6bc"
+    },
+    {
+      "id": "gate-source-hashes",
+      "filename": "source-files-after.json",
+      "sha256": "10c46da978038890feb1fbfe4097904f467a0693aff86ccbbfc38b3dbe13ceb3"
+    },
+    {
+      "id": "full-run-provenance",
+      "filename": "run-provenance.json",
+      "sha256": "0da037b4794f81e6636bf507bc21c20053bd7435a1499f2899b4a6f0b500c55f"
+    },
+    {
+      "id": "full-run-manifest",
+      "filename": "stable-runner-manifest.json",
+      "sha256": "590175c4b09518bc98098f7dfd68bed4540aacbccf3e595eeb81a0eb20f81500"
+    },
+    {
+      "id": "bcl-result",
+      "filename": "result.json",
+      "sha256": "bb5ba8423e3ca810898213011ef6ea5ef7ef41b94e908f5128cda1ccb885116c"
+    },
+    {
+      "id": "bcl-provenance",
+      "filename": "provenance.json",
+      "sha256": "5ea5a9d6fa653458a2f2c823d19750b0ccae8d2adb769b3aba21aefd8b0ec0d0"
+    },
+    {
+      "id": "bcl-assembly",
+      "filename": "SocketAllocationControl.dll",
+      "sha256": "cb1a769fbb814a24c27a05af8c36b2f2e56ef443eaa5e627d0575a053f4c0d72"
+    },
+    {
+      "id": "close-window-final-quality-55-var-summary.json",
+      "filename": "summary.json",
+      "sha256": "dab2b0e58fdb67eec89480eda175e02237deddbc63dc2fe92a31b35d86b2d910"
+    },
+    {
+      "id": "close-window-final-sarif-55-summary.json",
+      "filename": "summary.json",
+      "sha256": "65882069a79ebbd0b57492bf09a0565e66ec0ec1791112201e7c055a33efb58c"
+    },
+    {
+      "id": "close-window-final-test-info-55-var-source-hash-proof.json",
+      "filename": "source-hash-proof.json",
+      "sha256": "178cd1104b2072e982ad4b8223078fccb95158bf90c19c5266cb3531ecc3cdee"
+    },
+    {
+      "id": "close-window-final-allocation-55-summary.json",
+      "filename": "summary.json",
+      "sha256": "a39c83e64a9de77cfe40824ef9d0a617964ca74552c1dd0e65ae86e1e9a14931"
+    },
+    {
+      "id": "before-proof",
+      "filename": "proof-results.json",
+      "sha256": "b3a4a050af9816ae55fa018c3d53f8ee90a57d651d0943e0eb46c0c6fbd8fe48"
+    },
+    {
+      "id": "after-proof",
+      "filename": "proof-results.json",
+      "sha256": "6774500fd416039c53d2b75eda84a654a06efddf11b13bf4b4c62b02229e4bda"
+    },
+    {
+      "id": "before-run-provenance",
+      "filename": "provenance.json",
+      "sha256": "04a0d2273841aa95b4b49a477b08a03eae9d85db3c11e5e44a56c8977aed1a7a"
+    },
+    {
+      "id": "after-run-provenance",
+      "filename": "provenance.json",
+      "sha256": "d10017d81999d3ea52a40320a71cba2a73d25ff618852fb20ed16633ad32bf35"
+    }
+  ]
+}

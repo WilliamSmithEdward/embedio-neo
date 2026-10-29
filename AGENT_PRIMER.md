@@ -1123,7 +1123,8 @@ keeps running. A completing write owns its pending I/O without an extra actor
 wait; committed-error cleanup retains its drain-before-abort ordering.
 Strict write errors (`IgnoreWriteExceptions = false`) retain
 write-through behavior, as do requests with entity bodies. This is absent from
-2.19.0 packages. Keep its warm and cold measurements separate; #577's broader
+2.19.0 packages. The guide records separate warm, cold and identical-binary
+measurements, with their coverage and host-activity limits. #577's broader
 Kestrel performance goal remains open.
 
 ### Response-pipeline validation (2.3.0 source tree)

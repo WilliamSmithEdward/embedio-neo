@@ -1,0 +1,379 @@
+{
+  "schema_version": 1,
+  "kind": "http1-incomplete-measurement-context",
+  "campaign_status": "INCOMPLETE",
+  "repository": "WilliamSmithEdward/embedio-neo",
+  "display_timezone": "America/Los_Angeles",
+  "source_and_binaries": {
+    "candidate_source_commit": "9d62d6b0af37c1a4e8f4dda117d90e1cf71e3d05",
+    "baseline_core_source_commit": "b30f186436b23b0a924952b9e2a231266666d01f",
+    "common_harness_source_commit": "9d62d6b0af37c1a4e8f4dda117d90e1cf71e3d05",
+    "candidate_core_sha256": "998281aab698a8a0eb2aa3f242dcf48506afd0870b4dc0c6a6d871c8a0c4dd20",
+    "baseline_core_sha256": "0f5402e283b83832c6b5e592bcd2f6ba6fe4ec742aefab219ffce0bbbcae265d",
+    "common_runner_sha256": "a492449af3553562e0e9d49a25e4fa42d38f28196c83ffb7aea20cbdb316eeec",
+    "kestrel_core_sha256": "9cff42e8b03915c3b91d831cf586e5e9052d0492a08d804355578ab336be194d"
+  },
+  "linked_evidence": {
+    "selected_four_run_partial_export_sha256": "838050fe85454b6b612765d1f5031542c9ab5297d838693f26a534916940d559",
+    "original_unqualified_warm_orientation_sha256": "1c468d89b89af8d8a4a8c03dd32a8c4960a5f0d273cb95c191a40d13ef247974",
+    "same_binary_calibration_sha256": "64a724782a2a9efab6fb78d88510c077f5ba235875a5b87ae1e50e607ad1988d"
+  },
+  "source_inputs": {
+    "observer_raw_sha256": "4045920a0ab0122d08cf00755c68973a6359b52a4e0a32f3fe990f183d64ef0c",
+    "observer_records": 223,
+    "cold_ab_raw_sha256": "b00e55d723914d76ce448bf9f849d9a44daf4647f68dae290d819cfab341e362",
+    "observer_first_snapshot_utc": "2026-10-28T23:38:32.9030539Z",
+    "observer_last_snapshot_utc": "2026-10-28T23:58:32.4498819Z"
+  },
+  "scope": {
+    "private_project_process_attribution_included": false,
+    "os_or_algorithm_cause_claim": false,
+    "tls_stability_claim": false,
+    "full_attempt_quiet_certification": false,
+    "original_warm_stall_or_native_10055_cause_inferred_from_later_activity": false
+  },
+  "selected_warm_orientation": {
+    "started_pacific": "2026-10-28T16:39:54.000-07:00",
+    "finished_pacific": "2026-10-28T16:55:11.000-07:00",
+    "guard_status": "failed",
+    "command_exit_code": 1,
+    "invalid_marker_retained": true,
+    "observer_snapshot_count": 170,
+    "observer_first_pacific": "2026-10-28T16:39:59.129-07:00",
+    "observer_last_pacific": "2026-10-28T16:55:09.424-07:00",
+    "interpretation": "No concurrent nonbenchmark test workload was identified in the saved snapshots overlapping this orientation. The attempt remains incomplete and invalid because a client connection failed; bounded sampling does not establish zero background activity."
+  },
+  "post_warm_concurrent_test_activity": {
+    "description": "Saved observer snapshots record a concurrent nonbenchmark test workload after the selected warm orientation ended and overlapping predeclared excluded cold warmups.",
+    "first_snapshot_pacific": "2026-10-28T16:56:19.401-07:00",
+    "last_snapshot_pacific": "2026-10-28T16:57:54.761-07:00",
+    "snapshots": [
+      {
+        "raw_line_1based": 199,
+        "raw_record_sha256": "f1c1c5af8ca4281fd2df358084d3e81df786b85a378bd9318d96d82e894e9dc1",
+        "captured_utc": "2026-10-28T23:56:19.4011701Z",
+        "captured_pacific": "2026-10-28T16:56:19.401-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 64,
+          "PercentDPCTime": 1,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 19,
+          "PercentIdleTime": 36
+        }
+      },
+      {
+        "raw_line_1based": 200,
+        "raw_record_sha256": "3a7025887f8021511d4368eaf992ee4b33f15d1bdcd3faf78d9555f7f3af623e",
+        "captured_utc": "2026-10-28T23:56:24.9303817Z",
+        "captured_pacific": "2026-10-28T16:56:24.930-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 14,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 201,
+        "raw_record_sha256": "040f52e6d1054d3def4ad74c2c5822b50f816a090e9e06ea7d609094d1a02523",
+        "captured_utc": "2026-10-28T23:56:30.4849674Z",
+        "captured_pacific": "2026-10-28T16:56:30.484-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 8,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 202,
+        "raw_record_sha256": "684577fffe3896cc213229f843f3dad2e01b27ebb0d7a86b4ae44beb2e9f113e",
+        "captured_utc": "2026-10-28T23:56:36.0849209Z",
+        "captured_pacific": "2026-10-28T16:56:36.084-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 9,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 203,
+        "raw_record_sha256": "af111ad988229ec5d62fa8d7b0398565bef42b70317326a4bb955835a6f6645f",
+        "captured_utc": "2026-10-28T23:56:41.6251093Z",
+        "captured_pacific": "2026-10-28T16:56:41.625-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 99,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 1,
+          "PercentPrivilegedTime": 17,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 204,
+        "raw_record_sha256": "d489455b12e6466868fc91f5b3bfa8964cafb14fb7be17b9fac006e6dfdebc46",
+        "captured_utc": "2026-10-28T23:56:47.2130035Z",
+        "captured_pacific": "2026-10-28T16:56:47.213-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 1,
+          "PercentPrivilegedTime": 14,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 205,
+        "raw_record_sha256": "5958ce8afddfc92d90c778f79fed99f06b44a44f91bdb88f42bc487b896297f6",
+        "captured_utc": "2026-10-28T23:56:52.898893Z",
+        "captured_pacific": "2026-10-28T16:56:52.898-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 17,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 206,
+        "raw_record_sha256": "2da7368287dc4cfa46e5ef30d7982bd9279b2d4813a69f3d70da18105e36a293",
+        "captured_utc": "2026-10-28T23:56:58.5332783Z",
+        "captured_pacific": "2026-10-28T16:56:58.533-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 22,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 207,
+        "raw_record_sha256": "2b6cf5a0577cd0a7e1d8b02c12867c47c1156a22a883ddd58941900025ff382e",
+        "captured_utc": "2026-10-28T23:57:04.1276757Z",
+        "captured_pacific": "2026-10-28T16:57:04.127-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 25,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 208,
+        "raw_record_sha256": "c9c9f258a9c11802766fa85f6cb8673394c1f2deb79eff08f90b5f09c0b2ed03",
+        "captured_utc": "2026-10-28T23:57:09.7595754Z",
+        "captured_pacific": "2026-10-28T16:57:09.759-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 1,
+          "PercentPrivilegedTime": 35,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 209,
+        "raw_record_sha256": "7279460a39c0f751758553d278161c2af480cea725f0c44aa2b0f9fc8b25fb11",
+        "captured_utc": "2026-10-28T23:57:15.3883604Z",
+        "captured_pacific": "2026-10-28T16:57:15.388-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 28,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 210,
+        "raw_record_sha256": "a6088ba677e245116a50baefa38f13aa7f1b75709bcf44ae4fd1eb019739e0b8",
+        "captured_utc": "2026-10-28T23:57:21.0672784Z",
+        "captured_pacific": "2026-10-28T16:57:21.067-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 1,
+          "PercentPrivilegedTime": 26,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 211,
+        "raw_record_sha256": "a70481754f356f230ee95759c49344d63bef4b8c9ea28782f676e3567c867049",
+        "captured_utc": "2026-10-28T23:57:26.6327551Z",
+        "captured_pacific": "2026-10-28T16:57:26.632-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 28,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 212,
+        "raw_record_sha256": "fd67e0f6dcdafcd6420b85f1d5ff72c136a2a68e6fae62cc3f2ce44031c56f9d",
+        "captured_utc": "2026-10-28T23:57:32.3429441Z",
+        "captured_pacific": "2026-10-28T16:57:32.342-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 96,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 1,
+          "PercentPrivilegedTime": 36,
+          "PercentIdleTime": 2
+        }
+      },
+      {
+        "raw_line_1based": 213,
+        "raw_record_sha256": "bb46dfdff5fbcb35c11f75b722cd791d87cb334b307828679549102f109a2ac7",
+        "captured_utc": "2026-10-28T23:57:37.9904549Z",
+        "captured_pacific": "2026-10-28T16:57:37.990-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 99,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 1,
+          "PercentPrivilegedTime": 33,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 214,
+        "raw_record_sha256": "487055b6546db6b26d8f3c8589b1ed59c80ef7ce06ce405c3cc73454dc28de07",
+        "captured_utc": "2026-10-28T23:57:43.5720773Z",
+        "captured_pacific": "2026-10-28T16:57:43.572-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 1,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 41,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 215,
+        "raw_record_sha256": "ea4331a25c07ed34305468f11d3c0807c136bd75691d7638babc1e35f70a80a3",
+        "captured_utc": "2026-10-28T23:57:49.1635136Z",
+        "captured_pacific": "2026-10-28T16:57:49.163-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 29,
+          "PercentIdleTime": 0
+        }
+      },
+      {
+        "raw_line_1based": 216,
+        "raw_record_sha256": "1426bb3e43e3849246bd29dc9a36fa4138d1eb7b308a7c43bcc8b8e5dedd5239",
+        "captured_utc": "2026-10-28T23:57:54.7614696Z",
+        "captured_pacific": "2026-10-28T16:57:54.761-07:00",
+        "whole_host_counters": {
+          "PercentProcessorTime": 100,
+          "PercentDPCTime": 0,
+          "PercentInterruptTime": 0,
+          "PercentPrivilegedTime": 34,
+          "PercentIdleTime": 0
+        }
+      }
+    ],
+    "limitation": "These are separate sampled windows with gaps. The activity is not a proven cause of the earlier warm stall, native error 10055, or every cold timing observation."
+  },
+  "cold_ab_predeclared_excluded_warmups": [
+    {
+      "id": "h1/candidate/iteration0",
+      "raw_line_1based": 1,
+      "raw_record_sha256": "d49499d8959fcd7c90bd620b6d6a19a39f32bc7c2bc63f7f8d3672b8dd08504c",
+      "transport": "h1",
+      "normalized_engine": "candidate",
+      "iteration": 0,
+      "excluded_by_original_measurement_plan": true,
+      "sample_started_pacific": "2026-10-28T16:57:44.248-07:00",
+      "whole_host_busy_logical_cpus": 16.02440577522671
+    },
+    {
+      "id": "h1/main/iteration0",
+      "raw_line_1based": 2,
+      "raw_record_sha256": "8e74db1f99d7a554760cff2bd1bfd29ee1674f7ff3db896a7616c721acb99b97",
+      "transport": "h1",
+      "normalized_engine": "main",
+      "iteration": 0,
+      "excluded_by_original_measurement_plan": true,
+      "sample_started_pacific": "2026-10-28T16:57:46.656-07:00",
+      "whole_host_busy_logical_cpus": 15.935448097309125
+    },
+    {
+      "id": "h1/kestrel/iteration0",
+      "raw_line_1based": 3,
+      "raw_record_sha256": "2b960d3ca1679a2e083ae71c5e0902f06df93df7c8eb5a3d80c2fbe8fbec1e83",
+      "transport": "h1",
+      "normalized_engine": "kestrel",
+      "iteration": 0,
+      "excluded_by_original_measurement_plan": true,
+      "sample_started_pacific": "2026-10-28T16:57:48.844-07:00",
+      "whole_host_busy_logical_cpus": 16.090528105045482
+    },
+    {
+      "id": "h1tls/candidate/iteration0",
+      "raw_line_1based": 4,
+      "raw_record_sha256": "da2f88195aaeca81cbf4e467daabb1728fcc2d4a89160aa054ea0cb82bdde915",
+      "transport": "h1tls",
+      "normalized_engine": "candidate",
+      "iteration": 0,
+      "excluded_by_original_measurement_plan": true,
+      "sample_started_pacific": "2026-10-28T16:57:50.720-07:00",
+      "whole_host_busy_logical_cpus": 15.984810608105754
+    },
+    {
+      "id": "h1tls/main/iteration0",
+      "raw_line_1based": 5,
+      "raw_record_sha256": "5d06f3f163267717f7abefe4f7ed4ea9431e2ca8208932e834d50092bfd80553",
+      "transport": "h1tls",
+      "normalized_engine": "main",
+      "iteration": 0,
+      "excluded_by_original_measurement_plan": true,
+      "sample_started_pacific": "2026-10-28T16:57:53.087-07:00",
+      "whole_host_busy_logical_cpus": 15.956328136385563
+    },
+    {
+      "id": "h1tls/kestrel/iteration0",
+      "raw_line_1based": 6,
+      "raw_record_sha256": "810c3f4f20e6f90fe4b8dc7afc66f7c2580b412a78c5acf2ac5c200964eab78a",
+      "transport": "h1tls",
+      "normalized_engine": "kestrel",
+      "iteration": 0,
+      "excluded_by_original_measurement_plan": true,
+      "sample_started_pacific": "2026-10-28T16:57:56.143-07:00",
+      "whole_host_busy_logical_cpus": 15.05453111410895
+    }
+  ],
+  "measured_cold_rows": {
+    "valid_measured_total": 240,
+    "planned_measured_total": 240,
+    "iterations_per_engine_transport_orientation": 20,
+    "cold_ab": {
+      "valid": 120,
+      "whole_host_windows_at_or_above15": 0,
+      "maximum_whole_host_busy_cpus": 12.30618271940482
+    },
+    "cold_ba": {
+      "valid": 120,
+      "whole_host_windows_at_or_above15": 0,
+      "maximum_whole_host_busy_cpus": 5.006182635554911
+    },
+    "interpretation": "Measured cold rows remain descriptive. All predeclared iteration 0 exclusions are retained in the evidence; no full-attempt quiet or overall cold-performance win is claimed.",
+    "iteration0_included_in_measured_statistics": false
+  },
+  "method": {
+    "observer": "Top-five process CPU-delta snapshots over roughly 1 second, separated by 4 second sleep plus capture overhead; public records retain timing and whole-host counters only.",
+    "record_hash": "SHA256 of UTF-8 JSONL line content without the line terminator; exact raw-file hash is also retained.",
+    "timestamp": "Pacific conversions use UTC-07:00 for October 28, 2026; raw UTC snapshot timestamps are also retained.",
+    "same_binary_calibration_is_separate_and_not_pooled": true
+  }
+}
