@@ -54,6 +54,31 @@ namespace EmbedIO.Internal
             return WaitAsync(token);
         }
 
+        // Intentional shutdown may submit already accepted output, but must never queue
+        // behind another writer before closing the transport that can unblock that writer.
+        internal bool TryEnter(out Scope scope)
+        {
+            scope = default;
+
+            if (!TryAddReference()) return false;
+
+            var entered = false;
+
+            try
+            {
+                entered = _semaphore.Wait(0, CancellationToken.None);
+
+                if (entered) scope = new Scope(this);
+
+                return entered;
+            }
+
+            finally
+            {
+                if (!entered) ReleaseReference();
+            }
+        }
+
         private async ValueTask<Scope> WaitAsync(CancellationToken token)
         {
             try

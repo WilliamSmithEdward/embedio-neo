@@ -16,6 +16,11 @@ namespace EmbedIO.Net.Internal
         private bool _responseCanReuse;
         private bool _idleAwaitingSuccessor;
         private Task<int>? _idleRead;
+
+        // Open while this actor dispatches a handler on its own thread: the response output
+        // created meanwhile holds what the handler writes until the handler returns or suspends.
+        private bool _outputWindow;
+        private Http1OutputHeartbeat.Registration? _outputHeartbeat;
 #if NET10_0_OR_GREATER
         private ManualResetValueTaskSourceCore<bool> _responseCompletion;
         private bool _responseWaitRequested;
@@ -188,12 +193,36 @@ namespace EmbedIO.Net.Internal
                     }
 
                     _contextBound = true;
+                    // Request-body parsing can fail synchronously after the application
+                    // has already committed output. Preserve that interleaving on the wire.
+                    _outputWindow = !_context.Request.HasEntityBody;
                 }
 
-                // With a dispatcher installed the handler has run on this thread up to
-                // its first suspension; the server owns its task, including failures,
-                // and every outcome ends the response that the actor waits for next.
-                _ = owner.RegisterContext(_context);
+                try
+                {
+                    // With a dispatcher installed the handler has run on this thread up to
+                    // its first suspension; the server owns its task, including failures,
+                    // and every outcome ends the response that the actor waits for next.
+                    _ = owner.RegisterContext(_context);
+                }
+
+                finally
+                {
+                    ResponseStream? output;
+
+                    lock (_connectionSync)
+                    {
+                        _outputWindow = false;
+                        output = _oStream;
+                    }
+
+                    // A completed response has already sent its output and released the stream.
+                    if (output != null)
+                        await output
+                            .CloseInlineWindowAsync()
+                            .ConfigureAwait(false);
+                }
+
                 return true;
             }
         }

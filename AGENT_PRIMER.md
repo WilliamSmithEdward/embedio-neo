@@ -739,6 +739,11 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
 - `Redirect(location, statusCode)` accepts only 3xx statuses.
 - Set status, headers and cookies before the first body write or flush. After
   headers are sent they cannot change.
+- In unreleased HTTP/1 source, incomplete writes and flushes can be held while a
+  handler for a request without a body runs inline. Metadata is committed by the
+  first write or flush as before. Returning, suspending or the shared heartbeat
+  sends the held bytes; strict write errors retain write-through behavior. See
+  [HTTP/1.1 response completion](docs/project/http1-coalesced-output.md).
 - Response text is validated. `StatusDescription` with a control character throws
   `ArgumentException`; a header or cookie value with a control character throws
   `InvalidOperationException` when the response is written. Never copy request
@@ -1108,6 +1113,19 @@ change cuts the per-datagram and per-request cost. Against the source before it,
 Windows and Linux, small HTTP/3 requests ran at 3.6 to 7.3 times the rate with 13 to
 26 percent of the server CPU per request, and 1 MiB transfers at 1.9 to 3.1 times the
 rate.
+
+The [HTTP/1.1 response completion path](docs/project/http1-coalesced-output.md)
+holds up to 64 KiB while a handler for a request without an entity body runs
+inline, so its ending can share one transport write. Returning or suspending
+sends the held output; a shared 10 ms
+heartbeat also sends output held past a complete tick when a synchronous handler
+keeps running. A completing write owns its pending I/O without an extra actor
+wait; committed-error cleanup retains its drain-before-abort ordering.
+Strict write errors (`IgnoreWriteExceptions = false`) retain
+write-through behavior, as do requests with entity bodies. This is absent from
+2.19.0 packages. The guide records separate warm, cold and identical-binary
+measurements, with their coverage and host-activity limits. #577's broader
+Kestrel performance goal remains open.
 
 ### Response-pipeline validation (2.3.0 source tree)
 
