@@ -61,6 +61,9 @@ Headers, cookies, core admission and body policies, completion callbacks, stream
 flushes, request-abort tokens and WebSocket modules pass through the existing
 EmbedIO application pipeline.
 
+Write payload bytes to the response stream and choose framing through
+`ContentLength64` or `SendChunked`. Kestrel adds the transport framing.
+
 Applications must check optional capabilities before using them. This backend
 currently has these differences:
 
@@ -92,7 +95,7 @@ Windows x64 validation on .NET 10.0.13 completed on 2026-10-30 (Pacific):
 
 | Check | Completed evidence |
 | --- | --- |
-| Optional backend | 95 checks across all six groups, including shared-port protocols, request ownership, admission, body limits/timeouts, streaming, controllers, sessions and WebSockets. |
+| Optional backend | 97 checks across all six groups, including shared-port protocols, request ownership, admission, body limits/timeouts, streaming, controllers, sessions and WebSockets. Explicit chunked output covers a small response, a 1 MiB flushed response and its pipelined successor; protocol checks mix fixed-length and chunked responses. |
 | TLS policy | Mutual TLS, certificate rotation and missing-client-certificate refusal for HTTP/1.1, HTTP/2 and HTTP/3. |
 | Deployment | Fresh NuGet consumer passes 50 protocol checks under an isolated dotnet root containing only `Microsoft.NETCore.App`; a self-contained Windows publish passes the same checks. |
 | Default engine | Full documented regression command succeeds: 7,591 total, 7,588 passed and three expected Windows skips. The basic comparison group passes 15 checks. |
@@ -105,10 +108,14 @@ Kestrel preserves a raw `Content-Type` assignment. Abort detection remains best
 effort. Transport cleanup can finish after peer EOF; lifecycle checks require a
 healthy successor within a bounded deadline rather than assuming synchronous cleanup.
 
-Linux/macOS execution, hosted checks and controlled performance comparisons remain
-pending. Initial warm attempts were rejected before load because host CPU activity
-exceeded the quiet threshold; they establish no performance result. No optional
-backend QUIC fuzz campaign has been completed.
+Linux/macOS execution, hosted checks and performance comparisons remain pending.
+Initial warm attempts were rejected before load because host CPU activity exceeded
+the quiet threshold. William subsequently authorized measurements without host idle;
+these retain CPU limits, shared-slot ownership and recorded host activity. The first
+such attempt exposed explicit chunked framing during warmup and was stopped. The
+adapter now delegates that framing to Kestrel, with regression checks above. None
+of these attempts establishes a performance improvement. No optional backend QUIC
+fuzz campaign has been completed.
 
 `components.json` records the managed closure. `upstream-packs.json` pins SHA-256
 of the seven official source package archives. Build and pack verify those pins;
@@ -119,3 +126,16 @@ when Kestrel receives fixes: update its component version, review the closure,
 refresh and review archive hashes, regenerate the map, and repeat package and
 runtime validation. The application's installed ASP.NET Core runtime does not
 service these private bundled components.
+
+## Disk footprint
+
+The current Windows x64 runtime group adds approximately **7.95 MiB**, including
+the adapter and its 46 official components. The .NET 10 `EmbedIO.dll` is about
+**1.82 MiB**, giving about **9.76 MiB** of engine DLLs together. These figures
+exclude the base .NET runtime and common dependencies and do not describe RAM.
+
+The compressed optional NuGet package is approximately **21.3 MiB** because it
+contains six RID groups. Publish for a specific RID, such as
+`dotnet publish -c Release -r win-x64 --self-contained false`, to select that
+platform's assets. Use `--self-contained true` to include the base runtime too.
+Portable deployment can carry several platform groups.

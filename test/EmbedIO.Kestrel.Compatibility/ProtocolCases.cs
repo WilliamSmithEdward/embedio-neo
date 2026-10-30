@@ -84,7 +84,13 @@ internal static class ProtocolCases
 
                 using (var reader = new StreamReader(context.OpenRequestStream())) content = await reader.ReadToEndAsync(context.CancellationToken);
 
-                await context.SendStringAsync(context.Request.ProtocolVersion.Major + ":" + context.Request.HttpMethod + ":" + content, "text/plain", Encoding.UTF8);
+                var body = Encoding.UTF8.GetBytes(context.Request.ProtocolVersion.Major + ":" + context.Request.HttpMethod + ":" + content);
+                context.Response.ContentType = "text/plain";
+                context.Response.SendChunked = context.Request.QueryString["chunked"] == "1";
+
+                if (!context.Response.SendChunked) context.Response.ContentLength64 = body.Length;
+
+                await context.Response.OutputStream.WriteAsync(body, context.CancellationToken);
             }));
         using var handler = new HttpClientHandler
         {
@@ -105,7 +111,7 @@ internal static class ProtocolCases
                 .Select(async index =>
                 {
                     var payload = "payload-" + index;
-                    using var request = new HttpRequestMessage(HttpMethod.Post, "echo")
+                    using var request = new HttpRequestMessage(HttpMethod.Post, "echo?chunked=" + (index & 1))
                     {
                         Version = version,
                         VersionPolicy = HttpVersionPolicy.RequestVersionExact,

@@ -224,6 +224,11 @@ namespace EmbedIO.Kestrel
             for (var index = 0; index < Fields.Count; index++)
             {
                 var name = Fields.NameAt(index);
+
+                // Kestrel supplies chunk framing. A raw Transfer-Encoding header
+                // instead tells it that the application already framed the body.
+                if (_chunked && name.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase)) continue;
+
                 var values = Fields.Values(name) ?? [];
                 feature.Headers[name] = new StringValues(values);
             }

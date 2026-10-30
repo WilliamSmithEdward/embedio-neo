@@ -372,6 +372,8 @@ not released or fully validated. Port sharing, raw tunnels, interim/response
 trailer sections, HTTP/1 half-close tokens and WebTransport differ; consult the
 [backend guide](docs/guides/kestrel-backend.md) before recommending it. The
 built-in engine guidance below continues to apply when it is not selected.
+Write payload bytes to its response stream; select framing with `ContentLength64`
+or `SendChunked` and let Kestrel add the framing.
 
 Select with `options.WithMode(HttpListenerMode.X)`:
 

@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using EmbedIO;
@@ -59,6 +60,7 @@ IHttpContextImpl? retained = null;
 var closeCount = 0;
 var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 var cases = new List<string>();
+var streamedBody = Encoding.ASCII.GetBytes(new string('x', 1024 * 1024));
 server.WithModule(new ActionModule(async context =>
     {
         switch (context.Request.Url.AbsolutePath)
@@ -66,6 +68,24 @@ server.WithModule(new ActionModule(async context =>
             case "/fixed":
                 context.Response.ContentLength64 = 2;
                 await context.Response.OutputStream.WriteAsync(Encoding.UTF8.GetBytes("ok"), context.CancellationToken);
+                break;
+
+            case "/chunked13":
+                context.Response.SendChunked = true;
+                context.Response.ContentLength64 = 99;
+                await context.Response.OutputStream.WriteAsync("hello"u8.ToArray(), context.CancellationToken);
+                await context.Response.OutputStream.WriteAsync(" chunks!"u8.ToArray(), context.CancellationToken);
+                break;
+
+            case "/chunked-large":
+                context.Response.SendChunked = true;
+
+                for (var offset = 0; offset < streamedBody.Length; offset += 16384)
+                {
+                    await context.Response.OutputStream.WriteAsync(streamedBody.AsMemory(offset, 16384), context.CancellationToken);
+                    await context.Response.OutputStream.FlushAsync(context.CancellationToken);
+                }
+
                 break;
 
             case "/empty":
@@ -160,6 +180,36 @@ using var client = new HttpClient
 try
 {
     await Get("fixed", "ok");
+
+    using (var chunked = await client.GetAsync("chunked13", HttpCompletionOption.ResponseHeadersRead, deadline.Token))
+    {
+        Equal(true, chunked.Headers.TransferEncodingChunked == true, "explicit chunked framing");
+        Equal<long?>(null, chunked.Content.Headers.ContentLength, "chunked response overrides length");
+        Equal("hello chunks!", await chunked.Content.ReadAsStringAsync(deadline.Token), "explicit chunked body");
+        cases.Add("explicit-chunked13");
+    }
+
+    using (var tcp = new TcpClient())
+    {
+        var port = new Uri(prefix).Port;
+        await tcp.ConnectAsync(IPAddress.Loopback, port, deadline.Token);
+        var requests = "GET /chunked-large HTTP/1.1\r\nHost: 127.0.0.1:"
+            + port
+            + "\r\n\r\nGET /fixed HTTP/1.1\r\nHost: 127.0.0.1:"
+            + port
+            + "\r\n\r\n";
+        await tcp
+            .GetStream()
+            .WriteAsync(Encoding.ASCII.GetBytes(requests), deadline.Token);
+        var large = await WireResponse.ReadAsync(tcp.GetStream(), deadline.Token);
+        Equal(new WireResponse(200, new string('x', streamedBody.Length)), large, "large chunked response");
+        Equal(
+            new WireResponse(200, "ok"),
+            await WireResponse.ReadAsync(tcp.GetStream(), deadline.Token),
+            "chunked pipeline successor"
+        );
+        cases.Add("explicit-large-chunked-and-pipelined-successor");
+    }
 
     using (var empty = await client.GetAsync("empty", deadline.Token))
     {
