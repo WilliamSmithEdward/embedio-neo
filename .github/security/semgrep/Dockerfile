@@ -9,7 +9,7 @@ RUN python -m venv /opt/semgrep \
     && /opt/semgrep/bin/python -m pip install --require-hashes --only-binary=:all: -r /tmp/semgrep-requirements.txt \
     && /opt/semgrep/bin/python -m pip check \
     && git --version \
-    && expected="$(sed -n 's/^semgrep==\([^ ]*\) .*/\1/p' /tmp/semgrep-requirements.txt)" \
+    && expected="$(grep -o '^semgrep==[0-9.]*' /tmp/semgrep-requirements.txt | cut -d = -f 3)" \
     && test -n "$expected" \
     && test "$(/opt/semgrep/bin/semgrep --version)" = "$expected"
 ENV PATH="/opt/semgrep/bin:${PATH}"
