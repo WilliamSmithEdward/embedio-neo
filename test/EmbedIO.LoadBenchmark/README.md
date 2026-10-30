@@ -7,6 +7,15 @@ development evidence for program #181, not public benchmark submissions.
 
 ## Prepare and run
 
+For the optional backend, set `--candidate-engine embedio-kestrel` while leaving
+`--baseline-engine embedio` for the built-in reference. Both warm `run` and
+`cold` accept these switches; defaults preserve the original comparison. Reverse
+the runner directories and engine switches for a role-alternated comparison.
+`kestrel` selects the bare Kestrel application, while `embedio-kestrel` runs the
+same EmbedIO modules through the optional adapter. Record the exact runner/core
+hashes, separate cold and warm results, and use bounded measurement and cleanup
+budgets. Timed work requires both shared heavy slots and the benchmark lock.
+
 ```sh
 python scripts/prepare_load_benchmark.py
 dotnet TestResults/load-benchmark/runners/candidate/EmbedIO.LoadBenchmark.dll run --output TestResults/load-benchmark/results-<label> --baseline-dir TestResults/load-benchmark/runners/baseline --server-cpus 0-7 --client-cpus 8-15

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- Pending validation: optional .NET 10 `EmbedIO-Neo.Kestrel` backend, with
+  application-local official components and HTTP/1.1, HTTP/2 and HTTP/3 hosting.
+  The built-in engine remains the default. See the
+  [compatibility and deployment guide](docs/guides/kestrel-backend.md).
+
 ### Changed
 
 - HTTP/1.1 responses to requests without entity bodies hold up to 64 KiB while an

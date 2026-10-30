@@ -17,7 +17,7 @@ def relative_links(markdown):
 
 def main(directory, native_staging=None):
     packages = list(Path(directory).glob("*.nupkg"))
-    expected_count = 7 if native_staging is not None else 6
+    expected_count = 8 if native_staging is not None else 7
     if len(packages) != expected_count:
         raise ValueError(f"Expected {expected_count} packages, found {len(packages)}")
     root = Path(__file__).resolve().parents[1]
@@ -51,7 +51,14 @@ def main(directory, native_staging=None):
                 identities.add("EmbedIO-Neo.Quic.Native")
                 print(f"Verified {package.name}")
                 continue
-            if package.name.startswith("EmbedIO-Neo.Cli."):
+            if package.name.startswith("EmbedIO-Neo.Kestrel."):
+                from check_kestrel_package import verify
+                import os
+                cache = Path(os.environ.get("NUGET_PACKAGES", Path.home() / ".nuget/packages"))
+                verify(package, cache)
+                identity = "EmbedIO-Neo.Kestrel"
+                required = {"lib/net10.0/EmbedIO.Kestrel.dll"}
+            elif package.name.startswith("EmbedIO-Neo.Cli."):
                 identity = "EmbedIO-Neo.Cli"
                 required = {"README.md", "licenses/embedio-cli-LICENSE",
                             "tools/net10.0/any/EmbedIO.dll",

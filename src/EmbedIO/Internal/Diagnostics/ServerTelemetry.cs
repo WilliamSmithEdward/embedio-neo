@@ -245,6 +245,7 @@ namespace EmbedIO.Internal
         {
             Net.Internal.HttpListenerContext http1 => http1.HttpListenerResponse.SentBodyBytes,
             Net.Internal.MultiplexedContext multiplexed => multiplexed.SentBodyBytes,
+            IHttpBackendContext when context.Response is IHttpBackendResponse response => response.SentBodyBytes,
             _ => 0
         };
 

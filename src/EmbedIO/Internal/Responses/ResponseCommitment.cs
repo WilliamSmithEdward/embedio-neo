@@ -16,6 +16,7 @@ namespace EmbedIO.Internal
             Caching.OutputCacheCapture capture => IsCommitted(capture.Inner),
             HttpListenerContext http1 => http1.HttpListenerResponse.HeadersSent,
             MultiplexedContext multiplexed => multiplexed.ResponseHeadersSent,
+            IHttpBackendContext backend => backend.ResponseHeadersSent,
             _ => false
         };
 
@@ -41,6 +42,9 @@ namespace EmbedIO.Internal
 
                 case MultiplexedContext multiplexed:
                     return multiplexed.AbortExchangeAsync(cause);
+
+                case IHttpBackendContext backend:
+                    return backend.AbortAsync(cause);
 
                 default:
                     return Task.CompletedTask;

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/EmbedIO.Kestrel/EmbedIO.Kestrel.csproj" />
+    <Compile Include="../Shared/LoopbackPorts.cs" Link="LoopbackPorts.cs" />
+  </ItemGroup>
+</Project>

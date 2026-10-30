@@ -363,6 +363,16 @@ Try it: `GET http://localhost:9696/api/items/42` returns `{"id":42}`.
 
 ## 4. Choosing the protocol
 
+Pending development: `EmbedIO-Neo.Kestrel` is an opt-in .NET 10 backend selected
+with `options.WithKestrel()` (`using EmbedIO.Kestrel`). It bundles official Kestrel
+components and needs no installed ASP.NET Core shared runtime. It preserves the
+default built-in engine, accepts HTTP/1.1 and prior-knowledge HTTP/2 on the same
+cleartext port, and uses Kestrel/System.Net.Quic/MsQuic for optional HTTP/3. It is
+not released or fully validated. Port sharing, raw tunnels, interim/response
+trailer sections, HTTP/1 half-close tokens and WebTransport differ; consult the
+[backend guide](docs/guides/kestrel-backend.md) before recommending it. The
+built-in engine guidance below continues to apply when it is not selected.
+
 Select with `options.WithMode(HttpListenerMode.X)`:
 
 | Mode | Serves | Requirements |

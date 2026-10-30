@@ -36,6 +36,7 @@ namespace EmbedIO.Internal
         {
             HttpListenerRequest http1 => http1.CapturedRequestPolicy,
             MultiplexedRequest multiplexed => multiplexed.CapturedRequestPolicy,
+            IHttpBackendRequest backend => backend.CapturedRequestPolicy,
             _ => null
         };
     }
@@ -95,6 +96,8 @@ namespace EmbedIO.Internal
             if (context.Request is HttpListenerRequest http1) http1.CaptureRequestPolicy(effective);
 
             else if (context.Request is MultiplexedRequest multiplexed) multiplexed.CaptureRequestPolicy(effective);
+
+            else if (context.Request is IHttpBackendRequest backend) backend.CapturedRequestPolicy = effective;
 
             else throw new NotSupportedException("Request policy admission requires an owned request backend.");
 

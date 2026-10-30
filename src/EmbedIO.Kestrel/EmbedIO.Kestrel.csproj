@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>EmbedIO.Kestrel</AssemblyName>
+    <PackageId>EmbedIO-Neo.Kestrel</PackageId>
+    <Description>Opt-in application-local Kestrel backend for EmbedIO-Neo. Requires the base .NET 10 runtime, not the ASP.NET Core shared runtime.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <KestrelComponentVersion>10.0.13</KestrelComponentVersion>
+    <KestrelRuntimeIdentifiers Condition="'$(KestrelRuntimeIdentifiers)' == ''">win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</KestrelRuntimeIdentifiers>
+    <KestrelBuildRuntimeIdentifier Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</KestrelBuildRuntimeIdentifier>
+    <KestrelBuildRuntimeIdentifier Condition="'$(KestrelBuildRuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</KestrelBuildRuntimeIdentifier>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeKestrelRuntimeAdapter</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../EmbedIO/EmbedIO.csproj" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="" />
+    <None Include="$(NuGetPackageRoot)microsoft.aspnetcore.app.ref/$(KestrelComponentVersion)/LICENSE.txt" Pack="true" PackagePath="licenses/Microsoft.AspNetCore.App/" />
+    <None Include="$(NuGetPackageRoot)microsoft.aspnetcore.app.ref/$(KestrelComponentVersion)/THIRD-PARTY-NOTICES.TXT" Pack="true" PackagePath="licenses/Microsoft.AspNetCore.App/" />
+    <_KestrelRuntime Include="$(KestrelRuntimeIdentifiers)" />
+    <PackageDownload Include="Microsoft.AspNetCore.App.Ref" Version="[$(KestrelComponentVersion)]" />
+    <PackageDownload Include="@(_KestrelRuntime->'Microsoft.AspNetCore.App.Runtime.%(Identity)')" Version="[$(KestrelComponentVersion)]" />
+  </ItemGroup>
+  <Import Project="KestrelComponents.props" />
+  <!-- NuGet selects a complete runtime asset group per RID. Include the adapter
+       in each group as well as lib/net10.0, which supplies its compile asset. -->
+  <Target Name="IncludeKestrelRuntimeAdapter">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(_KestrelRuntime->'$(TargetPath)')" PackagePath="runtimes/%(_KestrelRuntime.Identity)/lib/net10.0/" />
+    </ItemGroup>
+  </Target>
+</Project>

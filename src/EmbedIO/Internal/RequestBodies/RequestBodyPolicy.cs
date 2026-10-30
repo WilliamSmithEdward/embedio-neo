@@ -22,6 +22,7 @@ namespace EmbedIO.Internal
         {
             HttpListenerRequest http1 => http1.KnownBodyRefusal,
             MultiplexedRequest multiplexed => multiplexed.KnownBodyRefusal,
+            IHttpBackendRequest backend => backend.KnownBodyRefusal,
             _ => null
         };
 
@@ -36,6 +37,8 @@ namespace EmbedIO.Internal
             if (request is HttpListenerRequest http1) http1.SetBodyPolicy(this);
 
             else if (request is MultiplexedRequest multiplexed) multiplexed.SetBodyPolicy(this);
+
+            else if (request is IHttpBackendRequest backend) backend.SetBodyPolicy(this);
 
             else throw new NotSupportedException("Raw request body limits require an owned request backend.");
 
@@ -57,6 +60,8 @@ namespace EmbedIO.Internal
             if (request is HttpListenerRequest ownedHttp1) ownedHttp1.MarkKnownBodyRefusal(failure);
 
             else if (request is MultiplexedRequest ownedMultiplexed) ownedMultiplexed.MarkKnownBodyRefusal(failure);
+
+            else if (request is IHttpBackendRequest knownBackend) knownBackend.KnownBodyRefusal ??= failure;
         }
     }
 }

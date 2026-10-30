@@ -421,7 +421,12 @@ namespace EmbedIO
 
                 finally
                 {
-                    if (context is MultiplexedContext multiplexed)
+                    if (context is EmbedIO.Internal.IHttpBackendContext backend)
+                        await backend
+                            .CloseAsync()
+                            .ConfigureAwait(false);
+
+                    else if (context is MultiplexedContext multiplexed)
                         await multiplexed
                             .CloseAsync()
                             .ConfigureAwait(false);
@@ -501,6 +506,9 @@ namespace EmbedIO
         {
             var bodyPolicy = EmbedIO.Internal.RequestPolicyResolver.Create(Options);
 
+            if (Options.ListenerFactory != null && http3Factory != null)
+                throw new NotSupportedException("Configure only one listener factory.");
+
             // QUIC connections are not governed by the TCP connection limits;
             // RequestHeadersTimeout applies to HTTP/3 streams as well.
             if (Options.Mode == HttpListenerMode.EmbedIOHttp3 && Options.HasTcpOnlyConnectionLimits)
@@ -528,31 +536,34 @@ namespace EmbedIO
             X509Certificate2? CertificateOrNull() => Options.CertificateSource != null ? null : Options.Certificate;
 
             IHttpListener DoCreate() =>
-                http3Factory != null
-                    ? http3Factory(bodyPolicy)
-                        ?? throw new InvalidOperationException("Transport factory returned no listener.")
-                    : Options.Mode switch
-                    {
-                        HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(
-                            CertificateOrNull(),
-                            Options.CertificateSource,
-                            false,
-                            bodyPolicy
-                        ),
-                        HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(
-                            CertificateOrNull(),
-                            Options.CertificateSource,
-                            true,
-                            bodyPolicy
-                        ),
-                        _ when (int)Options.Mode == 1 =>
-                            throw new NotSupportedException(
-                                "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."
+                Options.ListenerFactory != null
+                    ? Options.ListenerFactory(Options)
+                        ?? throw new InvalidOperationException("Listener factory returned no listener.")
+                    : http3Factory != null
+                        ? http3Factory(bodyPolicy)
+                            ?? throw new InvalidOperationException("Transport factory returned no listener.")
+                        : Options.Mode switch
+                        {
+                            HttpListenerMode.EmbedIOHttp3 => CreateHttp3Listener(
+                                CertificateOrNull(),
+                                Options.CertificateSource,
+                                false,
+                                bodyPolicy
                             ),
-                        _ => Options.CertificateSource != null
-                            ? new Net.HttpListener(Options.CertificateSource, bodyPolicy)
-                            : new Net.HttpListener(Options.Certificate, bodyPolicy)
-                    };
+                            HttpListenerMode.EmbedIOCombined => CreateHttp3Listener(
+                                CertificateOrNull(),
+                                Options.CertificateSource,
+                                true,
+                                bodyPolicy
+                            ),
+                            _ when (int)Options.Mode == 1 =>
+                                throw new NotSupportedException(
+                                    "Neo v2 no longer supports the Microsoft HTTP listener. Select EmbedIO, EmbedIOHttp3 or EmbedIOCombined."
+                                ),
+                            _ => Options.CertificateSource != null
+                                ? new Net.HttpListener(Options.CertificateSource, bodyPolicy)
+                                : new Net.HttpListener(Options.Certificate, bodyPolicy)
+                        };
 
             // Refuse TLS settings the selected listener cannot honor before creating it.
             var tlsPolicy = Options.TlsPolicy;
@@ -560,6 +571,9 @@ namespace EmbedIO
                 Options.Mode is HttpListenerMode.EmbedIOHttp3 or HttpListenerMode.EmbedIOCombined
             );
             var listener = DoCreate();
+
+            if (listener is EmbedIO.Internal.IHttpBackendListener backend) backend.Configure(bodyPolicy, Telemetry);
+
             $"Running HTTPListener: {listener.Name}".Info(LogSource);
 
             // With a body limit, 100 Continue waits until a handler reads the body, so a

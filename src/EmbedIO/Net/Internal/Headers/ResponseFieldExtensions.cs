@@ -30,6 +30,7 @@
         {
             HttpListenerResponse http1 => http1.Fields,
             MultiplexedResponse multiplexed => multiplexed.Fields,
+            EmbedIO.Internal.IHttpBackendResponse backend => backend.Fields,
             _ => null
         };
     }

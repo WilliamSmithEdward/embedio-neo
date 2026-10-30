@@ -40,6 +40,8 @@
       href: guides/getting-started/requests.md
 - name: Usage guides
   items:
+    - name: Optional Kestrel backend (pending)
+      href: guides/kestrel-backend.md
     - name: Typed minimal endpoints (2.16.0+)
       href: guides/minimal-endpoints.md
     - name: Typed request binding (2.15.0+)

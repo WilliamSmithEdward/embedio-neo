@@ -17,9 +17,21 @@ internal static class ServerHost
         var protocol = Enum.Parse<Protocol>(options.Required("--protocol"), ignoreCase: true);
         var tls = options.Has("--tls") || protocol == Protocol.Http3;
         using var certificate = tls
-            ? X509CertificateLoader.LoadPkcs12FromFile(options.Required("--certificate"), options.Required("--certificate-password"), X509KeyStorageFlags.Exportable)
+            ? X509CertificateLoader.LoadPkcs12FromFile(
+                options.Required("--certificate"),
+                options.Required("--certificate-password"),
+                X509KeyStorageFlags.Exportable
+            )
             : null;
-        var settings = new ServerSettings(options.Required("--engine"), protocol, tls, options.Integer("--port", 0), certificate, options.Has("--connection-census"), options.Has("--control-hard-cleanup"));
+        var settings = new ServerSettings(
+            options.Required("--engine"),
+            protocol,
+            tls,
+            options.Integer("--port", 0),
+            certificate,
+            options.Has("--connection-census"),
+            options.Has("--control-hard-cleanup")
+        );
         Payloads.Prepare(options.Integer("--reference-bytes", 1 << 20));
         var exceptions = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
         // Diagnostic opt-in: key by message too and log the first stack per key (bounded).
@@ -27,36 +39,54 @@ internal static class ServerHost
         var detail = exceptionCensus && Environment.GetEnvironmentVariable("EMBEDIO_BENCH_EXCEPTION_DETAIL") == "1";
         var sites = new ExceptionSiteLedger(exceptions);
         object? SiteSnapshot() => detail ? sites.Snapshot() : null;
-        if (exceptionCensus) AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
-        {
-            var key = e.Exception.GetType().FullName ?? "?";
-            if (detail)
+
+        if (exceptionCensus)
+            AppDomain.CurrentDomain.FirstChanceException += (_, e) =>
             {
-                key += ": " + e.Exception.Message;
-                var first = sites.Record(key, e.Exception.StackTrace ?? "<stack unavailable>", Environment.StackTrace);
-                if (first) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
-            }
-            else exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
-        };
+                var key = e.Exception.GetType().FullName ?? "?";
+
+                if (detail)
+                {
+                    key += ": " + e.Exception.Message;
+                    var first = sites.Record(
+                        key,
+                        e.Exception.StackTrace ?? "<stack unavailable>",
+                        Environment.StackTrace
+                    );
+
+                    if (first) Console.Error.WriteLine("FIRST " + key + Environment.NewLine + e.Exception.StackTrace);
+                }
+
+                else exceptions.AddOrUpdate(key, 1, static (_, count) => count + 1);
+            };
+
         using var profile = options.Has("--profile") ? new RuntimeEventProfile() : null;
-        using var connections = settings.ConnectionCensus ? new ConnectionLedger(settings.Engine == "kestrel") : null;
+        using var connections = settings.ConnectionCensus
+            ? new ConnectionLedger(settings.Engine is "kestrel" or "embedio-kestrel")
+            : null;
         connections?.Start();
         IBenchmarkServer server = settings.Engine switch
         {
             "kestrel" => new KestrelServer(settings, connections),
-            "embedio" => new EmbedIOServer(settings),
-            _ => throw new ArgumentException("Unknown engine " + settings.Engine),
+            "embedio" or "embedio-kestrel" => new EmbedIOServer(settings),
+            _ => throw new ArgumentException("Unknown engine " + settings.Engine)
         };
         var disposed = false;
         Measurement? measurement = null;
+
         try
         {
             var started = Stopwatch.StartNew();
-            await server.StartAsync().ConfigureAwait(false);
+            await server
+                .StartAsync()
+                .ConfigureAwait(false);
             // Process start to a listening server, before this harness hashes assemblies for READY.
             double uptimeAtListening;
-            using (var self = Process.GetCurrentProcess()) uptimeAtListening = (DateTime.Now - self.StartTime).TotalMilliseconds;
-            Control.Write("READY " + JsonSerializer.Serialize(new
+
+            using (var self = Process.GetCurrentProcess())
+                uptimeAtListening = (DateTime.Now - self.StartTime).TotalMilliseconds;
+
+            var ready = new
             {
                 engine = settings.Engine,
                 exceptionCensus,
@@ -71,47 +101,86 @@ internal static class ServerHost
                 gcLatencyMode = GCSettings.LatencyMode.ToString(),
                 runtime = RuntimeInformation.FrameworkDescription,
                 msquic = settings.Protocol == Protocol.Http3 ? AssemblyIdentity.NativeQuic() : null,
-                assemblies = AssemblyIdentity.Describe(typeof(EmbedIO.WebServer).Assembly, typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly, typeof(System.Net.Quic.QuicListener).Assembly),
-            }));
+                assemblies = AssemblyIdentity.Describe(
+                    typeof(EmbedIO.WebServer).Assembly,
+                    typeof(Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions).Assembly,
+                    typeof(System.Net.Quic.QuicListener).Assembly
+                )
+            };
+            Control.Write("READY " + JsonSerializer.Serialize(ready));
 
             while (true)
             {
-                var command = await Console.In.ReadLineAsync().ConfigureAwait(false);
+                var command = await Console.In
+                    .ReadLineAsync()
+                    .ConfigureAwait(false);
+
                 switch (command)
                 {
                     case "snapshot":
                         Control.Write(JsonSerializer.Serialize(ResourceSnapshot.Capture()));
                         break;
+
                     case "exception-sites":
                         Control.Write(JsonSerializer.Serialize(SiteSnapshot()));
                         break;
+
                     case "connections":
                         Control.Write(JsonSerializer.Serialize(connections?.Snapshot()));
                         break;
+
                     case "exceptions":
-                        Control.Write(JsonSerializer.Serialize(new Dictionary<string, long>(exceptions, StringComparer.Ordinal)));
+                        Control.Write(
+                            JsonSerializer.Serialize(new Dictionary<string, long>(exceptions, StringComparer.Ordinal))
+                        );
                         break;
+
                     case "start":
                         profile?.Begin();
-                        if (measurement is not null) await measurement.DisposeAsync().ConfigureAwait(false);
+
+                        if (measurement is not null)
+                            await measurement
+                                .DisposeAsync()
+                                .ConfigureAwait(false);
+
                         measurement = new Measurement(exceptions);
                         Control.Write("MEASURING");
                         break;
+
                     case "stop":
-                        var result = await (measurement ?? throw new InvalidOperationException("stop without start")).FinishAsync().ConfigureAwait(false);
-                        Control.Write(JsonSerializer.Serialize(new { window = result, profile = profile?.End() }));
+                        var result = await (measurement ?? throw new InvalidOperationException("stop without start"))
+                            .FinishAsync()
+                            .ConfigureAwait(false);
+                        var stopped = new
+                        {
+                            window = result,
+                            profile = profile?.End()
+                        };
+                        Control.Write(JsonSerializer.Serialize(stopped));
                         break;
+
                     case "exit":
                     case null:
-                        if (measurement is not null) await measurement.DisposeAsync().ConfigureAwait(false);
+                        if (measurement is not null)
+                            await measurement
+                                .DisposeAsync()
+                                .ConfigureAwait(false);
+
                         var connectionsBeforeHostStop = connections?.Snapshot();
                         var stopping = Stopwatch.StartNew();
-                        await server.StopAsync().ConfigureAwait(false);
+                        await server
+                            .StopAsync()
+                            .ConfigureAwait(false);
                         var connectionsAfterHostStop = connections?.Snapshot();
-                        await server.DisposeAsync().ConfigureAwait(false);
-                        var observerComplete = connections is null || await connections.WaitForCompletionAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                        await server
+                            .DisposeAsync()
+                            .ConfigureAwait(false);
+                        var observerComplete = connections is null
+                            || await connections
+                                .WaitForCompletionAsync(TimeSpan.FromSeconds(2))
+                                .ConfigureAwait(false);
                         disposed = true;
-                        Control.Write(JsonSerializer.Serialize(new
+                        var exited = new
                         {
                             exceptionSites = SiteSnapshot(),
                             connectionsBeforeHostStop,
@@ -120,23 +189,33 @@ internal static class ServerHost
                             observerComplete,
                             connections = connections?.Snapshot(),
                             stopMilliseconds = stopping.Elapsed.TotalMilliseconds,
-                            firstChanceExceptions = new Dictionary<string, long>(exceptions, StringComparer.Ordinal),
-                        }));
+                            firstChanceExceptions = new Dictionary<string, long>(exceptions, StringComparer.Ordinal)
+                        };
+                        Control.Write(JsonSerializer.Serialize(exited));
                         return 0;
+
                     default:
                         throw new InvalidOperationException("Unknown server command: " + command);
                 }
             }
         }
+
         finally
         {
             try
             {
-                if (measurement is not null) await measurement.DisposeAsync().ConfigureAwait(false);
+                if (measurement is not null)
+                    await measurement
+                        .DisposeAsync()
+                        .ConfigureAwait(false);
             }
+
             finally
             {
-                if (!disposed) await server.DisposeAsync().ConfigureAwait(false);
+                if (!disposed)
+                    await server
+                        .DisposeAsync()
+                        .ConfigureAwait(false);
             }
         }
     }
@@ -146,28 +225,61 @@ internal static class AssemblyIdentity
 {
     internal static object? NativeQuic()
     {
-        if (!(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-            || !System.Net.Quic.QuicConnection.IsSupported) return null;
+        if (
+            !(OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            || !System.Net.Quic.QuicConnection.IsSupported
+        ) return null;
+
         string? path = null;
+
         if (OperatingSystem.IsLinux())
-            path = File.ReadLines("/proc/self/maps").Select(line => line.Split(' ', StringSplitOptions.RemoveEmptyEntries).Last())
-                .FirstOrDefault(value => value.StartsWith("/", StringComparison.Ordinal) && Path.GetFileName(value).StartsWith("libmsquic", StringComparison.Ordinal));
+            path = File
+                .ReadLines("/proc/self/maps")
+                .Select(line => line
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Last())
+                .FirstOrDefault(
+                    value => value.StartsWith("/", StringComparison.Ordinal)
+                        && Path
+                            .GetFileName(value)
+                            .StartsWith("libmsquic", StringComparison.Ordinal)
+                );
+
         else if (OperatingSystem.IsWindows())
         {
             using var process = Process.GetCurrentProcess();
+
             foreach (ProcessModule module in process.Modules)
-                if (module.ModuleName.Equals("msquic.dll", StringComparison.OrdinalIgnoreCase)) { path = module.FileName; break; }
+                if (module.ModuleName.Equals("msquic.dll", StringComparison.OrdinalIgnoreCase))
+                {
+                    path = module.FileName;
+                    break;
+                }
         }
-        return path is null ? null : new { path, sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) };
+
+        return path is null
+            ? null
+            : new
+            {
+                path,
+                sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)))
+            };
     }
 
-    internal static object[] Describe(params Assembly[] assemblies) => assemblies.Select(assembly => (object)new
-    {
-        name = assembly.GetName().Name,
-        version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
-        path = assembly.Location,
-        sha256 = string.IsNullOrEmpty(assembly.Location) ? null : Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(assembly.Location))),
-    }).ToArray();
+    internal static object[] Describe(params Assembly[] assemblies) =>
+    [
+        .. assemblies.Select(
+            assembly => (object)new
+            {
+                name = assembly.GetName().Name,
+                version = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion,
+                path = assembly.Location,
+                sha256 = string.IsNullOrEmpty(assembly.Location)
+                    ? null
+                    : Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(assembly.Location)))
+            }
+        )
+    ];
 }
 
 internal static class ResourceSnapshot
@@ -191,9 +303,11 @@ internal static class ResourceSnapshot
             // macOS reports 0 for both: private bytes is unavailable (null), and open
             // file descriptors stand in for handles.
             privateBytes = OperatingSystem.IsMacOS() ? (long?)null : process.PrivateMemorySize64,
-            handles = OperatingSystem.IsMacOS() ? Directory.GetFileSystemEntries("/dev/fd").Length : process.HandleCount,
+            handles = OperatingSystem.IsMacOS()
+                ? Directory.GetFileSystemEntries("/dev/fd").Length
+                : process.HandleCount,
             threads = process.Threads.Count,
-            threadPoolThreads = ThreadPool.ThreadCount,
+            threadPoolThreads = ThreadPool.ThreadCount
         };
     }
 }
@@ -226,7 +340,12 @@ internal sealed class Measurement : IAsyncDisposable
         _cpu = _process.TotalProcessorTime;
         _userCpu = _process.UserProcessorTime;
         _allocated = GC.GetTotalAllocatedBytes(true);
-        _collections = [GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2)];
+        _collections =
+        [
+            GC.CollectionCount(0),
+            GC.CollectionCount(1),
+            GC.CollectionCount(2)
+        ];
         _pause = GC.GetTotalPauseDuration();
         _contention = Monitor.LockContentionCount;
         _workItems = ThreadPool.CompletedWorkItemCount;
@@ -256,7 +375,12 @@ internal sealed class Measurement : IAsyncDisposable
             cpuSeconds = cpu.TotalSeconds,
             userCpuSeconds = user.TotalSeconds,
             allocatedBytes = allocated,
-            collections = new[] { GC.CollectionCount(0) - _collections[0], GC.CollectionCount(1) - _collections[1], GC.CollectionCount(2) - _collections[2] },
+            collections = new[]
+            {
+                GC.CollectionCount(0) - _collections[0],
+                GC.CollectionCount(1) - _collections[1],
+                GC.CollectionCount(2) - _collections[2]
+            },
             gcPauseMilliseconds = (GC.GetTotalPauseDuration() - _pause).TotalMilliseconds,
             lockContentions = Monitor.LockContentionCount - _contention,
             threadPoolWorkItems = ThreadPool.CompletedWorkItemCount - _workItems,
@@ -264,17 +388,26 @@ internal sealed class Measurement : IAsyncDisposable
             peakPrivateBytes = _peakPrivate,
             peakThreads = _peakThreads,
             peakThreadPoolThreads = _peakPoolThreads,
-            firstChanceExceptions = thrown,
+            firstChanceExceptions = thrown
         };
     }
 
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
+
         _disposed = true;
         _timer.Dispose();
-        try { await _sampler.ConfigureAwait(false); }
-        finally { _process.Dispose(); }
+
+        try
+        {
+            await _sampler.ConfigureAwait(false);
+        }
+
+        finally
+        {
+            _process.Dispose();
+        }
     }
 
     private async Task SampleAsync()
@@ -287,7 +420,12 @@ internal sealed class Measurement : IAsyncDisposable
             _peakThreads = Math.Max(_peakThreads, _process.Threads.Count);
             _peakPoolThreads = Math.Max(_peakPoolThreads, ThreadPool.ThreadCount);
         }
-        while (await _timer.WaitForNextTickAsync().ConfigureAwait(false));
+
+        while (
+            await _timer
+                .WaitForNextTickAsync()
+                .ConfigureAwait(false)
+        );
     }
 }
 
@@ -298,7 +436,6 @@ internal sealed class RuntimeEventProfile : EventListener
     private const EventKeywords GcKeyword = (EventKeywords)0x1;
     private const EventKeywords ContentionKeyword = (EventKeywords)0x4000;
     private const EventKeywords ExceptionKeyword = (EventKeywords)0x8000;
-
     private readonly ConcurrentDictionary<string, long> _allocations = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> _exceptions = new(StringComparer.Ordinal);
     private long _contentions;
@@ -322,10 +459,12 @@ internal sealed class RuntimeEventProfile : EventListener
             note = "AllocationTick events sample roughly every 100 KB per heap; amounts are sampled totals, not exact.",
             // Keep every sampled type: a per-request object of a few dozen bytes sits far
             // below the largest thirty types yet is exactly what a before/after diff needs.
-            sampledAllocationBytesByType = _allocations.OrderByDescending(pair => pair.Value).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
+            sampledAllocationBytesByType = _allocations
+                .OrderByDescending(pair => pair.Value)
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             exceptionsByType = _exceptions.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             contentions = Interlocked.Read(ref _contentions),
-            contentionMilliseconds = _contentionNanoseconds / 1_000_000,
+            contentionMilliseconds = _contentionNanoseconds / 1_000_000
         };
     }
 
@@ -338,19 +477,30 @@ internal sealed class RuntimeEventProfile : EventListener
     protected override void OnEventWritten(EventWrittenEventArgs eventData)
     {
         if (!_active || eventData.Payload is null || eventData.PayloadNames is null) return;
+
         switch (eventData.EventName)
         {
             case "GCAllocationTick_V4":
             case "GCAllocationTick_V3":
                 var type = Field(eventData, "TypeName") as string ?? "?";
-                var amount = Convert.ToInt64(Field(eventData, "AllocationAmount64") ?? 0L, System.Globalization.CultureInfo.InvariantCulture);
+                var amount = Convert.ToInt64(
+                    Field(eventData, "AllocationAmount64") ?? 0L,
+                    System.Globalization.CultureInfo.InvariantCulture
+                );
                 _allocations.AddOrUpdate(type, amount, (_, total) => total + amount);
                 break;
+
             case "ContentionStop_V1":
                 Interlocked.Increment(ref _contentions);
-                var duration = Convert.ToDouble(Field(eventData, "DurationNs") ?? 0d, System.Globalization.CultureInfo.InvariantCulture);
+                var duration = Convert.ToDouble(
+                    Field(eventData, "DurationNs") ?? 0d,
+                    System.Globalization.CultureInfo.InvariantCulture
+                );
+
                 lock (_exceptions) _contentionNanoseconds += duration;
+
                 break;
+
             case "ExceptionThrown_V1":
                 var name = Field(eventData, "ExceptionType") as string ?? "?";
                 _exceptions.AddOrUpdate(name, 1, static (_, count) => count + 1);

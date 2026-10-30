@@ -612,6 +612,16 @@ namespace EmbedIO
                                 await multiplexedRequest
                                     .CompleteBodyInputAsync(context.CancellationToken)
                                     .ConfigureAwait(false);
+
+                            else if (
+                                !rawBodyFailureHandled
+                                && !bodyReadFailureHandled
+                                && !headerPolicyRejected
+                                && context.Request is IHttpBackendRequest backendRequest
+                            )
+                                await backendRequest
+                                    .CompleteBodyInputAsync(context.CancellationToken)
+                                    .ConfigureAwait(false);
                         }
 
                         catch (RawRequestBodyLimitException exception)
@@ -627,7 +637,10 @@ namespace EmbedIO
                         // Direct HTTP/1 writes are unbuffered; completion supplies final
                         // framing and handles already-disposed serializer output. Do not
                         // turn automatic teardown into an application header flush.
-                        if (context.Response.OutputStream is not Net.Internal.ResponseStream)
+                        if (
+                            context.Response.OutputStream is not Net.Internal.ResponseStream
+                                && (context is not IHttpBackendContext || context.Request.HasEntityBody)
+                        )
                             await context.Response.OutputStream
                                 .FlushAsync(context.CancellationToken)
                                 .ConfigureAwait(false);
@@ -648,7 +661,12 @@ namespace EmbedIO
                             {
                                 // Completion callbacks must run even if flushing or cleanup fails.
                                 // Multiplexed FIN writes must not block a worker waiting for I/O.
-                                if (context is Net.Internal.MultiplexedContext multiplexed)
+                                if (context is IHttpBackendContext backend)
+                                    await backend
+                                        .CloseAsync()
+                                        .ConfigureAwait(false);
+
+                                else if (context is Net.Internal.MultiplexedContext multiplexed)
                                     await multiplexed
                                         .CloseAsync()
                                         .ConfigureAwait(false);
@@ -768,6 +786,13 @@ namespace EmbedIO
                 ex.Log(LogSource, $"[{context.Id}] HTTP/1 request failed.");
             }
 
+            catch (Exception ex) when (
+                context is IHttpBackendContext && EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex)
+            )
+            {
+                ex.Log(LogSource, $"[{context.Id}] Backend request failed.");
+            }
+
             catch (Exception ex) when (EmbedIO.Internal.ExceptionPolicy.IsRecoverable(ex))
             {
                 ex.Log(LogSource, $"[{context.Id}] Fatal exception.");
@@ -810,6 +835,7 @@ namespace EmbedIO
         {
             Net.Internal.HttpListenerRequest http1 => http1.IsBodyReadTimeoutFailure(error),
             Net.Internal.MultiplexedRequest multiplexed => multiplexed.IsBodyReadTimeoutFailure(error),
+            IHttpBackendRequest backend => backend.IsBodyReadTimeoutFailure(error),
             _ => false
         };
 

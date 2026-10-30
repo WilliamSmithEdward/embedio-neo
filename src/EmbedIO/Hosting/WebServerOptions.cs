@@ -29,6 +29,7 @@ namespace EmbedIO
         private string? _certificateThumbprint;
         private bool _autoLoadCertificate;
         private bool _autoRegisterCertificate;
+        private Func<WebServerOptions, IHttpListener>? _listenerFactory;
         private StoreName _storeName = StoreName.My;
         private StoreLocation _storeLocation = StoreLocation.LocalMachine;
 
@@ -40,6 +41,18 @@ namespace EmbedIO
         public IReadOnlyList<string> UrlPrefixes => _urlPrefixesView ??= _urlPrefixes.AsReadOnly();
 
         private System.Collections.ObjectModel.ReadOnlyCollection<string>? _urlPrefixesView;
+
+        /// <summary>Gets or sets an optional listener factory supplied by a backend package.</summary>
+        /// <remarks>Null selects the built-in engine. A factory receives locked options and must honor the selected hosting mode.</remarks>
+        public Func<WebServerOptions, IHttpListener>? ListenerFactory
+        {
+            get => _listenerFactory;
+            set
+            {
+                EnsureConfigurationNotLocked();
+                _listenerFactory = value;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the type of HTTP listener.

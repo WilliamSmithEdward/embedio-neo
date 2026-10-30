@@ -7,6 +7,8 @@ for a complete app you can run, then choose files or controllers as needed.
 
 ## Getting started
 
+- [Optional Kestrel backend](guides/kestrel-backend.md): pending .NET 10 backend, deployment and compatibility boundaries.
+
 - [Finite write idempotency (2.11.0+)](guides/idempotency.md)
 - [Opt-in output caching](guides/output-caching.md)
 

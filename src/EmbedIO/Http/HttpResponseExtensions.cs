@@ -56,7 +56,11 @@ namespace EmbedIO
             CookieSameSiteStore.ValidateMode(sameSite, nameof(sameSite));
             CookieSameSiteStore.ValidateCookie(cookie, sameSite);
 
-            if (@this is not (EmbedIO.Net.Internal.HttpListenerResponse or EmbedIO.Net.Internal.MultiplexedResponse))
+            if (
+                @this is not (EmbedIO.Net.Internal.HttpListenerResponse
+                    or EmbedIO.Net.Internal.MultiplexedResponse
+                    or IHttpBackendResponse)
+            )
                 throw new NotSupportedException("SameSite cookie metadata requires a built-in listener response.");
 
             @this.SetCookie(cookie);

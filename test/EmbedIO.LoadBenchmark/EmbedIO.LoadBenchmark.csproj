@@ -15,6 +15,7 @@
     <!-- Kestrel comes from the installed ASP.NET Core shared framework; no package download. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../src/EmbedIO/EmbedIO.csproj" />
+    <ProjectReference Include="../../src/EmbedIO.Kestrel/EmbedIO.Kestrel.csproj" />
     <Compile Include="../Shared/LoopbackPorts.cs" Link="Shared/LoopbackPorts.cs" />
     <Compile Include="../Shared/CompressibleJson.cs" Link="Shared/CompressibleJson.cs" />
   </ItemGroup>

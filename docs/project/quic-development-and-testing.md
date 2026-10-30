@@ -1,5 +1,15 @@
 # EmbedIO.Quic development and testing record
 
+The pending optional `EmbedIO-Neo.Kestrel` backend is a separate, explicitly
+authorized use of official Kestrel/System.Net.Quic/MsQuic. It changes neither
+the default engine nor the owned QUIC implementation documented here. Its
+[backend guide](../guides/kestrel-backend.md) records deployment and capability
+boundaries. Windows x64 checks include combined and HTTP/3-only listeners,
+exact negotiated versions and concurrent request bodies through a NuGet
+consumer with only the base runtime and through a self-contained publish.
+This is protocol and packaging evidence; extensive QUIC fuzzing, platform
+execution and performance validation remain outstanding.
+
 This record covers the development path, test architecture, reproducible local
 campaigns and remaining acceptance work for the original C# QUIC engine. It is
 maintained with the implementation, which [PR #506](https://github.com/WilliamSmithEdward/embedio-neo/pull/506) added; 2.17.0

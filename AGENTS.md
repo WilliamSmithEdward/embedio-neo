@@ -6,6 +6,8 @@
 
 ## Performance priorities
 
+- William authorized an optional `EmbedIO-Neo.Kestrel` .NET 10 backend (2026-10-30), including official Kestrel HTTP/1.1, HTTP/2 and HTTP/3 with its System.Net.Quic/MsQuic transport. This is an explicit exception confined to the opt-in package; keep the built-in engine and `EmbedIO.Quic` as the default. Bundle the official Kestrel components so no installed ASP.NET Core shared runtime is needed. The same cleartext TCP port must accept HTTP/1.1 and prior-knowledge HTTP/2. Validate drop-in behavior and document concrete capability differences. William lifted the earlier one-minute test/benchmark cap later on 2026-10-30; retain bounded runs, shared slots and conservative CPU use.
+
 - William's preference (2026-10-16): prioritize warm steady-state and tail latency over cold-start latency when a tradeoff is necessary, while aiming to improve both. Measure cold and warm behavior separately; do not accept a meaningful warm regression solely for a cold-start gain. Windows desktop / embedded hosting remains the lead measurement environment.
 
 ## C# formatting and diagnostics

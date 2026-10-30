@@ -4,10 +4,19 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from check_source_quality import check_pretty, expected_format, scan_failed
+from check_source_quality import check_messages, check_pretty, expected_format, scan_failed
 
 
 class SourceQualityTests(unittest.TestCase):
+    def test_unknown_project_shard_fails_closed(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src").mkdir()
+            (root / "src/Valid.csproj").write_text("<Project />", encoding="utf-8")
+            with patch("check_source_quality.ROOT", root):
+                with self.assertRaises(ValueError):
+                    check_messages(root, ["src/Missing.csproj"])
+
     def test_missing_editorconfig_bom_fails(self):
         import prettycsharp
         with TemporaryDirectory() as directory:

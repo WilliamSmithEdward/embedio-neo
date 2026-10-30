@@ -28,7 +28,7 @@ namespace EmbedIO.Security
         }
 
         private bool HasCommitted =>
-            _context.Response is HttpListenerResponse or MultiplexedResponse
+            _context.Response is HttpListenerResponse or MultiplexedResponse or IHttpBackendResponse
                 ? ResponseCommitment.IsCommitted(_context)
                 : _committed;
         internal bool PreventStorage => _policy.UsesNonce || _nonce != null;
@@ -64,6 +64,8 @@ namespace EmbedIO.Security
                     if (context.Response is HttpListenerResponse http1) http1.SecurityHeaders = state;
 
                     if (context.Response is MultiplexedResponse multiplexed) multiplexed.SecurityHeaders = state;
+
+                    if (context.Response is IHttpBackendResponse backend) backend.SecurityHeaders = state;
                 }
 
                 lock (state._gate)

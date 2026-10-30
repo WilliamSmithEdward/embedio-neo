@@ -73,14 +73,20 @@ def check_pretty(report: Path) -> bool:
     return not differences
 
 
-def check_messages(report: Path) -> bool:
+def check_messages(report: Path, selected=None, kinds=("style", "analyzers")) -> bool:
     projects = sorted((ROOT / "src").rglob("*.csproj"))
+    if selected:
+        requested = {(ROOT / path).resolve() for path in selected}
+        available = {project.resolve() for project in projects}
+        if not requested <= available:
+            raise ValueError(f"Unknown source projects: {requested - available}")
+        projects = [project for project in projects if project.resolve() in requested]
     if not projects:
         raise RuntimeError("No source projects discovered")
     passed = True
     summary = []
     for project in projects:
-        for kind in ("style", "analyzers"):
+        for kind in kinds:
             name = f"{project.stem}-{kind}"
             command = ["dotnet", "format", kind, str(project), "--no-restore", "--severity", "hidden",
                        "--verify-no-changes", "--report", str(report / f"{name}.json"), "--verbosity", "normal"]
@@ -102,14 +108,17 @@ def check_messages(report: Path) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("pretty", "messages", "all"), default="all")
+    parser.add_argument("--project", action="append", help="Explicit source project shard; omit to scan every source project")
+    parser.add_argument("--kind", action="append", choices=("style", "analyzers"), help="Explicit diagnostic shard; omit to scan both kinds")
+    parser.add_argument("--report-dir", type=Path, help="Separate evidence directory for a bounded shard")
     args = parser.parse_args()
-    report = ROOT / "TestResults" / "source-quality"
+    report = args.report_dir or ROOT / "TestResults" / "source-quality"
     report.mkdir(parents=True, exist_ok=True)
     passed = True
     if args.mode in ("pretty", "all"):
         passed = check_pretty(report)
     if args.mode in ("messages", "all"):
-        passed = check_messages(report) and passed
+        passed = check_messages(report, args.project, args.kind or ("style", "analyzers")) and passed
     return 0 if passed else 1
 
 
