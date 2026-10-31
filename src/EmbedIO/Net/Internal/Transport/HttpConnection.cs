@@ -366,6 +366,8 @@ namespace EmbedIO.Net.Internal
                     _context.Listener?.IgnoreWriteExceptions ?? true
                 );
 
+                if (_protocolEnded != 0 || Volatile.Read(ref _forceClosing) != 0) owner.BeginAbandonment();
+
                 if (_outputWindow && _protocolEnded == 0 && (_context.Listener?.IgnoreWriteExceptions ?? true))
                     owner.OpenWindow(_outputHeartbeat ??= new Http1OutputHeartbeat.Registration());
 
@@ -687,6 +689,7 @@ namespace EmbedIO.Net.Internal
                 outputHeartbeat = _outputHeartbeat;
                 _outputHeartbeat = null;
                 output = _oStream;
+                output?.BeginAbandonment();
                 _requestAborts?.Retire();
                 EndResponse(false);
                 protocolStop = _http2Stop?.Value;

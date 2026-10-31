@@ -83,7 +83,7 @@ the same rules. Then run:
 ```sh
 dotnet restore EmbedIO.sln --locked-mode
 dotnet build EmbedIO.sln --configuration Release --no-restore
-dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 12m --minimum-expected-tests 7591
+dotnet test --project test/EmbedIO.Tests/EmbedIO.Tests.csproj --configuration Release --no-build --report-trx --results-directory TestResults --timeout 12m --minimum-expected-tests 7593
 ```
 
 For every development change, also run the source-quality gates after the final edit:
@@ -115,7 +115,7 @@ Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
 select a project, `--report-trx` instead of VSTest's `--logger trx`, and `--timeout`
 for a whole-run timeout (not the old per-test hang timeout). CI checks for at
-least 7591 executed/reported test cases to catch accidental discovery loss; update
+least 7593 executed/reported test cases to catch accidental discovery loss; update
 that baseline deliberately when adding or removing tests. The full regression and
 coverage suite budget is twelve minutes on all three desktop platforms. Linux coverage
 run 38970758078 stopped near its eight-minute boundary with 6,522 of 6,695 cases

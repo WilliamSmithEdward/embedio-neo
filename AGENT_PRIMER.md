@@ -355,6 +355,9 @@ Try it: `GET http://localhost:9696/api/items/42` returns `{"id":42}`.
   There is no `StopAsync`.
 - `DrainAsync(timeout)` stops accepting work and lets admitted requests finish.
   `DrainStarted` is a token cancelled when a drain begins.
+  Pending correction: concurrent HTTP/1.1 aborts prevent response finalization
+  before socket retirement, including output acquired during cleanup; an
+  unwritten aborted response must not become an empty success response.
 - `server.Start()` runs `RunAsync` in the background and returns once listening.
   Startup failures then surface only through the background task, so prefer
   awaiting `RunAsync`.
