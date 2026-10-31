@@ -1,4 +1,7 @@
-"""Repository-local policy: keep automated updates open for all-checks review."""
+"""Repository-local policy: keep the .NET SDK updater's pull requests open for all-checks review.
+
+Dependabot and YARA pull requests follow repo-standards and merge themselves.
+"""
 import json
 import subprocess
 import sys
