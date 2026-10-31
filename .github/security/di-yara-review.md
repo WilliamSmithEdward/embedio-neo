@@ -757,3 +757,38 @@ Written acceptance covers only `GODMODERULES_IDDQD_God_Mode_Rule` on:
 | `e7af99e5` | `8a4a672d8aff9c4c662e571e92c71f8ef186a54f5721a3b74051a716d3c29eb6` | `277c90d1d3df48c20c2a43e069037199c7249792ddf9ff0b4ed9313d8505ae00`, `0x6ccc` | `309b4126c36d6debe10eb92713e09c3c34c8251cdc3cbe20b8a967d38820508d`, `0x75d7` |
 
 Local offsets differ from CI-built offsets because the local build paths differ. Paginated open/fixed/dismissed GitHub code-scanning alert queries on 2026-10-27 expose no YARA alert at all. William explicitly approved, choosing "Approve 2.19.0 paths" on 2026-10-27, to move this acceptance to the two 2.19.0 paths with the same waiver for the alert GitHub does not expose. No dismissal is claimed. Local hashes identify reviewed precommit bytes, not CI or release builds; final exact-byte reviews, independent full scans and all CI gates remain required. Every other finding, scanner error and stale acceptance remains fatal. This approval is restricted to the two version-qualified 2.19.0 paths above. Evidence remains under ignored TestResults/release-2.19.0/logs/precommit-01.
+
+## 2.19.1 HTTP/1 patch release revalidation
+
+Written acceptance covers only `GODMODERULES_IDDQD_God_Mode_Rule` on:
+
+- `dist/EmbedIO-Neo.DependencyInjection.2.19.1-unpacked/lib/net10.0/EmbedIO.DependencyInjection.dll`
+- `dist/EmbedIO-Neo.DependencyInjection.2.19.1-unpacked/lib/netstandard2.0/EmbedIO.DependencyInjection.dll`
+
+DI source and scanner pins are unchanged since v2.19.0. The initial PR #588 CI
+package was built from synthetic merge commit `3e098194e3c3a6ccb79bc0bf6fea62863125314c`,
+whose tree equals reviewed head `00e5d5463041600ce1be23870e702c3851101376`, in
+[run 41212888693](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/41212888693).
+Pinned YARA-X 1.21.0 and YARA Forge 20261026 full rules were independently rerun
+with printed strings in the existing digest-pinned .NET SDK 10.0.402-noble
+container without network access and with a two-CPU limit. The rule in isolation
+and the full bundle each match only `Injection.pdb` once per assembly, inside
+compiler RSDS/CodeView debug-symbol filename metadata. No other rule or scanner
+error occurred. The source rule and both pinned archive hashes were verified;
+the rule condition is one matching string, not an assertion of executable behavior.
+
+CI package SHA-256: `21849123d3b65085d6dcba3e658793a15689ee4e486ed7b49b5e74bddc736b4b`.
+
+| Target | Assembly SHA-256 | Match offset |
+| --- | --- | --- |
+| net10.0 | `8edbce5473d3f8d506b73d8a146f85f66d50811bad0e806b4f94dc1cd301af09` | `0x6cbc` |
+| netstandard2.0 | `ae34d98541db5b7cac7bc81446133a9c972d72a661458abde06ff93e6c18304d` | `0x75c7` |
+
+These hashes identify the initial CI candidate, not future final-head or release
+builds. Exact-byte review and full scans remain required for those builds.
+Paginated open/fixed/dismissed GitHub code-scanning alert queries expose no YARA
+alert to dismiss. William approved only the two version-qualified 2.19.1 paths
+above and waived their unavailable matching-alert dismissal on 2026-10-31; no
+dismissal is claimed and no other exception is granted. Other matches, scanner
+errors and stale acceptances remain fatal. Private detailed evidence is retained
+under ignored `TestResults/release-2.19.1/yara-review`.
