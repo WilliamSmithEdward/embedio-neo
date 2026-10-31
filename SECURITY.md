@@ -91,14 +91,15 @@ with `RuntimeFrameworkVersion` and roll-forward disabled.
 YARA Forge rules and the YARA-X engine use releases and SHA-256 digests. ClamAV's
 signatures change too often to pin, so freshclam fetches and verifies them.
 
-Dependabot proposes actions, Docker, Python and NuGet updates with a seven-day
-cooldown, except security updates and the owner's Python packages. The Update YARA
-rules workflow proposes pin updates weekly, and the Update Semgrep image workflow a
-new Semgrep image once it is a week old (GitHub refuses Dependabot's updates of
-that image). Relock Dependabot updates rebuilds a lock Dependabot changed with
-the lock's own uv or dotnet restore command. Minor and patch updates and the YARA
-and Semgrep pull requests merge once the three gates pass; third-party major
-versions wait for review.
+Dependabot proposes actions, Python and NuGet updates with a seven-day
+cooldown, except security updates and the owner's Python packages. The Update
+YARA rules workflow proposes pin updates weekly, and the Update images workflow
+new ClamAV, Semgrep and peer Go images once they are a week old, a version
+rebuilt in place included (GitHub refuses Dependabot's image updates). Relock
+Dependabot updates rebuilds a lock Dependabot changed with the lock's own uv or
+dotnet restore command. Minor and patch updates and the YARA and image pull
+requests merge once the three gates pass; third-party major versions wait for
+review.
 
 The Update .NET SDK workflow proposes the newest SDK patch in the pinned feature
 band weekly, with the same cooldown, waived when Microsoft marks the release as
