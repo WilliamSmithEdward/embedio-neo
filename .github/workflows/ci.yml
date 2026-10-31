@@ -560,7 +560,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker build --quiet --tag embedio-webtransport-go test/EmbedIO.Quic/peer
+          docker build --quiet --tag embedio-webtransport-go .github/test/quic-peer
           mkdir -p TestResults/webtransport-peer
           docker run --rm --user "$(id -u):$(id -g)" --env HOME=/tmp --env GOCACHE=/tmp/go-cache \
             --env GOPATH=/tmp/go --env GOFLAGS=-mod=readonly --env CGO_ENABLED=0 \
