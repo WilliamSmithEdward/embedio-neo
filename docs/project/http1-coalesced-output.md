@@ -1,6 +1,6 @@
 # HTTP/1.1 response completion and held output
 
-This candidate is part of [#577](https://github.com/WilliamSmithEdward/embedio-neo/issues/577).
+This HTTP/1.1 change is part of [#577](https://github.com/WilliamSmithEdward/embedio-neo/issues/577).
 The measurements below are **INCOMPLETE descriptive evidence**: 95 of 96 planned
 warm samples completed successfully. The reversed warm attempt remains
 `failed`, exit 1, with its `INVALID` marker retained. Its failed Kestrel TLS
@@ -13,7 +13,7 @@ The wider goal remains lower cold-start and warm latency and higher throughput
 than Kestrel. Warm steady-state and tail latency take priority when tradeoffs are
 necessary. Windows desktop and embedded hosting are the lead environment. The
 implementation and measurements here describe the source checkpoints below;
-the change is absent from the published 2.19.0 packages.
+the change requires 2.19.1+ and is absent from the 2.19.0 packages.
 
 ## Output ownership
 

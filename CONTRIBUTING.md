@@ -284,7 +284,8 @@ cleanup are documented in [the migration guide](docs/compatibility/migration.md#
 
 The approved NuGet IDs are `EmbedIO-Neo`, `EmbedIO-Neo.JsonServer`,
 `EmbedIO-Neo.Testing`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.DependencyInjection`,
-and `EmbedIO-Neo.Jwt`. Assembly names and namespaces remain
+and `EmbedIO-Neo.Jwt`, plus the asset-only `EmbedIO-Neo.Quic.Native` runtime
+package introduced in 2.17.0. Managed assembly names and namespaces remain
 unchanged; downstream users change their package references. Neo's independent
 release series starts at 1.0.0. Do not treat upstream releases as Neo releases.
 

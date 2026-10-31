@@ -60,14 +60,14 @@
       "EmbedIO-Neo": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo.Quic.Native": "[2.19.0, )",
+          "EmbedIO-Neo.Quic.Native": "[2.19.1, )",
           "System.Threading.RateLimiting": "[10.0.13, )"
         }
       },
       "EmbedIO-Neo.Jwt": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.19.0, )",
+          "EmbedIO-Neo": "[2.19.1, )",
           "Microsoft.IdentityModel.JsonWebTokens": "[8.23.0, )"
         }
       },
@@ -77,13 +77,13 @@
       "EmbedIO-Neo.Testing": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.19.0, )"
+          "EmbedIO-Neo": "[2.19.1, )"
         }
       },
       "EmbedIO.Quic.Development": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo": "[2.19.0, )"
+          "EmbedIO-Neo": "[2.19.1, )"
         }
       },
       "Microsoft.IdentityModel.JsonWebTokens": {

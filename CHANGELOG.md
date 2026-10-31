@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [2.19.1] - 2026-10-31
+
+Patch release with HTTP/1.1 response output coalescing and concurrent-abort cleanup.
+Public APIs, defaults and runtime dependency groups remain unchanged.
+
 ### Changed
 
 - HTTP/1.1 responses to requests without entity bodies hold up to 64 KiB while an
@@ -14,6 +19,20 @@
   Strict write errors continue to write through, and response-body telemetry
   counts held bytes only after successful transport output. See
   [HTTP/1.1 response completion](docs/project/http1-coalesced-output.md) (#577).
+
+### Fixed
+
+- Concurrent HTTP/1.1 aborts cannot finalize an unfinished response as an empty
+  successful response while another caller is retiring the transport. Output
+  created after abort starts is abandoned too; completed responses retain their
+  successful result (#587).
+- Wait for the SSE handler to finish disposing its subscription before checking
+  its released slot in the lifecycle regression fixture (#574).
+
+### Maintenance
+
+- Refresh pinned CI actions and the test-only FsCheck dependency, and automate
+  guarded updates to CI image pins. Production package dependencies are unchanged.
 
 ## [2.19.0] - 2026-10-27
 
