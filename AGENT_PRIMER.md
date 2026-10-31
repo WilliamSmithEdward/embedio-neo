@@ -252,7 +252,7 @@ limits, failure matrix, concurrency fuzzing and cross-target support.
 | NuGet packages | Core: `EmbedIO-Neo`; optional: `EmbedIO-Neo.DependencyInjection`, `EmbedIO-Neo.Jwt`, `EmbedIO-Neo.JsonServer`, `EmbedIO-Neo.Cli`, `EmbedIO-Neo.Testing` |
 | Assembly and namespaces | `EmbedIO`, `EmbedIO.WebApi`, `EmbedIO.Routing`, `EmbedIO.WebSockets`, `EmbedIO.Files`, `EmbedIO.Security`, `EmbedIO.Net` and others |
 | Targets | `net10.0` and `netstandard2.0` |
-| Current source version | 2.19.0, the v2 engine. 2.19.0 resumes HTTP/3 TLS sessions with session tickets, sends consecutive HTTP/3 datagrams in one segmented system call, builds a response's `Headers` collection only when something reads it, keeps an HTTP/3 connection open when a client cancels a request just as the server starts it, and closes connections that break QUIC's stream and frame rules with the error codes RFC 9000 names. 2.18.0 cuts EmbedIO.Quic's HTTP/3 cost per datagram and per request, refuses new HTTP/3 connections before any TLS work under overload, advertises HTTP/3 with Alt-Svc in `EmbedIOCombined`, adds opt-in Retry address validation, reuses each certificate's TLS credential and speaks WebTransport draft-14 for Safari. 2.17.0 runs HTTP/3 on EmbedIO.Quic instead of `System.Net.Quic`; opt-in WebTransport requires 2.17.0+. 2.16.1 keeps the server running when one HTTP/1 request fails. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
+| Current source version | 2.19.1, the v2 engine. 2.19.1 coalesces inline HTTP/1.1 output and prevents unfinished responses from completing successfully during concurrent aborts. 2.19.0 resumes HTTP/3 TLS sessions with session tickets, sends consecutive HTTP/3 datagrams in one segmented system call, builds a response's `Headers` collection only when something reads it, keeps an HTTP/3 connection open when a client cancels a request just as the server starts it, and closes connections that break QUIC's stream and frame rules with the error codes RFC 9000 names. 2.18.0 cuts EmbedIO.Quic's HTTP/3 cost per datagram and per request, refuses new HTTP/3 connections before any TLS work under overload, advertises HTTP/3 with Alt-Svc in `EmbedIOCombined`, adds opt-in Retry address validation, reuses each certificate's TLS credential and speaks WebTransport draft-14 for Safari. 2.17.0 runs HTTP/3 on EmbedIO.Quic instead of `System.Net.Quic`; opt-in WebTransport requires 2.17.0+. 2.16.1 keeps the server running when one HTTP/1 request fails. Typed minimal endpoints require 2.16.0+. Typed request binding requires 2.15.0+. Typed results and validation/error helpers require 2.14.0+. Response security headers require 2.13.0+. Resumable tus uploads and method-override browser protection require 2.12.0+. Write idempotency requires 2.11.0+. Output caching requires 2.10.0+. Request validation requires 2.4.0+. Route hooks and enum status overloads require 2.3.0+. Streaming multipart requires 2.1.0+; bearer authentication and controller authorization require 2.2.0+. 1.0.x is the previous major version. |
 | Install | `dotnet add package EmbedIO-Neo` |
 
 Check which version the project references before you write code. A 1.0.x
@@ -742,7 +742,7 @@ Guide: [streaming multipart uploads](docs/guides/streaming-multipart.md).
 - `Redirect(location, statusCode)` accepts only 3xx statuses.
 - Set status, headers and cookies before the first body write or flush. After
   headers are sent they cannot change.
-- In unreleased HTTP/1 source, incomplete writes and flushes can be held while a
+- In 2.19.1+, incomplete HTTP/1 writes and flushes can be held while a
   handler for a request without a body runs inline. Metadata is committed by the
   first write or flush as before. Returning, suspending or the shared heartbeat
   sends the held bytes; strict write errors retain write-through behavior. See
@@ -1125,8 +1125,8 @@ heartbeat also sends output held past a complete tick when a synchronous handler
 keeps running. A completing write owns its pending I/O without an extra actor
 wait; committed-error cleanup retains its drain-before-abort ordering.
 Strict write errors (`IgnoreWriteExceptions = false`) retain
-write-through behavior, as do requests with entity bodies. This is absent from
-2.19.0 packages. The guide records separate warm, cold and identical-binary
+write-through behavior, as do requests with entity bodies. This requires 2.19.1+;
+2.19.0 packages do not contain it. The guide records separate warm, cold and identical-binary
 measurements, with their coverage and host-activity limits. #577's broader
 Kestrel performance goal remains open.
 
@@ -1220,8 +1220,8 @@ and peer parameters alone do not admit application traffic: TLS Finished and
 client-certificate policy must succeed first. Native buffers and handles remain
 bounded and owned by the serialized connection. Windows retains Schannel.
 
-Released HTTP/3 provider selection and package dependency groups are unchanged;
-the development binding transition is described below.
+HTTP/3 provider selection and native package delivery shipped in 2.17.0;
+the binding and package behavior are described below.
 The native runtime package and the package-only consumers shipped in 2.17.0. CI runs
 the consumers on all six RIDs and on the oldest glibc and musl that .NET 10 supports.
 Build instructions and the exact archive pin are in
@@ -1234,8 +1234,8 @@ wire cases and 3,072 wrapper-sanitizer ownership lifecycles. Those initial proof
 used the recorded development build; final restricted native-build validation is
 recorded separately in the development guide. This work shipped in 2.17.0.
 
-The portable boundary's private ABI is now 3 (2.18.0 and later; 2.17.0
-ships ABI 2). A native credential holds the key and leaf parsed once from the selected
+The portable boundary's private ABI is 4 in 2.19.0 and later; 2.18.0 ships ABI 3
+and 2.17.0 ships ABI 2. A native credential holds the key and leaf parsed once from the selected
 certificate's PKCS#12 export and the issuer chain; each connection installs it by
 reference, and the listener keeps one per selected certificate, up to 32, until the
 source publishes, the certificate is disposed or the listener stops. Server credential
@@ -1264,14 +1264,14 @@ Portable builds now emit a binary audit with RID/architecture, dependency,
 export and platform-version metadata. Requested glibc assets reject requirements
 above 2.27; Linux x64 CI builds in a digest-pinned manylinux compiler environment
 and the tested artifact requires only GLIBC_2.17. macOS builds explicitly target
-15.0 and verify their load commands. Binary metadata does not establish all RID,
+14.0 and verify their load commands. Binary metadata does not establish all RID,
 musl, signing, package-consumer or runtime acceptance. The native artifacts and
-receipts are retained as package inputs. The unpublished `EmbedIO-Neo.Quic.Native`
+receipts are retained as package inputs. The owned `EmbedIO-Neo.Quic.Native`
 project stages exactly six Linux/macOS x64/ARM64 RIDs by default and checks the
 packed native bytes, license, manifest and source identity. It stays outside the
-ordinary solution; the six existing packages and core dependency groups remain
-unchanged until provider transition. This avoids placing native runtime assets in
-the legacy .NET Standard package graph.
+ordinary solution and ships alongside the six managed packages. Since 2.17.0,
+the .NET 10 core depends on this asset-only package at the same version; native
+runtime assets remain outside the legacy .NET Standard package graph.
 
 The portable workflow now builds on matching hardware, assembles one runtime
 package and validates portable/RID/Native AOT consumers with isolated local feeds
@@ -1412,7 +1412,7 @@ assembly verifies seven packages and all six native RIDs; configured jobs still
 require final-head execution. CI also passes that exact seven-package artifact to
 the reusable ClamAV/YARA-X scan, including native bytes. The standalone six-package
 source/managed scan remains required. Publish likewise requires the seventh
-runtime package in its scan input. No release is authorized.
+runtime package in its scan input.
 
 
 Ordinary `EmbedIOHttp3` / `EmbedIOCombined` construction selects

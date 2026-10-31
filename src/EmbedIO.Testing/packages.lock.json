@@ -121,7 +121,7 @@
       "EmbedIO-Neo": {
         "type": "Project",
         "dependencies": {
-          "EmbedIO-Neo.Quic.Native": "[2.19.0, )",
+          "EmbedIO-Neo.Quic.Native": "[2.19.1, )",
           "System.Threading.RateLimiting": "[10.0.13, )"
         }
       },
