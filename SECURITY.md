@@ -93,8 +93,12 @@ signatures change too often to pin, so freshclam fetches and verifies them.
 
 Dependabot proposes actions, Docker, Python and NuGet updates with a seven-day
 cooldown, except security updates and the owner's Python packages. The Update YARA
-rules workflow proposes pin updates weekly. Minor and patch updates and YARA
-updates merge once the three gates pass; third-party major versions wait for review.
+rules workflow proposes pin updates weekly, and the Update Semgrep image workflow a
+new Semgrep image once it is a week old (GitHub refuses Dependabot's updates of
+that image). Relock Dependabot updates rebuilds a lock Dependabot changed with
+the lock's own uv or dotnet restore command. Minor and patch updates and the YARA
+and Semgrep pull requests merge once the three gates pass; third-party major
+versions wait for review.
 
 The Update .NET SDK workflow proposes the newest SDK patch in the pinned feature
 band weekly, with the same cooldown, waived when Microsoft marks the release as
@@ -111,24 +115,13 @@ opens as a draft labelled `needs owner decision`, because a workload set can mov
 the Apple packs to a newer Xcode. The .NET SDK canary builds and
 tests with the newest SDK weekly, ahead of the pin; it is informational.
 
-### Semgrep installation
+### Semgrep image
 
-Semgrep remains a containerized CI tool running as the checkout's user. Its base
-image is pinned by digest from GHCR, and the scanner release and complete Python
-wheel dependency closure are pinned by SHA-256 in
-`.github/security/semgrep/requirements.txt`. This avoids Docker Hub's anonymous
-pull quota without changing the scan rules, target paths, timeout policy,
-`--disable-nosem`, SARIF checks or required gate. Semgrep and Python are not runtime
-dependencies of shipped EmbedIO packages.
-
-The wheel lock targets the Ubuntu x86_64 / Python 3.12 scanner job. To update it,
-resolve the intended Semgrep release and all dependencies on that platform,
-verify wheel metadata and hashes, install using `--require-hashes` and
-`--only-binary=:all:`, run `pip check`, verify the reported Semgrep version, and
-run the existing complete scan and report validation. Keep installation failures
-and scan warnings failing. Dependabot follows the Docker base and both pip-lock
-directories; a version change requires regenerating the complete lock and updating
-the Dockerfile's version assertion together.
+Semgrep runs from the `semgrep/semgrep` image pinned by digest in
+`.github/security/semgrep/Dockerfile`, as in the other repositories, and runs as
+the checkout's user. The image carries Semgrep's own dependencies, so none of
+them is a pinned Python lock here. Semgrep is not a runtime dependency of shipped
+EmbedIO packages.
 
 ## Releases
 
