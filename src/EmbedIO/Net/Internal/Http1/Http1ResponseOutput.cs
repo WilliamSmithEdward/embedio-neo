@@ -150,10 +150,18 @@ namespace EmbedIO.Net.Internal
                     await SendHeldAsync(false, CancellationToken.None).ConfigureAwait(false);
         }
 
+        // Mark retirement under the connection gate, before another close can
+        // finalize this output while the transport is still writable.
+        internal void BeginAbandonment()
+        {
+            if (Volatile.Read(ref _completionFinished) == 0) Volatile.Write(ref _failed, 1);
+        }
+
         // Retirement must drop buffered output even when the application has not resumed.
         // The connection closes the transport independently, settling any writer ahead of us.
         internal async Task AbandonAsync()
         {
+            BeginAbandonment();
             AsyncWriteGate.Scope writer;
 
             try
