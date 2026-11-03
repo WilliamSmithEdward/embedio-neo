@@ -76,7 +76,8 @@ For HTTPS, retain strict client certificate trust; see [HTTPS guidance](../guide
 Apple documents that foreground apps generally transition briefly through the
 background before suspension, and recommends stopping tasks and releasing shared
 resources during that transition. Use the applicable application or scene lifecycle
-notifications in your host app; scene-based apps can have more than one scene.
+notifications in your host app; scene-based apps can have more than one scene. An
+app built with the 27 SDK [must use the scene lifecycle](maui-mac-catalyst.md#building-with-the-27-sdk).
 See Apple's [background preparation](https://developer.apple.com/documentation/uikit/preparing-your-ui-to-run-in-the-background)
 and [background execution sequence](https://developer.apple.com/documentation/uikit/about-the-background-execution-sequence).
 A library endpoint cleanup correction cannot grant background execution.

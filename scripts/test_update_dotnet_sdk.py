@@ -802,7 +802,7 @@ class AppleMoveTests(unittest.TestCase):
                                      self.feed.get, NOW)
 
     def proposed(self, path):
-        return (self.out / "files" / path).read_text(encoding="utf-8", newline="")
+        return sdk.read(self.out / "files" / path)
 
     def test_the_whole_move_passes_the_propose_job_checks(self):
         self.assertTrue(self.prepare()[0])
