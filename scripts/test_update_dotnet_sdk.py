@@ -150,13 +150,6 @@ class RewriteTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             sdk.rewrite_global_json(text, "10.0.400", "10.0.402")
 
-    def test_workflow_lines_move_only_the_matching_dotnet_version(self):
-        text = ("      - uses: actions/setup-dotnet@x # v6.0.0\r\n        with:\r\n          dotnet-version: 10.0.401\r\n"
-                "          other: 10.0.401\r\n          dotnet-version: 9.0.100\r\n")
-        updated, count = sdk.rewrite_lines(text, sdk.DOTNET_VERSION_LINE, 2, "10.0.401", "10.0.402")
-        self.assertEqual(count, 1)
-        self.assertEqual(updated, text.replace("dotnet-version: 10.0.401", "dotnet-version: 10.0.402"))
-
     def test_runtime_pins_move_and_version_tokens_stay_whole(self):
         text = "<RuntimeFrameworkVersion>10.0.1</RuntimeFrameworkVersion>\n<Version>10.0.12</Version>\n"
         updated, count = sdk.rewrite_lines(text, sdk.RUNTIME_PIN, 1, "10.0.1", "10.0.2")
@@ -184,6 +177,25 @@ class LockTests(unittest.TestCase):
         rehashed["dependencies"]["net10.0"]["Other"]["contentHash"] = "changed=="
         with self.assertRaises(ValueError):
             sdk.check_lock_change("a", old, render(rehashed), "10.0.12", "10.0.13")
+
+    def test_a_range_for_a_referenced_project_may_follow_its_version(self):
+        lock = json.loads(json.dumps(LOCK))
+        packages = lock["dependencies"]["net10.0"]
+        packages["EmbedIO-Neo.Quic.Native"] = {"type": "Project"}
+        packages["EmbedIO-Neo"]["dependencies"]["EmbedIO-Neo.Quic.Native"] = "[2.16.0, )"
+
+        def with_ranges(**ranges):
+            moved = json.loads(json.dumps(lock))
+            moved["dependencies"]["net10.0"]["EmbedIO-Neo"]["dependencies"].update(ranges)
+            return render(moved)
+
+        native, tasks = "EmbedIO-Neo.Quic.Native", "Microsoft.NET.ILLink.Tasks"
+        for good in ("[2.19.1, )", "[3.0.0-preview.1, )"):
+            with self.subTest(good=good):
+                sdk.check_lock_change("a", render(lock), with_ranges(**{native: good}), "10.0.12", "10.0.13")
+        for bad in ({native: "2.19.1"}, {native: "[2.19.1,3.0.0)"}, {tasks: "[10.0.14, )"}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                sdk.check_lock_change("a", render(lock), with_ranges(**bad), "10.0.12", "10.0.13")
 
     def test_moves_from_regenerated_locks_mirror_into_unrestorable_ones(self):
         moves = sdk.package_moves({"a": (render(LOCK), render(moved_lock()))})
@@ -255,10 +267,10 @@ class WorkloadTests(unittest.TestCase):
     def test_pins_must_name_one_set(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            git_repo(root, {".github/workflows/a.yml": "run: dotnet workload install maui-android --version 10.0.401\n",
+            git_repo(root, {"scripts/a.sh": "dotnet workload install maui-android --version 10.0.401\n",
                             "scripts/b.ps1": "dotnet workload install $env:W --version 10.0.401\n",
                             "scripts/c.ps1": "dotnet workload restore\n"})
-            self.assertEqual(sdk.workload_pins(root), ("10.0.401", [".github/workflows/a.yml", "scripts/b.ps1"]))
+            self.assertEqual(sdk.workload_pins(root), ("10.0.401", ["scripts/a.sh", "scripts/b.ps1"]))
             (root / "scripts/b.ps1").write_text("dotnet workload install $env:W --version 10.0.402\n", encoding="utf-8")
             with self.assertRaises(ValueError):
                 sdk.workload_pins(root)
@@ -272,6 +284,23 @@ DOCKERFILE = ("FROM golang@sha256:" + "1" * 64 + " AS h2spec\r\n"
               "FROM mcr.microsoft.com/dotnet/sdk@sha256:" + "e" * 64 + "\r\n"
               "RUN apt-get update\r\n")
 NEW_DIGEST = "sha256:" + "f" * 64
+
+
+class WorkflowTests(unittest.TestCase):
+    WORKFLOWS = Path(__file__).resolve().parent.parent / ".github" / "workflows"
+
+    def test_no_workflow_holds_a_pin_the_updater_moves(self):
+        # A commit changing a workflow needs a permission GITHUB_TOKEN cannot be given.
+        for path in self.WORKFLOWS.glob("*.yml"):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertNotRegex(text, r"(?m)^\s*dotnet-version:\s*\d+\.\d+\.\d+\s*$")
+                self.assertNotRegex(text, sdk.WORKLOAD_INSTALL)
+
+    def test_the_proposal_artifact_keeps_the_files_under_github(self):
+        text = (self.WORKFLOWS / "update-dotnet-sdk.yml").read_text(encoding="utf-8")
+        step = text[text.index("name: dotnet-sdk-proposal"):]
+        self.assertIn("include-hidden-files: true", step[:step.index("- uses:")])
 
 
 class ImageTests(unittest.TestCase):
@@ -305,8 +334,8 @@ class ImageTests(unittest.TestCase):
 class ProposalTests(unittest.TestCase):
     BASE = {
         "global.json": '{\n  "sdk": {\n    "version": "10.0.401",\n    "rollForward": "disable"\n  }\n}\n',
-        ".github/workflows/ci.yml": "jobs:\n  a:\n    steps:\n      - with:\n          dotnet-version: 10.0.401\n",
-        ".github/workflows/android.yml": "      - run: dotnet workload install maui-android --version 10.0.401\n",
+        ".github/workflows/ci.yml": "jobs:\n  a:\n    steps:\n      - with:\n          global-json-file: global.json\n",
+        "scripts/install.ps1": "dotnet workload install maui-android --version 10.0.401\n",
         "test/Probe/Probe.csproj": "<Project>\n  <RuntimeFrameworkVersion>10.0.12</RuntimeFrameworkVersion>\n</Project>\n",
         "src/Lib/packages.lock.json": render(LOCK),
         "README.md": "SDK 10.0.401\n",
@@ -319,7 +348,6 @@ class ProposalTests(unittest.TestCase):
         git_repo(self.root, self.BASE)
         self.sdk_files = {
             "global.json": self.BASE["global.json"].replace("10.0.401", "10.0.402"),
-            ".github/workflows/ci.yml": self.BASE[".github/workflows/ci.yml"].replace("10.0.401", "10.0.402"),
             "test/Probe/Probe.csproj": self.BASE["test/Probe/Probe.csproj"].replace("10.0.12", "10.0.13"),
             "src/Lib/packages.lock.json": render(moved_lock()),
         }
@@ -348,9 +376,9 @@ class ProposalTests(unittest.TestCase):
     def test_other_files_and_other_edits_are_refused(self):
         cases = {
             "README.md": "SDK 10.0.402\n",
-            ".github/workflows/ci.yml": "jobs:\n  a:\n    steps:\n      - run: curl evil\n          dotnet-version: 10.0.402\n",
+            ".github/workflows/ci.yml": "jobs:\n  a:\n    steps:\n      - run: curl evil\n",
             "test/Probe/Probe.csproj": "<Project>\n  <RuntimeFrameworkVersion>10.0.13</RuntimeFrameworkVersion>\n  <Evil />\n</Project>\n",
-            ".github/workflows/android.yml": "      - run: dotnet workload install maui-android --version 10.0.402\n",
+            "scripts/install.ps1": "dotnet workload install maui-android --version 10.0.402\n",
         }
         for path, text in cases.items():
             with self.subTest(path=path):
@@ -368,12 +396,12 @@ class ProposalTests(unittest.TestCase):
             sdk.check_proposal(self.root, self.out / "sdk")
 
     def test_workload_moves_change_only_the_install_versions(self):
-        moved = self.BASE[".github/workflows/android.yml"].replace("10.0.401", "10.0.401.1")
-        self.write_workloads({".github/workflows/android.yml": moved})
+        moved = self.BASE["scripts/install.ps1"].replace("10.0.401", "10.0.401.1")
+        self.write_workloads({"scripts/install.ps1": moved})
         proposal, changed = sdk.check_proposal(self.root, self.out / "workloads")
-        self.assertEqual((proposal["new_set"], list(changed)), ("10.0.401.1", [".github/workflows/android.yml"]))
-        for bad in ({".github/workflows/android.yml": moved.replace("maui-android", "maui-ios")},
-                    {".github/workflows/android.yml": moved, "global.json": self.sdk_files["global.json"]}):
+        self.assertEqual((proposal["new_set"], list(changed)), ("10.0.401.1", ["scripts/install.ps1"]))
+        for bad in ({"scripts/install.ps1": moved.replace("maui-android", "maui-ios")},
+                    {"scripts/install.ps1": moved, "global.json": self.sdk_files["global.json"]}):
             with self.subTest(bad=sorted(bad)):
                 self.write_workloads(bad)
                 with self.assertRaises(ValueError):
@@ -382,9 +410,18 @@ class ProposalTests(unittest.TestCase):
             sdk.check_workloads_proposal(self.root, {"old_set": "10.0.401", "new_set": "10.0.400", "base_ref": "main",
                                                      "new_runtime": "10.0.12", "title": "", "branch": ""}, {})
 
+    def test_a_proposal_may_not_change_a_workflow(self):
+        workflow = {".github/workflows/ci.yml": self.BASE[".github/workflows/ci.yml"] + "# moved\n"}
+        self.write_sdk({**self.sdk_files, **workflow})
+        with self.assertRaisesRegex(ValueError, "is a workflow"):
+            sdk.check_proposal(self.root, self.out / "sdk")
+        self.write_workloads(workflow)
+        with self.assertRaisesRegex(ValueError, "is a workflow"):
+            sdk.check_proposal(self.root, self.out / "workloads")
+
     def test_propose_commits_each_move_through_the_api_and_starts_the_gates(self):
-        self.write_workloads({".github/workflows/android.yml":
-                              self.BASE[".github/workflows/android.yml"].replace("10.0.401", "10.0.401.1")})
+        self.write_workloads({"scripts/install.ps1":
+                              self.BASE["scripts/install.ps1"].replace("10.0.401", "10.0.401.1")})
         api, review = self.api(pulls=[]), Mock()
         urls = sdk.propose(self.root, self.out, "owner/repo", "1" * 40, "main", api, review)
         self.assertEqual(urls, ["https://github.com/owner/repo/pull/7", "https://github.com/owner/repo/pull/7"])
@@ -397,8 +434,8 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(review.call_count, 2)
 
     def test_a_workload_set_opens_as_a_draft_labelled_for_the_owner(self):
-        self.write_workloads({".github/workflows/android.yml":
-                              self.BASE[".github/workflows/android.yml"].replace("10.0.401", "10.0.401.1")})
+        self.write_workloads({"scripts/install.ps1":
+                              self.BASE["scripts/install.ps1"].replace("10.0.401", "10.0.401.1")})
         api = self.api(pulls=[])
         sdk.propose(self.root, self.out, "owner/repo", "1" * 40, "main", api, Mock())
         created = {c.args[2]["head"]: c.args[2] for c in api.call_args_list if c.args[0] == "repos/owner/repo/pulls"}
@@ -456,7 +493,7 @@ class PrepareTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             git_repo(root, {"global.json": '{"sdk": {"version": "10.0.402"}}',
-                            ".github/workflows/a.yml": "run: dotnet workload install maui-ios --version 10.0.402\n"})
+                            "scripts/a.sh": "dotnet workload install maui-ios --version 10.0.402\n"})
             feed = Feed({"10.0.402": ("10.0.113", "2026-10-14T00:00:00Z")})
             changed, notes = sdk.prepare(root, root / "out", root / "sdk", "1" * 40, "main", feed.fetch, feed.get, NOW)
             self.assertFalse(changed)
