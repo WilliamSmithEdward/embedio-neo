@@ -112,7 +112,6 @@ OWNER_DECISION_KINDS = frozenset({"workloads"})
 OWNER_DECISION_LABEL = "needs owner decision"
 APPLE_MANIFEST = re.compile(r"Microsoft\.NET\.Sdk\.(iOS|MacCatalyst|macOS|tvOS)", re.IGNORECASE)
 STABLE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
-PROJECT_RANGE = re.compile(r"\[\d+\.\d+\.\d+[\w.-]*, \)")
 LOCK_NAME = re.compile(r"packages(\.[a-z]+)?\.lock\.json")
 SHA512_HEX = re.compile(r"[0-9a-f]{128}")
 RUNTIME_PIN = re.compile(r"<RuntimeFrameworkVersion>([^<]*)</RuntimeFrameworkVersion>")
@@ -120,6 +119,7 @@ WORKLOAD_INSTALL = re.compile(r"dotnet workload install\b.*?--version\s+(\S+)")
 SDK_IMAGE_COMMENT = re.compile(r"^# mcr\.microsoft\.com/dotnet/sdk:(\S+) \(runtime (\S+), ([^)]+)\)\.$")
 SDK_IMAGE_FROM = re.compile(r"^FROM mcr\.microsoft\.com/dotnet/sdk@(sha256:[0-9a-f]{64})$")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+PROJECT_RANGE = re.compile(r"\[\d+\.\d+\.\d+[\w.-]*, \)")
 
 Api = Callable[..., Any]
 FetchJson = Callable[[str], Any]
