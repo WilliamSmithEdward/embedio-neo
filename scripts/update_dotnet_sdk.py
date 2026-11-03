@@ -6,15 +6,17 @@ requests, each moving its pins together:
 
 - An SDK move: `sdk.version` in global.json, each `<RuntimeFrameworkVersion>`
   naming the old SDK's runtime (the test probes that need an exact runtime),
-  and every packages.lock.json restored again with the new SDK. The MAUI locks
-  need workloads this Linux job does not install, so they take the package moves
-  the other locks show; the MAUI jobs' locked restores then check them.
+  every pinned SDK image, because a container that reads global.json cannot run
+  without that SDK, and every packages.lock.json restored again with the new SDK.
+  The MAUI locks need workloads this Linux job does not install, so they take the
+  package moves the other locks show; the MAUI jobs' locked restores then check
+  them. MCR publishes images some hours after a release, so the move waits until
+  every image it needs is there.
 - A workload set move: each `dotnet workload install ... --version <set>`. The
   set decides the Mono runtime the MAUI apps run and the Apple and Android SDK
   packs, so it moves on its own, deliberately, rather than with every SDK patch.
 - An SDK image move: a Dockerfile pinning `mcr.microsoft.com/dotnet/sdk` by
-  digest follows the SDK global.json pins, once MCR publishes that tag (it
-  often lags the release by hours).
+  digest that still lags the SDK global.json pins, when no SDK move is due.
 
 Rules:
 - Only the channel and feature band global.json names, such as 10.0.4xx. A new
@@ -27,7 +29,7 @@ Rules:
 - Each waits out a seven-day cooldown, waived when it brings a runtime that
   Microsoft marks as a security release.
 - Nothing moves back, and a pin moved ahead by hand is kept.
-- No proposal changes a workflow file: GitHub gives a workflow's own token no
+- No proposal changes a workflow file: the Repo Bot App that opens them has no
   permission to. Workflows take the SDK from global.json and install workloads
   through a script, and a proposal naming a workflow is refused.
 - An SDK move may only change versions from the old runtime's to the new
@@ -61,9 +63,9 @@ changed file must be one its move may change, changed only as the rules allow.
 It commits through the GitHub API (no git credentials on disk), opens each pull
 request against that branch and leaves it open for exact-head review. A workload
 set's pull request opens as a draft labelled "needs owner decision", because the
-set can move the Apple packs to a newer Xcode; that call is the owner's. A pull
-request opened with the workflow's own token starts no workflows, so it starts
-CI, Security and Malware scan on the new branch itself.
+set can move the Apple packs to a newer Xcode; that call is the owner's. It uses
+the Repo Bot App's token, because a pull request opened with the workflow's own
+token waits for approval and gets no normal CI.
 """
 from __future__ import annotations
 
@@ -113,8 +115,6 @@ MAUI_LOCKS = frozenset({
     "test/EmbedIO.MauiHttpsSmoke/windows.packages.lock.json",
 })
 WORKLOAD_PIN_FILES = ("scripts/*.ps1", "scripts/*.sh")
-# The required checks. They are started by hand because the pull request is not.
-GATES = ("ci.yml", "security.yml", "malware-scan.yml")
 LABELS = (".NET", "dependencies")
 # A workload set decides the MAUI apps' Apple and Android packs, and an Apple pack move can need a
 # newer Xcode, so those pull requests open as drafts that wait for the owner's decision.
@@ -580,16 +580,36 @@ def image_tags(text: str) -> list[str]:
             if comment and SDK_IMAGE_FROM.match(image)]
 
 
-def rewrite_image(text: str, sdk: str, runtime: str, digest: str) -> str:
-    """Point every pinned SDK image in a Dockerfile at `sdk`, keeping its comment's OS and the line endings."""
+def image_pins(root: Path) -> dict[str, list[str]]:
+    """Each tracked Dockerfile that pins an SDK image, with the tags it pins."""
+    found = {path: image_tags(read(root / path)) for path in tracked(root, "*Dockerfile*")}
+    return {path: tags for path, tags in found.items() if tags}
+
+
+def image_tag(tag: str, sdk: str) -> str:
+    """`tag` for `sdk`, keeping an OS suffix such as -alpine3.24."""
+    return sdk + tag[len(tag.partition("-")[0]):]
+
+
+def rewrite_image(text: str, sdk: str, runtime: str, digests: dict[str, str]) -> str:
+    """Point every pinned SDK image in a Dockerfile at `sdk`, keeping its OS and the line endings."""
     lines = text.splitlines(keepends=True)
     for index in range(len(lines) - 1):
         comment = SDK_IMAGE_COMMENT.match(lines[index].rstrip("\r\n"))
         if comment and SDK_IMAGE_FROM.match(lines[index + 1].rstrip("\r\n")):
+            tag = image_tag(comment.group(1), sdk)
             endings = [line[len(line.rstrip("\r\n")):] for line in lines[index:index + 2]]
-            lines[index] = f"# mcr.microsoft.com/dotnet/sdk:{sdk} (runtime {runtime}, {comment.group(3)})." + endings[0]
-            lines[index + 1] = f"FROM mcr.microsoft.com/dotnet/sdk@{digest}" + endings[1]
+            lines[index] = f"# mcr.microsoft.com/dotnet/sdk:{tag} (runtime {runtime}, {comment.group(3)})." + endings[0]
+            lines[index + 1] = f"FROM mcr.microsoft.com/dotnet/sdk@{digests[tag]}" + endings[1]
     return "".join(lines)
+
+
+def check_image_digests(digests: dict[str, str], tags: set[str]) -> None:
+    """The proposal's digests name exactly the images it moves, and each has a digest's shape."""
+    if set(digests) != tags:
+        raise ValueError(f"the proposal's image digests name {sorted(digests)}, not {sorted(tags)}")
+    if not all(DIGEST.fullmatch(digest) for digest in digests.values()):
+        raise ValueError("the proposal's image digest is malformed")
 
 
 def branch_for(prefix: str, target: str, base: str) -> str:
@@ -613,13 +633,12 @@ def image_title_and_branch(sdk: str, base: str) -> tuple[str, str]:
     return f"Update the pinned .NET SDK image to {sdk}", branch_for("update-dotnet-sdk-image", sdk, base)
 
 
-CHECKS_NOTE = ("CI, Security and Malware scan were started on this branch by the workflow, because a pull "
-               "request opened with the workflow's own token starts no workflows. This PR remains open for "
-               "review of every exact-head check; no merge is armed.")
+CHECKS_NOTE = ("CI, Security and Malware scan run on this pull request as usual. It remains open for review of "
+               "every exact-head check; no merge is armed.")
 
 
 def sdk_body(old_sdk: str, old_runtime: str, move: dict[str, Any], moves: dict[str, tuple[str, str, str]],
-             channel: str) -> str:
+             channel: str, digests: dict[str, str]) -> str:
     notes = RELEASE_NOTES.format(channel=channel, release=move["release"])
     reason = ("a security release, so the seven-day cooldown does not apply" if move["security"]
               else "at least seven days old")
@@ -633,10 +652,13 @@ def sdk_body(old_sdk: str, old_runtime: str, move: dict[str, Any], moves: dict[s
         lines.append(f"- CVEs listed for the release: {', '.join(move['cves'])}.")
     lines += [
         "",
-        "Moved together: `global.json`, each `RuntimeFrameworkVersion` "
-        "pin and the lock files. The SDK archive matched the SHA-512 in Microsoft's `releases.json`.",
+        "Moved together: `global.json`, each `RuntimeFrameworkVersion` pin, each pinned SDK image and the "
+        "lock files. The SDK archive matched the SHA-512 in Microsoft's `releases.json`.",
         "",
     ]
+    if digests:
+        lines += [f"- `dotnet/sdk:{tag}`: `{digest}`" for tag, digest in sorted(digests.items())]
+        lines.append("")
     if moves:
         lines += ["| Package | Old | New |", "|---|---|---|"]
         lines += [f"| {name} | {old} | {new} |" for name, (old, new, _) in sorted(moves.items())]
@@ -700,16 +722,17 @@ def workloads_body(old_set: str, move: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def image_body(old_sdks: list[str], sdk: str, runtime: str, digest: str) -> str:
+def image_body(old_sdks: list[str], sdk: str, runtime: str, digests: dict[str, str]) -> str:
     return "\n".join([
         "The weekly .NET SDK image update, proposed by `update-dotnet-sdk.yml`.",
         "",
         f"- `mcr.microsoft.com/dotnet/sdk` {', '.join(old_sdks)} -> {sdk} (runtime {runtime}), the SDK `global.json` "
         "pins.",
-        f"- Digest `{digest}`: MCR's manifest-list digest for the tag, which Docker checks on every pull.",
+        *[f"- `dotnet/sdk:{tag}`: `{digest}`, MCR's manifest-list digest for the tag, which Docker checks on every "
+          "pull." for tag, digest in sorted(digests.items())],
         "",
-        "MCR publishes SDK images some hours after a release, so this follows the SDK move rather than "
-        "joining it. Only the image comment and `FROM` lines change.",
+        "An SDK move carries its images, so this is for an image that still lags `global.json`. Only the image "
+        "comment and `FROM` lines change.",
         "",
         CHECKS_NOTE,
     ]) + "\n"
@@ -749,31 +772,31 @@ def prepare_image(root: Path, out: Path, base_sha: str, base_ref: str, releases:
                   lookup: Lookup) -> tuple[bool, list[str]]:
     """Writes an SDK image proposal from the base content when a pinned image lags global.json."""
     sdk = json.loads(read(root / "global.json").lstrip("﻿"))["sdk"]["version"]
-    notes, changed, old_sdks, digest, runtime = [], {}, set(), None, None
-    for path in tracked(root, "*Dockerfile*"):
-        text = read(root / path)
-        stale = {tag for tag in image_tags(text) if tag != sdk}
+    notes, changed, old_sdks, digests, runtime = [], {}, set(), {}, None
+    for path, tags in image_pins(root).items():
+        stale = {tag.partition("-")[0] for tag in tags} - {sdk}
         if not stale:
             continue
-        digest = digest or lookup(sdk)
-        if digest is None:
-            notes.append(f"MCR has no dotnet/sdk:{sdk} image yet; {path} keeps sdk:{', '.join(sorted(stale))}.")
+        found = {tag: digests.get(tag) or lookup(tag) for tag in {image_tag(tag, sdk) for tag in tags}}
+        if missing := sorted(tag for tag, digest in found.items() if digest is None):
+            notes.append(f"MCR has no dotnet/sdk:{', '.join(missing)} image yet; {path} keeps sdk:{', '.join(sorted(stale))}.")
             continue
+        digests.update(found)
         runtime = runtime or runtime_of(releases, sdk)
-        changed[path] = rewrite_image(text, sdk, runtime, digest)
+        changed[path] = rewrite_image(read(root / path), sdk, runtime, found)
         old_sdks |= stale
     if not changed:
         return False, notes
     title, branch = image_title_and_branch(sdk, base_ref)
     write_proposal(out, {"kind": "image", "base_sha": base_sha, "base_ref": base_ref, "title": title,
-                         "branch": branch, "new_sdk": sdk, "new_runtime": runtime, "digest": digest},
-                   changed, image_body(sorted(old_sdks), sdk, runtime, digest))
-    notes.append(f"Proposed the SDK image dotnet/sdk:{sdk} ({digest}) for {', '.join(sorted(changed))}.")
+                         "branch": branch, "new_sdk": sdk, "new_runtime": runtime, "digests": digests},
+                   changed, image_body(sorted(old_sdks), sdk, runtime, digests))
+    notes.append(f"Proposed the SDK image dotnet/sdk:{sdk} for {', '.join(sorted(changed))}.")
     return True, notes
 
 
 def prepare_sdk(root: Path, out: Path, sdk_dir: Path, base_sha: str, base_ref: str, releases: dict[str, Any],
-                now: dt.datetime, archive: Path | None, rid: str | None) -> tuple[bool, list[str]]:
+                now: dt.datetime, archive: Path | None, rid: str | None, lookup: Lookup) -> tuple[bool, list[str]]:
     """Moves the SDK pins in the checkout, restores, and writes the SDK proposal."""
     old_sdk = json.loads(read(root / "global.json").lstrip("﻿"))["sdk"]["version"]
     major, minor, _ = version(old_sdk)
@@ -782,6 +805,11 @@ def prepare_sdk(root: Path, out: Path, sdk_dir: Path, base_sha: str, base_ref: s
         notes.append(f"SDK {old_sdk} is current for its feature band.")
         return False, notes
     old_runtime = runtime_of(releases, old_sdk)
+    needed = {image_tag(tag, move["sdk"]) for tags in image_pins(root).values() for tag in tags}
+    digests = {tag: lookup(tag) for tag in needed}
+    if missing := sorted(tag for tag, digest in digests.items() if digest is None):
+        notes.append(f"SDK {move['sdk']} waits for MCR to publish dotnet/sdk:{', '.join(missing)}.")
+        return False, notes
     entry = archive_entry(move["files"], move["sdk"], rid or platform_rid())
     out.mkdir(parents=True, exist_ok=True)
     if archive is None:
@@ -802,6 +830,8 @@ def prepare_sdk(root: Path, out: Path, sdk_dir: Path, base_sha: str, base_ref: s
         if count:
             write(root / name, text)
             changed[name] = text
+    for name in image_pins(root):
+        changed[name] = rewrite_image(read(root / name), move["sdk"], move["runtime"], digests)
     dotnet = sdk_dir / ("dotnet.exe" if os.name == "nt" else "dotnet")
     reported = subprocess.run([str(dotnet), "--version"], cwd=root, env=dotnet_env(sdk_dir),
                               capture_output=True, text=True, check=True, timeout=120).stdout.strip()
@@ -823,8 +853,8 @@ def prepare_sdk(root: Path, out: Path, sdk_dir: Path, base_sha: str, base_ref: s
     title, branch = sdk_title_and_branch(move["sdk"], move["runtime"], base_ref)
     write_proposal(out, {"kind": "sdk", "base_sha": base_sha, "base_ref": base_ref, "title": title,
                                "branch": branch, "old_sdk": old_sdk, "new_sdk": move["sdk"],
-                               "old_runtime": old_runtime, "new_runtime": move["runtime"]},
-                   changed, sdk_body(old_sdk, old_runtime, move, moves, f"{major}.{minor}"))
+                               "old_runtime": old_runtime, "new_runtime": move["runtime"], "digests": digests},
+                   changed, sdk_body(old_sdk, old_runtime, move, moves, f"{major}.{minor}", digests))
     notes.append(f"Proposed SDK {old_sdk} -> {move['sdk']} (runtime {old_runtime} -> {move['runtime']}), "
                  f"{len(changed)} files.")
     return True, notes
@@ -837,10 +867,11 @@ def prepare(root: Path, out: Path, sdk_dir: Path, base_sha: str, base_ref: str, 
     sdk = json.loads(read(root / "global.json").lstrip("﻿"))["sdk"]["version"]
     major, minor, _ = version(sdk)
     releases = fetch(RELEASES_URL.format(channel=f"{major}.{minor}"))
-    # These read the base content, so they run before the SDK move edits the checkout.
+    # This reads the base content, so it runs before the SDK move edits the checkout.
     workloads, notes = prepare_workloads(root, out / "workloads", base_sha, base_ref, sdk, releases, fetch, get, now)
-    image, image_notes = prepare_image(root, out / "image", base_sha, base_ref, releases, lookup)
-    moved, sdk_notes = prepare_sdk(root, out / "sdk", sdk_dir, base_sha, base_ref, releases, now, archive, rid)
+    moved, sdk_notes = prepare_sdk(root, out / "sdk", sdk_dir, base_sha, base_ref, releases, now, archive, rid, lookup)
+    # An SDK move carries the images. Without one the checkout is untouched.
+    image, image_notes = (False, []) if moved else prepare_image(root, out / "image", base_sha, base_ref, releases, lookup)
     return workloads or image or moved, sdk_notes + notes + image_notes
 
 
@@ -857,6 +888,8 @@ def check_sdk_proposal(root: Path, proposal: dict[str, Any], files: dict[str, tu
         raise ValueError("the proposal's title or branch does not match its move")
     projects = set(tracked(root, "*.csproj", "*.csproj.template"))
     locks = set(lock_files(root))
+    images, digests = image_pins(root), proposal["digests"]
+    check_image_digests(digests, {image_tag(tag, new_sdk) for tags in images.values() for tag in tags})
     for path, (old_text, new_text) in files.items():
         if path == "global.json":
             if rewrite_global_json(old_text, old_sdk, new_sdk) != new_text:
@@ -864,6 +897,9 @@ def check_sdk_proposal(root: Path, proposal: dict[str, Any], files: dict[str, tu
         elif path in projects:
             if rewrite_lines(old_text, RUNTIME_PIN, 1, old_runtime, new_runtime)[0] != new_text:
                 raise ValueError(f"{path} changes beyond its RuntimeFrameworkVersion pin")
+        elif path in images:
+            if rewrite_image(old_text, new_sdk, new_runtime, digests) != new_text:
+                raise ValueError(f"{path} changes beyond its SDK image pin")
         elif path in locks:
             check_lock_change(path, old_text, new_text, old_runtime, new_runtime)
         else:
@@ -871,6 +907,7 @@ def check_sdk_proposal(root: Path, proposal: dict[str, Any], files: dict[str, tu
     # A pin left behind would fail CI, but say so here rather than there.
     expected = {"global.json"}
     expected |= {p for p in projects if rewrite_lines(read(root / p), RUNTIME_PIN, 1, old_runtime, new_runtime)[1]}
+    expected |= set(images)
     if missing := sorted(expected - set(files)):
         raise ValueError(f"the proposal leaves pins unmoved in {missing}")
 
@@ -897,19 +934,18 @@ def check_workloads_proposal(root: Path, proposal: dict[str, Any], files: dict[s
 
 
 def check_image_proposal(root: Path, proposal: dict[str, Any], files: dict[str, tuple[str, str]]) -> None:
-    sdk, runtime, digest = proposal["new_sdk"], proposal["new_runtime"], proposal["digest"]
+    sdk, runtime, digests = proposal["new_sdk"], proposal["new_runtime"], proposal["digests"]
     if json.loads(read(root / "global.json").lstrip("﻿"))["sdk"]["version"] != sdk:
         raise ValueError("the proposal's SDK image is not the SDK global.json pins")
     version(runtime)
-    if not DIGEST.fullmatch(digest):
-        raise ValueError("the proposal's image digest is malformed")
     if (proposal["title"], proposal["branch"]) != image_title_and_branch(sdk, proposal["base_ref"]):
         raise ValueError("the proposal's title or branch does not match its move")
-    dockerfiles = set(tracked(root, "*Dockerfile*"))
+    images = image_pins(root)
+    if unknown := sorted(set(files) - set(images)):
+        raise ValueError(f"an SDK image move does not change {unknown}")
+    check_image_digests(digests, {image_tag(tag, sdk) for path in files for tag in images[path]})
     for path, (old_text, new_text) in files.items():
-        if path not in dockerfiles or not image_tags(old_text):
-            raise ValueError(f"an SDK image move does not change {path}")
-        if rewrite_image(old_text, sdk, runtime, digest) != new_text:
+        if rewrite_image(old_text, sdk, runtime, digests) != new_text:
             raise ValueError(f"{path} changes beyond its SDK image pin")
 
 
@@ -922,7 +958,7 @@ def check_proposal(root: Path, inp: Path) -> tuple[dict[str, Any], dict[str, byt
         if path not in tracked_files:
             raise ValueError(f"{path} is not a tracked file")
         if path.startswith(".github/workflows/"):
-            raise ValueError(f"{path} is a workflow, which this workflow's own token may not change")
+            raise ValueError(f"{path} is a workflow, which the Repo Bot App may not change")
         source = inp / "files" / path
         if not source.resolve().is_relative_to((inp / "files").resolve()):
             raise ValueError(f"{path} lies outside the proposal")
@@ -986,9 +1022,6 @@ def propose_one(root: Path, inp: Path, repository: str, base_sha: str, base_ref:
     pull = api(f"{base}/pulls", "POST", {"title": title, "head": branch, "base": base_ref,
                                          "body": (inp / "body.md").read_text(encoding="utf-8"),
                                          "draft": owner_decision})
-    # The gates first: nothing after this may leave the pull request without its checks.
-    for workflow in GATES:
-        api(f"{base}/actions/workflows/{workflow}/dispatches", "POST", {"ref": branch})
     labels = [*LABELS, OWNER_DECISION_LABEL] if owner_decision else list(LABELS)
     api(f"{base}/issues/{pull['number']}/labels", "POST", {"labels": labels})
     api(f"{base}/issues/{pull['number']}/assignees", "POST", {"assignees": [owner]})

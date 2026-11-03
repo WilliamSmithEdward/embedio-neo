@@ -2,9 +2,10 @@ name: Update .NET SDK
 
 # Each Monday, and on demand, proposes the newest .NET SDK patch in the feature
 # band global.json pins, together with every pin that follows it, in one pull
-# request against the branch the workflow ran on. In separate pull requests it
-# proposes the newest workload set for that SDK patch and moves pinned SDK
-# container images to the SDK global.json names. scripts/update_dotnet_sdk.py
+# request against the branch the workflow ran on, pinned SDK container images
+# included. In separate pull requests it proposes the newest workload set for
+# that SDK patch and moves an SDK image that still lags global.json.
+# scripts/update_dotnet_sdk.py
 # has the rules: a seven-day cooldown unless the move brings a runtime Microsoft
 # marks as a security release, downloads checked against the SHA-512 Microsoft's
 # releases.json or nuget.org's catalog records, no feature-band moves, and
@@ -13,10 +14,9 @@ name: Update .NET SDK
 # Two jobs, so the downloaded SDK and the restore only ever run without write
 # access: `prepare` works out the move with a read-only token, `propose` checks
 # the proposal against the commit the workflow ran on and commits it through
-# the GitHub API. No checkout keeps credentials. A pull request opened with the
-# workflow's own token starts no workflows, so `propose` starts CI, Security and
-# Malware scan on the new branch. The repository setting "Allow GitHub Actions
-# to create and approve pull requests" must stay on for the pull request.
+# the GitHub API with the Repo Bot App's token, so the pull request's checks run
+# without a manual approval. No checkout keeps credentials. See YARA_APP.md in
+# repo-standards for the App.
 
 on:
   schedule:
@@ -76,9 +76,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      contents: write # commits the proposal through the git data API
-      pull-requests: write # opens, labels and assigns the pull request
-      actions: write # starts CI, Security and Malware scan on the new branch
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,7 +91,16 @@ jobs:
           name: dotnet-sdk-proposal
           path: ${{ runner.temp }}/proposal
 
+      - name: Create a token for this repository
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.YARA_APP_CLIENT_ID }}
+          private-key: ${{ secrets.YARA_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Propose the update
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: python scripts/update_dotnet_sdk.py propose --in "$RUNNER_TEMP/proposal"
