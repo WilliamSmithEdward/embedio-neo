@@ -17,7 +17,7 @@ requests, each moving its pins together:
   packs, so it moves on its own, deliberately, rather than with every SDK patch.
   A set that moves the platform of the Apple packs the MAUI apps build with waits
   until the macos-26 image lists an Xcode new enough for them. It then also moves
-  the Xcode the macOS jobs select, the iOS simulator and the Apple lock targets.
+  the Xcode the macOS jobs select and the Apple lock targets.
 - An SDK image move: a Dockerfile pinning `mcr.microsoft.com/dotnet/sdk` by
   digest that still lags the SDK global.json pins, when no SDK move is due.
 
@@ -140,8 +140,6 @@ XCODE_PIN = re.compile(r"/Applications/Xcode_(\d+(?:\.\d+)*)\.app")
 # A row of the README's Xcode table: version, build, app, aliases. Version 27.0 can live in Xcode_27.app, and a release
 # candidate can show a plain version, so its app is what gives it away: Xcode_27.2_Release_Candidate.app does not match.
 XCODE_ROW = re.compile(r"\|\s*(\d+(?:\.\d+)+)(?: \(default\))?\s*\|\s*\w+\s*\|\s*/Applications/Xcode_(\d+(?:\.\d+)*)\.app\s*\|.*")
-IOS_RUNTIME = re.compile(r"\biOS-(\d+-\d+)\b")
-IOS_RUNTIME_FILE = "scripts/run_maui_https_smoke.py"
 SDK_IMAGE_COMMENT = re.compile(r"^# mcr\.microsoft\.com/dotnet/sdk:(\S+) \(runtime (\S+), ([^)]+)\)\.$")
 SDK_IMAGE_FROM = re.compile(r"^FROM mcr\.microsoft\.com/dotnet/sdk@(sha256:[0-9a-f]{64})$")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
@@ -754,7 +752,7 @@ def workload_move_files(root: Path, old_set: str, new_set: str, old_xcode: str |
                         targets: dict[str, list[str]]) -> dict[str, str]:
     """Every file a workload set move changes, with its new text."""
     changed = {}
-    for path in tracked(root, *WORKLOAD_PIN_FILES, IOS_RUNTIME_FILE, *sorted(MAUI_LOCKS)):
+    for path in tracked(root, *WORKLOAD_PIN_FILES, *sorted(MAUI_LOCKS)):
         old_text = text = read(root / path)
         if path in MAUI_LOCKS:
             text = move_lock_targets(text, targets)
@@ -762,9 +760,6 @@ def workload_move_files(root: Path, old_set: str, new_set: str, old_xcode: str |
             text = rewrite_lines(text, WORKLOAD_INSTALL, 1, old_set, new_set)[0]
             if old_xcode and new_xcode:
                 text = rewrite_lines(text, XCODE_PIN, 1, old_xcode, new_xcode)[0]
-            if path == IOS_RUNTIME_FILE and "ios" in targets:
-                before, after = (platform.replace(".", "-") for platform in targets["ios"])
-                text = rewrite_lines(text, IOS_RUNTIME, 1, before, after)[0]
         if text != old_text:
             changed[path] = text
     return changed
@@ -792,7 +787,7 @@ def workloads_body(old_set: str, move: dict[str, Any]) -> str:
         lines.append(f"- The macOS jobs move from Xcode {move['old_xcode']} to {move['xcode']}, the oldest stable Xcode "
                      f"`{MACOS_IMAGE}` lists for these packs.")
     if move.get("targets"):
-        lines.append("- The Apple lock targets and the iOS simulator follow: "
+        lines.append("- The Apple lock targets follow: "
                      + ", ".join(f"{target} {old} -> {new}" for target, (old, new) in sorted(move["targets"].items())) + ".")
     lines += [
         "",
@@ -806,11 +801,11 @@ def workloads_body(old_set: str, move: dict[str, Any]) -> str:
         lines.append(f"| {name} | {old} | {new} |" if old == new else f"| **{name}** | {old} | **{new}** |")
     lines += [
         "",
-        "Moved: each `dotnet workload install ... --version`, and with a new Apple platform the Xcode, the iOS "
-        "simulator and the Apple lock targets. If the new packs add or move a package, the MAUI jobs' locked "
-        "restores say so, and `maui-https.yml` with `update-locks` regenerates those locks. Android packs can need a "
-        "newer Android SDK; the MAUI jobs check that too. iOS runs only on demand: "
-        "`gh workflow run maui-https.yml --ref <branch>` includes it.",
+        "Moved: each `dotnet workload install ... --version`, and with a new Apple platform the Xcode and the Apple "
+        "lock targets. If the new packs add or move a package, the MAUI jobs' locked restores say so, and "
+        "`maui-https.yml` with `update-locks` regenerates those locks. If they raise the minimum OS, the Mac Catalyst "
+        "build says so. Android packs can need a newer Android SDK; the MAUI jobs check that too. iOS runs only on "
+        "demand: `gh workflow run maui-https.yml --ref <branch>` includes it.",
         "",
         CHECKS_NOTE,
     ]

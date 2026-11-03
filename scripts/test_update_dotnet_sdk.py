@@ -16,6 +16,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import maui_https_probe  # noqa: E402
 import update_dotnet_sdk as sdk  # noqa: E402
 
 NOW = dt.datetime(2026, 10, 20, 12, tzinfo=dt.timezone.utc)
@@ -475,9 +476,8 @@ class WorkflowTests(unittest.TestCase):
         matrix = (self.WORKFLOWS / "maui-https.yml").read_text(encoding="utf-8")
         self.assertEqual(set(re.findall(r'"platform":"(?:ios|maccatalyst)","os":"([^"]+)"', matrix)), {sdk.MACOS_IMAGE})
 
-    def test_the_pins_a_platform_move_changes_are_all_readable_here(self):
+    def test_the_apple_locks_a_platform_move_renames_are_all_readable_here(self):
         repository = self.WORKFLOWS.parent.parent
-        self.assertRegex(sdk.read(repository / sdk.IOS_RUNTIME_FILE), sdk.IOS_RUNTIME)
         for name in ("MacCatalystSmoke/packages", "MauiHttpsSmoke/ios.packages", "MauiHttpsSmoke/maccatalyst.packages"):
             with self.subTest(name=name):
                 self.assertIn(f"test/EmbedIO.{name}.lock.json", sdk.MAUI_LOCKS)
@@ -722,17 +722,48 @@ class ProposalTests(unittest.TestCase):
         return Mock(side_effect=respond)
 
 
+class IosSimulatorTests(unittest.TestCase):
+    IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16"
+
+    @staticmethod
+    def runtime(version, hosts=("iPhone-16",), platform="iOS", available=True):
+        return {"platform": platform, "version": version, "isAvailable": available,
+                "identifier": f"com.apple.CoreSimulator.SimRuntime.{platform}-{version.replace('.', '-')}",
+                "supportedDeviceTypes": [{"identifier": f"com.apple.CoreSimulator.SimDeviceType.{host}"} for host in hosts]}
+
+    def newest(self, *runtimes):
+        return maui_https_probe.newest_ios_runtime({"runtimes": list(runtimes)}, self.IPHONE).rsplit(".", 1)[1]
+
+    def test_a_runtime_that_cannot_host_the_device_is_passed_over(self):
+        # The xcode-27 image, 2026-11-03: creating an iPhone 16 on iOS 27.1 fails with "Incompatible device".
+        self.assertEqual(self.newest(self.runtime("27.0"), self.runtime("27.1", hosts=("iPhone-Duo",))), "iOS-27-0")
+
+    def test_versions_compare_as_numbers(self):
+        self.assertEqual(self.newest(self.runtime("26.5"), self.runtime("26.10"), self.runtime("26.4.1")), "iOS-26-10")
+
+    def test_other_platforms_and_unavailable_runtimes_do_not_count(self):
+        self.assertEqual(self.newest(self.runtime("26.5"), self.runtime("27.0", platform="tvOS"),
+                                     self.runtime("27.1", available=False)), "iOS-26-5")
+
+    def test_no_usable_runtime_says_so(self):
+        with self.assertRaisesRegex(RuntimeError, "iPhone-16"):
+            self.newest(self.runtime("27.1", hosts=("iPhone-Duo",)))
+
+    def test_the_smoke_script_pins_no_simulator(self):
+        text = sdk.read(Path(__file__).resolve().parent / "run_maui_https_smoke.py")
+        self.assertIn("newest_ios_runtime(", text)
+        self.assertNotRegex(text, r"iOS-\d")
+
+
 class AppleMoveTests(unittest.TestCase):
     """A workload set move that reaches a new Apple platform, prepared and then checked as the propose job does."""
     CI = "scripts/maui_https_ci.ps1"
-    SMOKE = sdk.IOS_RUNTIME_FILE
     IOS = "test/EmbedIO.MauiHttpsSmoke/ios.packages.lock.json"
     CATALYST = "test/EmbedIO.MacCatalystSmoke/packages.lock.json"
     ANDROID = "test/EmbedIO.AndroidSmoke/packages.lock.json"
     BASE = {
         CI: "$xcode = '/Applications/Xcode_26.6.app/Contents/Developer'\r\n"
             "dotnet workload install $env:W --version 10.0.401\r\n",
-        SMOKE: "invoke('com.apple.CoreSimulator.SimRuntime.iOS-26-5')\r\nfinal['ios_runtime'] = 'iOS-26-5'\r\n",
         IOS: '{"dependencies": {"net10.0-ios26.5": {}, "net10.0-ios26.5/iossimulator-arm64": {}}}\r\n',
         CATALYST: '{"dependencies": {"net10.0-maccatalyst26.5": {}, "net10.0-maccatalyst26.5/maccatalyst-arm64": {}}}\r\n',
         ANDROID: '{"dependencies": {"net10.0-android36.0": {}}}\r\n',
@@ -759,10 +790,9 @@ class AppleMoveTests(unittest.TestCase):
     def test_the_whole_move_passes_the_propose_job_checks(self):
         self.assertTrue(self.prepare()[0])
         proposal, files = sdk.check_proposal(self.root, self.out)
-        self.assertEqual(sorted(files), sorted([self.CI, self.SMOKE, self.IOS, self.CATALYST]))
+        self.assertEqual(sorted(files), sorted([self.CI, self.IOS, self.CATALYST]))
         self.assertEqual((proposal["old_xcode"], proposal["new_xcode"]), ("26.6", "27.1"))
         self.assertEqual(self.proposed(self.CI), self.BASE[self.CI].replace("Xcode_26.6", "Xcode_27.1").replace("10.0.401", "10.0.402"))
-        self.assertEqual(self.proposed(self.SMOKE), self.BASE[self.SMOKE].replace("iOS-26-5", "iOS-27-1"))
         self.assertEqual(self.proposed(self.IOS), self.BASE[self.IOS].replace("ios26.5", "ios27.1"))
         self.assertEqual(self.proposed(self.CATALYST), self.BASE[self.CATALYST].replace("maccatalyst26.5", "maccatalyst27.0"))
         body = (self.out / "body.md").read_text(encoding="utf-8")

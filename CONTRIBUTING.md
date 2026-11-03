@@ -79,8 +79,8 @@ newest workload set for the pinned SDK patch (the set decides the mobile apps'
 Mono runtime and their Apple and Android packs), and any SDK image that still
 lags `global.json`. A set whose Apple packs need an Xcode the `macos-26` image
 does not list yet waits until it does, and its pull request then also moves the
-Xcode, the iOS simulator and the Apple lock targets. Workload-set pull requests
-open as drafts labelled `needs owner decision` and wait for the owner.
+Xcode and the Apple lock targets. Workload-set pull requests open as drafts
+labelled `needs owner decision` and wait for the owner.
 It never changes feature band; that is left to a person.
 `dotnet-sdk-canary.yml` builds and tests with the newest SDK each Monday,
 without the pins, as an early warning; it gates nothing. A move by hand follows
