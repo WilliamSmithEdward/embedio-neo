@@ -56,8 +56,8 @@ jobs:
           name: dotnet-sdk-proposal
           path: ${{ runner.temp }}/proposal/
           if-no-files-found: error
-          # The files keep their repository paths, and the workflows sit under
-          # .github, which upload-artifact skips unless told.
+          # The files keep their repository paths, and the image proposal's
+          # Dockerfile sits under .github, which upload-artifact skips unless told.
           include-hidden-files: true
           retention-days: 7
 

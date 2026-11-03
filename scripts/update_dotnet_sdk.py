@@ -6,9 +6,9 @@ requests, each moving its pins together:
 
 - An SDK move: `sdk.version` in global.json, each `<RuntimeFrameworkVersion>`
   naming the old SDK's runtime (the test probes that need an exact runtime),
-  and every packages.lock.json restored again with the new SDK. The MAUI locks need
-  workloads this Linux job does not install, so they take the package moves the
-  other locks show; the MAUI jobs' locked restores then check them.
+  and every packages.lock.json restored again with the new SDK. The MAUI locks
+  need workloads this Linux job does not install, so they take the package moves
+  the other locks show; the MAUI jobs' locked restores then check them.
 - A workload set move: each `dotnet workload install ... --version <set>`. The
   set decides the Mono runtime the MAUI apps run and the Apple and Android SDK
   packs, so it moves on its own, deliberately, rather than with every SDK patch.
