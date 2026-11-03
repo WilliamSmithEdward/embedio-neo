@@ -136,9 +136,10 @@ LOCK_NAME = re.compile(r"([a-z]+\.)?packages\.lock\.json")
 SHA512_HEX = re.compile(r"[0-9a-f]{128}")
 RUNTIME_PIN = re.compile(r"<RuntimeFrameworkVersion>([^<]*)</RuntimeFrameworkVersion>")
 WORKLOAD_INSTALL = re.compile(r"dotnet workload install\b.*?--version\s+(\S+)")
-XCODE_PIN = re.compile(r"/Applications/Xcode_(\d+(?:\.\d+)+)\.app")
-# A row of the README's Xcode table. A beta or release candidate names itself in both columns, so it does not match.
-XCODE_ROW = re.compile(r"\|\s*(\d+(?:\.\d+)+)(?: \(default\))?\s*\|\s*\w+\s*\|\s*/Applications/Xcode_\1\.app\s*\|.*")
+XCODE_PIN = re.compile(r"/Applications/Xcode_(\d+(?:\.\d+)*)\.app")
+# A row of the README's Xcode table: version, build, app, aliases. Version 27.0 can live in Xcode_27.app, and a release
+# candidate can show a plain version, so its app is what gives it away: Xcode_27.2_Release_Candidate.app does not match.
+XCODE_ROW = re.compile(r"\|\s*(\d+(?:\.\d+)+)(?: \(default\))?\s*\|\s*\w+\s*\|\s*/Applications/Xcode_(\d+(?:\.\d+)*)\.app\s*\|.*")
 IOS_RUNTIME = re.compile(r"\biOS-(\d+-\d+)\b")
 IOS_RUNTIME_FILE = "scripts/run_maui_https_smoke.py"
 SDK_IMAGE_COMMENT = re.compile(r"^# mcr\.microsoft\.com/dotnet/sdk:(\S+) \(runtime (\S+), ([^)]+)\)\.$")
@@ -533,12 +534,15 @@ def xcode_pin(root: Path) -> str | None:
 
 
 def xcode_key(xcode: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in xcode.split("."))
+    """Comparable across spellings: Xcode_27.app is 27.0 is 27.0.0."""
+    parts = [int(part) for part in xcode.split(".")]
+    return tuple(parts + [0] * (3 - len(parts)))
 
 
 def runner_xcodes(readme: str) -> list[str]:
-    """The stable Xcode versions a runner image's README lists."""
-    listed = [match.group(1) for line in readme.splitlines() if (match := XCODE_ROW.fullmatch(line.strip()))]
+    """The stable Xcodes a runner image's README lists, each as its app is named."""
+    rows = (XCODE_ROW.fullmatch(line.strip()) for line in readme.splitlines())
+    listed = [row.group(2) for row in rows if row and xcode_key(row.group(1)) == xcode_key(row.group(2))]
     if not listed:
         # Holding every set from here on would look like nothing is due, so stop instead.
         raise ValueError(f"{MACOS_IMAGE_README} lists no Xcode; has its format changed?")

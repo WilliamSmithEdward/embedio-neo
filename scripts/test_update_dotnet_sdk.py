@@ -354,12 +354,28 @@ class WorkloadTests(unittest.TestCase):
             "old_runtime": "10.0.12", "manifests": old, "old_manifests": old}))
 
     def test_the_image_list_keeps_stable_xcodes_only(self):
-        readme = image_readme("26.6 (default)", "26.4.1") + (
-            b"\n| 27.0_beta_3 | 18A1 | /Applications/Xcode_27.0_beta_3.app | |"
-            b"\n| 27.1 RC | 18B5 | /Applications/Xcode_27.1_RC.app | |")
-        self.assertEqual(sdk.runner_xcodes(readme.decode()), ["26.6", "26.4.1"])
+        # The rows of actions/runner-images xcode-27-arm64-Readme.md on 2026-11-03, whose 27.2 is a release candidate.
+        readme = "\n".join([
+            "| 27.2           | 27B48   | /Applications/Xcode_27.2_Release_Candidate.app | /Applications/Xcode_27.2.0.app |",
+            "| 27.1 (default) | 27A9275 | /Applications/Xcode_27.1.app                   | /Applications/Xcode.app |",
+            "| 27.0           | 27A266a | /Applications/Xcode_27.app                     | /Applications/Xcode_27.0.0.app |",
+            "| 26.4.1         | 17E202  | /Applications/Xcode_26.4.1.app | /Applications/Xcode_26.4.app |",
+            "| 27.3_beta_1    | 27C1    | /Applications/Xcode_27.3_beta_1.app | |",
+            "| 27.4           | 27D1    | /Applications/Xcode_27.3.app | |",
+        ])
+        self.assertEqual(sdk.runner_xcodes(readme), ["27.1", "27", "26.4.1"])
         with self.assertRaisesRegex(ValueError, "lists no Xcode"):
             sdk.runner_xcodes("### Xcode\n")
+
+    def test_an_xcode_named_without_its_minor_compares_as_that_version(self):
+        self.assertEqual(sdk.xcode_key("27"), sdk.xcode_key("27.0"))
+        self.assertLess(sdk.xcode_key("27"), sdk.xcode_key("27.0.1"))
+        self.assertLess(sdk.xcode_key("26.6"), sdk.xcode_key("27"))
+        feed = Feed({"10.0.401": ("10.0.112", "2026-09-08T21:35:33Z"),
+                     "10.0.402": ("10.0.113", "2026-10-13T00:00:00Z", "27.0.10722")})
+        feed.bytes[sdk.MACOS_IMAGE_README] = (b"| 27.1 | 27A9275 | /Applications/Xcode_27.1.app | |\n"
+                                              b"| 27.0 | 27A266a | /Applications/Xcode_27.app | |\n")
+        self.assertEqual(self.choose_for(feed)[0]["xcode"], "27")
 
     def apple_feed(self, *image):
         feed = Feed({"10.0.401": ("10.0.112", "2026-09-08T21:35:33Z"),
