@@ -3,7 +3,7 @@ param([ValidateSet('install', 'build', 'run')][string]$Stage)
 $ErrorActionPreference = 'Stop'
 switch ($Stage) {
     'install' {
-        dotnet workload install $env:SMOKE_WORKLOAD --version 10.0.401
+        dotnet workload install $env:SMOKE_WORKLOAD --version 10.0.402.1
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     'build' {
