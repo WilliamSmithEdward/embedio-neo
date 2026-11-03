@@ -1,0 +1,13 @@
+<Project>
+
+  <Import Project="../../../Directory.Packages.props" />
+
+  <ItemGroup>
+    <!-- This host forces EmbedIO's netstandard2.0 asset, which references the async-interface
+         package at the version System.Text.Json requires, so it needs that package's forwarding
+         assembly at the same version. Dependabot does not see this project, so the version comes
+         from the central System.Text.Json entry and moves with it. -->
+    <PackageVersion Include="Microsoft.Bcl.AsyncInterfaces" Version="@(PackageVersion->WithMetadataValue('Identity', 'System.Text.Json')->Metadata('Version'))" />
+  </ItemGroup>
+
+</Project>

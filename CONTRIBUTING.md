@@ -111,7 +111,12 @@ to verified commit SHAs when changing workflows. SDK, test-runtime, and CI
 modernization should be reviewed separately from library behavior changes.
 Commit every project's `packages.lock.json`. When deliberately updating a package,
 run `dotnet restore EmbedIO.sln --force-evaluate`, inspect the lock-file changes
-for every target, and verify a subsequent locked restore succeeds.
+for every target, and verify a subsequent locked restore succeeds. That restore also
+rebuilds the locks of the projects outside the solution (`Directory.Solution.targets`
+runs `scripts/update_dotnet_sdk.py relock`, which needs Python). The locks of the MAUI
+apps need workloads to restore, so they take the package moves the other locks show,
+and the MAUI jobs' locked restores check them. A package that only a MAUI app uses
+has no other lock to copy from: restore that app with its workload instead.
 
 Tests use NUnit 5, NUnit3TestAdapter's Microsoft.Testing.Platform integration,
 and NUnit.Analyzers. `global.json` selects native MTP mode. Use `--project` to
