@@ -374,6 +374,13 @@ class WorkflowTests(unittest.TestCase):
                 self.assertNotRegex(text, r"(?m)^\s*dotnet-version:\s*\d+\.\d+\.\d+\s*$")
                 self.assertNotRegex(text, sdk.WORKLOAD_INSTALL)
 
+    def test_the_repo_bot_opens_the_pull_requests(self):
+        # A pull request opened with the workflow's own token waits for approval and gets no normal CI.
+        text = (self.WORKFLOWS / "update-dotnet-sdk.yml").read_text(encoding="utf-8")
+        self.assertIn("GH_TOKEN: ${{ steps.app-token.outputs.token }}", text)
+        self.assertNotIn("github.token", text)
+        self.assertNotRegex(text, r"(?m)^\s*(contents|pull-requests|actions): write")
+
     def test_the_proposal_artifact_keeps_the_files_under_github(self):
         text = (self.WORKFLOWS / "update-dotnet-sdk.yml").read_text(encoding="utf-8")
         step = text[text.index("name: dotnet-sdk-proposal"):]
@@ -383,9 +390,32 @@ class WorkflowTests(unittest.TestCase):
 class ImageTests(unittest.TestCase):
     def test_reads_and_moves_the_pinned_sdk_image(self):
         self.assertEqual(sdk.image_tags(DOCKERFILE), ["10.0.401"])
-        moved = sdk.rewrite_image(DOCKERFILE, "10.0.402", "10.0.13", NEW_DIGEST)
+        moved = sdk.rewrite_image(DOCKERFILE, "10.0.402", "10.0.13", {"10.0.402": NEW_DIGEST})
         self.assertEqual(moved, DOCKERFILE.replace("sdk:10.0.401 (runtime 10.0.12,", "sdk:10.0.402 (runtime 10.0.13,")
                          .replace("sha256:" + "e" * 64, NEW_DIGEST))
+
+    def test_an_image_keeps_its_suffix(self):
+        text = ("# mcr.microsoft.com/dotnet/sdk:10.0.401-alpine3.24-aot (runtime 10.0.12, Alpine 3.24).\n"
+                "FROM mcr.microsoft.com/dotnet/sdk@sha256:" + "e" * 64 + "\n")
+        self.assertEqual(sdk.image_tags(text), ["10.0.401-alpine3.24-aot"])
+        self.assertEqual(sdk.image_tag("10.0.401", "10.0.402"), "10.0.402")
+        moved = sdk.rewrite_image(text, "10.0.402", "10.0.13", {"10.0.402-alpine3.24-aot": NEW_DIGEST})
+        self.assertEqual(moved, text.replace("10.0.401-alpine3.24-aot (runtime 10.0.12",
+                                             "10.0.402-alpine3.24-aot (runtime 10.0.13")
+                         .replace("sha256:" + "e" * 64, NEW_DIGEST))
+
+    def test_the_musl_image_has_the_linker_its_aot_publish_needs(self):
+        repository = Path(__file__).resolve().parent.parent
+        text = sdk.read(repository / "native/EmbedIO.Quic.Tls/Dockerfile.musl-validation")
+        self.assertEqual([tag.rpartition("-")[2] for tag in sdk.image_tags(text)], ["aot"])
+
+    def test_every_sdk_image_here_is_a_pin_the_updater_moves(self):
+        repository = Path(__file__).resolve().parent.parent
+        for path in sdk.tracked(repository, "*Dockerfile*"):
+            text = sdk.read(repository / path)
+            images = [line for line in text.splitlines() if line.startswith("FROM") and "dotnet/sdk" in line]
+            with self.subTest(path=path):
+                self.assertEqual(len(sdk.image_tags(text)), len(images))
 
     def test_follows_global_json_once_mcr_has_the_tag(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -398,8 +428,9 @@ class ImageTests(unittest.TestCase):
             changed, _ = sdk.prepare_image(root, out, "1" * 40, "main", RELEASES, lambda tag: NEW_DIGEST)
             self.assertTrue(changed)
             proposal, files_ = sdk.check_proposal(root, out)
-            self.assertEqual((proposal["new_sdk"], proposal["digest"], list(files_)), ("10.0.402", NEW_DIGEST, ["docker/Dockerfile"]))
-            (out / "files/docker/Dockerfile").write_bytes(sdk.rewrite_image(DOCKERFILE, "10.0.402", "10.0.13", NEW_DIGEST)
+            self.assertEqual((proposal["new_sdk"], proposal["digests"], list(files_)),
+                             ("10.0.402", {"10.0.402": NEW_DIGEST}, ["docker/Dockerfile"]))
+            (out / "files/docker/Dockerfile").write_bytes(sdk.rewrite_image(DOCKERFILE, "10.0.402", "10.0.13", {"10.0.402": NEW_DIGEST})
                                                           .replace("apt-get update", "curl evil").encode())
             with self.assertRaises(ValueError):
                 sdk.check_proposal(root, out)
@@ -433,11 +464,12 @@ class ProposalTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def write_sdk(self, changed):
+    def write_sdk(self, changed, digests=None):
         title, branch = sdk.sdk_title_and_branch("10.0.402", "10.0.13", "main")
         sdk.write_proposal(self.out / "sdk", {"kind": "sdk", "base_sha": "1" * 40, "base_ref": "main", "title": title,
                                               "branch": branch, "old_sdk": "10.0.401", "new_sdk": "10.0.402",
-                                              "old_runtime": "10.0.12", "new_runtime": "10.0.13"}, changed, "body\n")
+                                              "old_runtime": "10.0.12", "new_runtime": "10.0.13",
+                                              "digests": digests or {}}, changed, "body\n")
 
     def write_workloads(self, changed, new_set="10.0.401.1"):
         title, branch = sdk.workloads_title_and_branch(new_set, "10.0.12", "main")
@@ -496,7 +528,23 @@ class ProposalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "is a workflow"):
             sdk.check_proposal(self.root, self.out / "workloads")
 
-    def test_propose_commits_each_move_through_the_api_and_starts_the_gates(self):
+    def test_an_sdk_move_carries_every_pinned_image(self):
+        git_repo(self.root, {"docker/Dockerfile": DOCKERFILE})
+        digests = {"10.0.402": NEW_DIGEST}
+        moved = sdk.rewrite_image(DOCKERFILE, "10.0.402", "10.0.13", digests)
+        files = {**self.sdk_files, "docker/Dockerfile": moved}
+        self.write_sdk(files, digests)
+        self.assertIn("docker/Dockerfile", sdk.check_proposal(self.root, self.out / "sdk")[1])
+        for bad_files, bad_digests in ((self.sdk_files, digests),
+                                       (files, {}),
+                                       (files, {"10.0.402": "sha256:short"}),
+                                       ({**files, "docker/Dockerfile": moved.replace("apt-get update", "curl evil")}, digests)):
+            with self.subTest(digests=bad_digests, moved="curl evil" in bad_files.get("docker/Dockerfile", "")):
+                self.write_sdk(bad_files, bad_digests)
+                with self.assertRaises(ValueError):
+                    sdk.check_proposal(self.root, self.out / "sdk")
+
+    def test_propose_commits_each_move_through_the_api(self):
         self.write_workloads({"scripts/install.ps1":
                               self.BASE["scripts/install.ps1"].replace("10.0.401", "10.0.401.1")})
         api, review = self.api(pulls=[]), Mock()
@@ -504,8 +552,8 @@ class ProposalTests(unittest.TestCase):
         self.assertEqual(urls, ["https://github.com/owner/repo/pull/7", "https://github.com/owner/repo/pull/7"])
         calls = [c.args[0] for c in api.call_args_list]
         self.assertEqual(sum(1 for endpoint in calls if endpoint.endswith("/git/blobs")), len(self.sdk_files) + 1)
-        dispatched = [endpoint for endpoint in calls if endpoint.endswith("/dispatches")]
-        self.assertEqual(dispatched, [f"repos/owner/repo/actions/workflows/{w}/dispatches" for w in sdk.GATES] * 2)
+        # The Repo Bot App has no Actions permission, and its pull requests start their own checks.
+        self.assertEqual([endpoint for endpoint in calls if "/actions/" in endpoint], [])
         heads = [c.args[2]["head"] for c in api.call_args_list if c.args[0] == "repos/owner/repo/pulls"]
         self.assertEqual(heads, ["update-dotnet-sdk/10.0.402", "update-dotnet-workloads/10.0.401.1"])
         self.assertEqual(review.call_count, 2)
@@ -566,6 +614,53 @@ class ProposalTests(unittest.TestCase):
 
 
 class PrepareTests(unittest.TestCase):
+    def test_an_sdk_move_puts_the_images_in_its_proposal(self):
+        pinned = '{\n  "sdk": {\n    "version": "10.0.401",\n    "rollForward": "disable"\n  }\n}\n'
+        real_run = subprocess.run
+
+        def run(command, **kwargs):
+            if command[1] == "--version":
+                return subprocess.CompletedProcess(command, 0, stdout="10.0.402\n")
+            return real_run(command, **kwargs)
+
+        with tempfile.TemporaryDirectory() as temp:
+            root, out = Path(temp) / "repo", Path(temp) / "runner" / "temp" / "sdk"
+            git_repo(root, {"global.json": pinned, "docker/Dockerfile": DOCKERFILE})
+            with patch.object(sdk, "download", return_value=HASH), patch.object(sdk, "extract"), \
+                    patch.object(sdk, "restore_locks", return_value={}), patch.object(sdk, "MAUI_LOCKS", frozenset()), \
+                    patch.object(sdk.subprocess, "run", run):
+                moved, _ = sdk.prepare_sdk(root, out, Path(temp) / "dotnet", "1" * 40, "main", RELEASES, NOW, None,
+                                           "linux-x64", lambda tag: NEW_DIGEST)
+            self.assertTrue(moved)
+            (root / "global.json").write_bytes(pinned.encode("utf-8"))  # the base the propose job checks against
+            _, files_ = sdk.check_proposal(root, out)
+            self.assertEqual(sorted(files_), ["docker/Dockerfile", "global.json"])
+            self.assertIn(NEW_DIGEST.encode(), files_["docker/Dockerfile"])
+            self.assertIn(f"`dotnet/sdk:10.0.402`: `{NEW_DIGEST}`", (out / "body.md").read_text(encoding="utf-8"))
+
+    def test_an_sdk_move_waits_for_every_image_it_needs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            pinned = '{"sdk": {"version": "10.0.401"}}'
+            git_repo(root, {"global.json": pinned, "docker/Dockerfile": DOCKERFILE})
+            changed, notes = sdk.prepare_sdk(root, root / "out", root / "sdk", "1" * 40, "main", RELEASES, NOW, None,
+                                             "linux-x64", lambda tag: None)
+            self.assertFalse(changed)
+            self.assertTrue(any("waits for MCR to publish dotnet/sdk:10.0.402" in note for note in notes), notes)
+            self.assertEqual(sdk.read(root / "global.json"), pinned)
+            self.assertFalse((root / "sdk").exists())
+
+    def test_an_image_gets_its_own_proposal_only_without_an_sdk_move(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            git_repo(root, {"global.json": '{"sdk": {"version": "10.0.402"}}'})
+            feed = Feed({"10.0.402": ("10.0.113", "2026-10-14T00:00:00Z")})
+            for moved, calls in ((True, 0), (False, 1)):
+                with self.subTest(moved=moved), patch.object(sdk, "prepare_sdk", return_value=(moved, [])), \
+                        patch.object(sdk, "prepare_image", return_value=(False, [])) as image:
+                    sdk.prepare(root, root / "out", root / "sdk", "1" * 40, "main", feed.fetch, feed.get, NOW)
+                    self.assertEqual(image.call_count, calls)
+
     def test_current_pins_propose_nothing_and_a_bad_archive_stops_before_use(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
