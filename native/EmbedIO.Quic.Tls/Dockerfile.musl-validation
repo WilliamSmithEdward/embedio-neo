@@ -1,7 +1,7 @@
 # Native hardware is required; the workflow does not use architecture emulation.
 # The -aot image carries the C toolchain that the package consumer's Native AOT publish links with.
-# mcr.microsoft.com/dotnet/sdk:10.0.402-alpine3.24-aot (runtime 10.0.13, Alpine 3.24).
-FROM mcr.microsoft.com/dotnet/sdk@sha256:574e01812ecd2f33a79cb61b0398320abbd0589125b1e0a6fea00806ba630cb4
+# mcr.microsoft.com/dotnet/sdk:10.0.403-alpine3.24-aot (runtime 10.0.14, Alpine 3.24).
+FROM mcr.microsoft.com/dotnet/sdk@sha256:8a339f2175a99aad64cd618450303b8361d565eebbdf8aad95cdf8e6b54ab9d3
 RUN apk add --no-cache python3=3.14.10-r1 py3-pip=26.1.2-r0
 COPY requirements.txt /tmp/quic-validation-requirements.txt
 RUN python3 -m venv /opt/quic-validation && /opt/quic-validation/bin/python -m pip --isolated install --require-hashes --only-binary=:all: -r /tmp/quic-validation-requirements.txt
