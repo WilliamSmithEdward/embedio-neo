@@ -13,8 +13,8 @@ RUN git clone --quiet https://github.com/summerwind/h2spec.git /src \
  && test "$(git -C /src rev-parse HEAD)" = "$H2SPEC_COMMIT" \
  && cd /src && CGO_ENABLED=0 GOFLAGS=-mod=readonly go build -trimpath -o /h2spec ./cmd/h2spec
 
-# mcr.microsoft.com/dotnet/sdk:10.0.401 (runtime 10.0.12, Ubuntu 24.04).
-FROM mcr.microsoft.com/dotnet/sdk@sha256:e70cdb7f80b0348f5cb85f19a8f670fca061f033d57eed12fa003d58b0e06317
+# mcr.microsoft.com/dotnet/sdk:10.0.403 (runtime 10.0.14, Ubuntu 24.04).
+FROM mcr.microsoft.com/dotnet/sdk@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b
 RUN apt-get update \
  && apt-get install --yes --no-install-recommends python3 python3-venv \
  && rm -rf /var/lib/apt/lists/*
