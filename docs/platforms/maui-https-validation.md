@@ -76,12 +76,12 @@ smokes run as separate required jobs.
 
 ## Reproduce CI
 
-The SDK follows `global.json`, the workload set is pinned to 10.0.401 (a
-workload set belongs to a feature band, and an SDK patch keeps its band's set)
-and MAUI Controls to 10.0.110;
-every target has its own committed dependency lock. Runners are Windows 2025,
-Ubuntu 24.04 and macOS 26. Apple uses Xcode 26.6 and the iOS 26.5 simulator;
-Android uses Android 10/API 29.
+The SDK follows `global.json`. `scripts/maui_https_ci.ps1` pins the workload set
+(a workload set belongs to a feature band, and an SDK patch keeps its band's set)
+and the Xcode the Apple jobs select, and `scripts/run_maui_https_smoke.py` pins
+the iOS simulator; the SDK updater moves them together. MAUI Controls is pinned to
+10.0.110, and every target has its own committed dependency lock. Runners are
+Windows 2025, Ubuntu 24.04 and macOS 26. Android uses Android 10/API 29.
 
 ```sh
 gh workflow run maui-https.yml --ref <branch>
