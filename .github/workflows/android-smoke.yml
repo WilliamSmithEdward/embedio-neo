@@ -24,13 +24,16 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.402
+          global-json-file: global.json
           cache: true
           cache-dependency-path: |
             src/**/packages.lock.json
             test/EmbedIO.AndroidSmoke/packages.lock.json
       - name: Install the pinned MAUI Android workload
-        run: dotnet workload install maui-android --version 10.0.401
+        shell: pwsh
+        env:
+          SMOKE_WORKLOAD: maui-android
+        run: ./scripts/maui_https_ci.ps1 install
       - name: Build the test-only Android app
         run: |
           mkdir -p TestResults/android

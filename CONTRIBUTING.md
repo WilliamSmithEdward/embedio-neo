@@ -67,8 +67,10 @@ refuses to work in the checkout until you install the new one.
 
 SDK moves are deliberate and automated. Each Monday `update-dotnet-sdk.yml`
 proposes the newest SDK patch in the pinned feature band as a pull request that
-moves `global.json`, the workflows' `dotnet-version` pins, the test probes'
-`RuntimeFrameworkVersion` pins and the lock files together. It waits out a
+moves `global.json`, the test probes' `RuntimeFrameworkVersion` pins and the
+lock files together. Its proposals never edit a workflow, because the workflow's
+own token may not, so workflows take the SDK from `global.json` and install MAUI
+workloads through `scripts/maui_https_ci.ps1`. It waits out a
 one-week cooldown unless Microsoft marks the release as a security release. In
 separate pull requests it moves the MAUI workload `--version` to the newest
 workload set for the pinned SDK patch (the set decides the mobile apps' Mono

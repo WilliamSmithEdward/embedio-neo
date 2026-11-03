@@ -4,12 +4,11 @@ global.json pins the exact SDK with roll-forward disabled, and other pins follow
 it. update-dotnet-sdk.yml runs this script each week. It can open three pull
 requests, each moving its pins together:
 
-- An SDK move: `sdk.version` in global.json, each workflow line
-  `dotnet-version: <old SDK>`, each `<RuntimeFrameworkVersion>` naming the old
-  SDK's runtime (the test probes that need an exact runtime), and every
-  packages.lock.json restored again with the new SDK. The MAUI locks need
-  workloads this Linux job does not install, so they take the package moves the
-  other locks show; the MAUI jobs' locked restores then check them.
+- An SDK move: `sdk.version` in global.json, each `<RuntimeFrameworkVersion>`
+  naming the old SDK's runtime (the test probes that need an exact runtime),
+  and every packages.lock.json restored again with the new SDK. The MAUI locks
+  need workloads this Linux job does not install, so they take the package moves
+  the other locks show; the MAUI jobs' locked restores then check them.
 - A workload set move: each `dotnet workload install ... --version <set>`. The
   set decides the Mono runtime the MAUI apps run and the Apple and Android SDK
   packs, so it moves on its own, deliberately, rather than with every SDK patch.
@@ -28,9 +27,14 @@ Rules:
 - Each waits out a seven-day cooldown, waived when it brings a runtime that
   Microsoft marks as a security release.
 - Nothing moves back, and a pin moved ahead by hand is kept.
+- No proposal changes a workflow file: GitHub gives a workflow's own token no
+  permission to. Workflows take the SDK from global.json and install workloads
+  through a script, and a proposal naming a workflow is refused.
 - An SDK move may only change versions from the old runtime's to the new
   runtime's in the lock files (the SDK's implicit packages carry the runtime
-  version). Any other lock-file change stops the update for a person.
+  version), and a project's range for a project it references, which follows
+  the version a release commit gave that project and downloads nothing. Any
+  other lock-file change stops the update for a person.
 
 Usage, from the two jobs of update-dotnet-sdk.yml:
 
@@ -98,7 +102,7 @@ MAUI_LOCKS = frozenset({
     "test/EmbedIO.MauiHttpsSmoke/packages.maccatalyst.lock.json",
     "test/EmbedIO.MauiHttpsSmoke/packages.windows.lock.json",
 })
-WORKLOAD_PIN_FILES = (".github/workflows/*.yml", "scripts/*.ps1", "scripts/*.sh")
+WORKLOAD_PIN_FILES = ("scripts/*.ps1", "scripts/*.sh")
 # The required checks. They are started by hand because the pull request is not.
 GATES = ("ci.yml", "security.yml", "malware-scan.yml")
 LABELS = (".NET", "dependencies")
@@ -110,12 +114,12 @@ APPLE_MANIFEST = re.compile(r"Microsoft\.NET\.Sdk\.(iOS|MacCatalyst|macOS|tvOS)"
 STABLE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 LOCK_NAME = re.compile(r"packages(\.[a-z]+)?\.lock\.json")
 SHA512_HEX = re.compile(r"[0-9a-f]{128}")
-DOTNET_VERSION_LINE = re.compile(r"^(\s*dotnet-version:\s*)(\S+)(\s*)$")
 RUNTIME_PIN = re.compile(r"<RuntimeFrameworkVersion>([^<]*)</RuntimeFrameworkVersion>")
 WORKLOAD_INSTALL = re.compile(r"dotnet workload install\b.*?--version\s+(\S+)")
 SDK_IMAGE_COMMENT = re.compile(r"^# mcr\.microsoft\.com/dotnet/sdk:(\S+) \(runtime (\S+), ([^)]+)\)\.$")
 SDK_IMAGE_FROM = re.compile(r"^FROM mcr\.microsoft\.com/dotnet/sdk@(sha256:[0-9a-f]{64})$")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+PROJECT_RANGE = re.compile(r"\[\d+\.\d+\.\d+[\w.-]*, \)")
 
 Api = Callable[..., Any]
 FetchJson = Callable[[str], Any]
@@ -356,6 +360,8 @@ def check_lock_change(path: str, old_text: str, new_text: str, old_runtime: str,
                 continue
             if field == "dependencies" and entry[field].keys() == update[field].keys() and all(
                     entry[field][name] == update[field][name] or moved(entry[field][name], update[field][name])
+                    or (before.get((key[0], name), {}).get("type") == "Project"
+                        and PROJECT_RANGE.fullmatch(update[field][name]))
                     for name in entry[field]):
                 continue
             raise ValueError(f"{path}: {key[1]} ({key[0]}) changes {field} beyond a "
@@ -600,7 +606,7 @@ def sdk_body(old_sdk: str, old_runtime: str, move: dict[str, Any], moves: dict[s
         lines.append(f"- CVEs listed for the release: {', '.join(move['cves'])}.")
     lines += [
         "",
-        "Moved together: `global.json`, each workflow `dotnet-version`, each `RuntimeFrameworkVersion` "
+        "Moved together: `global.json`, each `RuntimeFrameworkVersion` "
         "pin and the lock files. The SDK archive matched the SHA-512 in Microsoft's `releases.json`.",
         "",
     ]
@@ -764,11 +770,6 @@ def prepare_sdk(root: Path, out: Path, sdk_dir: Path, base_sha: str, base_ref: s
     path = root / "global.json"
     write(path, rewrite_global_json(read(path), old_sdk, move["sdk"]))
     changed["global.json"] = read(path)
-    for name in tracked(root, ".github/workflows/*.yml"):
-        text, count = rewrite_lines(read(root / name), DOTNET_VERSION_LINE, 2, old_sdk, move["sdk"])
-        if count:
-            write(root / name, text)
-            changed[name] = text
     for name in tracked(root, "*.csproj", "*.csproj.template"):
         text, count = rewrite_lines(read(root / name), RUNTIME_PIN, 1, old_runtime, move["runtime"])
         if count:
@@ -827,16 +828,12 @@ def check_sdk_proposal(root: Path, proposal: dict[str, Any], files: dict[str, tu
         raise ValueError("the proposal does not move the runtime forward within its channel")
     if (proposal["title"], proposal["branch"]) != sdk_title_and_branch(new_sdk, new_runtime, proposal["base_ref"]):
         raise ValueError("the proposal's title or branch does not match its move")
-    workflows = set(tracked(root, ".github/workflows/*.yml"))
     projects = set(tracked(root, "*.csproj", "*.csproj.template"))
     locks = set(lock_files(root))
     for path, (old_text, new_text) in files.items():
         if path == "global.json":
             if rewrite_global_json(old_text, old_sdk, new_sdk) != new_text:
                 raise ValueError("global.json changes beyond the SDK version")
-        elif path in workflows:
-            if rewrite_lines(old_text, DOTNET_VERSION_LINE, 2, old_sdk, new_sdk)[0] != new_text:
-                raise ValueError(f"{path} changes beyond its dotnet-version pins")
         elif path in projects:
             if rewrite_lines(old_text, RUNTIME_PIN, 1, old_runtime, new_runtime)[0] != new_text:
                 raise ValueError(f"{path} changes beyond its RuntimeFrameworkVersion pin")
@@ -846,7 +843,6 @@ def check_sdk_proposal(root: Path, proposal: dict[str, Any], files: dict[str, tu
             raise ValueError(f"an SDK move does not change {path}")
     # A pin left behind would fail CI, but say so here rather than there.
     expected = {"global.json"}
-    expected |= {p for p in workflows if rewrite_lines(read(root / p), DOTNET_VERSION_LINE, 2, old_sdk, new_sdk)[1]}
     expected |= {p for p in projects if rewrite_lines(read(root / p), RUNTIME_PIN, 1, old_runtime, new_runtime)[1]}
     if missing := sorted(expected - set(files)):
         raise ValueError(f"the proposal leaves pins unmoved in {missing}")
@@ -856,7 +852,7 @@ def check_workloads_proposal(root: Path, proposal: dict[str, Any], files: dict[s
     old_set, new_set = proposal["old_set"], proposal["new_set"]
     current, pinned = workload_pins(root)
     if current != old_set:
-        raise ValueError("the proposal starts from a different workload set than the workflows pin")
+        raise ValueError("the proposal starts from a different workload set than the scripts pin")
     if set_key(new_set) <= set_key(old_set) or set_key(new_set)[:2] != set_key(old_set)[:2] \
             or set_key(new_set)[2] // 100 != set_key(old_set)[2] // 100:
         raise ValueError("the proposal does not move the workload set forward within its feature band")
@@ -898,6 +894,8 @@ def check_proposal(root: Path, inp: Path) -> tuple[dict[str, Any], dict[str, byt
     for path in proposal["files"]:
         if path not in tracked_files:
             raise ValueError(f"{path} is not a tracked file")
+        if path.startswith(".github/workflows/"):
+            raise ValueError(f"{path} is a workflow, which this workflow's own token may not change")
         source = inp / "files" / path
         if not source.resolve().is_relative_to((inp / "files").resolve()):
             raise ValueError(f"{path} lies outside the proposal")
