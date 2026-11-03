@@ -2,6 +2,7 @@
 import base64
 import datetime as dt
 import hashlib
+import importlib.util
 import io
 import json
 import subprocess
@@ -10,7 +11,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_dotnet_sdk as sdk  # noqa: E402
@@ -197,6 +198,82 @@ class LockTests(unittest.TestCase):
         other = moved_lock(content_hash="different==")
         with self.assertRaises(ValueError):
             sdk.package_moves({"a": (render(LOCK), render(moved_lock())), "b": (render(LOCK), render(other))})
+
+
+class RelockTests(unittest.TestCase):
+    MAUI = "test/EmbedIO.AndroidSmoke/packages.lock.json"
+
+    def relocked(self, base_lock, head_lock, restored):
+        """Run relock on a commit holding `head_lock`, on top of one holding `base_lock`; its restore writes `restored`."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            lock = root / "src/Lib/packages.lock.json"
+            git_repo(root, {"src/Lib/packages.lock.json": render(base_lock), self.MAUI: render(LOCK)})
+            for message, text in (("base", render(base_lock)), ("head", render(head_lock))):
+                lock.write_bytes(text.encode("utf-8"))
+                subprocess.run(["git", "-C", str(root), "-c", "core.autocrlf=false", "add", "-A"], check=True)
+                subprocess.run(["git", "-C", str(root), "-c", "user.name=test", "-c", "user.email=test@example.invalid",
+                                "commit", "-q", "--allow-empty", "-m", message], check=True)
+
+            def restore(_root, _sdk, _logs):
+                lock.write_bytes(render(restored).encode("utf-8"))
+
+            with patch.object(sdk, "restore_locks", restore):
+                moves = sdk.relock(root, root / "sdk", root / "logs", "HEAD~1")
+            return moves, json.loads(sdk.read(root / self.MAUI))
+
+    def test_the_maui_locks_take_what_the_restored_locks_moved(self):
+        moves, maui = self.relocked(LOCK, LOCK, moved_lock())
+        self.assertEqual(moves, {"Microsoft.NET.ILLink.Tasks": ("10.0.12", "10.0.13", "new+hash/==")})
+        self.assertEqual(maui, moved_lock())
+
+    def test_a_move_dependabot_already_committed_still_counts(self):
+        moves, maui = self.relocked(LOCK, moved_lock(), moved_lock())
+        self.assertEqual(moves, {"Microsoft.NET.ILLink.Tasks": ("10.0.12", "10.0.13", "new+hash/==")})
+        self.assertEqual(maui, moved_lock())
+
+    def test_nothing_moved_leaves_the_maui_locks_alone(self):
+        moves, maui = self.relocked(LOCK, LOCK, LOCK)
+        self.assertEqual(moves, {})
+        self.assertEqual(maui, LOCK)
+
+    def test_a_package_the_restore_dropped_is_not_a_move(self):
+        dropped = moved_lock()
+        del dropped["dependencies"]["net10.0"]["Other"]
+        moves, _ = self.relocked(LOCK, LOCK, dropped)
+        self.assertEqual(list(moves), ["Microsoft.NET.ILLink.Tasks"])
+
+    def test_a_forced_solution_restore_runs_the_relock(self):
+        repository = Path(__file__).resolve().parent.parent
+        # .gitignore ignores *.targets, so being present in a checkout proves nothing.
+        self.assertEqual(sdk.tracked(repository, "Directory.Solution.targets"), ["Directory.Solution.targets"])
+        self.assertIn("scripts/update_dotnet_sdk.py relock", sdk.read(repository / "Directory.Solution.targets"))
+
+    def test_the_relock_job_can_push_every_lock_file_here(self):
+        repository = Path(__file__).resolve().parent.parent
+        spec = importlib.util.spec_from_file_location("relock", repository / ".github" / "relock.py")
+        relock = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(relock)
+        locks = sdk.lock_files(repository)
+        self.assertTrue(sdk.MAUI_LOCKS.issubset(locks), "a MAUI lock this script names is not tracked")
+        for path in locks:
+            with self.subTest(path=path):
+                self.assertTrue(relock.is_lock(path, "{}"), "relock.py's push job would refuse this name")
+                if path not in sdk.MAUI_LOCKS:
+                    self.assertEqual(len(list((repository / path).parent.glob("*.csproj"))), 1)
+
+    def test_a_lock_target_for_one_runtime_is_declared_by_its_project(self):
+        # The relock job restores on Linux and CI restores some of these on Windows. A runtime only the
+        # Windows SDK infers, such as win-x86 for a net472 exe, leaves the Linux-built lock without that
+        # target, and Windows then refuses the lock with NU1004.
+        repository = Path(__file__).resolve().parent.parent
+        for path in set(sdk.lock_files(repository)) - sdk.MAUI_LOCKS:
+            lock = json.loads(sdk.read(repository / path).lstrip("\ufeff"))
+            project = next((repository / path).parent.glob("*.csproj"))
+            for target in lock["dependencies"]:
+                if "/" in target:
+                    with self.subTest(path=path, target=target):
+                        self.assertIn(target.rsplit("/", 1)[1], sdk.read(project))
 
 
 class WorkloadTests(unittest.TestCase):

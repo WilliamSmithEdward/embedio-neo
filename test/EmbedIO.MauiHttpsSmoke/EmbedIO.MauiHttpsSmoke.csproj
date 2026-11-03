@@ -15,7 +15,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
-    <NuGetLockFilePath>packages.$(SmokePlatform).lock.json</NuGetLockFilePath>
+    <NuGetLockFilePath>$(SmokePlatform).packages.lock.json</NuGetLockFilePath>
     <ApplicationTitle>EmbedIO HTTPS tests</ApplicationTitle>
     <ApplicationId>io.embedioneo.https</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>

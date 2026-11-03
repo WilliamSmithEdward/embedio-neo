@@ -168,6 +168,8 @@ TestResult.xml
 !/src/EmbedIO/Packaging/EmbedIO-Neo.targets
 # Shared opt-in source-build TLS asset hook for the test projects.
 !/test/Shared/QuicNativeAssets.targets
+# Runs the lock rebuild after a forced restore of the solution.
+!/Directory.Solution.targets
 /.vscode
 /_site
 /_api

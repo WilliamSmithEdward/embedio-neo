@@ -68,7 +68,7 @@ jobs:
           cache-dependency-path: |
             src/**/packages.lock.json
             test/EmbedIO.HttpsCertificates/packages.lock.json
-            test/EmbedIO.MauiHttpsSmoke/packages.${{ matrix.platform }}.lock.json
+            test/EmbedIO.MauiHttpsSmoke/${{ matrix.platform }}.packages.lock.json
       - name: Install the pinned workload
         shell: pwsh
         run: ./scripts/maui_https_ci.ps1 install
@@ -99,5 +99,5 @@ jobs:
           path: |
             TestResults/maui-https/${{ matrix.platform }}/
             TestResults/maui-https/emulator.log
-            test/EmbedIO.MauiHttpsSmoke/packages.${{ matrix.platform }}.lock.json
+            test/EmbedIO.MauiHttpsSmoke/${{ matrix.platform }}.packages.lock.json
           if-no-files-found: error

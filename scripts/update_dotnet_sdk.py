@@ -37,6 +37,15 @@ Usage, from the two jobs of update-dotnet-sdk.yml:
     python scripts/update_dotnet_sdk.py prepare --out DIR --sdk-dir DIR
     python scripts/update_dotnet_sdk.py propose --in DIR
 
+A third mode rebuilds every lock file after a package moved, with the SDK on
+PATH. A forced restore of the solution runs it (Directory.Solution.targets),
+which is how the Dependabot relock job reaches the projects outside the
+solution; relock.py's push accepts these files by name, so every lock file's
+name must end in packages.lock.json. Moves are read against $BASE_SHA, the
+commit the relock job starts from, or HEAD:
+
+    python scripts/update_dotnet_sdk.py relock
+
 `prepare` runs with a read-only token. It works out the moves, downloads and
 checks what it uses, rewrites the pins, restores, and writes each proposal's
 changed files and pull request text under DIR. It sets `changed` in
@@ -62,6 +71,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -93,10 +103,10 @@ KINDS = ("sdk", "workloads", "image")
 MAUI_LOCKS = frozenset({
     "test/EmbedIO.AndroidSmoke/packages.lock.json",
     "test/EmbedIO.MacCatalystSmoke/packages.lock.json",
-    "test/EmbedIO.MauiHttpsSmoke/packages.android.lock.json",
-    "test/EmbedIO.MauiHttpsSmoke/packages.ios.lock.json",
-    "test/EmbedIO.MauiHttpsSmoke/packages.maccatalyst.lock.json",
-    "test/EmbedIO.MauiHttpsSmoke/packages.windows.lock.json",
+    "test/EmbedIO.MauiHttpsSmoke/android.packages.lock.json",
+    "test/EmbedIO.MauiHttpsSmoke/ios.packages.lock.json",
+    "test/EmbedIO.MauiHttpsSmoke/maccatalyst.packages.lock.json",
+    "test/EmbedIO.MauiHttpsSmoke/windows.packages.lock.json",
 })
 WORKLOAD_PIN_FILES = (".github/workflows/*.yml", "scripts/*.ps1", "scripts/*.sh")
 # The required checks. They are started by hand because the pull request is not.
@@ -108,7 +118,7 @@ OWNER_DECISION_KINDS = frozenset({"workloads"})
 OWNER_DECISION_LABEL = "needs owner decision"
 APPLE_MANIFEST = re.compile(r"Microsoft\.NET\.Sdk\.(iOS|MacCatalyst|macOS|tvOS)", re.IGNORECASE)
 STABLE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
-LOCK_NAME = re.compile(r"packages(\.[a-z]+)?\.lock\.json")
+LOCK_NAME = re.compile(r"([a-z]+\.)?packages\.lock\.json")
 SHA512_HEX = re.compile(r"[0-9a-f]{128}")
 DOTNET_VERSION_LINE = re.compile(r"^(\s*dotnet-version:\s*)(\S+)(\s*)$")
 RUNTIME_PIN = re.compile(r"<RuntimeFrameworkVersion>([^<]*)</RuntimeFrameworkVersion>")
@@ -368,8 +378,8 @@ def package_moves(changes: dict[str, tuple[str, str]]) -> dict[str, tuple[str, s
     for path, (old_text, new_text) in changes.items():
         before, after = lock_entries(json.loads(old_text.lstrip("﻿"))), lock_entries(json.loads(new_text.lstrip("﻿")))
         for key, entry in before.items():
-            update = after[key]
-            if "resolved" not in entry or entry["resolved"] == update["resolved"]:
+            update = after.get(key, {})
+            if "resolved" not in entry or "resolved" not in update or entry["resolved"] == update["resolved"]:
                 continue
             move = (entry["resolved"], update["resolved"], update["contentHash"])
             if moves.setdefault(key[1], move) != move:
@@ -427,9 +437,26 @@ def restore_locks(root: Path, sdk_dir: Path, logs: Path) -> dict[str, tuple[str,
                                      "--no-http-cache", "-v", "q"], cwd=root, env=dotnet_env(sdk_dir),
                                     stdout=stream, stderr=subprocess.STDOUT, timeout=900)
         if result.returncode != 0:
-            raise RuntimeError(f"restore failed for {path}; see {log}")
+            tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-20:]
+            raise RuntimeError(f"restore failed for {path}; {log} ends:\n" + "\n".join(tail))
     return {path: (old[path], read(root / path)) for path in locks
             if path not in MAUI_LOCKS and read(root / path) != old[path]}
+
+
+def relock(root: Path, sdk_dir: Path, logs: Path, base: str) -> dict[str, tuple[str, str, str]]:
+    """Rebuild every lock file: restore each project, then give the MAUI locks what the rest moved since `base`."""
+    restore_locks(root, sdk_dir, logs)
+    locks = lock_files(root)
+    changes = {}
+    for path in sorted(set(locks) - MAUI_LOCKS):
+        shown = subprocess.run(["git", "-C", str(root), "show", f"{base}:{path}"], capture_output=True, timeout=120)
+        if shown.returncode == 0:  # a new lock has nothing to move from
+            changes[path] = (shown.stdout.decode("utf-8"), read(root / path))
+    moves = package_moves(changes)
+    if moves:
+        for path in MAUI_LOCKS.intersection(locks):
+            write(root / path, mirror(read(root / path), moves))
+    return moves
 
 
 # Workload sets: nuget.org package microsoft.net.workloads.<band> version 10.401.1
@@ -992,13 +1019,21 @@ def report(lines: list[str]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("prepare", "propose"))
+    parser.add_argument("mode", choices=("prepare", "propose", "relock"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--in", dest="inp", type=Path)
     parser.add_argument("--sdk-dir", type=Path)
     parser.add_argument("--archive", type=Path, help="a local SDK archive, still checked against releases.json")
     args = parser.parse_args(argv)
     root = Path.cwd()
+    if args.mode == "relock":
+        dotnet = os.environ.get("DOTNET_HOST_PATH") or shutil.which("dotnet")
+        if dotnet is None:
+            raise ValueError("no dotnet on PATH")
+        moves = relock(root, Path(dotnet).resolve().parent, root / "TestResults" / "relock-logs",
+                       os.environ.get("BASE_SHA", "HEAD"))
+        report([f"Relocked every project; {len(moves)} package(s) moved."])
+        return 0
     if not os.environ.get("GITHUB_REF", "").startswith("refs/heads/"):
         raise ValueError("run this workflow on a branch")
     base_ref = os.environ["GITHUB_REF_NAME"]

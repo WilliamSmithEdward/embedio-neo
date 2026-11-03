@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- The smoke apps, probes, fuzzing and benchmarks stay out of EmbedIO.sln, but their locked
+       restores pin the same packages. A forced restore of the solution, which is how a person and
+       the Dependabot relock job (.github/relock.py) rebuild the locks, therefore rebuilds theirs
+       too. Their restores name a project, not the solution, so this target does not run again. -->
+  <Target Name="RelockOutsideTheSolution" AfterTargets="Restore" Condition="'$(RestoreForceEvaluate)' == 'true'">
+    <Exec Command="python scripts/update_dotnet_sdk.py relock" Condition="'$(OS)' == 'Windows_NT'" WorkingDirectory="$(MSBuildThisFileDirectory)" />
+    <Exec Command="python3 scripts/update_dotnet_sdk.py relock" Condition="'$(OS)' != 'Windows_NT'" WorkingDirectory="$(MSBuildThisFileDirectory)" />
+  </Target>
+
+</Project>
