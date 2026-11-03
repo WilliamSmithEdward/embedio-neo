@@ -394,14 +394,20 @@ class ImageTests(unittest.TestCase):
         self.assertEqual(moved, DOCKERFILE.replace("sdk:10.0.401 (runtime 10.0.12,", "sdk:10.0.402 (runtime 10.0.13,")
                          .replace("sha256:" + "e" * 64, NEW_DIGEST))
 
-    def test_an_os_suffix_stays_with_its_image(self):
-        text = ("# mcr.microsoft.com/dotnet/sdk:10.0.401-alpine3.24 (runtime 10.0.12, Alpine 3.24).\n"
+    def test_an_image_keeps_its_suffix(self):
+        text = ("# mcr.microsoft.com/dotnet/sdk:10.0.401-alpine3.24-aot (runtime 10.0.12, Alpine 3.24).\n"
                 "FROM mcr.microsoft.com/dotnet/sdk@sha256:" + "e" * 64 + "\n")
-        self.assertEqual(sdk.image_tags(text), ["10.0.401-alpine3.24"])
+        self.assertEqual(sdk.image_tags(text), ["10.0.401-alpine3.24-aot"])
         self.assertEqual(sdk.image_tag("10.0.401", "10.0.402"), "10.0.402")
-        moved = sdk.rewrite_image(text, "10.0.402", "10.0.13", {"10.0.402-alpine3.24": NEW_DIGEST})
-        self.assertEqual(moved, text.replace("10.0.401-alpine3.24 (runtime 10.0.12", "10.0.402-alpine3.24 (runtime 10.0.13")
+        moved = sdk.rewrite_image(text, "10.0.402", "10.0.13", {"10.0.402-alpine3.24-aot": NEW_DIGEST})
+        self.assertEqual(moved, text.replace("10.0.401-alpine3.24-aot (runtime 10.0.12",
+                                             "10.0.402-alpine3.24-aot (runtime 10.0.13")
                          .replace("sha256:" + "e" * 64, NEW_DIGEST))
+
+    def test_the_musl_image_has_the_linker_its_aot_publish_needs(self):
+        repository = Path(__file__).resolve().parent.parent
+        text = sdk.read(repository / "native/EmbedIO.Quic.Tls/Dockerfile.musl-validation")
+        self.assertEqual([tag.rpartition("-")[2] for tag in sdk.image_tags(text)], ["aot"])
 
     def test_every_sdk_image_here_is_a_pin_the_updater_moves(self):
         repository = Path(__file__).resolve().parent.parent

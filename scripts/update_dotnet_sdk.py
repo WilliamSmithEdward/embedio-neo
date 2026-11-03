@@ -587,12 +587,12 @@ def image_pins(root: Path) -> dict[str, list[str]]:
 
 
 def image_tag(tag: str, sdk: str) -> str:
-    """`tag` for `sdk`, keeping an OS suffix such as -alpine3.24."""
+    """`tag` for `sdk`, keeping a suffix such as -alpine3.24-aot."""
     return sdk + tag[len(tag.partition("-")[0]):]
 
 
 def rewrite_image(text: str, sdk: str, runtime: str, digests: dict[str, str]) -> str:
-    """Point every pinned SDK image in a Dockerfile at `sdk`, keeping its OS and the line endings."""
+    """Point every pinned SDK image in a Dockerfile at `sdk`, keeping its variant and the line endings."""
     lines = text.splitlines(keepends=True)
     for index in range(len(lines) - 1):
         comment = SDK_IMAGE_COMMENT.match(lines[index].rstrip("\r\n"))
