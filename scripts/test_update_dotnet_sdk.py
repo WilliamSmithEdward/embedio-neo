@@ -5,6 +5,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import plistlib
 import re
 import shutil
 import subprocess
@@ -753,6 +754,22 @@ class IosSimulatorTests(unittest.TestCase):
         text = sdk.read(Path(__file__).resolve().parent / "run_maui_https_smoke.py")
         self.assertIn("newest_ios_runtime(", text)
         self.assertNotRegex(text, r"iOS-\d")
+
+
+class AppleAppTests(unittest.TestCase):
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def test_the_apple_apps_adopt_the_scene_lifecycle(self):
+        # Built with the 27 SDK, UIKit stops an app at launch without this, and CI only builds with that SDK after a
+        # workload set moves, so nothing else would say so before that pull request.
+        apps = sorted(self.ROOT.glob("test/*/Platforms/*/Info.plist"))
+        self.assertEqual(len(apps), 3)
+        for info in apps:
+            with self.subTest(app=str(info.relative_to(self.ROOT))):
+                manifest = plistlib.loads(info.read_bytes())["UIApplicationSceneManifest"]
+                scene = manifest["UISceneConfigurations"]["UIWindowSceneSessionRoleApplication"][0]
+                self.assertEqual(scene["UISceneConfigurationName"], "__MAUI_DEFAULT_SCENE_CONFIGURATION__")
+                self.assertIn(f'[Register("{scene["UISceneDelegateClassName"]}")]', sdk.read(info.with_name("Program.cs")))
 
 
 class AppleMoveTests(unittest.TestCase):
