@@ -1,7 +1,13 @@
-param([ValidateSet('install', 'build', 'run')][string]$Stage)
+param([ValidateSet('xcode', 'install', 'build', 'run')][string]$Stage)
 
 $ErrorActionPreference = 'Stop'
 switch ($Stage) {
+    'xcode' {
+        # scripts/update_dotnet_sdk.py moves this with the workload set whose Apple packs need it.
+        $xcode = '/Applications/Xcode_26.6.app/Contents/Developer'
+        if (-not (Test-Path $xcode)) { throw "$xcode is not on this runner image" }
+        "DEVELOPER_DIR=$xcode" >> $env:GITHUB_ENV
+    }
     'install' {
         dotnet workload install $env:SMOKE_WORKLOAD --version 10.0.401
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

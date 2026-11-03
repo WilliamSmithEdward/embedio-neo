@@ -15,6 +15,9 @@ requests, each moving its pins together:
 - A workload set move: each `dotnet workload install ... --version <set>`. The
   set decides the Mono runtime the MAUI apps run and the Apple and Android SDK
   packs, so it moves on its own, deliberately, rather than with every SDK patch.
+  A set that moves the platform of the Apple packs the MAUI apps build with waits
+  until the macos-26 image lists an Xcode new enough for them. It then also moves
+  the Xcode the macOS jobs select and the Apple lock targets.
 - An SDK image move: a Dockerfile pinning `mcr.microsoft.com/dotnet/sdk` by
   digest that still lags the SDK global.json pins, when no SDK move is due.
 
@@ -31,7 +34,7 @@ Rules:
 - Nothing moves back, and a pin moved ahead by hand is kept.
 - No proposal changes a workflow file: the Repo Bot App that opens them has no
   permission to. Workflows take the SDK from global.json and install workloads
-  through a script, and a proposal naming a workflow is refused.
+  and select Xcode through a script, and a proposal naming a workflow is refused.
 - An SDK move may only change versions from the old runtime's to the new
   runtime's in the lock files (the SDK's implicit packages carry the runtime
   version), and a project's range for a project it references, which follows
@@ -103,6 +106,10 @@ WORKLOAD_SET_FILE = "data/microsoft.net.workloads.workloadset.json"
 MONO_TOOLCHAIN = "Microsoft.NET.Workload.Mono.ToolChain.Current"
 MCR_MANIFEST = "https://mcr.microsoft.com/v2/dotnet/sdk/manifests/{tag}"
 MCR_ACCEPT = "application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json"
+# The image the macOS jobs run on, and GitHub's list of what it holds.
+MACOS_IMAGE = "macos-26"
+MACOS_IMAGE_README = ("https://raw.githubusercontent.com/actions/runner-images/main/images/macos/"
+                      "macos-26-arm64-Readme.md")
 COOLDOWN = dt.timedelta(days=7)
 KINDS = ("sdk", "workloads", "image")
 # Lock files whose projects need MAUI workloads to restore.
@@ -121,11 +128,18 @@ LABELS = (".NET", "dependencies")
 OWNER_DECISION_KINDS = frozenset({"workloads"})
 OWNER_DECISION_LABEL = "needs owner decision"
 APPLE_MANIFEST = re.compile(r"Microsoft\.NET\.Sdk\.(iOS|MacCatalyst|macOS|tvOS)", re.IGNORECASE)
+# The packs the MAUI apps build with. They decide the Xcode, and a lock target names their platform.
+APPLE_TARGETS = {"microsoft.net.sdk.ios": "ios", "microsoft.net.sdk.maccatalyst": "maccatalyst"}
+LOCK_TARGET = re.compile(r'"(net\d+\.\d+-)(ios|maccatalyst)(\d+\.\d+)(/[^"]*)?"')
 STABLE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 LOCK_NAME = re.compile(r"([a-z]+\.)?packages\.lock\.json")
 SHA512_HEX = re.compile(r"[0-9a-f]{128}")
 RUNTIME_PIN = re.compile(r"<RuntimeFrameworkVersion>([^<]*)</RuntimeFrameworkVersion>")
 WORKLOAD_INSTALL = re.compile(r"dotnet workload install\b.*?--version\s+(\S+)")
+XCODE_PIN = re.compile(r"/Applications/Xcode_(\d+(?:\.\d+)*)\.app")
+# A row of the README's Xcode table: version, build, app, aliases. Version 27.0 can live in Xcode_27.app, and a release
+# candidate can show a plain version, so its app is what gives it away: Xcode_27.2_Release_Candidate.app does not match.
+XCODE_ROW = re.compile(r"\|\s*(\d+(?:\.\d+)+)(?: \(default\))?\s*\|\s*\w+\s*\|\s*/Applications/Xcode_(\d+(?:\.\d+)*)\.app\s*\|.*")
 SDK_IMAGE_COMMENT = re.compile(r"^# mcr\.microsoft\.com/dotnet/sdk:(\S+) \(runtime (\S+), ([^)]+)\)\.$")
 SDK_IMAGE_FROM = re.compile(r"^FROM mcr\.microsoft\.com/dotnet/sdk@(sha256:[0-9a-f]{64})$")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
@@ -509,6 +523,30 @@ def workload_pins(root: Path) -> tuple[str | None, list[str]]:
     return (versions.pop() if versions else None), files
 
 
+def xcode_pin(root: Path) -> str | None:
+    """The Xcode the macOS jobs select, or None when nothing selects one."""
+    versions = {match.group(1) for path in tracked(root, *WORKLOAD_PIN_FILES) for match in XCODE_PIN.finditer(read(root / path))}
+    if len(versions) > 1:
+        raise ValueError(f"the scripts select {sorted(versions)}, not one Xcode")
+    return versions.pop() if versions else None
+
+
+def xcode_key(xcode: str) -> tuple[int, ...]:
+    """Comparable across spellings: Xcode_27.app is 27.0 is 27.0.0."""
+    parts = [int(part) for part in xcode.split(".")]
+    return tuple(parts + [0] * (3 - len(parts)))
+
+
+def runner_xcodes(readme: str) -> list[str]:
+    """The stable Xcodes a runner image's README lists, each as its app is named."""
+    rows = (XCODE_ROW.fullmatch(line.strip()) for line in readme.splitlines())
+    listed = [row.group(2) for row in rows if row and xcode_key(row.group(1)) == xcode_key(row.group(2))]
+    if not listed:
+        # Holding every set from here on would look like nothing is due, so stop instead.
+        raise ValueError(f"{MACOS_IMAGE_README} lists no Xcode; has its format changed?")
+    return listed
+
+
 def workload_set(package_id: str, workload: str, fetch: FetchJson, get: FetchBytes) -> tuple[dict[str, str], str]:
     """The set's manifest versions and publication time, from a package checked against nuget.org's catalog."""
     package_version = package_from_set(workload)
@@ -529,14 +567,15 @@ def workload_set(package_id: str, workload: str, fetch: FetchJson, get: FetchByt
 
 
 def choose_workloads(current: str, sdk: str, releases: dict[str, Any], fetch: FetchJson, get: FetchBytes,
-                     now: dt.datetime) -> tuple[dict[str, Any] | None, list[str]]:
+                     now: dt.datetime, pinned_xcode: str | None = None) -> tuple[dict[str, Any] | None, list[str]]:
     """The workload set to move to, or None, with notes for the job summary."""
     major, minor, patch = version(sdk)
     package_id = WORKLOAD_PACKAGE.format(major=major, minor=minor, band=patch // 100)
     if set_key(current)[:2] != (major, minor) or set_key(current)[2] // 100 != patch // 100:
         raise ValueError(f"workload set {current} is not in the feature band of SDK {sdk}")
     sets = {s for s in (set_from_package(v, major, minor) for v in fetch(NUGET_INDEX.format(id=package_id))["versions"]) if s}
-    notes = []
+    notes: list[str] = []
+    listed: list[str] = []
     current_manifests, _ = workload_set(package_id, current, fetch, get)
     current_runtime = toolchain_runtime(current_manifests)
     for candidate in sorted(sets, key=set_key, reverse=True):
@@ -552,8 +591,19 @@ def choose_workloads(current: str, sdk: str, releases: dict[str, Any], fetch: Fe
         if not security and now - published_at < COOLDOWN:
             notes.append(f"Workload set {candidate} ({published[:10]}) waits for the seven-day cooldown.")
             continue
+        targets = apple_targets(current_manifests, manifests)
+        needed = max((new for _, new in targets.values()), key=xcode_key, default=None)
+        xcode = pinned_xcode
+        if pinned_xcode and needed and xcode_key(pinned_xcode) < xcode_key(needed):
+            listed = listed or runner_xcodes(get(MACOS_IMAGE_README).decode("utf-8"))
+            xcode = min((x for x in listed if xcode_key(x) >= xcode_key(needed)), key=xcode_key, default=None)
+            if xcode is None:
+                notes.append(f"Workload set {candidate} waits for Xcode {needed} on {MACOS_IMAGE}, which lists up to "
+                             f"{max(listed, key=xcode_key)}.")
+                continue
         return {"set": candidate, "runtime": runtime, "old_runtime": current_runtime, "security": security,
-                "published": published[:10], "manifests": manifests, "old_manifests": current_manifests}, notes
+                "published": published[:10], "manifests": manifests, "old_manifests": current_manifests,
+                "xcode": xcode, "old_xcode": pinned_xcode, "targets": targets}, notes
     return None, notes
 
 
@@ -684,6 +734,37 @@ def apple_platform_moves(old: dict[str, str], new: dict[str, str]) -> list[tuple
             if APPLE_MANIFEST.fullmatch(name) and platform(old.get(name)) != platform(new.get(name))]
 
 
+def apple_targets(old: dict[str, str], new: dict[str, str]) -> dict[str, list[str]]:
+    """The lock targets a set moves, such as ios: [26.5, 27.1]."""
+    return {APPLE_TARGETS[name.casefold()]: [before, after] for name, before, after in apple_platform_moves(old, new)
+            if name.casefold() in APPLE_TARGETS and "-" not in (before, after)}
+
+
+def move_lock_targets(text: str, targets: dict[str, list[str]]) -> str:
+    """A MAUI lock with its Apple targets renamed. A package the new packs add or move still needs a restore on a Mac."""
+    def rename(match: re.Match[str]) -> str:
+        before, after = targets.get(match.group(2), (None, None))
+        return f'"{match.group(1)}{match.group(2)}{after}{match.group(4) or ""}"' if match.group(3) == before else match.group(0)
+    return LOCK_TARGET.sub(rename, text)
+
+
+def workload_move_files(root: Path, old_set: str, new_set: str, old_xcode: str | None, new_xcode: str | None,
+                        targets: dict[str, list[str]]) -> dict[str, str]:
+    """Every file a workload set move changes, with its new text."""
+    changed = {}
+    for path in tracked(root, *WORKLOAD_PIN_FILES, *sorted(MAUI_LOCKS)):
+        old_text = text = read(root / path)
+        if path in MAUI_LOCKS:
+            text = move_lock_targets(text, targets)
+        else:
+            text = rewrite_lines(text, WORKLOAD_INSTALL, 1, old_set, new_set)[0]
+            if old_xcode and new_xcode:
+                text = rewrite_lines(text, XCODE_PIN, 1, old_xcode, new_xcode)[0]
+        if text != old_text:
+            changed[path] = text
+    return changed
+
+
 def workloads_body(old_set: str, move: dict[str, Any]) -> str:
     reason = (f"it brings runtime {move['runtime']}, a security release, so the seven-day cooldown does not apply"
               if move["security"] else "at least seven days old")
@@ -702,6 +783,12 @@ def workloads_body(old_set: str, move: dict[str, Any]) -> str:
     if apple:
         lines.append("- Apple SDK packs change platform version, which usually needs the matching Xcode: "
                      + ", ".join(f"{name} {old} -> {new}" for name, old, new in apple) + ".")
+    if move.get("xcode") != move.get("old_xcode"):
+        lines.append(f"- The macOS jobs move from Xcode {move['old_xcode']} to {move['xcode']}, the oldest stable Xcode "
+                     f"`{MACOS_IMAGE}` lists for these packs.")
+    if move.get("targets"):
+        lines.append("- The Apple lock targets follow: "
+                     + ", ".join(f"{target} {old} -> {new}" for target, (old, new) in sorted(move["targets"].items())) + ".")
     lines += [
         "",
         "The package matched the SHA-512 in nuget.org's catalog. Its manifests:",
@@ -714,8 +801,11 @@ def workloads_body(old_set: str, move: dict[str, Any]) -> str:
         lines.append(f"| {name} | {old} | {new} |" if old == new else f"| **{name}** | {old} | **{new}** |")
     lines += [
         "",
-        "Moved: each `dotnet workload install ... --version`. A new Apple SDK pack can need a newer Xcode "
-        "than the macOS jobs select, and Android packs a newer Android SDK; the MAUI jobs check both.",
+        "Moved: each `dotnet workload install ... --version`, and with a new Apple platform the Xcode and the Apple "
+        "lock targets. If the new packs add or move a package, the MAUI jobs' locked restores say so, and "
+        "`maui-https.yml` with `update-locks` regenerates those locks. If they raise the minimum OS, the Mac Catalyst "
+        "build says so. Android packs can need a newer Android SDK; the MAUI jobs check that too. iOS runs only on "
+        "demand: `gh workflow run maui-https.yml --ref <branch>` includes it.",
         "",
         CHECKS_NOTE,
     ]
@@ -751,17 +841,18 @@ def write_proposal(out: Path, proposal: dict[str, Any], changed: dict[str, str],
 def prepare_workloads(root: Path, out: Path, base_sha: str, base_ref: str, sdk: str, releases: dict[str, Any],
                       fetch: FetchJson, get: FetchBytes, now: dt.datetime) -> tuple[bool, list[str]]:
     """Writes a workload set proposal from the base content; never touches the checkout."""
-    current, files = workload_pins(root)
+    current, _ = workload_pins(root)
     if current is None:
         return False, ["No workload install is pinned."]
-    move, notes = choose_workloads(current, sdk, releases, fetch, get, now)
+    move, notes = choose_workloads(current, sdk, releases, fetch, get, now, xcode_pin(root))
     if move is None:
-        notes.append(f"Workload set {current} is current for SDK {sdk}.")
+        notes.append(f"Workload set {current} stays for now." if notes else f"Workload set {current} is current for SDK {sdk}.")
         return False, notes
-    changed = {path: rewrite_lines(read(root / path), WORKLOAD_INSTALL, 1, current, move["set"])[0] for path in files}
+    changed = workload_move_files(root, current, move["set"], move["old_xcode"], move["xcode"], move["targets"])
     title, branch = workloads_title_and_branch(move["set"], move["runtime"], base_ref)
     write_proposal(out, {"kind": "workloads", "base_sha": base_sha, "base_ref": base_ref, "title": title,
-                         "branch": branch, "old_set": current, "new_set": move["set"], "new_runtime": move["runtime"]},
+                         "branch": branch, "old_set": current, "new_set": move["set"], "new_runtime": move["runtime"],
+                         "old_xcode": move["old_xcode"], "new_xcode": move["xcode"], "targets": move["targets"]},
                    changed, workloads_body(current, move))
     notes.append(f"Proposed workload set {current} -> {move['set']} (Mono runtime {move['old_runtime']} -> "
                  f"{move['runtime']}).")
@@ -914,7 +1005,7 @@ def check_sdk_proposal(root: Path, proposal: dict[str, Any], files: dict[str, tu
 
 def check_workloads_proposal(root: Path, proposal: dict[str, Any], files: dict[str, tuple[str, str]]) -> None:
     old_set, new_set = proposal["old_set"], proposal["new_set"]
-    current, pinned = workload_pins(root)
+    current, _ = workload_pins(root)
     if current != old_set:
         raise ValueError("the proposal starts from a different workload set than the scripts pin")
     if set_key(new_set) <= set_key(old_set) or set_key(new_set)[:2] != set_key(old_set)[:2] \
@@ -924,12 +1015,21 @@ def check_workloads_proposal(root: Path, proposal: dict[str, Any], files: dict[s
     if (proposal["title"], proposal["branch"]) != workloads_title_and_branch(new_set, proposal["new_runtime"],
                                                                              proposal["base_ref"]):
         raise ValueError("the proposal's title or branch does not match its move")
-    for path, (old_text, new_text) in files.items():
-        if path not in pinned:
+    old_xcode, new_xcode, targets = proposal.get("old_xcode"), proposal.get("new_xcode"), proposal.get("targets", {})
+    if new_xcode != old_xcode and not (new_xcode and XCODE_PIN.fullmatch(f"/Applications/Xcode_{new_xcode}.app")
+                                       and xcode_key(new_xcode) > xcode_key(old_xcode or "0")):
+        raise ValueError("the proposal does not move Xcode forward")
+    if not all(len(move) == 2 and all(re.fullmatch(r"\d+\.\d+", platform) for platform in move)
+               for move in targets.values()):
+        raise ValueError("the proposal's Apple targets are malformed")
+    # The expected text comes from the base files, so a value that names nothing there changes nothing.
+    expected = workload_move_files(root, old_set, new_set, old_xcode, new_xcode, targets)
+    for path, (_, new_text) in files.items():
+        if path not in expected:
             raise ValueError(f"a workload set move does not change {path}")
-        if rewrite_lines(old_text, WORKLOAD_INSTALL, 1, old_set, new_set)[0] != new_text:
+        if expected[path] != new_text:
             raise ValueError(f"{path} changes beyond its workload set pins")
-    if missing := sorted(set(pinned) - set(files)):
+    if missing := sorted(set(expected) - set(files)):
         raise ValueError(f"the proposal leaves workload pins unmoved in {missing}")
 
 

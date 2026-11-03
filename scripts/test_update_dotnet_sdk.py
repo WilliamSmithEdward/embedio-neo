@@ -5,6 +5,9 @@ import hashlib
 import importlib.util
 import io
 import json
+import plistlib
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,6 +17,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import maui_https_probe  # noqa: E402
 import update_dotnet_sdk as sdk  # noqa: E402
 
 NOW = dt.datetime(2026, 10, 20, 12, tzinfo=dt.timezone.utc)
@@ -59,12 +63,22 @@ def moved_lock(version="10.0.13", content_hash="new+hash/=="):
     return lock
 
 
-def workload_package(toolchain, ios="26.5.10318"):
-    manifests = {sdk.MONO_TOOLCHAIN: f"{toolchain}/10.0.100", "Microsoft.NET.Sdk.iOS": f"{ios}/10.0.100"}
+def workload_package(toolchain, ios="26.5.10318", maccatalyst=None):
+    manifests = {sdk.MONO_TOOLCHAIN: f"{toolchain}/10.0.100", "Microsoft.NET.Sdk.iOS": f"{ios}/10.0.100",
+                 "Microsoft.NET.Sdk.MacCatalyst": f"{maccatalyst or ios}/10.0.100"}
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as package:
         package.writestr(sdk.WORKLOAD_SET_FILE, json.dumps(manifests))
     return stream.getvalue()
+
+
+def image_readme(*versions):
+    """A runner image README's Xcode table, followed by a table of the same shape's neighbours."""
+    rows = [f"| {version} | 17F113 | /Applications/Xcode_{version.split()[0]}.app   | /Applications/Xcode.app |"
+            for version in versions]
+    return "\n".join(["### Xcode", "| Version | Build | Path | Symlinks |", "| ------- | ----- | ---- | -------- |", *rows, "",
+                      "#### Installed SDKs", "| SDK | SDK Name | Xcode Version |", "| --- | -------- | ------------- |",
+                      "| iOS 99.9 | iphoneos99.9 | 99.9 |"]).encode("utf-8")
 
 
 class Feed:
@@ -341,6 +355,79 @@ class WorkloadTests(unittest.TestCase):
             "set": "10.0.401.1", "published": "2026-10-01", "security": False, "runtime": "10.0.12",
             "old_runtime": "10.0.12", "manifests": old, "old_manifests": old}))
 
+    def test_the_image_list_keeps_stable_xcodes_only(self):
+        # The rows of actions/runner-images xcode-27-arm64-Readme.md on 2026-11-03, whose 27.2 is a release candidate.
+        readme = "\n".join([
+            "| 27.2           | 27B48   | /Applications/Xcode_27.2_Release_Candidate.app | /Applications/Xcode_27.2.0.app |",
+            "| 27.1 (default) | 27A9275 | /Applications/Xcode_27.1.app                   | /Applications/Xcode.app |",
+            "| 27.0           | 27A266a | /Applications/Xcode_27.app                     | /Applications/Xcode_27.0.0.app |",
+            "| 26.4.1         | 17E202  | /Applications/Xcode_26.4.1.app | /Applications/Xcode_26.4.app |",
+            "| 27.3_beta_1    | 27C1    | /Applications/Xcode_27.3_beta_1.app | |",
+            "| 27.4           | 27D1    | /Applications/Xcode_27.3.app | |",
+        ])
+        self.assertEqual(sdk.runner_xcodes(readme), ["27.1", "27", "26.4.1"])
+        with self.assertRaisesRegex(ValueError, "lists no Xcode"):
+            sdk.runner_xcodes("### Xcode\n")
+
+    def test_an_xcode_named_without_its_minor_compares_as_that_version(self):
+        self.assertEqual(sdk.xcode_key("27"), sdk.xcode_key("27.0"))
+        self.assertLess(sdk.xcode_key("27"), sdk.xcode_key("27.0.1"))
+        self.assertLess(sdk.xcode_key("26.6"), sdk.xcode_key("27"))
+        feed = Feed({"10.0.401": ("10.0.112", "2026-09-08T21:35:33Z"),
+                     "10.0.402": ("10.0.113", "2026-10-13T00:00:00Z", "27.0.10722")})
+        feed.bytes[sdk.MACOS_IMAGE_README] = (b"| 27.1 | 27A9275 | /Applications/Xcode_27.1.app | |\n"
+                                              b"| 27.0 | 27A266a | /Applications/Xcode_27.app | |\n")
+        self.assertEqual(self.choose_for(feed)[0]["xcode"], "27")
+
+    def apple_feed(self, *image):
+        feed = Feed({"10.0.401": ("10.0.112", "2026-09-08T21:35:33Z"),
+                     "10.0.402": ("10.0.113", "2026-10-13T00:00:00Z", "27.1.10018", "27.0.10742")})
+        if image:
+            feed.bytes[sdk.MACOS_IMAGE_README] = image_readme(*image)
+        return feed
+
+    def choose_for(self, feed, xcode="26.6"):
+        return sdk.choose_workloads("10.0.401", "10.0.402", RELEASES, feed.fetch, feed.get, NOW, xcode)
+
+    def test_a_set_waits_for_the_xcode_its_apple_packs_need(self):
+        for image in (("26.6 (default)", "26.5"), ("27.0", "26.6 (default)")):
+            with self.subTest(image=image):
+                move, notes = self.choose_for(self.apple_feed(*image))
+                self.assertIsNone(move)
+                self.assertTrue(any("10.0.402 waits for Xcode 27.1 on macos-26, which lists up to" in n for n in notes), notes)
+
+    def test_the_oldest_stable_xcode_new_enough_is_taken(self):
+        move, _ = self.choose_for(self.apple_feed("27.2", "27.1.1", "27.1", "26.6 (default)"))
+        self.assertEqual((move["set"], move["old_xcode"], move["xcode"]), ("10.0.402", "26.6", "27.1"))
+        self.assertEqual(move["targets"], {"ios": ["26.5", "27.1"], "maccatalyst": ["26.5", "27.0"]})
+
+    def test_an_older_set_the_image_can_build_is_taken_instead(self):
+        feed = Feed({"10.0.401": ("10.0.112", "2026-09-08T21:35:33Z"),
+                     "10.0.401.1": ("10.0.112", "2026-09-28T00:00:00Z", "26.5.10400"),
+                     "10.0.402": ("10.0.113", "2026-10-13T00:00:00Z", "27.0.10722")})
+        feed.bytes[sdk.MACOS_IMAGE_README] = image_readme("26.6 (default)")
+        move, notes = self.choose_for(feed)
+        self.assertEqual((move["set"], move["xcode"], move["targets"]), ("10.0.401.1", "26.6", {}))
+        self.assertTrue(any("10.0.402 waits for Xcode" in n for n in notes), notes)
+
+    def test_a_pin_new_enough_stays_and_the_image_is_not_asked(self):
+        move, _ = self.choose_for(self.apple_feed(), "27.1")  # the feed has no README, so a read would raise
+        self.assertEqual((move["xcode"], move["old_xcode"]), ("27.1", "27.1"))
+        self.assertEqual(sorted(move["targets"]), ["ios", "maccatalyst"])
+
+    def test_packs_the_apps_do_not_build_with_do_not_hold_a_set(self):
+        old = {"Microsoft.NET.Sdk.iOS": "26.5.1/10.0.100", "Microsoft.NET.Sdk.tvOS": "26.5.1/10.0.100"}
+        new = {"Microsoft.NET.Sdk.iOS": "26.5.2/10.0.100", "Microsoft.NET.Sdk.tvOS": "27.0.1/10.0.100"}
+        self.assertEqual(sdk.apple_targets(old, new), {})
+
+    def test_lock_targets_follow_their_platform_only(self):
+        lock = ('{\r\n  "dependencies": {\r\n    "net10.0-ios26.5": {\r\n      "A": {"resolved": "26.5.0"}\r\n    },\r\n'
+                '    "net10.0-ios26.5/iossimulator-arm64": {},\r\n    "net10.0-maccatalyst26.5": {},\r\n    "net10.0": {}\r\n  }\r\n}\r\n')
+        moved = sdk.move_lock_targets(lock, {"ios": ["26.5", "27.1"]})
+        self.assertEqual(moved, lock.replace("net10.0-ios26.5", "net10.0-ios27.1"))
+        self.assertEqual(sdk.move_lock_targets(lock, {"ios": ["26.4", "27.1"]}), lock)
+        self.assertEqual(sdk.move_lock_targets(lock, {}), lock)
+
     def test_pins_must_name_one_set(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -373,6 +460,29 @@ class WorkflowTests(unittest.TestCase):
             with self.subTest(path=path.name):
                 self.assertNotRegex(text, r"(?m)^\s*dotnet-version:\s*\d+\.\d+\.\d+\s*$")
                 self.assertNotRegex(text, sdk.WORKLOAD_INSTALL)
+                self.assertNotRegex(text, sdk.XCODE_PIN)
+                self.assertNotIn("DEVELOPER_DIR", text)
+
+    def test_the_macos_jobs_select_the_pinned_xcode_before_using_it(self):
+        repository = self.WORKFLOWS.parent.parent
+        self.assertRegex(sdk.xcode_pin(repository) or "", r"^\d+\.\d+")
+        for name, first_use in (("mac-catalyst.yml", "actions/setup-dotnet"), ("maui-https.yml", "--ios-stage prepare")):
+            text = (self.WORKFLOWS / name).read_text(encoding="utf-8")
+            with self.subTest(name=name):
+                self.assertLess(text.index("./scripts/maui_https_ci.ps1 xcode"), text.index(first_use))
+
+    def test_the_hold_reads_the_image_the_jobs_run_on(self):
+        self.assertIn(f"/{sdk.MACOS_IMAGE}-", sdk.MACOS_IMAGE_README)
+        self.assertIn(f"runs-on: {sdk.MACOS_IMAGE}", (self.WORKFLOWS / "mac-catalyst.yml").read_text(encoding="utf-8"))
+        matrix = (self.WORKFLOWS / "maui-https.yml").read_text(encoding="utf-8")
+        self.assertEqual(set(re.findall(r'"platform":"(?:ios|maccatalyst)","os":"([^"]+)"', matrix)), {sdk.MACOS_IMAGE})
+
+    def test_the_apple_locks_a_platform_move_renames_are_all_readable_here(self):
+        repository = self.WORKFLOWS.parent.parent
+        for name in ("MacCatalystSmoke/packages", "MauiHttpsSmoke/ios.packages", "MauiHttpsSmoke/maccatalyst.packages"):
+            with self.subTest(name=name):
+                self.assertIn(f"test/EmbedIO.{name}.lock.json", sdk.MAUI_LOCKS)
+                self.assertRegex(sdk.read(repository / f"test/EmbedIO.{name}.lock.json"), sdk.LOCK_TARGET)
 
     def test_the_repo_bot_opens_the_pull_requests(self):
         # A pull request opened with the workflow's own token waits for approval and gets no normal CI.
@@ -611,6 +721,166 @@ class ProposalTests(unittest.TestCase):
                 return {"number": 7, "html_url": "https://github.com/owner/repo/pull/7"}
             return None
         return Mock(side_effect=respond)
+
+
+class IosSimulatorTests(unittest.TestCase):
+    IPHONE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16"
+
+    @staticmethod
+    def runtime(version, hosts=("iPhone-16",), platform="iOS", available=True):
+        return {"platform": platform, "version": version, "isAvailable": available,
+                "identifier": f"com.apple.CoreSimulator.SimRuntime.{platform}-{version.replace('.', '-')}",
+                "supportedDeviceTypes": [{"identifier": f"com.apple.CoreSimulator.SimDeviceType.{host}"} for host in hosts]}
+
+    def newest(self, *runtimes):
+        return maui_https_probe.newest_ios_runtime({"runtimes": list(runtimes)}, self.IPHONE).rsplit(".", 1)[1]
+
+    def test_a_runtime_that_cannot_host_the_device_is_passed_over(self):
+        # The xcode-27 image, 2026-11-03: creating an iPhone 16 on iOS 27.1 fails with "Incompatible device".
+        self.assertEqual(self.newest(self.runtime("27.0"), self.runtime("27.1", hosts=("iPhone-Duo",))), "iOS-27-0")
+
+    def test_versions_compare_as_numbers(self):
+        self.assertEqual(self.newest(self.runtime("26.5"), self.runtime("26.10"), self.runtime("26.4.1")), "iOS-26-10")
+
+    def test_other_platforms_and_unavailable_runtimes_do_not_count(self):
+        self.assertEqual(self.newest(self.runtime("26.5"), self.runtime("27.0", platform="tvOS"),
+                                     self.runtime("27.1", available=False)), "iOS-26-5")
+
+    def test_no_usable_runtime_says_so(self):
+        with self.assertRaisesRegex(RuntimeError, "iPhone-16"):
+            self.newest(self.runtime("27.1", hosts=("iPhone-Duo",)))
+
+    def test_the_smoke_script_pins_no_simulator(self):
+        text = sdk.read(Path(__file__).resolve().parent / "run_maui_https_smoke.py")
+        self.assertIn("newest_ios_runtime(", text)
+        self.assertNotRegex(text, r"iOS-\d")
+
+
+class AppleAppTests(unittest.TestCase):
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def test_the_apple_apps_adopt_the_scene_lifecycle(self):
+        # Built with the 27 SDK, UIKit stops an app at launch without this, and CI only builds with that SDK after a
+        # workload set moves, so nothing else would say so before that pull request.
+        apps = sorted(self.ROOT.glob("test/*/Platforms/*/Info.plist"))
+        self.assertEqual(len(apps), 3)
+        for info in apps:
+            with self.subTest(app=str(info.relative_to(self.ROOT))):
+                manifest = plistlib.loads(info.read_bytes())["UIApplicationSceneManifest"]
+                scene = manifest["UISceneConfigurations"]["UIWindowSceneSessionRoleApplication"][0]
+                self.assertEqual(scene["UISceneConfigurationName"], "__MAUI_DEFAULT_SCENE_CONFIGURATION__")
+                self.assertIn(f'[Register("{scene["UISceneDelegateClassName"]}")]', sdk.read(info.with_name("Program.cs")))
+
+
+class AppleMoveTests(unittest.TestCase):
+    """A workload set move that reaches a new Apple platform, prepared and then checked as the propose job does."""
+    CI = "scripts/maui_https_ci.ps1"
+    IOS = "test/EmbedIO.MauiHttpsSmoke/ios.packages.lock.json"
+    CATALYST = "test/EmbedIO.MacCatalystSmoke/packages.lock.json"
+    ANDROID = "test/EmbedIO.AndroidSmoke/packages.lock.json"
+    BASE = {
+        CI: "$xcode = '/Applications/Xcode_26.6.app/Contents/Developer'\r\n"
+            "dotnet workload install $env:W --version 10.0.401\r\n",
+        IOS: '{"dependencies": {"net10.0-ios26.5": {}, "net10.0-ios26.5/iossimulator-arm64": {}}}\r\n',
+        CATALYST: '{"dependencies": {"net10.0-maccatalyst26.5": {}, "net10.0-maccatalyst26.5/maccatalyst-arm64": {}}}\r\n',
+        ANDROID: '{"dependencies": {"net10.0-android36.0": {}}}\r\n',
+    }
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root, self.out = Path(self.temp.name) / "repo", Path(self.temp.name) / "workloads"
+        git_repo(self.root, self.BASE)
+        self.feed = Feed({"10.0.401": ("10.0.112", "2026-09-08T21:35:33Z"),
+                          "10.0.402": ("10.0.113", "2026-10-13T00:00:00Z", "27.1.10018", "27.0.10742")})
+        self.feed.bytes[sdk.MACOS_IMAGE_README] = image_readme("27.2", "27.1", "26.6 (default)")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def prepare(self):
+        return sdk.prepare_workloads(self.root, self.out, "1" * 40, "main", "10.0.402", RELEASES, self.feed.fetch,
+                                     self.feed.get, NOW)
+
+    def proposed(self, path):
+        return sdk.read(self.out / "files" / path)
+
+    def test_the_whole_move_passes_the_propose_job_checks(self):
+        self.assertTrue(self.prepare()[0])
+        proposal, files = sdk.check_proposal(self.root, self.out)
+        self.assertEqual(sorted(files), sorted([self.CI, self.IOS, self.CATALYST]))
+        self.assertEqual((proposal["old_xcode"], proposal["new_xcode"]), ("26.6", "27.1"))
+        self.assertEqual(self.proposed(self.CI), self.BASE[self.CI].replace("Xcode_26.6", "Xcode_27.1").replace("10.0.401", "10.0.402"))
+        self.assertEqual(self.proposed(self.IOS), self.BASE[self.IOS].replace("ios26.5", "ios27.1"))
+        self.assertEqual(self.proposed(self.CATALYST), self.BASE[self.CATALYST].replace("maccatalyst26.5", "maccatalyst27.0"))
+        body = (self.out / "body.md").read_text(encoding="utf-8")
+        self.assertIn("move from Xcode 26.6 to 27.1", body)
+        self.assertIn("ios 26.5 -> 27.1, maccatalyst 26.5 -> 27.0", body)
+        self.assertIn("gh workflow run maui-https.yml --ref <branch>", body)
+
+    def test_a_held_set_proposes_nothing(self):
+        self.feed.bytes[sdk.MACOS_IMAGE_README] = image_readme("26.6 (default)")
+        changed, notes = self.prepare()
+        self.assertFalse(changed)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(notes, ["Workload set 10.0.402 waits for Xcode 27.1 on macos-26, which lists up to 26.6.",
+                                 "Workload set 10.0.401 stays for now."])
+
+    def edit(self, field=None, value=None, path=None, text=None):
+        proposal = json.loads((self.out / "proposal.json").read_text(encoding="utf-8"))
+        if field:
+            proposal[field] = value
+        (self.out / "proposal.json").write_text(json.dumps(proposal), encoding="utf-8")
+        if path:
+            (self.out / "files" / path).write_bytes(text.encode("utf-8"))
+
+    def test_anything_else_is_refused(self):
+        self.prepare()
+        ci, ios = self.proposed(self.CI), self.proposed(self.IOS)
+        for name, change in (("another Xcode in the file", {"path": self.CI, "text": ci.replace("Xcode_27.1", "Xcode_27.2")}),
+                             ("a stated Xcode the file does not have", {"field": "new_xcode", "value": "27.2"}),
+                             ("a lock's packages", {"path": self.IOS, "text": ios.replace("{}", '{"Evil": {}}', 1)})):
+            with self.subTest(name=name):
+                self.prepare()
+                self.edit(**change)
+                with self.assertRaises(ValueError):
+                    sdk.check_proposal(self.root, self.out)
+
+    def agreeing(self, new_xcode, targets):
+        """A proposal whose files are exactly what its stated values produce, so only a check of the values can refuse it."""
+        self.prepare()
+        changed = sdk.workload_move_files(self.root, "10.0.401", "10.0.402", "26.6", new_xcode, targets)
+        shutil.rmtree(self.out / "files")
+        proposal = json.loads((self.out / "proposal.json").read_text(encoding="utf-8"))
+        proposal.update(new_xcode=new_xcode, targets=targets)
+        sdk.write_proposal(self.out, proposal, changed, "body\n")
+
+    def test_stated_values_are_checked_even_when_the_files_agree(self):
+        good = {"ios": ["26.5", "27.1"], "maccatalyst": ["26.5", "27.0"]}
+        self.agreeing("27.1", good)
+        sdk.check_proposal(self.root, self.out)
+        for name, xcode, targets in (("Xcode moved back", "26.5", good),
+                                     ("not a version", "27.1_0", good),
+                                     ("a platform that breaks out of the lock's string", "27.1",
+                                      {**good, "ios": ["26.5", '27.1": {}, "x']})):
+            with self.subTest(name=name):
+                self.agreeing(xcode, targets)
+                with self.assertRaises(ValueError):
+                    sdk.check_proposal(self.root, self.out)
+
+    def test_a_target_left_behind_is_refused(self):
+        self.prepare()
+        proposal = json.loads((self.out / "proposal.json").read_text(encoding="utf-8"))
+        proposal["files"].remove(self.IOS)
+        (self.out / "proposal.json").write_text(json.dumps(proposal), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "leaves workload pins unmoved"):
+            sdk.check_proposal(self.root, self.out)
+
+    def test_a_move_without_a_new_platform_changes_only_the_workload_version(self):
+        self.feed = Feed({"10.0.401": ("10.0.112", "2026-09-08T21:35:33Z"), "10.0.402": ("10.0.113", "2026-10-13T00:00:00Z")})
+        self.assertTrue(self.prepare()[0])
+        proposal, files = sdk.check_proposal(self.root, self.out)
+        self.assertEqual((list(files), proposal["new_xcode"], proposal["targets"]), ([self.CI], "26.6", {}))
+        self.assertEqual(self.proposed(self.CI), self.BASE[self.CI].replace("10.0.401", "10.0.402"))
 
 
 class PrepareTests(unittest.TestCase):

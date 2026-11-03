@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 import uuid
-from maui_https_probe import validate
+from maui_https_probe import newest_ios_runtime, validate
 
 parser = argparse.ArgumentParser()
 parser.add_argument('platform', choices=['windows', 'ios', 'maccatalyst', 'android'])
@@ -99,11 +99,10 @@ def prepare_ios():
     if SIMULATOR_STATE.exists() and not read_simulator_state()['deleted']:
         raise RuntimeError('An owned simulator already exists; clean it up before preparing another.')
     BOOT_RESULT.unlink(missing_ok=True)
-    invoke('xcrun', 'simctl', 'list', '--json')
-    device = invoke('xcrun', 'simctl', 'create', 'EmbedIO HTTPS test',
-                    'com.apple.CoreSimulator.SimDeviceType.iPhone-16',
-                    'com.apple.CoreSimulator.SimRuntime.iOS-26-5')
-    state = {'id': str(uuid.UUID(device)), 'boot_started': time.monotonic(), 'deleted': False}
+    device_type = 'com.apple.CoreSimulator.SimDeviceType.iPhone-16'
+    runtime = newest_ios_runtime(json.loads(invoke('xcrun', 'simctl', 'list', '--json')), device_type)
+    device = invoke('xcrun', 'simctl', 'create', 'EmbedIO HTTPS test', device_type, runtime)
+    state = {'id': str(uuid.UUID(device)), 'runtime': runtime, 'boot_started': time.monotonic(), 'deleted': False}
     # Record ownership before boot, so a failed prepare/build can still clean up.
     SIMULATOR_STATE.write_text(json.dumps(state, indent=2), encoding='utf-8')
     invoke('xcrun', 'simctl', 'boot', state['id'])
@@ -241,7 +240,7 @@ try:
     final['app'] = str(app)
     if args.platform == 'ios':
         final['simulator'] = simulator
-        final['ios_runtime'] = 'iOS-26-5'
+        final['ios_runtime'] = state['runtime'].rsplit('.', 1)[1]
     if args.platform == 'android':
         final['android_api'] = invoke(adb, 'shell', 'getprop', 'ro.build.version.sdk')
     (ROOT / 'result.json').write_text(json.dumps(final, indent=2), encoding='utf-8')

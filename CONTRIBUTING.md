@@ -72,13 +72,15 @@ SDK image and the lock files together. A Dockerfile pins an SDK image as a comme
 naming the tag above a `FROM` line with its digest, and a test fails on any other
 form. The Repo Bot App opens these pull requests, so their checks run normally,
 and it may not edit a workflow, so workflows take the SDK from `global.json` and
-install MAUI workloads through `scripts/maui_https_ci.ps1`. It waits out a
-one-week cooldown unless Microsoft marks the release as a security release. In
-separate pull requests it moves the MAUI workload `--version` to the newest
-workload set for the pinned SDK patch (the set decides the mobile apps' Mono
-runtime and their Apple and Android packs, which can need a newer Xcode), and
-any SDK image that still lags `global.json`. Workload-set pull
-requests open as drafts labelled `needs owner decision` and wait for the owner.
+install MAUI workloads and select Xcode through `scripts/maui_https_ci.ps1`. It
+waits out a one-week cooldown unless Microsoft marks the release as a security
+release. In separate pull requests it moves the MAUI workload `--version` to the
+newest workload set for the pinned SDK patch (the set decides the mobile apps'
+Mono runtime and their Apple and Android packs), and any SDK image that still
+lags `global.json`. A set whose Apple packs need an Xcode the `macos-26` image
+does not list yet waits until it does, and its pull request then also moves the
+Xcode and the Apple lock targets. Workload-set pull requests open as drafts
+labelled `needs owner decision` and wait for the owner.
 It never changes feature band; that is left to a person.
 `dotnet-sdk-canary.yml` builds and tests with the newest SDK each Monday,
 without the pins, as an early warning; it gates nothing. A move by hand follows

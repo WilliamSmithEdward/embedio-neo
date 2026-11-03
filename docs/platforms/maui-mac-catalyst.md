@@ -56,6 +56,41 @@ an empty catch block. If startup still fails, provide the full exception and inn
 exception, .NET/MAUI and package versions, target framework, URL prefix, Debug or
 Release configuration, and effective signed entitlements, with secrets removed.
 
+## Building with the 27 SDK
+
+Built with the iOS or Mac Catalyst 27 SDK, UIKit stops an app at launch unless it
+has adopted the scene lifecycle. The crash report names
+`_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`. The app stops
+before your code starts the server, so clients see a refused connection, and the
+cause is UIKit rather than EmbedIO. In a MAUI app, add a scene manifest to
+`Info.plist`:
+
+```xml
+<key>UIApplicationSceneManifest</key><dict>
+  <key>UIApplicationSupportsMultipleScenes</key><false/>
+  <key>UISceneConfigurations</key><dict>
+    <key>UIWindowSceneSessionRoleApplication</key><array><dict>
+      <key>UISceneConfigurationName</key><string>__MAUI_DEFAULT_SCENE_CONFIGURATION__</string>
+      <key>UISceneDelegateClassName</key><string>SceneDelegate</string>
+    </dict></array>
+  </dict>
+</dict>
+```
+
+Then register the delegate beside your `AppDelegate`:
+
+```csharp
+[Register("SceneDelegate")]
+public class SceneDelegate : MauiUISceneDelegate;
+```
+
+The Mac Catalyst 27.0 pack also refuses a `SupportedOSPlatformVersion` below 17.0.
+`test/EmbedIO.MacCatalystSmoke` is a complete app. With these changes, the smoke
+fixture ([run 41725847102](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/41725847102)) and the HTTPS fixtures on iOS and Mac
+Catalyst ([run 41725851311](https://github.com/WilliamSmithEdward/embedio-neo/actions/runs/41725851311)) passed on GitHub's `xcode-27` image
+with macOS 27.0.1, Xcode 27.1 and runtime 10.0.14. That is a CI fixture on a preview
+image, not a physical device or a signed release build.
+
 ## Validation boundary
 
 The regression tests check the core assembly for SWAN/Console references and

@@ -14,6 +14,20 @@ import urllib.request
 MARKER = 'EmbedIO MAUI HTTPS rendered'
 
 
+def newest_ios_runtime(listing, device_type):
+    """The newest available iOS runtime that can host `device_type`, from `simctl list --json`.
+
+    The selected Xcode decides which runtimes exist, so this is not a pin of its own. The newest is not always usable:
+    on the xcode-27 image, iOS 27.1 hosts only the iPhone Duo, so an app built with the iOS 27.1 pack runs on iOS 27.0.
+    """
+    usable = [runtime for runtime in listing['runtimes']
+              if runtime.get('platform') == 'iOS' and runtime.get('isAvailable')
+              and any(kind['identifier'] == device_type for kind in runtime.get('supportedDeviceTypes', []))]
+    if not usable:
+        raise RuntimeError(f'No available iOS runtime can host {device_type}.')
+    return max(usable, key=lambda runtime: [int(part) for part in runtime['version'].split('.')])['identifier']
+
+
 def validate(base, cafile, timeout=180, progress=None):
     parsed = urllib.parse.urlparse(base)
     if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:

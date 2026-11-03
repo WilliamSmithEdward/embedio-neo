@@ -12,7 +12,7 @@
     <ApplicationId>io.embedioneo.smoke601</ApplicationId>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
-    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
     <EnableCodeSigning>true</EnableCodeSigning>
     <CodesignKey>-</CodesignKey>
     <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
