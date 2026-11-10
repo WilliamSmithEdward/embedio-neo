@@ -537,6 +537,9 @@ input/fixture replay. Complete credential and configuration parity remains pendi
 The peer scripts connect through `test/EmbedIO.Quic/quic_client.py`. aioquic's own
 `connect()` binds a dual-stack socket, which macOS can give a port an IPv4 socket holds,
 and that client then never hears from the server.
+macOS 26.7.2, on GitHub's `macos-26` image, never contacts the verifier's loopback
+revocation responder. There `verify_client_certificate.py` expects the custom-root online
+cases to be refused (fail closed), and `validate.py` warns on the job.
 A provider-neutral TLS boundary caches handshake state and
 releases packet keys with its connection. Bounded ClientHello framing and transport
 parameter extraction have property, deterministic and coverage-guided fuzz coverage. Production
