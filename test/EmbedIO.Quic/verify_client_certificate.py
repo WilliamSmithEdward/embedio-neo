@@ -1,6 +1,7 @@
 """Independent mutual-TLS checks through the actual HTTP/3 WebServer."""
 import argparse
 import os
+import sys
 import asyncio
 import datetime
 import contextlib
@@ -76,14 +77,30 @@ def certificates(directory, crl_base):
     return result, {'/root.crl': crl(root, root_key), '/intermediate.crl': crl(intermediate, intermediate_key, revoked_serial), **responders}
 
 
+def macos_skipped_revocation(mode, attempts, platform=sys.platform):
+    """macOS 26.7.2 on GitHub's runners never contacts the loopback revocation responder,
+    so a custom-root chain keeps an unknown revocation status and the server must refuse
+    the client. A connection the fixture cannot parse still counts as contact."""
+    return platform == 'darwin' and mode == 'require-custom-online' and not attempts
+
+
+def failed_closed(validations):
+    """Every validation refused the chain, for unknown revocation status alone."""
+    return bool(validations) and all(value.get('finalStatus') == ['RevocationStatusUnknown']
+                                     and value.get('accepted') is False for value in validations)
+
+
 async def case(args, mode, client, allowed):
     label = mode + '-' + client
     output = args.output / label
     output.mkdir()
     resources = {}
     requests = []
+    attempts = []
     nonce = '/' + uuid.uuid4().hex
     async def serve_crl(reader, writer):
+        # Count the connection before parsing: a request the fixture rejects is still contact.
+        attempts.append(str(writer.get_extra_info('peername')))
         if mode == 'require-custom-online' and client == 'revoked':
             # Exercise validation that outlives the loopback closing interval.
             await asyncio.sleep(0.6)
@@ -175,7 +192,7 @@ async def case(args, mode, client, allowed):
                         fields, body = await asyncio.wait_for(pending, 8)
                         assert dict(fields)[b':status'] == b'200' and body == b'd' * 131072
                 except ConnectionError:
-                    if allowed:
+                    if allowed and not macos_skipped_revocation(mode, attempts):
                         raise
                     assert len(peers) == (2 if sibling else 1) and peers[-1].termination is not None
                     rejection = peers[-1].termination.error_code
@@ -219,8 +236,14 @@ async def case(args, mode, client, allowed):
         and value['errors'] == 'RemoteCertificateChainErrors'
         and value['revocation'] == ('Online' if mode in ('require-online', 'require-custom-online') else 'NoCheck')
         and value['applicationPolicy'] == ['1.3.6.1.5.5.7.3.2'] for value in validations)
-    revocation_ok = (bool(requests) and any('Revoked' in value.get('finalStatus', []) for value in validations)
-                     if mode == 'require-custom-online' and client == 'revoked' else True)
+    skipped = macos_skipped_revocation(mode, attempts)
+    if skipped:
+        # Without a revocation answer the server must refuse the client, revoked or not.
+        allowed = False
+        revocation_ok = failed_closed(validations)
+    else:
+        revocation_ok = (bool(requests) and any('Revoked' in value.get('finalStatus', []) for value in validations)
+                         if mode == 'require-custom-online' and client == 'revoked' else True)
     if mode not in ('require-online', 'require-custom-online'):
         revocation_ok = revocation_ok and not requests
     result = {'case': label, 'passed': failure is None and process.returncode == 0
@@ -232,6 +255,7 @@ async def case(args, mode, client, allowed):
               and (allowed or rejection is not None) and observations_ok and revocation_ok
               and len(tickets) == (1 if mode == 'none' else 0)
               and report.get('retainedCertificates') == (2 if allowed and client != 'missing' and mode != 'none' else 0), 'failure': failure, 'rejection': rejection, 'healthySibling': sibling, 'crlRequests': requests,
+              'revocationConnections': len(attempts), 'macosSkippedRevocation': skipped,
               'sessionTickets': len(tickets), 'server': report, 'exit': process.returncode}
     (output / 'receipt.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
     print(json.dumps(result), flush=True)
