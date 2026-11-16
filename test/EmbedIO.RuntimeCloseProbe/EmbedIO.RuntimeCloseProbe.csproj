@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <RuntimeFrameworkVersion>10.0.14</RuntimeFrameworkVersion>
+    <RuntimeFrameworkVersion>10.0.15</RuntimeFrameworkVersion>
     <RollForward>Disable</RollForward>
   </PropertyGroup>
   <ItemGroup>
