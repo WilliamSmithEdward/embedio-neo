@@ -186,6 +186,12 @@ def validate(args):
             for script, name, extra in cases:
                 run([peer, str(ROOT / "test/EmbedIO.Quic" / script), *common, *extra, "--output", str(args.output / name)],
                     name, environment)
+            policies = json.loads((args.output / "certificate-policies" / "receipt.json").read_text(encoding="utf-8"))
+            for policy in policies["cases"]:
+                if policy.get("macosSkippedRevocation"):
+                    print(f"::warning title=No revocation lookup on macOS::{policy['case']}: macOS made no request to the "
+                          "revocation responder, so the server refused the client (fail closed). See "
+                          "docs/project/quic-development-and-testing.md.", flush=True)
             if sys.platform == "linux":
                 run([peer, str(ROOT / "test/EmbedIO.Quic/verify_server_chain.py"), *common,
                      "--output", str(args.output / "server-chains")], "server-chains",

@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509 import ocsp
 from revocation_peer import serve_revocation
-from verify_client_certificate import certificates
+from verify_client_certificate import certificates, failed_closed, macos_skipped_revocation
 
 
 class RevocationPeerTests(unittest.IsolatedAsyncioTestCase):
@@ -99,6 +99,27 @@ class RevocationPeerTests(unittest.IsolatedAsyncioTestCase):
         response, requests = await self.exchange(b'POST /ocsp/client HTTP/1.1\r\nContent-Length: 4097\r\n\r\n')
         self.assertTrue(response.startswith(b'HTTP/1.1 400'))
         self.assertEqual(requests, [])
+
+
+class RevocationExpectationTests(unittest.TestCase):
+    def test_only_macos_without_any_responder_connection_skips_revocation(self):
+        self.assertTrue(macos_skipped_revocation('require-custom-online', [], 'darwin'))
+        self.assertFalse(macos_skipped_revocation('require-custom-online', ["('127.0.0.1', 50000)"], 'darwin'))
+        self.assertFalse(macos_skipped_revocation('require-custom-online', [], 'linux'))
+        self.assertFalse(macos_skipped_revocation('require-custom-online', [], 'win32'))
+        self.assertFalse(macos_skipped_revocation('require-online', [], 'darwin'))
+        self.assertFalse(macos_skipped_revocation('require-custom-root', [], 'darwin'))
+
+    def test_fail_closed_needs_every_validation_refused_for_unknown_revocation_alone(self):
+        refused = {'finalStatus': ['RevocationStatusUnknown'], 'accepted': False}
+        self.assertTrue(failed_closed([refused]))
+        self.assertTrue(failed_closed([refused, dict(refused)]))
+        self.assertFalse(failed_closed([]))
+        self.assertFalse(failed_closed([{**refused, 'accepted': True}]))
+        self.assertFalse(failed_closed([{**refused, 'finalStatus': []}]))
+        self.assertFalse(failed_closed([{**refused, 'finalStatus': ['UntrustedRoot', 'RevocationStatusUnknown']}]))
+        self.assertFalse(failed_closed([{**refused, 'finalStatus': ['Revoked']}]))
+        self.assertFalse(failed_closed([refused, {**refused, 'accepted': True}]))
 
 
 if __name__ == '__main__':
