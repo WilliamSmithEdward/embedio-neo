@@ -26,6 +26,12 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
 
+# A new push to a pull request cancels its older runs. A push to main waits
+# for the run before it, and only the newest waiting run starts.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ (github.event_name == 'pull_request' || github.event_name == 'push') && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     # Documentation-only pull requests skip the test matrix and the app smokes;

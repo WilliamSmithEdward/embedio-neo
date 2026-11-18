@@ -4895,3 +4895,45 @@ the test scripts changed.
 - On Windows, against the Schannel host, the 12 peer suites that
   `scripts/run-quic-development.py --schannel` runs passed, the 256-case `auth-fuzz` among
   them, and so did the 16 peer regressions.
+
+## macOS 26.7 revocation lookups
+
+From November 9, 2026, the osx-arm64 Portable TLS job failed in each pull request run
+that reached it, in the `require-custom-online-client` case of
+`verify_client_certificate.py`. The server refused a client certificate the case expects
+it to accept. The test code had not changed since October 27. GitHub's `macos-26-arm64`
+image had moved from macOS 26.6.2 (25G83, image 20261026.0455.2) to macOS 26.7.2 (25G332,
+image 20261102.0473.1).
+
+### Cause
+
+- In the online modes, the client certificates name an OCSP responder that the verifier
+  serves on `127.0.0.1`. On macOS 26.6.2 the server's chain check queried it twice in each
+  online case, for the client and the intermediate, and the cases passed (main `e5ed0b8f`,
+  run 41741152547). On macOS 26.7.2 the responder recorded no request in either online
+  case (runs 42575690511, 42705918311 and 42705979249). The chain kept
+  `RevocationStatusUnknown`, and the server refused the client with bad_certificate
+  (0x12a). That refusal is the intended fail-closed behavior.
+- Why macOS 26.7.2 skips the lookup is not known. The osx-x64 job runs on macOS 15.7.9,
+  still queries the responder, and passes.
+
+### Change
+
+- `verify_client_certificate.py` counts every connection to its responder before parsing
+  it. On macOS, when a `require-custom-online` case gets no connection at all, the case
+  expects the fail-closed refusal. The client must be refused, the server must still ask
+  for `Online` revocation, and every validation must refuse the chain for
+  `RevocationStatusUnknown` alone. The receipt records `macosSkippedRevocation` and the
+  number of responder connections. A connection the fixture cannot parse still counts, so
+  the case then fails as before.
+- `validate.py` adds a warning annotation to the job for each such case.
+- Linux, Windows and macOS 15 keep the full check: a client is accepted only after a good
+  answer and refused after a revoked one. If macOS queries the responder again, its cases
+  take the full check by themselves.
+- `test_certificate_peer.py`, which `validate.py` runs with the other peer regressions on
+  every RID, covers both rules.
+
+### Left
+
+- Find out why macOS 26.7.2 makes no revocation request, and whether a different responder
+  setup would get one.
