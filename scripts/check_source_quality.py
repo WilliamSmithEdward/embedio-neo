@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.1.10"
+VERSION = "1.1.11"
 DIAGNOSTIC = re.compile(
     r"^[ \t]*(?:.+?:[ \t]*)?(info|warning|error)[ \t]+[^\s:]+:", re.MULTILINE)
 LOAD_FAILURE = re.compile(
