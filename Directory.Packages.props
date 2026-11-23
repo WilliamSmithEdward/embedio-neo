@@ -18,7 +18,7 @@
     <PackageVersion Include="NUnit3TestAdapter" Version="6.3.1" />
     <PackageVersion Include="NUnit.Analyzers" Version="4.15.0" />
     <PackageVersion Include="System.ComponentModel.Annotations" Version="5.0.0" />
-    <PackageVersion Include="System.Text.Json" Version="10.0.14" />
+    <PackageVersion Include="System.Text.Json" Version="11.0.0" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="10.0.14" />
   </ItemGroup>
 
