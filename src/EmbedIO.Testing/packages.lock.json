@@ -13,8 +13,8 @@
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
-        "resolved": "10.0.14",
-        "contentHash": "HCu9NbiXDh9++j4eRNRHCOiKPw/7I5UEJlFIRaDM3v0+ttZaH8p8rjxSWfNgP2cGv5JAa4EZnmc/nlcUOTFlpA==",
+        "resolved": "11.0.0",
+        "contentHash": "Uw3pD0oeX6kNS+pa8U9VaqUh3tcdQeY/cUILF89zDLeYgvfat0pzIi9kjK1nkA9u+3R7ZtAY9GsU1cgqVS+u4A==",
         "dependencies": {
           "System.Threading.Tasks.Extensions": "4.6.3"
         }
@@ -82,7 +82,7 @@
         "dependencies": {
           "System.ComponentModel.Annotations": "[5.0.0, )",
           "System.Text.Json": "[10.0.14, )",
-          "System.Threading.RateLimiting": "[10.0.14, )"
+          "System.Threading.RateLimiting": "[11.0.0, )"
         }
       },
       "System.ComponentModel.Annotations": {
@@ -108,11 +108,11 @@
       },
       "System.Threading.RateLimiting": {
         "type": "CentralTransitive",
-        "requested": "[10.0.14, )",
-        "resolved": "10.0.14",
-        "contentHash": "SLoXh2YBBLFmUMQwmPNky45ETCK/0qpp+bCjTaYC4MctQG4FVCPDMfeMt/mN2nxJG7VIRMGOovCJEKsx5nj7VQ==",
+        "requested": "[11.0.0, )",
+        "resolved": "11.0.0",
+        "contentHash": "/XV8cRRUkl+uyvVdPBCo+p/QUSMFI7JdPHgpeWvnVmh/Ao/TRn7gSjo1XS0qJGGhd7Pkjn/9ePSNXtKQN0kutA==",
         "dependencies": {
-          "Microsoft.Bcl.AsyncInterfaces": "10.0.14",
+          "Microsoft.Bcl.AsyncInterfaces": "11.0.0",
           "System.Threading.Tasks.Extensions": "4.6.3"
         }
       }
@@ -122,7 +122,7 @@
         "type": "Project",
         "dependencies": {
           "EmbedIO-Neo.Quic.Native": "[2.19.1, )",
-          "System.Threading.RateLimiting": "[10.0.14, )"
+          "System.Threading.RateLimiting": "[11.0.0, )"
         }
       },
       "EmbedIO-Neo.Quic.Native": {
@@ -130,9 +130,9 @@
       },
       "System.Threading.RateLimiting": {
         "type": "CentralTransitive",
-        "requested": "[10.0.14, )",
-        "resolved": "10.0.14",
-        "contentHash": "SLoXh2YBBLFmUMQwmPNky45ETCK/0qpp+bCjTaYC4MctQG4FVCPDMfeMt/mN2nxJG7VIRMGOovCJEKsx5nj7VQ=="
+        "requested": "[11.0.0, )",
+        "resolved": "11.0.0",
+        "contentHash": "/XV8cRRUkl+uyvVdPBCo+p/QUSMFI7JdPHgpeWvnVmh/Ao/TRn7gSjo1XS0qJGGhd7Pkjn/9ePSNXtKQN0kutA=="
       }
     }
   }
