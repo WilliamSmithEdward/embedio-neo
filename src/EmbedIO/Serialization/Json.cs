@@ -116,6 +116,11 @@ namespace EmbedIO.Serialization
 
         // Deserializes through the options' resolver, applying EmbedIO's input compatibility
         // when the options carry it. Source-generated options need no reflection.
+        [System.Diagnostics.CodeAnalysis.SuppressMessage(
+            "Usage",
+            "CA2263:Prefer generic overload when type is known",
+            Justification = "The shared implementation targets net10.0, whose framework System.Text.Json has no generic GetTypeInfo overload."
+        )]
         internal static T? DeserializeWith<T>(string json, JsonSerializerOptions options)
         {
             if (UsesCompatibleInput(options))

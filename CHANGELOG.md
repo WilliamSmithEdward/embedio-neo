@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Runtime dependencies move from 10.0.15 to 11.0.0: System.Threading.RateLimiting in
+  the core, System.Text.Json in the core's .NET Standard asset, and Microsoft DI and
+  Hosting.Abstractions in the dependency-injection adapter. Applications that pin an
+  older version of these packages must allow 11.0.0. Public APIs, defaults and
+  targets are unchanged.
+
 ## [2.19.1] - 2026-10-31
 
 Patch release with HTTP/1.1 response output coalescing and concurrent-abort cleanup.

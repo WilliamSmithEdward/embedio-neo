@@ -9,6 +9,11 @@
     <Compile Include="../Program.cs" Link="Program.cs" />
     <ProjectReference Include="../../../src/EmbedIO/EmbedIO.csproj" SetTargetFramework="TargetFramework=netstandard2.0" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" />
+    <!-- EmbedIO references System.Text.Json only for netstandard2.0, so it does not
+         flow to this net10.0 host through the forced standard reference. The standard
+         asset binds to the package's assembly version, which can be newer than the
+         shared framework's, so the host carries the package itself. -->
+    <PackageReference Include="System.Text.Json" />
     <!-- The forced standard asset exposes the BCL package's async interfaces; its
          netstandard2.1 forwarding asset unifies them with the modern host types.
          Normal package consumers choose their matching EmbedIO target automatically. -->
