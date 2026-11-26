@@ -323,7 +323,7 @@
         "type": "Project",
         "dependencies": {
           "EmbedIO-Neo.Quic.Native": "[2.16.0, )",
-          "System.Threading.RateLimiting": "[10.0.15, )"
+          "System.Threading.RateLimiting": "[11.0.0, )"
         }
       },
       "EmbedIO-Neo.Quic.Native": {
@@ -331,8 +331,8 @@
       },
       "System.Threading.RateLimiting": {
         "type": "Transitive",
-        "resolved": "10.0.15",
-        "contentHash": "3hkp+OP+GMUhMx77aPz1t40ClF3Prmh/NklskUy1KkZHfqriOdXBFRu8j9mDhp42GhB3yKnSfXaYunoUy/kADw=="
+        "resolved": "11.0.0",
+        "contentHash": "/XV8cRRUkl+uyvVdPBCo+p/QUSMFI7JdPHgpeWvnVmh/Ao/TRn7gSjo1XS0qJGGhd7Pkjn/9ePSNXtKQN0kutA=="
       }
     },
     "net10.0-windows10.0.19041/win-x64": {
