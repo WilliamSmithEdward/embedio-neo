@@ -178,7 +178,7 @@
         "type": "Project",
         "dependencies": {
           "EmbedIO-Neo.Quic.Native": "[2.16.0, )",
-          "System.Threading.RateLimiting": "[11.0.0, )"
+          "System.Threading.RateLimiting": "[10.0.15, )"
         }
       },
       "EmbedIO-Neo.Quic.Native": {
@@ -186,8 +186,8 @@
       },
       "System.Threading.RateLimiting": {
         "type": "Transitive",
-        "resolved": "11.0.0",
-        "contentHash": "/XV8cRRUkl+uyvVdPBCo+p/QUSMFI7JdPHgpeWvnVmh/Ao/TRn7gSjo1XS0qJGGhd7Pkjn/9ePSNXtKQN0kutA=="
+        "resolved": "10.0.15",
+        "contentHash": "3hkp+OP+GMUhMx77aPz1t40ClF3Prmh/NklskUy1KkZHfqriOdXBFRu8j9mDhp42GhB3yKnSfXaYunoUy/kADw=="
       }
     },
     "net10.0-maccatalyst26.5/maccatalyst-arm64": {}

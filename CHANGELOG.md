@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Runtime dependencies move from 10.0.14 to 11.0.0: System.Threading.RateLimiting in
+- Runtime dependencies move from 10.0.15 to 11.0.0: System.Threading.RateLimiting in
   the core, System.Text.Json in the core's .NET Standard asset, and Microsoft DI and
   Hosting.Abstractions in the dependency-injection adapter. Applications that pin an
   older version of these packages must allow 11.0.0. Public APIs, defaults and
