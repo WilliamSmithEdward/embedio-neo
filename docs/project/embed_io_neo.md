@@ -79,8 +79,8 @@ separately maintained forks or external dependencies on the archived packages.
   Two sample-only grid tests were removed; library regression coverage was retained.
 
 The .NET 10 core asset references Microsoft's System.Threading.RateLimiting
-10.0.13, which is not part of the base runtime. The .NET Standard asset also uses
-System.Text.Json 10.0.13 and its supporting packages. The unreleased
+11.0.0, which is not part of the base runtime. The .NET Standard asset also uses
+System.Text.Json 11.0.0 and its supporting packages. The unreleased
 [request-validation feature](../guides/request-validation.md) adds pinned
 System.ComponentModel.Annotations 5.0.0 to the .NET Standard asset; .NET 10 uses
 framework annotations. Integration packages have their own dependencies; current

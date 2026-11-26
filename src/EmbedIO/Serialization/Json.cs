@@ -130,7 +130,7 @@ namespace EmbedIO.Serialization
                     ? JsonSerializer.Deserialize<T>(json, options)
                     : throw ReflectionSerialization.Disabled();
 
-            return (T?)JsonSerializer.Deserialize(json, options.GetTypeInfo(typeof(T)));
+            return JsonSerializer.Deserialize(json, options.GetTypeInfo<T>());
         }
 
         /// <summary>Deserializes untyped JSON to dictionaries, lists, and primitive values.</summary>
