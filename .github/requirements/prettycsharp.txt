@@ -1,7 +1,7 @@
 # Pinned source-formatting tool and runtime dependencies; wheel hashes from PyPI.
-prettycsharp==1.1.11 \
-    --hash=sha256:aec1d5e7e69b2cb9db30bde4d3075e3f18c55e6952541cb11c3db30967092f62 \
-    --hash=sha256:fc91fa6553a59d4a98b094ead5345100065b4da081ae7f243b51ffa0ab923956
+prettycsharp==1.1.12 \
+    --hash=sha256:9ace8d55c87bbcbc37448cbc27b38261aa83af545e0200d7b37eb8ed6a1193b2 \
+    --hash=sha256:bf4f3d017dcda05472ee2a4034edf0f20e6137d9d199633e96b7e7e541725224
 defusedxml==0.7.1 \
     --hash=sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61
 tree-sitter==0.26.1 \
