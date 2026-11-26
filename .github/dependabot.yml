@@ -68,6 +68,12 @@ updates:
     cooldown:
       default-days: 7
       exclude: [pyopenvba, pyofficeeditor, pyprettyvba, vba-reference, pyvbaanalysis, pyvbaharness, xlide-mcp]
+    # prettycsharp requires tree-sitter-c-sharp below 0.24: 0.24.0 rejects a `$`
+    # string statement after an `if` (WilliamSmithEdward/prettyCSharp#74). Lift
+    # this when a prettycsharp release raises its cap.
+    ignore:
+      - dependency-name: tree-sitter-c-sharp
+        versions: [">=0.24"]
     commit-message:
       prefix: ci
     groups:
