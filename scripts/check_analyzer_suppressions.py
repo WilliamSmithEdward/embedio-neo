@@ -206,6 +206,9 @@ COMPATIBILITY_SUPPRESSIONS = (
     ("src/EmbedIO/WebApi/BoundedRequestFields.cs", "Performance", "CA1835:Prefer the memory-based overloads for ReadAsync and WriteAsync",
      "The shared implementation targets netstandard2.0, whose Stream API provides the byte-array async overloads.",
      r"internal\s+static\s+async\s+Task<NameValueCollection>\s+FormAsync\s*\("),
+    ("src/EmbedIO/Serialization/Json.cs", "Usage", "CA2263:Prefer generic overload when type is known",
+     "The shared implementation targets net10.0, whose framework System.Text.Json has no generic GetTypeInfo overload.",
+     r"internal\s+static\s+T\?\s+DeserializeWith<T>\s*\("),
 )
 COMPATIBILITY_ATTRIBUTE = re.compile(
     r'\[System\.Diagnostics\.CodeAnalysis\.SuppressMessage\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,'
